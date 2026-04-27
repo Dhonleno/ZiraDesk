@@ -19,6 +19,28 @@ const config: Config = {
           900: '#1e308f',
           950: '#161f57',
         },
+        // ── Design System ZiraDesk ──────────────────────────────
+        bg: {
+          DEFAULT: '#0E0F11',
+          2: '#141518',
+          3: '#1A1C20',
+          4: '#22252B',
+          5: '#2A2E36',
+        },
+        teal: {
+          DEFAULT: '#00C9A7',
+          hover: '#00E8C0',
+          dim: 'rgba(0,201,167,.15)',
+        },
+        txt: {
+          DEFAULT: '#F0F1F3',
+          2: '#9DA3AE',
+          3: '#5C6370',
+        },
+        line: {
+          DEFAULT: 'rgba(255,255,255,.07)',
+          2: 'rgba(255,255,255,.12)',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

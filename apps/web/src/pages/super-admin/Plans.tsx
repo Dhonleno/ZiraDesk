@@ -56,8 +56,8 @@ export function Plans() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">{t('superAdmin.plans.title')}</h1>
-          <p className="mt-1 text-sm text-gray-500">{plans.length} planos cadastrados</p>
+          <h1 className="text-2xl font-bold text-txt">{t('superAdmin.plans.title')}</h1>
+          <p className="mt-1 text-sm text-txt-2">{plans.length} planos cadastrados</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>{t('superAdmin.plans.new')}</Button>
       </div>
@@ -65,7 +65,7 @@ export function Plans() {
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-56 animate-pulse rounded-xl bg-gray-800" />
+            <div key={i} className="h-56 animate-pulse rounded-xl bg-bg-3" />
           ))}
         </div>
       ) : (
@@ -73,12 +73,12 @@ export function Plans() {
           {plans.map((plan) => (
             <div
               key={plan.id}
-              className="rounded-xl border border-gray-800 bg-gray-900 p-5 space-y-4"
+              className="rounded-xl border border-line bg-bg-2 p-5 space-y-4"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold text-white">{plan.name}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{plan.slug}</p>
+                  <h3 className="font-semibold text-txt">{plan.name}</h3>
+                  <p className="text-xs text-txt-3 mt-0.5">{plan.slug}</p>
                 </div>
                 <Badge variant={plan.isActive ? 'success' : 'neutral'}>
                   {plan.isActive ? 'Ativo' : 'Inativo'}
@@ -86,21 +86,21 @@ export function Plans() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-2xl font-bold" style={{ color: '#00C9A7' }}>
+                <p className="text-[28px] font-semibold leading-none" style={{ color: '#00C9A7' }}>
                   {formatPrice(plan.priceMonth)}
-                  <span className="text-sm font-normal text-gray-500">/mês</span>
+                  <span className="text-sm font-normal text-txt-2">/mês</span>
                 </p>
-                <p className="text-sm text-gray-500">{formatPrice(plan.priceYear)}/ano</p>
+                <p className="text-sm text-txt-3">{formatPrice(plan.priceYear)}/ano</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-lg bg-gray-800/50 px-3 py-2">
-                  <p className="text-gray-500 text-xs">Usuários</p>
-                  <p className="font-medium text-white">{formatLimit(plan.maxUsers)}</p>
+                <div className="rounded-lg bg-bg-3 px-3 py-2">
+                  <p className="text-txt-3 text-xs">Usuários</p>
+                  <p className="font-medium text-txt">{formatLimit(plan.maxUsers)}</p>
                 </div>
-                <div className="rounded-lg bg-gray-800/50 px-3 py-2">
-                  <p className="text-gray-500 text-xs">Contatos</p>
-                  <p className="font-medium text-white">{formatLimit(plan.maxContacts)}</p>
+                <div className="rounded-lg bg-bg-3 px-3 py-2">
+                  <p className="text-txt-3 text-xs">Contatos</p>
+                  <p className="font-medium text-txt">{formatLimit(plan.maxContacts)}</p>
                 </div>
               </div>
 
@@ -108,14 +108,17 @@ export function Plans() {
                 {Object.entries(plan.features)
                   .filter(([, v]) => v === true)
                   .map(([k]) => (
-                    <span key={k} className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+                    <span
+                      key={k}
+                      className="rounded-full bg-bg-3 border border-line px-2 py-0.5 text-xs text-txt-2"
+                    >
                       {k}
                     </span>
                   ))}
               </div>
 
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 loading={toggleMutation.isPending}
                 onClick={() => toggleMutation.mutate(plan)}

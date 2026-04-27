@@ -125,7 +125,7 @@ export function CreateTenantModal({ open, onClose, onSuccess }: CreateTenantModa
           <label className="block text-sm font-medium text-gray-300">Plano</label>
           <select
             {...register('planId')}
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-full rounded-lg border border-line-2 bg-bg-4 px-3 py-2 text-sm text-txt focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal"
           >
             <option value="">Selecione um plano</option>
             {plans.map((plan) => (

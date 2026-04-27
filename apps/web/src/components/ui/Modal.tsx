@@ -23,29 +23,27 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md' }: Modal
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden
       />
-      {/* Dialog */}
       <div
         role="dialog"
         aria-modal
         aria-labelledby="modal-title"
         className={[
-          'relative z-10 w-full rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl',
+          'relative z-10 w-full rounded-2xl border border-line bg-bg-3 shadow-2xl',
           widthClasses[maxWidth],
         ].join(' ')}
       >
-        <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
-          <h2 id="modal-title" className="text-base font-semibold text-white">
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <h2 id="modal-title" className="text-base font-semibold text-txt">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-500 hover:bg-gray-800 hover:text-gray-300 transition-colors"
+            className="rounded-lg p-1 text-txt-3 hover:bg-bg-4 hover:text-txt-2 transition-colors"
             aria-label="Fechar"
           >
             <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>

@@ -146,7 +146,7 @@ export function CreatePlanModal({ open, onClose, onSuccess }: CreatePlanModalPro
                 <input
                   type="checkbox"
                   {...register(`features.${feature}`)}
-                  className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-brand-500 focus:ring-brand-500"
+                  className="h-4 w-4 rounded border-line-2 bg-bg-4 text-teal focus:ring-teal"
                 />
                 <span className="text-sm text-gray-300">{feature}</span>
               </label>
@@ -158,7 +158,7 @@ export function CreatePlanModal({ open, onClose, onSuccess }: CreatePlanModalPro
           <input
             type="checkbox"
             {...register('isActive')}
-            className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-brand-500 focus:ring-brand-500"
+            className="h-4 w-4 rounded border-line-2 bg-bg-4 text-teal focus:ring-teal"
           />
           <span className="text-sm text-gray-300">Plano ativo</span>
         </label>

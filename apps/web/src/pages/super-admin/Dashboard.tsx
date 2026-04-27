@@ -23,11 +23,11 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, accent = false }: MetricCardProps) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-      <p className="text-sm text-gray-500">{label}</p>
+    <div className="rounded-xl border border-line bg-bg-2 p-5">
+      <p className="text-xs font-medium text-txt-2">{label}</p>
       <p
-        className="mt-1 text-3xl font-bold tabular-nums"
-        style={{ color: accent ? '#00C9A7' : '#F1F5F9' }}
+        className="mt-2 text-[28px] font-semibold tabular-nums leading-none"
+        style={{ color: accent ? '#00C9A7' : '#F0F1F3' }}
       >
         {value}
       </p>
@@ -38,7 +38,7 @@ function MetricCard({ label, value, accent = false }: MetricCardProps) {
 export function Dashboard() {
   const { t } = useTranslation('admin');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['super-admin', 'metrics'],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: Metrics }>('/super-admin/metrics/overview');
@@ -48,17 +48,25 @@ export function Dashboard() {
 
   const maxCount = data?.tenantsByPlan.reduce((m, p) => Math.max(m, p.count), 1) ?? 1;
 
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-[rgba(248,113,113,.25)] bg-[rgba(248,113,113,.08)] p-6 text-center text-sm text-[#F87171]">
+        Falha ao carregar métricas. Verifique se a API está rodando e tente novamente.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">{t('superAdmin.title')}</h1>
-        <p className="mt-1 text-sm text-gray-500">Visão geral do sistema</p>
+        <h1 className="text-2xl font-bold text-txt">{t('superAdmin.title')}</h1>
+        <p className="mt-1 text-sm text-txt-2">Visão geral do sistema</p>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-800" />
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-bg-3" />
           ))}
         </div>
       ) : (
@@ -72,15 +80,14 @@ export function Dashboard() {
             <MetricCard label={t('superAdmin.metrics.newLast30Days')} value={data?.newTenantsLast30Days ?? 0} />
           </div>
 
-          {/* Tenants por plano */}
           {(data?.tenantsByPlan.length ?? 0) > 0 && (
-            <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-              <h2 className="mb-4 text-sm font-medium text-gray-400">Tenants por plano</h2>
+            <div className="rounded-xl border border-line bg-bg-2 p-5">
+              <h2 className="mb-4 text-sm font-medium text-txt-2">Tenants por plano</h2>
               <div className="space-y-3">
                 {data?.tenantsByPlan.map((item) => (
                   <div key={item.planName} className="flex items-center gap-3">
-                    <span className="w-24 shrink-0 text-sm text-gray-300">{item.planName}</span>
-                    <div className="flex-1 rounded-full bg-gray-800 h-2 overflow-hidden">
+                    <span className="w-24 shrink-0 text-sm text-txt-2">{item.planName}</span>
+                    <div className="flex-1 h-2 rounded-full bg-bg-4 overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-500"
                         style={{
@@ -89,7 +96,7 @@ export function Dashboard() {
                         }}
                       />
                     </div>
-                    <span className="w-8 text-right text-sm font-medium text-gray-400">
+                    <span className="w-8 text-right text-sm font-medium text-txt-2">
                       {item.count}
                     </span>
                   </div>
@@ -100,17 +107,16 @@ export function Dashboard() {
         </>
       )}
 
-      {/* Atalhos */}
       <div className="flex gap-3">
         <Link
-          to="/admin/tenants"
-          className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+          to="/super-admin/tenants"
+          className="rounded-lg border border-line-2 bg-bg-4 px-4 py-2 text-sm text-txt-2 hover:bg-bg-5 hover:text-txt transition-colors"
         >
           Gerenciar Tenants →
         </Link>
         <Link
-          to="/admin/plans"
-          className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+          to="/super-admin/plans"
+          className="rounded-lg border border-line-2 bg-bg-4 px-4 py-2 text-sm text-txt-2 hover:bg-bg-5 hover:text-txt transition-colors"
         >
           Gerenciar Planos →
         </Link>

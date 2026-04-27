@@ -19,7 +19,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
-        className="rounded-lg px-2.5 py-1.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-white disabled:pointer-events-none disabled:opacity-40 transition-colors"
+        className="rounded-lg px-2.5 py-1.5 text-sm text-txt-2 hover:bg-bg-4 hover:text-txt disabled:pointer-events-none disabled:opacity-40 transition-colors"
       >
         ←
       </button>
@@ -31,8 +31,8 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
           className={[
             'min-w-[2rem] rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors',
             p === page
-              ? 'bg-brand-600/20 text-brand-400'
-              : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+              ? 'bg-teal-dim text-teal'
+              : 'text-txt-2 hover:bg-bg-4 hover:text-txt',
           ].join(' ')}
         >
           {p}
@@ -42,7 +42,7 @@ export function Pagination({ page, totalPages, onPageChange }: PaginationProps) 
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
-        className="rounded-lg px-2.5 py-1.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-white disabled:pointer-events-none disabled:opacity-40 transition-colors"
+        className="rounded-lg px-2.5 py-1.5 text-sm text-txt-2 hover:bg-bg-4 hover:text-txt disabled:pointer-events-none disabled:opacity-40 transition-colors"
       >
         →
       </button>
