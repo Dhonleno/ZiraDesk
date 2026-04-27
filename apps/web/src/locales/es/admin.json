@@ -1,0 +1,66 @@
+{
+  "superAdmin": {
+    "title": "Super Admin",
+    "tenants": {
+      "title": "Tenants",
+      "new": "Nuevo Tenant",
+      "search": "Buscar tenant...",
+      "status": {
+        "active": "Activo",
+        "trial": "Prueba",
+        "suspended": "Suspendido",
+        "cancelled": "Cancelado"
+      },
+      "fields": {
+        "name": "Nombre de la empresa",
+        "slug": "Subdominio",
+        "plan": "Plan",
+        "status": "Estado",
+        "createdAt": "Creado en",
+        "owner": "Responsable",
+        "ownerEmail": "Correo del responsable",
+        "trialDays": "Días de prueba"
+      },
+      "actions": {
+        "suspend": "Suspender",
+        "activate": "Activar",
+        "delete": "Eliminar",
+        "view": "Ver detalles"
+      },
+      "messages": {
+        "created": "Tenant creado con éxito",
+        "updated": "Tenant actualizado",
+        "suspended": "Tenant suspendido",
+        "activated": "Tenant activado",
+        "deleteConfirm": "¿Estás seguro? Esta acción no se puede deshacer."
+      }
+    },
+    "plans": {
+      "title": "Planes",
+      "new": "Nuevo Plan",
+      "fields": {
+        "name": "Nombre",
+        "slug": "Slug",
+        "priceMonth": "Precio mensual",
+        "priceYear": "Precio anual",
+        "maxUsers": "Máx. usuarios",
+        "maxContacts": "Máx. contactos",
+        "features": "Funciones",
+        "isActive": "Activo"
+      },
+      "messages": {
+        "created": "Plan creado con éxito",
+        "updated": "Plan actualizado",
+        "deleted": "Plan desactivado"
+      }
+    },
+    "metrics": {
+      "totalTenants": "Total de tenants",
+      "activeTenants": "Tenants activos",
+      "trialTenants": "En prueba",
+      "suspendedTenants": "Suspendidos",
+      "newLast7Days": "Nuevos (7 días)",
+      "newLast30Days": "Nuevos (30 días)"
+    }
+  }
+}

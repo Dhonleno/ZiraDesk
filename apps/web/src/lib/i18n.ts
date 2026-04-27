@@ -4,19 +4,22 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 import ptBRCommon from '../locales/pt-BR/common.json';
 import ptBRAuth from '../locales/pt-BR/auth.json';
+import ptBRAdmin from '../locales/pt-BR/admin.json';
 import enUSCommon from '../locales/en-US/common.json';
 import enUSAuth from '../locales/en-US/auth.json';
+import enUSAdmin from '../locales/en-US/admin.json';
 import esCommon from '../locales/es/common.json';
 import esAuth from '../locales/es/auth.json';
+import esAdmin from '../locales/es/admin.json';
 
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      'pt-BR': { common: ptBRCommon, auth: ptBRAuth },
-      'en-US': { common: enUSCommon, auth: enUSAuth },
-      es: { common: esCommon, auth: esAuth },
+      'pt-BR': { common: ptBRCommon, auth: ptBRAuth, admin: ptBRAdmin },
+      'en-US': { common: enUSCommon, auth: enUSAuth, admin: enUSAdmin },
+      es: { common: esCommon, auth: esAuth, admin: esAdmin },
     },
     fallbackLng: 'pt-BR',
     defaultNS: 'common',

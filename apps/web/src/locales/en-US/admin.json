@@ -1,0 +1,66 @@
+{
+  "superAdmin": {
+    "title": "Super Admin",
+    "tenants": {
+      "title": "Tenants",
+      "new": "New Tenant",
+      "search": "Search tenant...",
+      "status": {
+        "active": "Active",
+        "trial": "Trial",
+        "suspended": "Suspended",
+        "cancelled": "Cancelled"
+      },
+      "fields": {
+        "name": "Company name",
+        "slug": "Subdomain",
+        "plan": "Plan",
+        "status": "Status",
+        "createdAt": "Created at",
+        "owner": "Owner",
+        "ownerEmail": "Owner email",
+        "trialDays": "Trial days"
+      },
+      "actions": {
+        "suspend": "Suspend",
+        "activate": "Activate",
+        "delete": "Delete",
+        "view": "View details"
+      },
+      "messages": {
+        "created": "Tenant created successfully",
+        "updated": "Tenant updated",
+        "suspended": "Tenant suspended",
+        "activated": "Tenant activated",
+        "deleteConfirm": "Are you sure? This action cannot be undone."
+      }
+    },
+    "plans": {
+      "title": "Plans",
+      "new": "New Plan",
+      "fields": {
+        "name": "Name",
+        "slug": "Slug",
+        "priceMonth": "Monthly price",
+        "priceYear": "Annual price",
+        "maxUsers": "Max users",
+        "maxContacts": "Max contacts",
+        "features": "Features",
+        "isActive": "Active"
+      },
+      "messages": {
+        "created": "Plan created successfully",
+        "updated": "Plan updated",
+        "deleted": "Plan deactivated"
+      }
+    },
+    "metrics": {
+      "totalTenants": "Total tenants",
+      "activeTenants": "Active tenants",
+      "trialTenants": "On trial",
+      "suspendedTenants": "Suspended",
+      "newLast7Days": "New (7 days)",
+      "newLast30Days": "New (30 days)"
+    }
+  }
+}

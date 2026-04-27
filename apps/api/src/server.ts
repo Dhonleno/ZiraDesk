@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { superAdminRoutes } from './modules/super-admin/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
@@ -45,8 +46,8 @@ async function bootstrap(): Promise<void> {
   // Detecta idioma em todas as requisições via Accept-Language
   app.addHook('onRequest', languageMiddleware);
 
-  // Rotas de autenticação — sem tenant middleware (login é global)
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 

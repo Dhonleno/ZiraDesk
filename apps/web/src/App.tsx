@@ -7,6 +7,11 @@ import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { TenantLayout } from './layouts/TenantLayout';
 import { SuperAdminLayout } from './layouts/SuperAdminLayout';
 import { AuthLayout } from './layouts/AuthLayout';
+import { Dashboard } from './pages/super-admin/Dashboard';
+import { Tenants } from './pages/super-admin/Tenants';
+import { TenantDetail } from './pages/super-admin/TenantDetail';
+import { Plans } from './pages/super-admin/Plans';
+import { Toaster } from './components/ui/Toaster';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,7 +47,7 @@ export function App() {
 
           {/* Área do super admin */}
           <Route
-            path="/admin/*"
+            path="/admin"
             element={
               <RequireAuth>
                 <RequireSuperAdmin>
@@ -50,7 +55,12 @@ export function App() {
                 </RequireSuperAdmin>
               </RequireAuth>
             }
-          />
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="tenants" element={<Tenants />} />
+            <Route path="tenants/:id" element={<TenantDetail />} />
+            <Route path="plans" element={<Plans />} />
+          </Route>
 
           {/* Área do tenant — rota catch-all protegida */}
           <Route
@@ -63,6 +73,7 @@ export function App() {
           />
         </Routes>
       </BrowserRouter>
+      <Toaster />
     </QueryClientProvider>
   );
 }
