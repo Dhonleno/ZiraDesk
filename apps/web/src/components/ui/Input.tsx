@@ -7,13 +7,13 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, className = '', id, ...props }, ref) => {
+  ({ label, error, hint, className = '', id, style, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
 
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-txt-2">
+          <label htmlFor={inputId} className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
             {label}
           </label>
         )}
@@ -21,17 +21,44 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={[
-            'h-10 w-full rounded-lg border bg-bg-4 px-3 text-sm text-txt placeholder-txt-3 transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-teal focus:ring-offset-1 focus:ring-offset-bg',
-            error
-              ? 'border-[rgba(248,113,113,.5)] focus:ring-[#F87171]'
-              : 'border-line-2 hover:border-[rgba(255,255,255,.2)] focus:border-teal',
+            'h-10 w-full rounded-lg px-3 text-sm transition-colors outline-none',
             className,
           ].join(' ')}
+          style={{
+            background: '#1A1C20',
+            border: error
+              ? '1px solid rgba(248,113,113,.5)'
+              : '1px solid rgba(255,255,255,.07)',
+            color: '#F0F1F3',
+            ...style,
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = error ? '#F87171' : '#00C9A7';
+            e.currentTarget.style.boxShadow = error
+              ? '0 0 0 3px rgba(248,113,113,.15)'
+              : '0 0 0 3px rgba(0,201,167,.15)';
+            props.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = error
+              ? 'rgba(248,113,113,.5)'
+              : 'rgba(255,255,255,.07)';
+            e.currentTarget.style.boxShadow = 'none';
+            props.onBlur?.(e);
+          }}
+          placeholder={props.placeholder}
           {...props}
         />
-        {hint && !error && <p className="text-xs text-txt-3">{hint}</p>}
-        {error && <p className="text-xs text-[#F87171]">{error}</p>}
+        {hint && !error && (
+          <p className="text-xs" style={{ color: '#5C6370' }}>
+            {hint}
+          </p>
+        )}
+        {error && (
+          <p className="text-xs" style={{ color: '#F87171' }}>
+            {error}
+          </p>
+        )}
       </div>
     );
   },

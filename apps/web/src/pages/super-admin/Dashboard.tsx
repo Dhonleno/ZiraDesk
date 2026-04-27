@@ -59,8 +59,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-txt">{t('superAdmin.title')}</h1>
-        <p className="mt-1 text-sm text-txt-2">Visão geral do sistema</p>
+        <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>{t('superAdmin.title')}</h1>
+        <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>Visão geral do sistema</p>
       </div>
 
       {isLoading ? (
@@ -108,18 +108,27 @@ export function Dashboard() {
       )}
 
       <div className="flex gap-3">
-        <Link
-          to="/super-admin/tenants"
-          className="rounded-lg border border-line-2 bg-bg-4 px-4 py-2 text-sm text-txt-2 hover:bg-bg-5 hover:text-txt transition-colors"
-        >
-          Gerenciar Tenants →
-        </Link>
-        <Link
-          to="/super-admin/plans"
-          className="rounded-lg border border-line-2 bg-bg-4 px-4 py-2 text-sm text-txt-2 hover:bg-bg-5 hover:text-txt transition-colors"
-        >
-          Gerenciar Planos →
-        </Link>
+        {[
+          { to: '/super-admin/tenants', label: 'Gerenciar Tenants →' },
+          { to: '/super-admin/plans', label: 'Gerenciar Planos →' },
+        ].map(({ to, label }) => (
+          <Link
+            key={to}
+            to={to}
+            className="rounded-lg px-4 py-2 text-sm transition-colors"
+            style={{ background: '#1A1C20', border: '1px solid rgba(255,255,255,.07)', color: '#9DA3AE' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#22252B';
+              e.currentTarget.style.color = '#F0F1F3';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#1A1C20';
+              e.currentTarget.style.color = '#9DA3AE';
+            }}
+          >
+            {label}
+          </Link>
+        ))}
       </div>
     </div>
   );

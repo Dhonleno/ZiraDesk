@@ -86,9 +86,13 @@ export function Tenants() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-txt">{t('superAdmin.tenants.title')}</h1>
+          <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
+            {t('superAdmin.tenants.title')}
+          </h1>
           {data?.meta && (
-            <p className="mt-1 text-sm text-txt-2">{data.meta.total} tenants encontrados</p>
+            <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>
+              {data.meta.total} tenants encontrados
+            </p>
           )}
         </div>
         <Button onClick={() => setShowCreate(true)}>{t('superAdmin.tenants.new')}</Button>
@@ -103,17 +107,29 @@ export function Tenants() {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <div className="flex gap-1 rounded-lg border border-line bg-bg-2 p-1">
+        <div className="flex items-center gap-1.5">
           {ALL_STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => { setStatus(s); setPage(1); }}
-              className={[
-                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              className="text-xs font-medium transition-colors"
+              style={
                 status === s
-                  ? 'bg-teal-dim text-teal'
-                  : 'text-txt-2 hover:text-txt',
-              ].join(' ')}
+                  ? {
+                      background: 'rgba(0,201,167,.15)',
+                      color: '#00C9A7',
+                      border: '1px solid rgba(0,201,167,.2)',
+                      borderRadius: 999,
+                      padding: '4px 12px',
+                    }
+                  : {
+                      background: 'transparent',
+                      color: '#9DA3AE',
+                      border: '1px solid transparent',
+                      borderRadius: 999,
+                      padding: '4px 12px',
+                    }
+              }
             >
               {statusLabel[s]}
             </button>
@@ -122,64 +138,88 @@ export function Tenants() {
       </div>
 
       {/* Tabela */}
-      <div className="rounded-xl border border-line bg-bg-2 overflow-hidden">
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: '1px solid rgba(255,255,255,.07)', background: '#141518' }}
+      >
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-line bg-bg-3 text-left">
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">
-                {t('superAdmin.tenants.fields.name')}
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">
-                {t('superAdmin.tenants.fields.slug')}
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">
-                {t('superAdmin.tenants.fields.plan')}
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">
-                {t('superAdmin.tenants.fields.status')}
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">
-                {t('superAdmin.tenants.fields.createdAt')}
-              </th>
-              <th className="px-4 py-3 text-xs font-medium text-txt-3">Ações</th>
+            <tr style={{ background: '#1A1C20', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+              {[
+                t('superAdmin.tenants.fields.name'),
+                t('superAdmin.tenants.fields.slug'),
+                t('superAdmin.tenants.fields.plan'),
+                t('superAdmin.tenants.fields.status'),
+                t('superAdmin.tenants.fields.createdAt'),
+                'Ações',
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left font-medium uppercase tracking-wide"
+                  style={{ fontSize: 11, color: '#5C6370' }}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-line">
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,.07)' }}>
                     {Array.from({ length: 6 }).map((__, j) => (
                       <td key={j} className="px-4 py-3">
-                        <div className="h-4 w-24 animate-pulse rounded bg-bg-3" />
+                        <div
+                          className="h-4 w-24 animate-pulse rounded"
+                          style={{ background: '#1A1C20' }}
+                        />
                       </td>
                     ))}
                   </tr>
                 ))
               : (data?.data ?? []).map((tenant) => (
-                  <tr key={tenant.id} className="border-b border-line hover:bg-bg-3 transition-colors">
-                    <td className="px-4 py-3 font-medium text-txt">{tenant.name}</td>
-                    <td className="px-4 py-3 text-txt-2 font-mono text-xs">{tenant.slug}</td>
-                    <td className="px-4 py-3 text-txt-2">{tenant.plan?.name ?? '—'}</td>
+                  <tr
+                    key={tenant.id}
+                    className="transition-colors"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,.07)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#1A1C20')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-4 py-3 font-medium" style={{ color: '#F0F1F3' }}>
+                      {tenant.name}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: '#9DA3AE' }}>
+                      {tenant.slug}
+                    </td>
+                    <td className="px-4 py-3" style={{ color: '#9DA3AE' }}>
+                      {tenant.plan?.name ?? '—'}
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusVariant[tenant.status]}>
                         {t(`superAdmin.tenants.status.${tenant.status}`)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-txt-3">
+                    <td className="px-4 py-3" style={{ color: '#5C6370' }}>
                       {new Date(tenant.createdAt).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Link
                           to={`/super-admin/tenants/${tenant.id}`}
-                          className="text-xs text-teal hover:text-teal-hover transition-colors"
+                          className="text-xs transition-colors"
+                          style={{ color: '#00C9A7' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = '#00E8C0')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = '#00C9A7')}
                         >
                           {t('superAdmin.tenants.actions.view')}
                         </Link>
                         {tenant.status !== 'suspended' && tenant.status !== 'cancelled' && (
                           <button
                             onClick={() => actionMutation.mutate({ id: tenant.id, action: 'suspend' })}
-                            className="text-xs text-[#F87171] hover:text-[#FCA5A5] transition-colors"
+                            className="text-xs transition-colors"
+                            style={{ color: '#F87171' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#FCA5A5')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = '#F87171')}
                           >
                             {t('superAdmin.tenants.actions.suspend')}
                           </button>
@@ -187,7 +227,10 @@ export function Tenants() {
                         {tenant.status === 'suspended' && (
                           <button
                             onClick={() => actionMutation.mutate({ id: tenant.id, action: 'activate' })}
-                            className="text-xs text-[#3ECF8E] hover:text-[#6EE7B7] transition-colors"
+                            className="text-xs transition-colors"
+                            style={{ color: '#3ECF8E' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = '#6EE7B7')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = '#3ECF8E')}
                           >
                             {t('superAdmin.tenants.actions.activate')}
                           </button>
@@ -200,13 +243,16 @@ export function Tenants() {
         </table>
 
         {!isLoading && (data?.data ?? []).length === 0 && (
-          <div className="py-12 text-center text-sm text-txt-3">
+          <div className="py-12 text-center text-sm" style={{ color: '#5C6370' }}>
             Nenhum tenant encontrado
           </div>
         )}
 
         {data?.meta && data.meta.totalPages > 1 && (
-          <div className="flex justify-end border-t border-line px-4 py-3">
+          <div
+            className="flex justify-end px-4 py-3"
+            style={{ borderTop: '1px solid rgba(255,255,255,.07)' }}
+          >
             <Pagination
               page={data.meta.page}
               totalPages={data.meta.totalPages}
