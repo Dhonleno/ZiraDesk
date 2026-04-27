@@ -9,6 +9,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { superAdminRoutes } from './modules/super-admin/index.js';
 import { tenantRoutes } from './modules/tenant/index.js';
 import { adminRoutes } from './modules/admin/index.js';
+import { crmRoutes } from './modules/crm/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
@@ -51,6 +52,7 @@ async function bootstrap(): Promise<void> {
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
   await app.register(tenantRoutes, { prefix: '/api/tenant' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(crmRoutes, { prefix: '/api/crm' });
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
