@@ -196,7 +196,7 @@ export function TenantLayout() {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden" style={{ background: '#0E0F11' }}>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto">
           <Outlet />
         </div>
       </main>

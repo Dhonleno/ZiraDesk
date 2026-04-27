@@ -76,7 +76,16 @@ export function Login() {
               {...register('email')}
             />
 
-            <div className="flex flex-col gap-1.5">
+            {import.meta.env.DEV && (
+            <Input
+              label="Workspace (dev)"
+              placeholder="meu-tenant"
+              error={errors.tenantSlug?.message}
+              {...register('tenantSlug')}
+            />
+          )}
+
+          <div className="flex flex-col gap-1.5">
               <Input
                 label={t('login.password')}
                 type="password"

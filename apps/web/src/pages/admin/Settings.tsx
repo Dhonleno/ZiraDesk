@@ -94,7 +94,7 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-xl p-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
           {t('tenantAdmin.settings.title')}

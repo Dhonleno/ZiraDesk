@@ -109,7 +109,7 @@ export function Channels() {
   const channels = data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>

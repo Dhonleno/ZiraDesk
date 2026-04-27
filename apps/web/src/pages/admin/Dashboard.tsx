@@ -41,15 +41,17 @@ export function Dashboard() {
 
   if (isError) {
     return (
-      <div
-        className="rounded-xl p-6 text-center text-sm"
-        style={{
-          background: 'rgba(248,113,113,.08)',
-          border: '1px solid rgba(248,113,113,.25)',
-          color: '#F87171',
-        }}
-      >
-        Falha ao carregar estatísticas. Verifique se a API está rodando.
+      <div className="p-6">
+        <div
+          className="rounded-xl p-6 text-center text-sm"
+          style={{
+            background: 'rgba(248,113,113,.08)',
+            border: '1px solid rgba(248,113,113,.25)',
+            color: '#F87171',
+          }}
+        >
+          Falha ao carregar estatísticas. Verifique se a API está rodando.
+        </div>
       </div>
     );
   }
@@ -102,7 +104,7 @@ export function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
           {t('tenantAdmin.dashboard.title')}
