@@ -57,7 +57,10 @@ export function ForgotPassword() {
               />
             </svg>
           </div>
-          <span className="text-2xl font-bold tracking-tight text-white">ZiraDesk</span>
+          <span className="text-2xl tracking-tight" style={{ color: '#F1F5F9' }}>
+            <span style={{ fontWeight: 700 }}>Zira</span>
+            <span style={{ fontWeight: 300 }}>Desk</span>
+          </span>
         </div>
 
         <Card>

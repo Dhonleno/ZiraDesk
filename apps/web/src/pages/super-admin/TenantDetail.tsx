@@ -87,7 +87,7 @@ export function TenantDetail() {
     return (
       <div className="text-center py-16 text-gray-500">
         Tenant não encontrado.{' '}
-        <Link to="/admin/tenants" className="text-brand-400 hover:underline">
+        <Link to="/super-admin/tenants" className="text-brand-400 hover:underline">
           Voltar
         </Link>
       </div>
@@ -100,7 +100,7 @@ export function TenantDetail() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <Link to="/admin/tenants" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+          <Link to="/super-admin/tenants" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
             ← Tenants
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-white">{tenant.name}</h1>
