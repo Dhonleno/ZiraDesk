@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Schema PUBLIC — dados globais do SaaS
+// Dados de cada tenant vivem em schemas isolados
+// ─────────────────────────────────────────────
+
+model Plan {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  priceMonth  Decimal  @map("price_month") @db.Decimal(10, 2)
+  priceYear   Decimal  @map("price_year") @db.Decimal(10, 2)
+  maxUsers    Int      @map("max_users")
+  maxContacts Int      @map("max_contacts")
+  /// JSON com flags de features habilitadas no plano
+  features    Json     @default("{}")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenants       Tenant[]
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Tenant {
+  id         String       @id @default(cuid())
+  name       String
+  slug       String       @unique
+  /// Nome do schema PostgreSQL isolado deste tenant (ex: tenant_acme)
+  schemaName String       @unique @map("schema_name")
+  planId     String       @map("plan_id")
+  status     TenantStatus @default(trial)
+  trialEndsAt DateTime?   @map("trial_ends_at")
+  /// Configurações do tenant (timezone, logo_url, etc.)
+  settings   Json         @default("{}")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  plan          Plan           @relation(fields: [planId], references: [id])
+  subscriptions Subscription[]
+
+  @@map("tenants")
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  tenantId           String             @map("tenant_id")
+  planId             String             @map("plan_id")
+  status             SubscriptionStatus @default(trialing)
+  currentPeriodStart DateTime           @map("current_period_start")
+  currentPeriodEnd   DateTime           @map("current_period_end")
+  /// Gateway usado: stripe | pagarme | manual
+  paymentGateway     String?            @map("payment_gateway")
+  /// ID da subscription no gateway externo
+  gatewaySubId       String?            @map("gateway_sub_id")
+  createdAt          DateTime           @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model SuperAdmin {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("super_admins")
+}
+
+enum TenantStatus {
+  active
+  suspended
+  trial
+  cancelled
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  cancelled
+  trialing
+}

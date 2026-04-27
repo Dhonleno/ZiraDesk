@@ -1,0 +1,33 @@
+{
+  "name": "@ziradesk/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./schemas": {
+      "import": "./dist/schemas/index.js",
+      "types": "./dist/schemas/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
