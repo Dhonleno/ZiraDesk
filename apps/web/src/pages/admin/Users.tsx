@@ -20,19 +20,19 @@ interface TenantUser {
 }
 
 const ROLE_STYLES: Record<string, { bg: string; color: string }> = {
-  owner:  { bg: 'rgba(167,139,250,.15)', color: '#A78BFA' },
-  admin:  { bg: 'rgba(0,201,167,.15)',   color: '#00C9A7' },
-  agent:  { bg: 'rgba(96,165,250,.15)',  color: '#60A5FA' },
-  viewer: { bg: 'rgba(156,163,175,.15)', color: '#9CA3AF' },
+  owner:  { bg: 'var(--purple-dim)', color: 'var(--purple)' },
+  admin:  { bg: 'var(--teal-dim)',   color: 'var(--teal)' },
+  agent:  { bg: 'var(--blue-dim)',   color: 'var(--blue)' },
+  viewer: { bg: 'rgba(156,163,175,.15)', color: 'var(--txt-2)' },
 };
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
-  active:   { bg: 'rgba(62,207,142,.15)',  color: '#3ECF8E' },
-  inactive: { bg: 'rgba(248,113,113,.15)', color: '#F87171' },
+  active:   { bg: 'var(--green-dim)', color: 'var(--green)' },
+  inactive: { bg: 'var(--red-dim)',   color: 'var(--red)' },
 };
 
 function RoleBadge({ role, label }: { role: string; label: string }) {
-  const s = ROLE_STYLES[role] ?? { bg: 'rgba(156,163,175,.15)', color: '#9CA3AF' };
+  const s = ROLE_STYLES[role] ?? { bg: 'rgba(156,163,175,.15)', color: 'var(--txt-2)' };
   return (
     <span
       className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -44,7 +44,7 @@ function RoleBadge({ role, label }: { role: string; label: string }) {
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
-  const s = STATUS_STYLES[status] ?? { bg: 'rgba(248,113,113,.15)', color: '#F87171' };
+  const s = STATUS_STYLES[status] ?? { bg: 'var(--red-dim)', color: 'var(--red)' };
   return (
     <span
       className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -100,7 +100,7 @@ export function Users() {
       toast.success(t('tenantAdmin.users.messages.deactivated'));
     },
     onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? 'Erro ao desativar usuário');
+      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -120,14 +120,23 @@ export function Users() {
       : t('tenantAdmin.users.status.inactive');
   };
 
+  const TABLE_HEADERS = [
+    t('tenantAdmin.users.fields.name'),
+    t('tenantAdmin.users.fields.role'),
+    t('tenantAdmin.users.fields.status'),
+    t('tenantAdmin.users.fields.lastSeen'),
+    t('tenantAdmin.users.fields.createdAt'),
+    '',
+  ];
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
             {t('tenantAdmin.users.title')}
           </h1>
-          <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>
+          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
             {t('tenantAdmin.users.subtitle')}
           </p>
         </div>
@@ -148,18 +157,18 @@ export function Users() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1" style={{ background: '#141518', borderRadius: '0.5rem', padding: '3px' }}>
+        <div className="flex gap-1" style={{ background: 'var(--bg-2)', borderRadius: '0.5rem', padding: '3px' }}>
           {ROLE_TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setRoleFilter(tab)}
               className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
               style={{
-                background: roleFilter === tab ? '#22252B' : 'transparent',
-                color: roleFilter === tab ? '#F0F1F3' : '#9DA3AE',
+                background: roleFilter === tab ? 'var(--bg-4)' : 'transparent',
+                color: roleFilter === tab ? 'var(--txt)' : 'var(--txt-2)',
               }}
             >
-              {tab === 'all' ? 'Todos' : roleLabel(tab)}
+              {tab === 'all' ? t('tenantAdmin.common.all') : roleLabel(tab)}
             </button>
           ))}
         </div>
@@ -168,16 +177,16 @@ export function Users() {
       {/* Table */}
       <div
         className="overflow-hidden rounded-xl"
-        style={{ border: '1px solid rgba(255,255,255,.07)' }}
+        style={{ border: '1px solid var(--line)' }}
       >
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ background: '#141518', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
-              {['Usuário', 'Função', 'Status', 'Último acesso', 'Membro desde', ''].map((h) => (
+            <tr style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--line)' }}>
+              {TABLE_HEADERS.map((h, i) => (
                 <th
-                  key={h}
+                  key={i}
                   className="px-4 py-3 text-left text-xs font-medium"
-                  style={{ color: '#5C6370' }}
+                  style={{ color: 'var(--txt-3)' }}
                 >
                   {h}
                 </th>
@@ -187,7 +196,7 @@ export function Users() {
           <tbody>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
                     {Array.from({ length: 6 }).map((__, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 animate-pulse rounded bg-bg-3" />
@@ -198,21 +207,21 @@ export function Users() {
               : (data?.data ?? []).map((user: TenantUser) => (
                   <tr
                     key={user.id}
-                    style={{ borderBottom: '1px solid rgba(255,255,255,.04)', background: '#0E0F11' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#141518')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '#0E0F11')}
+                    style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg)')}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                          style={{ background: '#22252B', color: '#9DA3AE' }}
+                          style={{ background: 'var(--bg-4)', color: 'var(--txt-2)' }}
                         >
                           {initials(user.name)}
                         </div>
                         <div>
-                          <p className="font-medium" style={{ color: '#F0F1F3' }}>{user.name}</p>
-                          <p className="text-xs" style={{ color: '#5C6370' }}>{user.email}</p>
+                          <p className="font-medium" style={{ color: 'var(--txt)' }}>{user.name}</p>
+                          <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{user.email}</p>
                         </div>
                       </div>
                     </td>
@@ -222,10 +231,10 @@ export function Users() {
                     <td className="px-4 py-3">
                       <StatusBadge status={user.status} label={statusLabel(user.status)} />
                     </td>
-                    <td className="px-4 py-3 tabular-nums" style={{ color: '#9DA3AE' }}>
+                    <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--txt-2)' }}>
                       {formatDate(user.last_seen_at)}
                     </td>
-                    <td className="px-4 py-3 tabular-nums" style={{ color: '#9DA3AE' }}>
+                    <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--txt-2)' }}>
                       {formatDate(user.created_at)}
                     </td>
                     <td className="px-4 py-3">
@@ -235,31 +244,31 @@ export function Users() {
                             <button
                               onClick={() => setEditUser(user)}
                               className="rounded px-2 py-1 text-xs transition-colors"
-                              style={{ color: '#9DA3AE', background: 'transparent' }}
+                              style={{ color: 'var(--txt-2)', background: 'transparent' }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.background = '#22252B';
-                                e.currentTarget.style.color = '#F0F1F3';
+                                e.currentTarget.style.background = 'var(--bg-4)';
+                                e.currentTarget.style.color = 'var(--txt)';
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.background = 'transparent';
-                                e.currentTarget.style.color = '#9DA3AE';
+                                e.currentTarget.style.color = 'var(--txt-2)';
                               }}
                             >
-                              Editar
+                              {t('tenantAdmin.common.edit')}
                             </button>
                             {user.status === 'active' && (
                               <button
                                 onClick={() => deactivateMutation.mutate(user.id)}
                                 className="rounded px-2 py-1 text-xs transition-colors"
-                                style={{ color: '#F87171', background: 'transparent' }}
+                                style={{ color: 'var(--red)', background: 'transparent' }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(248,113,113,.1)';
+                                  e.currentTarget.style.background = 'var(--red-dim)';
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.background = 'transparent';
                                 }}
                               >
-                                Desativar
+                                {t('tenantAdmin.common.deactivate')}
                               </button>
                             )}
                           </>
@@ -272,8 +281,8 @@ export function Users() {
         </table>
 
         {!isLoading && (data?.data ?? []).length === 0 && (
-          <div className="py-12 text-center text-sm" style={{ color: '#5C6370' }}>
-            Nenhum usuário encontrado
+          <div className="py-12 text-center text-sm" style={{ color: 'var(--txt-3)' }}>
+            {t('tenantAdmin.users.noUsers')}
           </div>
         )}
       </div>

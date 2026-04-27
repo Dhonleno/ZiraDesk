@@ -77,14 +77,14 @@ export function Settings() {
       toast.success(t('tenantAdmin.settings.messages.saved'));
     },
     onError: () => {
-      toast.error('Erro ao salvar configurações');
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
   const selectStyle: React.CSSProperties = {
-    background: '#1A1C20',
-    border: '1px solid rgba(255,255,255,.07)',
-    color: '#F0F1F3',
+    background: 'var(--bg-3)',
+    border: '1px solid var(--line)',
+    color: 'var(--txt)',
     height: '2.5rem',
     borderRadius: '0.5rem',
     padding: '0 0.75rem',
@@ -96,17 +96,17 @@ export function Settings() {
   return (
     <div className="space-y-6 max-w-xl p-6">
       <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
           {t('tenantAdmin.settings.title')}
         </h1>
-        <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>
+        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
           {t('tenantAdmin.settings.subtitle')}
         </p>
       </div>
 
       <div
         className="rounded-xl p-6"
-        style={{ background: '#141518', border: '1px solid rgba(255,255,255,.07)' }}
+        style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
       >
         {isLoading ? (
           <div className="space-y-4">
@@ -123,7 +123,7 @@ export function Settings() {
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
                 {t('tenantAdmin.settings.fields.language')}
               </label>
               <select style={selectStyle} {...register('language')}>
@@ -136,7 +136,7 @@ export function Settings() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
                 {t('tenantAdmin.settings.fields.timezone')}
               </label>
               <select style={selectStyle} {...register('timezone')}>
@@ -150,7 +150,7 @@ export function Settings() {
 
             <div className="flex justify-end pt-2">
               <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? 'Salvando...' : 'Salvar configurações'}
+                {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
               </Button>
             </div>
           </form>

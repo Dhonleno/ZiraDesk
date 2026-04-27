@@ -36,7 +36,7 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
   },
   email: {
     label: 'E-mail',
-    color: '#60A5FA',
+    color: 'var(--blue)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -46,7 +46,7 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
   },
   webchat: {
     label: 'Web Chat',
-    color: '#00C9A7',
+    color: 'var(--teal)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -55,21 +55,21 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
   },
 };
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
   const isActive = status === 'active';
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
       style={{
-        background: isActive ? 'rgba(62,207,142,.15)' : 'rgba(248,113,113,.15)',
-        color: isActive ? '#3ECF8E' : '#F87171',
+        background: isActive ? 'var(--green-dim)' : 'var(--red-dim)',
+        color: isActive ? 'var(--green)' : 'var(--red)',
       }}
     >
       <span
         className="h-1.5 w-1.5 rounded-full"
-        style={{ background: isActive ? '#3ECF8E' : '#F87171' }}
+        style={{ background: isActive ? 'var(--green)' : 'var(--red)' }}
       />
-      {isActive ? 'Conectado' : 'Desconectado'}
+      {isActive ? t('tenantAdmin.channels.status.active') : t('tenantAdmin.channels.status.inactive')}
     </span>
   );
 }
@@ -91,7 +91,7 @@ export function Channels() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
       toast.success(t('tenantAdmin.channels.messages.deleted'));
     },
-    onError: () => toast.error('Erro ao remover canal'),
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
   const testMutation = useMutation({
@@ -112,10 +112,10 @@ export function Channels() {
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
             {t('tenantAdmin.channels.title')}
           </h1>
-          <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>
+          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
             {t('tenantAdmin.channels.subtitle')}
           </p>
         </div>
@@ -140,14 +140,14 @@ export function Channels() {
               key={type}
               onClick={() => setAddOpen(true)}
               className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
-              style={{ background: '#141518', border: `1px dashed ${meta.color}40` }}
+              style={{ background: 'var(--bg-2)', border: `1px dashed ${meta.color}40` }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = meta.color + '80';
-                e.currentTarget.style.background = '#1A1C20';
+                e.currentTarget.style.background = 'var(--bg-3)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = meta.color + '40';
-                e.currentTarget.style.background = '#141518';
+                e.currentTarget.style.background = 'var(--bg-2)';
               }}
             >
               <div
@@ -157,8 +157,10 @@ export function Channels() {
                 {meta.icon}
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium" style={{ color: '#F0F1F3' }}>{meta.label}</p>
-                <p className="mt-0.5 text-xs" style={{ color: '#5C6370' }}>Clique para adicionar</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>{meta.label}</p>
+                <p className="mt-0.5 text-xs" style={{ color: 'var(--txt-3)' }}>
+                  {t('tenantAdmin.channels.clickToAdd')}
+                </p>
               </div>
             </button>
           ))}
@@ -166,12 +168,12 @@ export function Channels() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(channels as Channel[]).map((channel) => {
-            const meta = TYPE_META[channel.type] ?? { label: 'Canal', color: '#9DA3AE', icon: null };
+            const meta = TYPE_META[channel.type] ?? { label: 'Canal', color: 'var(--txt-2)', icon: null };
             return (
               <div
                 key={channel.id}
                 className="rounded-xl p-5"
-                style={{ background: '#141518', border: '1px solid rgba(255,255,255,.07)' }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -182,11 +184,11 @@ export function Channels() {
                       {meta.icon}
                     </div>
                     <div>
-                      <p className="font-medium" style={{ color: '#F0F1F3' }}>{channel.name}</p>
-                      <p className="text-xs" style={{ color: '#5C6370' }}>{meta.label}</p>
+                      <p className="font-medium" style={{ color: 'var(--txt)' }}>{channel.name}</p>
+                      <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{meta.label}</p>
                     </div>
                   </div>
-                  <StatusBadge status={channel.status} />
+                  <StatusBadge status={channel.status} t={t} />
                 </div>
 
                 <div className="mt-4 flex gap-2">
@@ -194,20 +196,20 @@ export function Channels() {
                     onClick={() => testMutation.mutate(channel.id)}
                     disabled={testMutation.isPending}
                     className="flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: '#22252B', color: '#9DA3AE', border: '1px solid rgba(255,255,255,.07)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = '#F0F1F3'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = '#9DA3AE'; }}
+                    style={{ background: 'var(--bg-4)', color: 'var(--txt-2)', border: '1px solid var(--line)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
                   >
-                    Testar
+                    {t('tenantAdmin.common.test')}
                   </button>
                   <button
                     onClick={() => deleteMutation.mutate(channel.id)}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: 'rgba(248,113,113,.1)', color: '#F87171', border: '1px solid rgba(248,113,113,.2)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.2)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.1)'; }}
+                    style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(248,113,113,.2)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.25)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--red-dim)'; }}
                   >
-                    Remover
+                    {t('tenantAdmin.common.remove')}
                   </button>
                 </div>
               </div>

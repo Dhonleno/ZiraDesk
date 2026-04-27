@@ -9,11 +9,11 @@ interface StatCardProps {
   accent?: string;
 }
 
-function StatCard({ label, value, icon, accent = '#00C9A7' }: StatCardProps) {
+function StatCard({ label, value, icon, accent = 'var(--teal)' }: StatCardProps) {
   return (
     <div
       className="rounded-xl p-5 flex items-start gap-4"
-      style={{ background: '#141518', border: '1px solid rgba(255,255,255,.07)' }}
+      style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
     >
       <div
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
@@ -22,8 +22,8 @@ function StatCard({ label, value, icon, accent = '#00C9A7' }: StatCardProps) {
         {icon}
       </div>
       <div>
-        <p className="text-xs font-medium" style={{ color: '#9DA3AE' }}>{label}</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums leading-none" style={{ color: '#F0F1F3' }}>
+        <p className="text-xs font-medium" style={{ color: 'var(--txt-2)' }}>{label}</p>
+        <p className="mt-1 text-2xl font-semibold tabular-nums leading-none" style={{ color: 'var(--txt)' }}>
           {value}
         </p>
       </div>
@@ -45,12 +45,12 @@ export function Dashboard() {
         <div
           className="rounded-xl p-6 text-center text-sm"
           style={{
-            background: 'rgba(248,113,113,.08)',
+            background: 'var(--red-dim)',
             border: '1px solid rgba(248,113,113,.25)',
-            color: '#F87171',
+            color: 'var(--red)',
           }}
         >
-          Falha ao carregar estatísticas. Verifique se a API está rodando.
+          {t('tenantAdmin.common.errorLoad')}
         </div>
       </div>
     );
@@ -60,7 +60,7 @@ export function Dashboard() {
     {
       label: t('tenantAdmin.dashboard.stats.users'),
       value: data?.total_users ?? 0,
-      accent: '#00C9A7',
+      accent: 'var(--teal)',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
           <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -72,7 +72,7 @@ export function Dashboard() {
     {
       label: t('tenantAdmin.dashboard.stats.clients'),
       value: data?.total_clients ?? 0,
-      accent: '#60A5FA',
+      accent: 'var(--blue)',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
           <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -83,7 +83,7 @@ export function Dashboard() {
     {
       label: t('tenantAdmin.dashboard.stats.openConversations'),
       value: data?.open_conversations ?? 0,
-      accent: '#A78BFA',
+      accent: 'var(--purple)',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -93,7 +93,7 @@ export function Dashboard() {
     {
       label: t('tenantAdmin.dashboard.stats.openTickets'),
       value: data?.open_tickets ?? 0,
-      accent: '#F59E0B',
+      accent: 'var(--amber)',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
           <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -106,10 +106,10 @@ export function Dashboard() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#F0F1F3' }}>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
           {t('tenantAdmin.dashboard.title')}
         </h1>
-        <p className="mt-1 text-sm" style={{ color: '#9DA3AE' }}>
+        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
           {t('tenantAdmin.dashboard.subtitle')}
         </p>
       </div>
@@ -131,20 +131,22 @@ export function Dashboard() {
       {!isLoading && (
         <div
           className="rounded-xl p-5"
-          style={{ background: '#141518', border: '1px solid rgba(255,255,255,.07)' }}
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
         >
-          <h2 className="text-sm font-medium" style={{ color: '#9DA3AE' }}>Resumo</h2>
+          <h2 className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+            {t('tenantAdmin.dashboard.summary')}
+          </h2>
           <div className="mt-3 grid grid-cols-3 gap-4 text-center">
             {[
-              { label: 'Total de conversas', value: data?.total_conversations ?? 0 },
-              { label: 'Total de tickets', value: data?.total_tickets ?? 0 },
-              { label: 'Total de mensagens', value: data?.total_messages ?? 0 },
+              { label: t('tenantAdmin.dashboard.stats.totalConversations'), value: data?.total_conversations ?? 0 },
+              { label: t('tenantAdmin.dashboard.stats.totalTickets'), value: data?.total_tickets ?? 0 },
+              { label: t('tenantAdmin.dashboard.stats.totalMessages'), value: data?.total_messages ?? 0 },
             ].map((item) => (
               <div key={item.label}>
-                <p className="text-xl font-semibold tabular-nums" style={{ color: '#F0F1F3' }}>
+                <p className="text-xl font-semibold tabular-nums" style={{ color: 'var(--txt)' }}>
                   {item.value}
                 </p>
-                <p className="mt-1 text-xs" style={{ color: '#5C6370' }}>{item.label}</p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--txt-3)' }}>{item.label}</p>
               </div>
             ))}
           </div>

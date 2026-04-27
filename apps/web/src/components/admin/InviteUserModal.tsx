@@ -48,7 +48,7 @@ export function InviteUserModal({ open, onClose }: Props) {
       toast.success(t('tenantAdmin.users.messages.invited'));
     },
     onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? 'Erro ao convidar usuário');
+      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -68,9 +68,9 @@ export function InviteUserModal({ open, onClose }: Props) {
   }
 
   const selectStyle: React.CSSProperties = {
-    background: '#1A1C20',
-    border: '1px solid rgba(255,255,255,.07)',
-    color: '#F0F1F3',
+    background: 'var(--bg-3)',
+    border: '1px solid var(--line)',
+    color: 'var(--txt)',
     height: '2.5rem',
     borderRadius: '0.5rem',
     padding: '0 0.75rem',
@@ -80,17 +80,17 @@ export function InviteUserModal({ open, onClose }: Props) {
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title={t('tenantAdmin.users.invite')}>
+    <Modal open={open} onClose={handleClose} title={t('tenantAdmin.users.inviteUser')}>
       {tempPassword ? (
         <div className="space-y-4">
-          <p className="text-sm" style={{ color: '#9DA3AE' }}>
-            Usuário criado com sucesso. Copie a senha temporária abaixo e envie ao novo membro:
+          <p className="text-sm" style={{ color: 'var(--txt-2)' }}>
+            {t('tenantAdmin.users.messages.invited')}. {t('tenantAdmin.users.messages.tempPassword')}:
           </p>
           <div
             className="flex items-center gap-3 rounded-lg p-4"
             style={{ background: 'rgba(0,201,167,.08)', border: '1px solid rgba(0,201,167,.25)' }}
           >
-            <span className="flex-1 font-mono text-lg font-semibold" style={{ color: '#00C9A7' }}>
+            <span className="flex-1 font-mono text-lg font-semibold" style={{ color: 'var(--teal)' }}>
               {tempPassword}
             </span>
             <button
@@ -98,18 +98,15 @@ export function InviteUserModal({ open, onClose }: Props) {
               className="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
               style={{
                 background: copied ? 'rgba(0,201,167,.2)' : 'rgba(255,255,255,.05)',
-                color: copied ? '#00C9A7' : '#9DA3AE',
-                border: '1px solid rgba(255,255,255,.07)',
+                color: copied ? 'var(--teal)' : 'var(--txt-2)',
+                border: '1px solid var(--line)',
               }}
             >
-              {copied ? 'Copiado!' : 'Copiar'}
+              {copied ? '✓' : 'Copy'}
             </button>
           </div>
-          <p className="text-xs" style={{ color: '#5C6370' }}>
-            Esta senha não será exibida novamente. O usuário deverá alterá-la no primeiro acesso.
-          </p>
           <div className="flex justify-end pt-2">
-            <Button onClick={handleClose}>Fechar</Button>
+            <Button onClick={handleClose}>{t('tenantAdmin.common.close')}</Button>
           </div>
         </div>
       ) : (
@@ -126,7 +123,7 @@ export function InviteUserModal({ open, onClose }: Props) {
             {...register('email')}
           />
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+            <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
               {t('tenantAdmin.users.fields.role')}
             </label>
             <select style={selectStyle} {...register('role')}>
@@ -137,10 +134,10 @@ export function InviteUserModal({ open, onClose }: Props) {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" type="button" onClick={handleClose}>
-              Cancelar
+              {t('tenantAdmin.common.cancel')}
             </Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Convidando...' : 'Convidar'}
+              {mutation.isPending ? t('tenantAdmin.common.inviting') : t('tenantAdmin.common.invite')}
             </Button>
           </div>
         </form>

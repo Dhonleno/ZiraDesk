@@ -1,8 +1,34 @@
 {
   "tenantAdmin": {
+    "common": {
+      "all": "All",
+      "save": "Save",
+      "cancel": "Cancel",
+      "back": "Back",
+      "edit": "Edit",
+      "remove": "Remove",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "test": "Test",
+      "invite": "Invite",
+      "inviting": "Inviting...",
+      "saving": "Saving...",
+      "noResults": "No results found",
+      "errorSave": "Error saving",
+      "errorLoad": "Error loading data",
+      "close": "Close"
+    },
+    "nav": {
+      "conversations": "Conversations",
+      "dashboard": "Dashboard",
+      "users": "Users",
+      "channels": "Channels",
+      "settings": "Settings"
+    },
     "settings": {
       "title": "Settings",
       "subtitle": "General settings for your company",
+      "saveSettings": "Save settings",
       "fields": {
         "name": "Company name",
         "language": "Default language",
@@ -17,6 +43,9 @@
       "title": "Users",
       "subtitle": "Manage your team members",
       "invite": "Invite user",
+      "inviteUser": "Invite user",
+      "noUsers": "No users found",
+      "editUser": "Edit user",
       "search": "Search user...",
       "roles": {
         "owner": "Owner",
@@ -48,6 +77,9 @@
       "title": "Channels",
       "subtitle": "Integrate your communication channels",
       "add": "Add channel",
+      "clickToAdd": "Click to add",
+      "testSuccess": "Channel connected",
+      "testFail": "Connection failed",
       "types": {
         "whatsapp": "WhatsApp",
         "instagram": "Instagram DM",
@@ -74,11 +106,15 @@
     "dashboard": {
       "title": "Dashboard",
       "subtitle": "Overview of your support",
+      "summary": "Summary",
       "stats": {
         "users": "Active users",
         "clients": "Clients",
         "openConversations": "Open conversations",
-        "openTickets": "Open tickets"
+        "openTickets": "Open tickets",
+        "totalConversations": "Total conversations",
+        "totalTickets": "Total tickets",
+        "totalMessages": "Total messages"
       }
     }
   },

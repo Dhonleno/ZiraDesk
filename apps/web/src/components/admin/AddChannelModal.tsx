@@ -41,7 +41,7 @@ const CHANNEL_TYPES: ChannelTypeOption[] = [
   {
     type: 'email',
     label: 'E-mail',
-    color: '#60A5FA',
+    color: 'var(--blue)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -52,7 +52,7 @@ const CHANNEL_TYPES: ChannelTypeOption[] = [
   {
     type: 'webchat',
     label: 'Web Chat',
-    color: '#00C9A7',
+    color: 'var(--teal)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -89,7 +89,7 @@ export function AddChannelModal({ open, onClose }: Props) {
       handleClose();
     },
     onError: () => {
-      toast.error('Erro ao adicionar canal');
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -111,7 +111,7 @@ export function AddChannelModal({ open, onClose }: Props) {
     <Modal
       open={open}
       onClose={handleClose}
-      title={step === 1 ? t('tenantAdmin.channels.add') : `Configurar ${selectedTypeMeta?.label}`}
+      title={step === 1 ? t('tenantAdmin.channels.add') : `${t('tenantAdmin.channels.add')} — ${selectedTypeMeta?.label}`}
       maxWidth="lg"
     >
       {step === 1 ? (
@@ -121,14 +121,14 @@ export function AddChannelModal({ open, onClose }: Props) {
               key={ct.type}
               onClick={() => handleTypeSelect(ct.type)}
               className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
-              style={{ background: '#141518', border: '1px solid rgba(255,255,255,.07)' }}
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = ct.color + '66';
-                e.currentTarget.style.background = '#1A1C20';
+                e.currentTarget.style.background = 'var(--bg-3)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)';
-                e.currentTarget.style.background = '#141518';
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.background = 'var(--bg-2)';
               }}
             >
               <div
@@ -137,7 +137,7 @@ export function AddChannelModal({ open, onClose }: Props) {
               >
                 {ct.icon}
               </div>
-              <span className="text-sm font-medium" style={{ color: '#F0F1F3' }}>{ct.label}</span>
+              <span className="text-sm font-medium" style={{ color: 'var(--txt)' }}>{ct.label}</span>
             </button>
           ))}
         </div>
@@ -151,8 +151,8 @@ export function AddChannelModal({ open, onClose }: Props) {
               <Input label="API Key" type="password" {...register('api_key')} />
               <Input label="Instance Name" {...register('instance_name')} />
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>Webhook URL</label>
-                <div className="h-10 rounded-lg px-3 flex items-center text-sm font-mono" style={{ background: '#141518', border: '1px solid rgba(255,255,255,.04)', color: '#5C6370' }}>
+                <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Webhook URL</label>
+                <div className="h-10 rounded-lg px-3 flex items-center text-sm font-mono" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--txt-3)' }}>
                   {window.location.origin}/api/webhooks/whatsapp
                 </div>
               </div>
@@ -187,8 +187,8 @@ export function AddChannelModal({ open, onClose }: Props) {
               className="rounded-lg p-4"
               style={{ background: 'rgba(0,201,167,.08)', border: '1px solid rgba(0,201,167,.2)' }}
             >
-              <p className="text-xs font-medium" style={{ color: '#00C9A7' }}>Snippet de incorporação</p>
-              <p className="mt-1 text-xs" style={{ color: '#9DA3AE' }}>
+              <p className="text-xs font-medium" style={{ color: 'var(--teal)' }}>Snippet de incorporação</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--txt-2)' }}>
                 O código de incorporação será gerado após salvar o canal.
               </p>
             </div>
@@ -196,10 +196,10 @@ export function AddChannelModal({ open, onClose }: Props) {
 
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" type="button" onClick={() => setStep(1)}>
-              Voltar
+              {t('tenantAdmin.common.back')}
             </Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Salvando...' : 'Adicionar canal'}
+              {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.channels.add')}
             </Button>
           </div>
         </form>

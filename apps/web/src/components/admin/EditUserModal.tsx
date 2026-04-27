@@ -62,14 +62,14 @@ export function EditUserModal({ open, onClose, user }: Props) {
       onClose();
     },
     onError: () => {
-      toast.error('Erro ao atualizar usuário');
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
   const selectStyle: React.CSSProperties = {
-    background: '#1A1C20',
-    border: '1px solid rgba(255,255,255,.07)',
-    color: '#F0F1F3',
+    background: 'var(--bg-3)',
+    border: '1px solid var(--line)',
+    color: 'var(--txt)',
     height: '2.5rem',
     borderRadius: '0.5rem',
     padding: '0 0.75rem',
@@ -79,7 +79,7 @@ export function EditUserModal({ open, onClose, user }: Props) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Editar usuário">
+    <Modal open={open} onClose={onClose} title={t('tenantAdmin.users.editUser')}>
       <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
         <Input
           label={t('tenantAdmin.users.fields.name')}
@@ -87,18 +87,18 @@ export function EditUserModal({ open, onClose, user }: Props) {
           {...register('name')}
         />
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+          <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
             {t('tenantAdmin.users.fields.email')}
           </label>
           <div
             className="h-10 rounded-lg px-3 flex items-center text-sm"
-            style={{ background: '#141518', border: '1px solid rgba(255,255,255,.04)', color: '#5C6370' }}
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--txt-3)' }}
           >
             {user?.email}
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+          <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
             {t('tenantAdmin.users.fields.role')}
           </label>
           <select style={selectStyle} {...register('role')}>
@@ -109,10 +109,10 @@ export function EditUserModal({ open, onClose, user }: Props) {
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>
-            Cancelar
+            {t('tenantAdmin.common.cancel')}
           </Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Salvando...' : 'Salvar'}
+            {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.common.save')}
           </Button>
         </div>
       </form>
