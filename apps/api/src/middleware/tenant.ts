@@ -1,4 +1,4 @@
-import type { FastifyRequest, FastifyReply, HookHandlerDoneFunction } from 'fastify';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/database.js';
 import type { Tenant } from '@ziradesk/shared';
 

@@ -11,6 +11,7 @@ interface LoginResponseData {
     name: string;
     email: string;
     role: string;
+    tenantId?: string;
   };
 }
 
@@ -25,7 +26,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       setAuth({ user: data.user, token: data.accessToken });
-      navigate('/');
+      navigate(data.user.role === 'super_admin' ? '/super-admin' : '/');
     },
   });
 

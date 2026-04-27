@@ -12,7 +12,7 @@ import {
   ConflictError,
 } from './plans.service.js';
 
-const guard = [authMiddleware, hasRole('super_admin')] as const;
+const guard = [authMiddleware, hasRole('super_admin')];
 
 export async function plansRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { preHandler: guard }, async (_request, reply) => {

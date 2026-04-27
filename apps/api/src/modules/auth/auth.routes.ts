@@ -7,6 +7,7 @@ import {
   getAuthMessages,
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.service.js';
+import { prisma } from '../../config/database.js';
 
 const REFRESH_COOKIE = 'zd_refresh';
 
@@ -20,10 +21,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Dados inválidos', details: parsed.error.flatten() });
     }
 
-    const { email, password } = parsed.data;
+    const { email, password, tenantSlug } = parsed.data;
 
     try {
-      const { tokens, user } = await loginWithEmailPassword(email, password, lang);
+      // Se tenantSlug fornecido (dev sem subdomain), resolve o schema manualmente
+      let tenantSchemaName: string | undefined;
+      if (tenantSlug) {
+        const tenant = await prisma.tenant.findUnique({
+          where: { slug: tenantSlug },
+          select: { schemaName: true, status: true },
+        });
+        if (!tenant) {
+          return reply.code(404).send({ error: 'Tenant não encontrado' });
+        }
+        if (tenant.status !== 'active' && tenant.status !== 'trial') {
+          return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
+        }
+        await prisma.$executeRawUnsafe(`SET search_path TO "${tenant.schemaName}", public`);
+        tenantSchemaName = tenant.schemaName;
+      }
+
+      const { tokens, user } = await loginWithEmailPassword(email, password, lang, tenantSchemaName);
 
       reply.setCookie(REFRESH_COOKIE, tokens.refreshToken, {
         httpOnly: true,
@@ -40,6 +58,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           email: user.email,
           role: user.role,
+          ...(user.tenantId ? { tenantId: user.tenantId } : {}),
         },
       });
     } catch (err) {

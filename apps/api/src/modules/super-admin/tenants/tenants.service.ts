@@ -293,12 +293,8 @@ export async function updateTenant(id: string, data: UpdateTenantInput) {
   await getTenant(id);
   return prisma.tenant.update({
     where: { id },
-    data: {
-      name: data.name,
-      planId: data.planId,
-      status: data.status,
-      settings: data.settings as Prisma.InputJsonValue | undefined,
-    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: data as any,
   });
 }
 

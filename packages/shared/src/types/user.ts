@@ -31,6 +31,7 @@ export interface AuthSuperAdmin {
   email: string;
   role: 'super_admin';
   isSuperAdmin: true;
+  tenantId?: never;
 }
 
 export type AuthenticatedUser = AuthUser | AuthSuperAdmin;

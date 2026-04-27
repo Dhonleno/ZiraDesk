@@ -130,14 +130,15 @@ export function verifyRefreshToken(
       isSuperAdmin: boolean;
     };
 
-    return {
+    const result: UserPayload = {
       id: payload.sub,
       name: payload.name,
       email: payload.email,
       role: payload.role,
-      tenantId: payload.tenantId,
       isSuperAdmin: payload.isSuperAdmin,
     };
+    if (payload.tenantId) result.tenantId = payload.tenantId;
+    return result;
   } catch {
     throw new Error(msg.tokenExpired);
   }

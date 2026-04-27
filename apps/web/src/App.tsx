@@ -11,6 +11,11 @@ import { Dashboard } from './pages/super-admin/Dashboard';
 import { Tenants } from './pages/super-admin/Tenants';
 import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
+import { ConversationsPage } from './pages/tenant/ConversationsPage';
+import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
+import { Users as AdminUsers } from './pages/admin/Users';
+import { Channels as AdminChannels } from './pages/admin/Channels';
+import { Settings as AdminSettings } from './pages/admin/Settings';
 import { Toaster } from './components/ui/Toaster';
 
 const queryClient = new QueryClient({
@@ -47,7 +52,7 @@ export function App() {
 
           {/* Área do super admin */}
           <Route
-            path="/admin"
+            path="/super-admin"
             element={
               <RequireAuth>
                 <RequireSuperAdmin>
@@ -57,12 +62,13 @@ export function App() {
             }
           >
             <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="tenants" element={<Tenants />} />
             <Route path="tenants/:id" element={<TenantDetail />} />
             <Route path="plans" element={<Plans />} />
           </Route>
 
-          {/* Área do tenant — rota catch-all protegida */}
+          {/* Área do tenant */}
           <Route
             path="/*"
             element={
@@ -70,7 +76,15 @@ export function App() {
                 <TenantLayout />
               </RequireAuth>
             }
-          />
+          >
+            <Route index element={<Navigate to="/conversations" replace />} />
+            <Route path="conversations" element={<ConversationsPage />} />
+            <Route path="admin" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="admin/dashboard" element={<AdminDashboard />} />
+            <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/channels" element={<AdminChannels />} />
+            <Route path="admin/settings" element={<AdminSettings />} />
+          </Route>
         </Routes>
       </BrowserRouter>
       <Toaster />

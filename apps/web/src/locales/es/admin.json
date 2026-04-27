@@ -1,4 +1,87 @@
 {
+  "tenantAdmin": {
+    "settings": {
+      "title": "Configuración",
+      "subtitle": "Configuración general de tu empresa",
+      "fields": {
+        "name": "Nombre de la empresa",
+        "language": "Idioma predeterminado",
+        "timezone": "Zona horaria",
+        "primaryColor": "Color primario"
+      },
+      "messages": {
+        "saved": "Configuración guardada con éxito"
+      }
+    },
+    "users": {
+      "title": "Usuarios",
+      "subtitle": "Gestiona los miembros de tu equipo",
+      "invite": "Invitar usuario",
+      "search": "Buscar usuario...",
+      "roles": {
+        "owner": "Propietario",
+        "admin": "Administrador",
+        "agent": "Agente",
+        "viewer": "Visualizador"
+      },
+      "status": {
+        "active": "Activo",
+        "inactive": "Inactivo"
+      },
+      "fields": {
+        "name": "Nombre",
+        "email": "Correo",
+        "role": "Rol",
+        "status": "Estado",
+        "lastSeen": "Último acceso",
+        "createdAt": "Miembro desde"
+      },
+      "messages": {
+        "invited": "Usuario invitado con éxito",
+        "updated": "Usuario actualizado",
+        "deactivated": "Usuario desactivado",
+        "cantDeleteSelf": "No puedes eliminarte a ti mismo",
+        "tempPassword": "Contraseña temporal"
+      }
+    },
+    "channels": {
+      "title": "Canales",
+      "subtitle": "Integra tus canales de comunicación",
+      "add": "Agregar canal",
+      "types": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram DM",
+        "email": "Correo electrónico",
+        "webchat": "Web Chat"
+      },
+      "status": {
+        "active": "Conectado",
+        "inactive": "Desconectado"
+      },
+      "fields": {
+        "name": "Nombre del canal",
+        "type": "Tipo",
+        "status": "Estado"
+      },
+      "messages": {
+        "created": "Canal agregado con éxito",
+        "updated": "Canal actualizado",
+        "deleted": "Canal eliminado",
+        "testSuccess": "Canal conectado con éxito",
+        "testFail": "Error de conexión — verifica las credenciales"
+      }
+    },
+    "dashboard": {
+      "title": "Panel",
+      "subtitle": "Resumen de tu atención",
+      "stats": {
+        "users": "Usuarios activos",
+        "clients": "Clientes",
+        "openConversations": "Conversaciones abiertas",
+        "openTickets": "Tickets abiertos"
+      }
+    }
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

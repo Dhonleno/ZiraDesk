@@ -1,4 +1,87 @@
 {
+  "tenantAdmin": {
+    "settings": {
+      "title": "Configurações",
+      "subtitle": "Configurações gerais da sua empresa",
+      "fields": {
+        "name": "Nome da empresa",
+        "language": "Idioma padrão",
+        "timezone": "Fuso horário",
+        "primaryColor": "Cor primária"
+      },
+      "messages": {
+        "saved": "Configurações salvas com sucesso"
+      }
+    },
+    "users": {
+      "title": "Usuários",
+      "subtitle": "Gerencie os membros da sua equipe",
+      "invite": "Convidar usuário",
+      "search": "Buscar usuário...",
+      "roles": {
+        "owner": "Proprietário",
+        "admin": "Administrador",
+        "agent": "Agente",
+        "viewer": "Visualizador"
+      },
+      "status": {
+        "active": "Ativo",
+        "inactive": "Inativo"
+      },
+      "fields": {
+        "name": "Nome",
+        "email": "E-mail",
+        "role": "Função",
+        "status": "Status",
+        "lastSeen": "Último acesso",
+        "createdAt": "Membro desde"
+      },
+      "messages": {
+        "invited": "Usuário convidado com sucesso",
+        "updated": "Usuário atualizado",
+        "deactivated": "Usuário desativado",
+        "cantDeleteSelf": "Você não pode remover a si mesmo",
+        "tempPassword": "Senha temporária"
+      }
+    },
+    "channels": {
+      "title": "Canais",
+      "subtitle": "Integre seus canais de comunicação",
+      "add": "Adicionar canal",
+      "types": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram DM",
+        "email": "E-mail",
+        "webchat": "Web Chat"
+      },
+      "status": {
+        "active": "Conectado",
+        "inactive": "Desconectado"
+      },
+      "fields": {
+        "name": "Nome do canal",
+        "type": "Tipo",
+        "status": "Status"
+      },
+      "messages": {
+        "created": "Canal adicionado com sucesso",
+        "updated": "Canal atualizado",
+        "deleted": "Canal removido",
+        "testSuccess": "Canal conectado com sucesso",
+        "testFail": "Falha na conexão — verifique as credenciais"
+      }
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Visão geral do seu atendimento",
+      "stats": {
+        "users": "Usuários ativos",
+        "clients": "Clientes",
+        "openConversations": "Conversas abertas",
+        "openTickets": "Tickets abertos"
+      }
+    }
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

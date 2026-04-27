@@ -14,7 +14,7 @@ import {
   ConflictError,
 } from './tenants.service.js';
 
-const guard = [authMiddleware, hasRole('super_admin')] as const;
+const guard = [authMiddleware, hasRole('super_admin')];
 
 export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { preHandler: guard }, async (request, reply) => {

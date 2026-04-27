@@ -7,16 +7,17 @@ import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { superAdminRoutes } from './modules/super-admin/index.js';
+import { tenantRoutes } from './modules/tenant/index.js';
+import { adminRoutes } from './modules/admin/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
 const app = Fastify({
   logger: {
     level: env.NODE_ENV === 'development' ? 'info' : 'warn',
-    transport:
-      env.NODE_ENV === 'development'
-        ? { target: 'pino-pretty', options: { colorize: true } }
-        : undefined,
+    ...(env.NODE_ENV === 'development'
+      ? { transport: { target: 'pino-pretty', options: { colorize: true } } }
+      : {}),
   },
 });
 
@@ -48,12 +49,15 @@ async function bootstrap(): Promise<void> {
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
+  await app.register(tenantRoutes, { prefix: '/api/tenant' });
+  await app.register(adminRoutes, { prefix: '/api/admin' });
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
   // Inicia o servidor HTTP e anexa Socket.io
   const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
-  createSocketServer(app.server);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createSocketServer(app.server as any);
 
   app.log.info(`🚀 ZiraDesk API rodando em ${address}`);
 }

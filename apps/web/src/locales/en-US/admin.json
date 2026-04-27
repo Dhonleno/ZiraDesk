@@ -1,4 +1,87 @@
 {
+  "tenantAdmin": {
+    "settings": {
+      "title": "Settings",
+      "subtitle": "General settings for your company",
+      "fields": {
+        "name": "Company name",
+        "language": "Default language",
+        "timezone": "Timezone",
+        "primaryColor": "Primary color"
+      },
+      "messages": {
+        "saved": "Settings saved successfully"
+      }
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "Manage your team members",
+      "invite": "Invite user",
+      "search": "Search user...",
+      "roles": {
+        "owner": "Owner",
+        "admin": "Administrator",
+        "agent": "Agent",
+        "viewer": "Viewer"
+      },
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "status": "Status",
+        "lastSeen": "Last seen",
+        "createdAt": "Member since"
+      },
+      "messages": {
+        "invited": "User invited successfully",
+        "updated": "User updated",
+        "deactivated": "User deactivated",
+        "cantDeleteSelf": "You cannot remove yourself",
+        "tempPassword": "Temporary password"
+      }
+    },
+    "channels": {
+      "title": "Channels",
+      "subtitle": "Integrate your communication channels",
+      "add": "Add channel",
+      "types": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram DM",
+        "email": "Email",
+        "webchat": "Web Chat"
+      },
+      "status": {
+        "active": "Connected",
+        "inactive": "Disconnected"
+      },
+      "fields": {
+        "name": "Channel name",
+        "type": "Type",
+        "status": "Status"
+      },
+      "messages": {
+        "created": "Channel added successfully",
+        "updated": "Channel updated",
+        "deleted": "Channel removed",
+        "testSuccess": "Channel connected successfully",
+        "testFail": "Connection failed — check your credentials"
+      }
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Overview of your support",
+      "stats": {
+        "users": "Active users",
+        "clients": "Clients",
+        "openConversations": "Open conversations",
+        "openTickets": "Open tickets"
+      }
+    }
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {
