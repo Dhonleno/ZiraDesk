@@ -9,6 +9,8 @@
 - Middleware de linguagem no backend (Accept-Language)
 - Mensagens de erro da API internacionalizadas
 
+---
+
 ## [0.1.0] — Sprint 0 — Fundação
 ### Adicionado
 - Monorepo pnpm workspaces (apps/api, apps/web, packages/shared)
