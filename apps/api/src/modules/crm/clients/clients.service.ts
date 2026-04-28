@@ -41,6 +41,7 @@ interface ClientRow {
   custom_fields: unknown;
   created_at: Date;
   updated_at: Date;
+  last_contact_at: Date | null;
 }
 
 interface AuditLogRow {
@@ -74,12 +75,16 @@ interface MessageCountRow {
   last_created_at: Date | null;
 }
 
+function toPgArray(arr: string[]): string {
+  return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
+}
+
 // ── Valid sort column whitelist (prevents SQL injection) ──────────────────────
 const SORT_COLUMNS: Record<string, string> = {
   name: 'c.name',
   created_at: 'c.created_at',
   updated_at: 'c.updated_at',
-  last_contact: 'c.updated_at', // approximation until last_contact_at column exists
+  last_contact: 'last_msg.created_at',
 };
 
 export async function listClients(query: ListClientsQuery) {
@@ -103,9 +108,16 @@ export async function listClients(query: ListClientsQuery) {
        c.address_street, c.address_city, c.address_state, c.address_zip,
        c.birth_date, c.gender, c.occupation, c.income, c.segment, c.lead_source,
        c.responsible_id, c.tags, c.custom_fields, c.created_at, c.updated_at,
-       u.name AS responsible_name, u.email AS responsible_email
+       u.name AS responsible_name, u.email AS responsible_email,
+       last_msg.created_at AS last_contact_at
      FROM clients c
      LEFT JOIN users u ON u.id = c.responsible_id
+     LEFT JOIN LATERAL (
+       SELECT m.created_at FROM messages m
+       JOIN conversations cv ON cv.id = m.conversation_id
+       WHERE cv.client_id = c.id
+       ORDER BY m.created_at DESC LIMIT 1
+     ) last_msg ON true
      WHERE ($1::text IS NULL OR c.name ILIKE '%' || $1 || '%'
                               OR c.email ILIKE '%' || $1 || '%'
                               OR c.phone ILIKE '%' || $1 || '%'
@@ -181,7 +193,7 @@ export async function createClient(data: CreateClientInput, createdBy: string) {
     if (existing[0]) throw new ConflictError('E-mail já cadastrado para outro cliente');
   }
 
-  const tagsJson = JSON.stringify(data.tags ?? []);
+  const tagsLiteral = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
@@ -215,7 +227,7 @@ export async function createClient(data: CreateClientInput, createdBy: string) {
     data.segment ?? null,
     data.lead_source ?? null,
     data.responsible_id ?? null,
-    tagsJson,
+    tagsLiteral,
     customFieldsJson,
   );
 
@@ -244,7 +256,7 @@ export async function updateClient(id: string, data: UpdateClientInput, updatedB
     if (emailCheck[0]) throw new ConflictError('E-mail já cadastrado para outro cliente');
   }
 
-  const tagsJson = data.tags !== undefined ? JSON.stringify(data.tags) : null;
+  const tagsLiteral = data.tags !== undefined ? toPgArray(data.tags) : null;
   const customFieldsJson = data.custom_fields !== undefined ? JSON.stringify(data.custom_fields) : null;
 
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
@@ -290,7 +302,7 @@ export async function updateClient(id: string, data: UpdateClientInput, updatedB
     data.segment ?? null,
     data.lead_source ?? null,
     data.responsible_id ?? null,
-    tagsJson,
+    tagsLiteral,
     customFieldsJson,
     id,
   );
@@ -310,20 +322,21 @@ export async function updateClient(id: string, data: UpdateClientInput, updatedB
 }
 
 export async function deleteClient(id: string, deletedBy: string) {
-  await getClient(id);
+  const existing = await getClient(id);
 
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
-    `UPDATE clients SET status = 'inactive', updated_at = NOW()
+    `UPDATE clients SET status = 'inativo', updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
     id,
   );
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO audit_logs (user_id, action, entity, entity_id)
-     VALUES ($1::uuid, 'client.deleted', 'client', $2::uuid)`,
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
+     VALUES ($1::uuid, 'client.deleted', 'client', $2::uuid, $3::jsonb)`,
     deletedBy,
     id,
+    JSON.stringify(existing),
   );
 
   return rows[0]!;
@@ -345,7 +358,7 @@ export async function getClientTimeline(id: string) {
        FROM conversations
        WHERE client_id = $1::uuid
        ORDER BY created_at DESC
-       LIMIT 5`,
+       LIMIT 20`,
       id,
     ),
     prisma.$queryRawUnsafe<TicketRow[]>(
@@ -353,7 +366,7 @@ export async function getClientTimeline(id: string) {
        FROM tickets
        WHERE client_id = $1::uuid
        ORDER BY created_at DESC
-       LIMIT 5`,
+       LIMIT 20`,
       id,
     ),
   ]);
@@ -478,11 +491,20 @@ export async function addTag(clientId: string, tag: string) {
     tag,
     clientId,
   );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (action, entity, entity_id, new_data)
+     VALUES ('client.tag_added', 'client', $1::uuid, $2::jsonb)`,
+    clientId,
+    JSON.stringify({ tag }),
+  );
+
   return rows[0]!;
 }
 
 export async function removeTag(clientId: string, tag: string) {
-  await getClient(clientId);
+  const client = await getClient(clientId);
+  if (!client.tags.includes(tag)) throw new NotFoundError('Tag não encontrada');
 
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
     `UPDATE clients
@@ -492,5 +514,13 @@ export async function removeTag(clientId: string, tag: string) {
     tag,
     clientId,
   );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (action, entity, entity_id, old_data)
+     VALUES ('client.tag_removed', 'client', $1::uuid, $2::jsonb)`,
+    clientId,
+    JSON.stringify({ tag }),
+  );
+
   return rows[0]!;
 }

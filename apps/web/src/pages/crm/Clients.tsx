@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { crmApi } from '../../services/api';
-import type { CrmClient, CrmTimelineEvent } from '../../services/api';
+import type { CrmClient } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { CreateClientModal } from '../../components/crm/CreateClientModal';
+import { EditClientModal } from '../../components/crm/EditClientModal';
+import { ClientProfile } from '../../components/crm/ClientProfile';
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 const AVATAR_GRADS = [
@@ -40,11 +42,6 @@ function relTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pt-BR');
-}
-
 function fmtLtv(n: number): string {
   if (!n) return '—';
   if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1)}M`;
@@ -53,6 +50,31 @@ function fmtLtv(n: number): string {
 }
 
 const KPI_SPARK = [30, 45, 38, 55, 48, 65, 60, 75, 82, 78, 88, 100];
+
+/* Map English backend values → canonical frontend status keys */
+const STATUS_NORMALIZE: Record<string, string> = {
+  customer:    'cliente',
+  client:      'cliente',
+  inactive:    'inativo',
+  negotiating: 'negociando',
+};
+function normalizeStatus(s: string): string {
+  return STATUS_NORMALIZE[s] ?? s;
+}
+
+/* Health score per business rules:
+   inactive=20 | email+phone+<7d=100 | email|phone+<30d=70 | else=40 */
+function computeHealthScore(c: CrmClient): number {
+  if (normalizeStatus(c.status) === 'inativo') return 20;
+  const hasEmail = Boolean(c.email);
+  const hasPhone = Boolean(c.phone);
+  const daysSince = c.last_contact_at
+    ? (Date.now() - new Date(c.last_contact_at).getTime()) / 86_400_000
+    : Infinity;
+  if (hasEmail && hasPhone && daysSince < 7)    return 100;
+  if ((hasEmail || hasPhone) && daysSince < 30) return 70;
+  return 40;
+}
 
 const TAG_STYLE: Record<string, { bg: string; color: string; border: string }> = {
   cliente:    { bg: 'var(--teal-dim)',   color: 'var(--teal)',   border: 'rgba(0,201,167,.25)'   },
@@ -101,209 +123,39 @@ function TagPill({ status, label }: { status: string; label: string }) {
   );
 }
 
-/* ── Detail panel ────────────────────────────────────────────────────────── */
-interface DetailPanelProps {
-  client: CrmClient | null | undefined;
-  stats: { total_conversations: number; total_messages: number } | null | undefined;
-  timeline: CrmTimelineEvent[] | null | undefined;
-  statsLoading: boolean;
-  timelineLoading: boolean;
-  t: (key: string) => string;
-}
-
-function DetailPanel({ client, stats, timeline, statsLoading, timelineLoading, t }: DetailPanelProps) {
-  if (!client) {
-    return (
-      <div style={{ background: 'var(--bg-2)', borderLeft: '1px solid var(--line)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '40px 20px', color: 'var(--txt-3)', textAlign: 'center' }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('clients.detail.empty')}</div>
-        <div style={{ fontSize: 11, maxWidth: 220, lineHeight: 1.5 }}>{t('clients.detail.emptySubtitle')}</div>
-      </div>
-    );
-  }
-
-  const grad = gradFor(client.id);
-  const ini = initials(client.name);
-  const tagStyle = TAG_STYLE[client.status] ?? TAG_STYLE['inativo']!;
-
-  const tl: CrmTimelineEvent[] = (timeline && timeline.length > 0) ? timeline : [{
-    id: 'empty',
-    type: 'audit',
-    title: t('clients.detail.noActivity'),
-    subtitle: t('clients.detail.noActivitySub'),
-    time: client.last_contact_at ?? client.created_at,
-    dot_color: 'var(--txt-3)',
-  }];
-
-  const location = [client.address_city, client.address_state].filter(Boolean).join(', ');
-  const roleDesc = [client.occupation, location].filter(Boolean).join(' · ');
-
-  return (
-    <div style={{ background: 'var(--bg-2)', borderLeft: '1px solid var(--line)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
-
-        {/* Hero */}
-        <div style={{ padding: '24px 20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center', borderBottom: '1px solid var(--line)', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 80, background: 'radial-gradient(ellipse at top, var(--hero-glow), transparent 70%)', pointerEvents: 'none' }} />
-          <div style={{ width: 76, height: 76, borderRadius: '50%', background: grad, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 600, color: '#fff', border: '3px solid var(--bg-2)', position: 'relative', zIndex: 1, boxShadow: '0 8px 24px rgba(102,126,234,.3)' }}>
-            {ini}
-          </div>
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--txt)' }}>{client.name}</div>
-            {roleDesc && <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{roleDesc}</div>}
-          </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--r-pill)', background: tagStyle.bg, color: tagStyle.color, border: `1px solid ${tagStyle.border}` }}>
-              {t(`clients.statusLabel.${client.status}`)}
-            </span>
-            {client.tags.slice(0, 3).map((tag) => (
-              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, padding: '2px 8px', borderRadius: 'var(--r-pill)', background: 'var(--bg-4)', color: 'var(--txt-2)', border: '1px solid var(--line)' }}>
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-          {[
-            {
-              label: t('clients.detail.message'),
-              icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2 9.5V4a1.2 1.2 0 011.2-1.2h7.6A1.2 1.2 0 0112 4v4.5a1.2 1.2 0 01-1.2 1.2H5L2 12v-2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>,
-            },
-            {
-              label: t('clients.detail.call'),
-              icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2.5 2.5s1.2-.4 1.7 1.4c.2.8-.5 1.3-.4 2.2.2 1 .8 1.8 1.7 2.7s1.7 1.5 2.7 1.7c.9.1 1.4-.6 2.2-.4 1.8.5 1.4 1.7 1.4 1.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>,
-            },
-            {
-              label: t('clients.detail.schedule'),
-              icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><rect x="2" y="2.5" width="10" height="9" rx="1.3" stroke="currentColor" strokeWidth="1.3" /><path d="M2 5h10M4.5 1.5v2M9.5 1.5v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>,
-            },
-            {
-              label: t('clients.detail.more'),
-              icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><circle cx="7" cy="3.5" r="1" fill="currentColor" /><circle cx="7" cy="7" r="1" fill="currentColor" /><circle cx="7" cy="10.5" r="1" fill="currentColor" /></svg>,
-            },
-          ].map((a) => (
-            <button
-              key={a.label}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '9px 4px', borderRadius: 'var(--r)', background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--txt-2)', cursor: 'pointer', fontSize: 10, fontWeight: 500, transition: 'all .15s', fontFamily: 'var(--font)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--teal)'; e.currentTarget.style.borderColor = 'var(--teal)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--txt-2)'; e.currentTarget.style.borderColor = 'var(--line)'; }}
-            >
-              <div style={{ width: 26, height: 26, borderRadius: 7, background: 'var(--bg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {a.icon}
-              </div>
-              {a.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Métricas */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', marginBottom: 10 }}>{t('clients.detail.metrics')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            {statsLoading ? (
-              <div style={{ gridColumn: '1/-1', fontSize: 12, color: 'var(--txt-3)', textAlign: 'center', padding: '8px 0' }}>…</div>
-            ) : [
-              { val: String(stats?.total_conversations ?? 0), lbl: t('clients.detail.attendances'), green: false },
-              { val: String(stats?.total_messages ?? 0),       lbl: t('clients.detail.messages'),    green: false },
-              { val: '—',                                       lbl: t('clients.detail.nps'),          green: false },
-            ].map(({ val, lbl, green }) => (
-              <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 10, textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 600, fontFamily: 'var(--mono)', letterSpacing: '-0.3px', color: green ? 'var(--green)' : 'var(--txt)' }}>{val}</div>
-                <div style={{ fontSize: 10, color: 'var(--txt-3)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lbl}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Informações */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)' }}>{t('clients.detail.info')}</div>
-            <span style={{ fontSize: 11, color: 'var(--teal)', cursor: 'pointer' }}>{t('clients.detail.edit')}</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 10px' }}>
-            {[
-              { lbl: t('clients.detail.fields.email'),      val: client.email ?? '—',         link: true,  mono: false },
-              { lbl: t('clients.detail.fields.phone'),      val: client.phone ?? '—',         link: false, mono: true  },
-              { lbl: t('clients.detail.fields.document'),   val: client.document ?? '—',      link: false, mono: true  },
-              { lbl: t('clients.detail.fields.zip'),        val: client.address_zip ?? '—',   link: false, mono: true  },
-              { lbl: t('clients.detail.fields.city'),       val: client.address_city ?? '—',  link: false, mono: false },
-              { lbl: t('clients.detail.fields.occupation'), val: client.occupation ?? '—',    link: false, mono: false },
-              { lbl: t('clients.detail.fields.since'),      val: fmtDate(client.created_at),  link: false, mono: false },
-              { lbl: t('clients.detail.fields.assignedTo'), val: client.responsible_name ?? '—', link: false, mono: false },
-            ].map(({ lbl, val, link, mono }) => (
-              <div key={lbl} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lbl}</span>
-                <span style={{ fontSize: mono ? 11 : 12, color: link ? 'var(--teal)' : 'var(--txt)', fontFamily: mono ? 'var(--mono)' : 'var(--font)' } as React.CSSProperties}>{val}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Timeline */}
-        <div style={{ padding: '14px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)' }}>{t('clients.detail.recentActivity')}</div>
-            <span style={{ fontSize: 11, color: 'var(--teal)', cursor: 'pointer' }}>{t('clients.detail.viewAll')}</span>
-          </div>
-          {timelineLoading ? (
-            <div style={{ fontSize: 12, color: 'var(--txt-3)', textAlign: 'center', padding: '8px 0' }}>…</div>
-          ) : (
-            <div style={{ position: 'relative', paddingLeft: 18 }}>
-              <div style={{ position: 'absolute', left: 6, top: 6, bottom: 6, width: 1, background: 'var(--line-2)' }} />
-              {tl.map((ev, i) => (
-                <div key={ev.id + i} style={{ position: 'relative', padding: '6px 0 12px' }}>
-                  <div style={{ position: 'absolute', left: -16, top: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--bg-2)', border: `2px solid ${ev.dot_color}` }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--txt)' }}>
-                    <span style={{ flex: 1 }}>{ev.title}</span>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>{relTime(ev.time)}</span>
-                  </div>
-                  {ev.subtitle && <div style={{ fontSize: 11, color: 'var(--txt-2)', marginTop: 1, lineHeight: 1.5 }}>{ev.subtitle}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
 /* ── CrmClientsPage ──────────────────────────────────────────────────────── */
 export function CrmClientsPage() {
   const { t } = useTranslation('crm');
-  const [searchRaw, setSearchRaw] = useState('');
-  const [segStatus, setSegStatus] = useState<string | undefined>(undefined);
+  const [searchRaw, setSearchRaw]           = useState('');
+  const [segStatus, setSegStatus]           = useState<string | undefined>(undefined);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [page, setPage]                     = useState(1);
+  const [selectedId, setSelectedId]         = useState<string | null>(null);
+  const [hoveredId, setHoveredId]           = useState<string | null>(null);
+  const [editClient, setEditClient]         = useState<CrmClient | null>(null);
 
   const search = useDebounce(searchRaw, 300);
 
-  // Main list query
+  /* Main list query */
   const { data: listData, isLoading } = useQuery({
     queryKey: ['crm-clients', search, segStatus, page],
     queryFn: () => crmApi.listClients({
       per_page: 20,
       page,
-      ...(search ? { search } : {}),
+      ...(search    ? { search }         : {}),
       ...(segStatus ? { status: segStatus } : {}),
     }),
   });
 
-  // KPI count queries (cheap: per_page=1, just need meta.total)
-  const { data: kpiClientes } = useQuery({
-    queryKey: ['crm-kpi', 'cliente'],
-    queryFn: () => crmApi.listClients({ status: 'cliente', per_page: 1 }),
+  /* KPI count queries — per_page=1 to cheaply get meta.total */
+  const { data: kpiClient } = useQuery({
+    queryKey: ['crm-kpi', 'client'],
+    queryFn: () => crmApi.listClients({ status: 'client', per_page: 1 }),
+    staleTime: 60_000,
+  });
+  const { data: kpiVip } = useQuery({
+    queryKey: ['crm-kpi', 'vip'],
+    queryFn: () => crmApi.listClients({ status: 'vip', per_page: 1 }),
     staleTime: 60_000,
   });
   const { data: kpiLeads } = useQuery({
@@ -312,40 +164,30 @@ export function CrmClientsPage() {
     staleTime: 60_000,
   });
   const { data: kpiNeg } = useQuery({
-    queryKey: ['crm-kpi', 'negociando'],
-    queryFn: () => crmApi.listClients({ status: 'negociando', per_page: 1 }),
+    queryKey: ['crm-kpi', 'negotiating'],
+    queryFn: () => crmApi.listClients({ status: 'negotiating', per_page: 1 }),
     staleTime: 60_000,
   });
 
-  // Detail queries — enabled only when a client is selected
-  const { data: selectedClient, isLoading: clientLoading } = useQuery({
-    queryKey: ['crm-client', selectedId],
-    queryFn: () => crmApi.getClient(selectedId!),
-    enabled: !!selectedId,
-  });
-  const { data: clientStats, isLoading: statsLoading } = useQuery({
-    queryKey: ['crm-stats', selectedId],
-    queryFn: () => crmApi.getClientStats(selectedId!),
-    enabled: !!selectedId,
-  });
-  const { data: clientTimeline, isLoading: timelineLoading } = useQuery({
-    queryKey: ['crm-timeline', selectedId],
-    queryFn: () => crmApi.getClientTimeline(selectedId!),
-    enabled: !!selectedId,
-  });
-
-  const clients = listData?.data ?? [];
-  const meta = listData?.meta;
+  const clients    = listData?.data ?? [];
+  const meta       = listData?.meta;
   const totalPages = meta?.total_pages ?? 1;
 
+  /* Total ativos = client + vip + negotiating */
+  const totalAtivos =
+    kpiClient && kpiVip && kpiNeg
+      ? kpiClient.meta.total + kpiVip.meta.total + kpiNeg.meta.total
+      : undefined;
+
+  /* SEG_TABS: keys are API status values (English), labels are i18n */
   const SEG_TABS: Array<{ key: string | undefined; label: string }> = [
-    { key: undefined,     label: t('clients.status.all')        },
-    { key: 'cliente',     label: t('clients.status.cliente')    },
-    { key: 'lead',        label: t('clients.status.lead')       },
-    { key: 'prospect',    label: t('clients.status.prospect')   },
-    { key: 'negociando',  label: t('clients.status.negociando') },
-    { key: 'vip',         label: t('clients.status.vip')        },
-    { key: 'inativo',     label: t('clients.status.inativo')    },
+    { key: undefined,       label: t('clients.status.all')        },
+    { key: 'client',        label: t('clients.status.cliente')    },
+    { key: 'lead',          label: t('clients.status.lead')       },
+    { key: 'prospect',      label: t('clients.status.prospect')   },
+    { key: 'negotiating',   label: t('clients.status.negociando') },
+    { key: 'vip',           label: t('clients.status.vip')        },
+    { key: 'inactive',      label: t('clients.status.inativo')    },
   ];
 
   function handleSegChange(key: string | undefined) {
@@ -357,8 +199,6 @@ export function CrmClientsPage() {
     setSearchRaw(val);
     setPage(1);
   }
-
-  const detailClient = clientLoading ? undefined : (selectedClient ?? null);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', height: '100%', overflow: 'hidden' }}>
@@ -403,17 +243,17 @@ export function CrmClientsPage() {
         {/* KPI row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, padding: '14px 24px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
           {[
-            { label: t('clients.kpi.totalActive'),    value: kpiClientes?.meta.total,  delta: null, up: true,  spark: KPI_SPARK, color: 'var(--teal)'   },
-            { label: t('clients.kpi.leadsInFunnel'),  value: kpiLeads?.meta.total,     delta: null, up: true,  spark: KPI_SPARK, color: 'var(--blue)'   },
-            { label: t('clients.kpi.inNegotiation'),  value: kpiNeg?.meta.total,       delta: null, up: false, spark: KPI_SPARK, color: 'var(--amber)'  },
-            { label: t('clients.kpi.avgLtv'),         value: undefined,                delta: null, up: true,  spark: KPI_SPARK, color: 'var(--purple)' },
+            { label: t('clients.kpi.totalActive'),   value: totalAtivos,          color: 'var(--teal)'   },
+            { label: t('clients.kpi.leadsInFunnel'), value: kpiLeads?.meta.total, color: 'var(--blue)'   },
+            { label: t('clients.kpi.inNegotiation'), value: kpiNeg?.meta.total,   color: 'var(--amber)'  },
+            { label: t('clients.kpi.avgLtv'),        value: undefined,             color: 'var(--purple)' },
           ].map((kpi) => (
             <div key={kpi.label} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', fontWeight: 600 }}>{kpi.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'baseline', gap: 6, color: 'var(--txt)' }}>
+              <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', fontFamily: 'var(--mono)', color: 'var(--txt)' }}>
                 {kpi.value != null ? kpi.value.toLocaleString('pt-BR') : '—'}
               </div>
-              <Sparkline values={kpi.spark} color={kpi.color} />
+              <Sparkline values={KPI_SPARK} color={kpi.color} />
             </div>
           ))}
         </div>
@@ -438,11 +278,10 @@ export function CrmClientsPage() {
             />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', padding: '2px 5px', borderRadius: 4, background: 'var(--bg-4)', border: '1px solid var(--line)', flexShrink: 0 }}>⌘K</span>
           </div>
-          {/* Status chip — synced with segment tabs */}
           {(() => {
             const statusActive = segStatus !== undefined;
-            const activeTab = SEG_TABS.find((t) => t.key === segStatus);
-            const statusLabel = statusActive
+            const activeTab    = SEG_TABS.find((tab) => tab.key === segStatus);
+            const statusLabel  = statusActive
               ? `${t('clients.filters.status')}: ${activeTab?.label ?? segStatus}`
               : t('clients.filters.statusAll');
             return (
@@ -547,7 +386,7 @@ export function CrmClientsPage() {
                     >
                       {/* Checkbox */}
                       <td style={{ padding: '10px 14px', width: 36, boxShadow: isSelected ? 'inset 2px 0 0 var(--teal)' : 'none' }}>
-                        <div style={{ width: 14, height: 14, borderRadius: 4, border: '1.5px solid var(--line-2)', background: 'var(--bg-3)', cursor: 'pointer' }} />
+                        <div style={{ width: 14, height: 14, borderRadius: 4, border: '1.5px solid var(--line-2)', background: 'var(--bg-3)' }} />
                       </td>
 
                       {/* Name */}
@@ -563,7 +402,7 @@ export function CrmClientsPage() {
 
                       {/* Status */}
                       <td style={{ padding: '10px 14px' }}>
-                        <TagPill status={c.status} label={t(`clients.statusLabel.${c.status}`)} />
+                        <TagPill status={normalizeStatus(c.status)} label={t(`clients.statusLabel.${normalizeStatus(c.status)}`)} />
                       </td>
 
                       {/* Last contact */}
@@ -582,7 +421,7 @@ export function CrmClientsPage() {
                       </td>
 
                       {/* Health */}
-                      <td style={{ padding: '10px 14px' }}><HealthBar value={c.health_score} /></td>
+                      <td style={{ padding: '10px 14px' }}><HealthBar value={computeHealthScore(c)} /></td>
 
                       {/* Owner */}
                       <td style={{ padding: '10px 14px' }}>
@@ -601,20 +440,27 @@ export function CrmClientsPage() {
                       {/* Row actions */}
                       <td style={{ padding: '10px 14px' }}>
                         <div style={{ display: 'flex', gap: 4, opacity: isSelected || isHovered ? 1 : 0, transition: 'opacity .12s' }}>
-                          {[
-                            { title: t('clients.actions.chat'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 8.5V3.5a1 1 0 011-1h6a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2v-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg> },
-                            { title: t('clients.actions.edit'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg> },
-                            { title: t('clients.actions.moreOptions'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><circle cx="3" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" /><circle cx="9" cy="6" r="1" fill="currentColor" /></svg> },
-                          ].map((a) => (
-                            <button
-                              key={a.title}
-                              title={a.title}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
-                            >
-                              {a.icon}
-                            </button>
-                          ))}
+                          <button
+                            title={t('clients.actions.chat')}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 8.5V3.5a1 1 0 011-1h6a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2v-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
+                          </button>
+                          <button
+                            title={t('clients.actions.edit')}
+                            onClick={(e) => { e.stopPropagation(); setEditClient(c); }}
+                            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
+                          </button>
+                          <button
+                            title={t('clients.actions.moreOptions')}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><circle cx="3" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" /><circle cx="9" cy="6" r="1" fill="currentColor" /></svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -675,17 +521,13 @@ export function CrmClientsPage() {
 
       </div>{/* end list area */}
 
-      {/* ── Detail panel ── */}
-      <DetailPanel
-        client={detailClient}
-        stats={clientStats}
-        timeline={clientTimeline ?? null}
-        statsLoading={statsLoading}
-        timelineLoading={timelineLoading}
-        t={t}
-      />
+      {/* ── Client profile panel ── */}
+      <ClientProfile clientId={selectedId} onEdit={setEditClient} />
 
+      {/* ── Modals ── */}
       <CreateClientModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+      <EditClientModal client={editClient} onClose={() => setEditClient(null)} />
+
     </div>
   );
 }
