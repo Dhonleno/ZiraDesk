@@ -1,0 +1,99 @@
+{
+  "clients": {
+    "title": "Clients",
+    "newClient": "New client",
+    "importCsv": "Import CSV",
+    "searchPlaceholder": "Search by name, email, phone...",
+    "advancedFilters": "Advanced filters",
+    "columns": "Columns",
+    "export": "Export",
+    "total": "{{n}} records",
+    "noClients": "No clients found",
+    "loading": "Loading...",
+    "errorLoad": "Error loading clients",
+    "kpi": {
+      "totalActive": "Total active",
+      "leadsInFunnel": "Leads in funnel",
+      "inNegotiation": "In negotiation",
+      "avgLtv": "Avg LTV"
+    },
+    "filters": {
+      "statusAll": "Status: All",
+      "channel": "Channel",
+      "assignedTo": "Assigned to",
+      "tags": "Tags",
+      "date": "Date",
+      "table": "Table",
+      "kanban": "Kanban"
+    },
+    "status": {
+      "all": "All",
+      "cliente": "Clients",
+      "lead": "Leads",
+      "prospect": "Prospects",
+      "negociando": "Negotiating",
+      "vip": "VIP",
+      "inativo": "Inactive"
+    },
+    "statusLabel": {
+      "cliente": "Client",
+      "lead": "Lead",
+      "prospect": "Prospect",
+      "negociando": "Negotiating",
+      "vip": "VIP",
+      "inativo": "Inactive"
+    },
+    "table": {
+      "client": "Client",
+      "status": "Status",
+      "channels": "Channels",
+      "lastContact": "Last contact",
+      "ltv": "LTV",
+      "health": "Health",
+      "assignedTo": "Assigned to"
+    },
+    "pagination": {
+      "showing": "Showing",
+      "of": "of",
+      "perPage": "per page",
+      "noOwner": "Unassigned"
+    },
+    "detail": {
+      "empty": "No client selected",
+      "emptySubtitle": "Click a client in the list to view details",
+      "message": "Message",
+      "call": "Call",
+      "schedule": "Schedule",
+      "more": "More",
+      "metrics": "Metrics",
+      "attendances": "Conversations",
+      "messages": "Messages",
+      "nps": "NPS",
+      "info": "Information",
+      "edit": "Edit",
+      "recentActivity": "Recent activity",
+      "viewAll": "View all",
+      "noActivity": "No recent activity",
+      "noActivitySub": "Last interaction recorded some time ago",
+      "fields": {
+        "email": "Email",
+        "phone": "Phone",
+        "document": "Tax ID",
+        "zip": "ZIP code",
+        "company": "Company",
+        "occupation": "Job title",
+        "since": "Client since",
+        "assignedTo": "Assigned to",
+        "city": "City",
+        "state": "State",
+        "segment": "Segment",
+        "source": "Source"
+      }
+    },
+    "actions": {
+      "chat": "Message",
+      "edit": "Edit",
+      "moreOptions": "More options"
+    }
+  }
+}

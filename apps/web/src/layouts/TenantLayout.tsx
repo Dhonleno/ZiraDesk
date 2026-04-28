@@ -77,25 +77,36 @@ function Breadcrumb() {
   const { t } = useTranslation('admin');
   const { pathname } = useLocation();
 
+  const isCRM = pathname.startsWith('/crm');
+  const isConversations = pathname.startsWith('/conversations');
+  const isAdmin = pathname.startsWith('/admin');
+
   const routeLabels: Record<string, string> = {
-    '/conversations': t('tenantAdmin.nav.conversations'),
-    '/clientes': 'Clientes',
+    '/crm/clients': 'Clientes',
     '/admin/dashboard': t('tenantAdmin.nav.dashboard'),
     '/admin/users': t('tenantAdmin.nav.users'),
     '/admin/channels': t('tenantAdmin.nav.channels'),
     '/admin/settings': t('tenantAdmin.nav.settings'),
   };
 
-  const label = routeLabels[pathname] ?? '';
-  const section = pathname.startsWith('/admin') ? 'Admin' : t('tenantAdmin.nav.conversations');
+  const label = isConversations ? 'Central de Atendimento' : (routeLabels[pathname] ?? '');
+  const section = isAdmin ? 'Admin' : isCRM ? 'CRM' : 'Omnichannel';
   if (!label) return null;
   return (
-    <div className="flex items-center gap-1.5" style={{ color: 'var(--txt-3)', fontSize: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--txt-3)', fontSize: 12 }}>
+      {isCRM ? (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <circle cx="7" cy="5" r="2.3" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M2 12c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M2 10V4.5L7 2l5 2.5V10H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      )}
       <span>{section}</span>
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-        <path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span style={{ color: 'var(--txt)', fontWeight: 500 }}>{label}</span>
+      <span style={{ color: 'var(--txt-3)', margin: '0 1px' }}>/</span>
+      <strong style={{ color: 'var(--txt)', fontWeight: 500 }}>{label}</strong>
     </div>
   );
 }
@@ -120,6 +131,7 @@ function NavItem({ to, end, title, children }: NavItemProps) {
 export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { user, token, logout, isLoggingOut } = useAuth();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (token && user?.tenantId) {
@@ -146,7 +158,7 @@ export function TenantLayout() {
         zIndex: 10,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingRight: 16, borderRight: '1px solid var(--line)', marginRight: 4 }}>
           <Logo />
         </div>
 
@@ -157,7 +169,45 @@ export function TenantLayout() {
 
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Online indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 'var(--r-pill)', background: 'var(--green-dim)', border: '1px solid rgba(62,207,142,.25)', fontSize: 11, fontWeight: 500, color: 'var(--green)', flexShrink: 0 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
+            Online
+          </div>
+
           <ThemeToggle />
+
+          {/* Conversations-specific topbar actions */}
+          {pathname.startsWith('/conversations') && (
+            <>
+              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: '#0E1A18', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Novo atendimento
+              </button>
+              <button className="tb-icon-btn" aria-label="Histórico">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </button>
+              <button className="tb-icon-btn" aria-label="Empresa">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11V4.5l5-3 5 3V11H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M5 11V7.5h4V11" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+              </button>
+              <div style={{ width: 1, height: 20, background: 'var(--line)', margin: '0 2px' }} />
+            </>
+          )}
+
+          {/* CRM-specific topbar actions */}
+          {pathname.startsWith('/crm') && (
+            <>
+              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--bg-4)', color: 'var(--txt-2)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2.5 2h7l-.5 4-3 3-3-3-.5-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M2.5 6.5h7" stroke="currentColor" strokeWidth="1.2"/></svg>
+                Importar CSV
+              </button>
+              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                Novo cliente
+              </button>
+              <div style={{ width: 1, height: 20, background: 'var(--line)', margin: '0 2px' }} />
+            </>
+          )}
 
           {/* Avatar */}
           <div
@@ -219,79 +269,54 @@ export function TenantLayout() {
           }}
         >
           {/* Atendimentos */}
-          <NavItem to="/conversations" title={t('tenantAdmin.nav.conversations')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+          <NavItem to="/conversations" title="Atendimentos">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M3 13V5.5l6-4 6 4V13H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M3 8h12" stroke="currentColor" strokeWidth="1.4" />
             </svg>
           </NavItem>
 
           {/* Clientes */}
-          <NavItem to="/clientes" title="Clientes">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          <NavItem to="/crm/clients" title="Clientes">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M2 16c0-3.5 3-6 7-6s7 2.5 7 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </NavItem>
+
+          {/* Tickets (placeholder) */}
+          <div className="nav-item" title="Tickets" style={{ position: 'relative', opacity: 0.5, cursor: 'default' }}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M5.5 7h7M5.5 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 'var(--r-pill)', background: 'var(--red)', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontFamily: 'var(--mono)' }}>4</div>
+          </div>
+
+          {/* Campanhas (placeholder) */}
+          <div className="nav-item" title="Campanhas" style={{ opacity: 0.5, cursor: 'default' }}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M3 12l3-7 3 4 2-2 4 5H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+          </div>
 
           {/* Divisor */}
-          <div style={{ width: 32, height: 1, background: 'var(--line)', margin: '4px 0' }} />
+          <div style={{ width: 32, height: 1, background: 'var(--line)', margin: '6px 0' }} />
 
-          {/* Dashboard */}
-          <NavItem to="/admin/dashboard" title={t('tenantAdmin.nav.dashboard')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          {/* Relatórios (placeholder) */}
+          <div className="nav-item" title="Relatórios" style={{ opacity: 0.5, cursor: 'default' }}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M6 11V9M9 11V7M12 11V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
-          </NavItem>
-
-          {/* Usuários */}
-          <NavItem to="/admin/users" title={t('tenantAdmin.nav.users')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <path
-                d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </NavItem>
-
-          {/* Canais */}
-          <NavItem to="/admin/channels" title={t('tenantAdmin.nav.channels')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="5" cy="19" r="2" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="19" cy="19" r="2" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M12 7v4M10 15l-3 2M14 15l3 2M10 11H7M14 11h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </NavItem>
-
-          {/* Divisor */}
-          <div style={{ width: 32, height: 1, background: 'var(--line)', margin: '4px 0' }} />
+          </div>
 
           {/* Configurações */}
           <NavItem to="/admin/settings" title={t('tenantAdmin.nav.settings')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.4" />
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.4" />
               <path
-                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                d="M9 2v2M9 14v2M2 9h2M14 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4"
                 stroke="currentColor"
                 strokeWidth="1.4"
                 strokeLinecap="round"

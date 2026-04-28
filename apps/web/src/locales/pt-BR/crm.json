@@ -1,0 +1,99 @@
+{
+  "clients": {
+    "title": "Clientes",
+    "newClient": "Novo cliente",
+    "importCsv": "Importar CSV",
+    "searchPlaceholder": "Buscar por nome, e-mail, telefone...",
+    "advancedFilters": "Filtros avançados",
+    "columns": "Colunas",
+    "export": "Exportar",
+    "total": "{{n}} cadastros",
+    "noClients": "Nenhum cliente encontrado",
+    "loading": "Carregando...",
+    "errorLoad": "Erro ao carregar clientes",
+    "kpi": {
+      "totalActive": "Total ativos",
+      "leadsInFunnel": "Leads no funil",
+      "inNegotiation": "Em negociação",
+      "avgLtv": "LTV médio"
+    },
+    "filters": {
+      "statusAll": "Status: Todos",
+      "channel": "Canal",
+      "assignedTo": "Atribuído a",
+      "tags": "Tags",
+      "date": "Data",
+      "table": "Tabela",
+      "kanban": "Kanban"
+    },
+    "status": {
+      "all": "Todos",
+      "cliente": "Clientes",
+      "lead": "Leads",
+      "prospect": "Prospects",
+      "negociando": "Negociando",
+      "vip": "VIP",
+      "inativo": "Inativos"
+    },
+    "statusLabel": {
+      "cliente": "Cliente",
+      "lead": "Lead",
+      "prospect": "Prospect",
+      "negociando": "Negociando",
+      "vip": "VIP",
+      "inativo": "Inativo"
+    },
+    "table": {
+      "client": "Cliente",
+      "status": "Status",
+      "channels": "Canais",
+      "lastContact": "Último contato",
+      "ltv": "LTV",
+      "health": "Saúde",
+      "assignedTo": "Atribuído"
+    },
+    "pagination": {
+      "showing": "Mostrando",
+      "of": "de",
+      "perPage": "por página",
+      "noOwner": "Sem dono"
+    },
+    "detail": {
+      "empty": "Nenhum cliente selecionado",
+      "emptySubtitle": "Clique em um cliente da lista para ver os detalhes",
+      "message": "Mensagem",
+      "call": "Ligar",
+      "schedule": "Agendar",
+      "more": "Mais",
+      "metrics": "Métricas",
+      "attendances": "Atendimentos",
+      "messages": "Mensagens",
+      "nps": "NPS",
+      "info": "Informações",
+      "edit": "Editar",
+      "recentActivity": "Atividade recente",
+      "viewAll": "Ver tudo",
+      "noActivity": "Sem atividade recente",
+      "noActivitySub": "Última interação registrada há mais tempo",
+      "fields": {
+        "email": "E-mail",
+        "phone": "Telefone",
+        "document": "CPF / CNPJ",
+        "zip": "CEP",
+        "company": "Empresa",
+        "occupation": "Cargo / Ocupação",
+        "since": "Cliente desde",
+        "assignedTo": "Atribuído",
+        "city": "Cidade",
+        "state": "Estado",
+        "segment": "Segmento",
+        "source": "Origem"
+      }
+    },
+    "actions": {
+      "chat": "Conversar",
+      "edit": "Editar",
+      "moreOptions": "Mais opções"
+    }
+  }
+}

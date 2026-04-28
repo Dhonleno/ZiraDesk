@@ -146,6 +146,142 @@ api.interceptors.response.use(
   },
 );
 
+// ── CRM Types ─────────────────────────────────────────────────────────────────
+
+export type CrmStatus = 'lead' | 'prospect' | 'cliente' | 'vip' | 'inativo' | 'negociando';
+
+export interface CrmClient {
+  id: string;
+  type: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  document: string | null;
+  website: string | null;
+  status: CrmStatus;
+  address_street: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_zip: string | null;
+  birth_date: string | null;
+  gender: string | null;
+  occupation: string | null;
+  income: number | null;
+  segment: string | null;
+  lead_source: string | null;
+  responsible_id: string | null;
+  responsible_name: string | null;
+  responsible_email: string | null;
+  tags: string[];
+  custom_fields: Record<string, unknown>;
+  ltv: number;
+  health_score: number;
+  last_contact_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CrmClientStats {
+  total_conversations: number;
+  open_conversations: number;
+  total_tickets: number;
+  open_tickets: number;
+  total_messages: number;
+  last_contact_at: string | null;
+}
+
+export interface CrmTimelineEvent {
+  id: string;
+  type: 'audit' | 'conversation' | 'ticket';
+  title: string;
+  subtitle: string | null;
+  time: string;
+  dot_color: string;
+}
+
+interface CrmListMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+interface ListClientsParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: string;
+  type?: string;
+  responsible_id?: string;
+  tag?: string;
+  segment?: string;
+  sort_by?: 'name' | 'created_at' | 'updated_at' | 'last_contact';
+  sort_order?: 'asc' | 'desc';
+}
+
+interface CreateCrmClientPayload {
+  name: string;
+  type?: 'person' | 'company';
+  email?: string;
+  phone?: string;
+  document?: string;
+  status?: string;
+  segment?: string;
+  responsible_id?: string;
+  tags?: string[];
+}
+
+// ── CRM API ───────────────────────────────────────────────────────────────────
+
+export const crmApi = {
+  listClients: async (params?: ListClientsParams): Promise<{ data: CrmClient[]; meta: CrmListMeta }> => {
+    const res = await api.get<{ success: boolean; data: CrmClient[]; meta: CrmListMeta }>('/crm/clients', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  getClient: async (id: string): Promise<CrmClient> => {
+    const res = await api.get<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`);
+    return res.data.data;
+  },
+
+  createClient: async (payload: CreateCrmClientPayload): Promise<CrmClient> => {
+    const res = await api.post<{ success: boolean; data: CrmClient }>('/crm/clients', payload);
+    return res.data.data;
+  },
+
+  updateClient: async (id: string, payload: Partial<CreateCrmClientPayload>): Promise<CrmClient> => {
+    const res = await api.patch<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`, payload);
+    return res.data.data;
+  },
+
+  deleteClient: async (id: string) => {
+    const res = await api.delete<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`);
+    return res.data;
+  },
+
+  getClientStats: async (id: string): Promise<CrmClientStats> => {
+    const res = await api.get<{ success: boolean; data: CrmClientStats }>(`/crm/clients/${id}/stats`);
+    return res.data.data;
+  },
+
+  getClientTimeline: async (id: string): Promise<CrmTimelineEvent[]> => {
+    const res = await api.get<{ success: boolean; data: CrmTimelineEvent[] }>(`/crm/clients/${id}/timeline`);
+    return res.data.data;
+  },
+
+  addTag: async (id: string, tag: string): Promise<CrmClient> => {
+    const res = await api.post<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}/tags`, { tag });
+    return res.data.data;
+  },
+
+  removeTag: async (id: string, tag: string): Promise<CrmClient> => {
+    const res = await api.delete<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}/tags/${encodeURIComponent(tag)}`);
+    return res.data.data;
+  },
+};
+
+// ── Admin API ─────────────────────────────────────────────────────────────────
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<{ success: boolean; data: AdminStats }>('/admin/stats/overview');
