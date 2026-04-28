@@ -78,7 +78,7 @@ function Breadcrumb() {
   const { pathname } = useLocation();
 
   const isCRM     = pathname.startsWith('/crm');
-  const isConversations = pathname.startsWith('/conversations');
+  const isConversations = pathname.startsWith('/omnichannel');
   const isAdmin   = pathname.startsWith('/admin');
   const isTickets = pathname.startsWith('/tickets');
 
@@ -188,7 +188,7 @@ export function TenantLayout() {
           <ThemeToggle />
 
           {/* Conversations-specific topbar actions */}
-          {pathname.startsWith('/conversations') && (
+          {pathname.startsWith('/omnichannel') && (
             <>
               <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: '#0E1A18', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -264,7 +264,7 @@ export function TenantLayout() {
           }}
         >
           {/* Atendimentos */}
-          <NavItem to="/conversations" title="Atendimentos">
+          <NavItem to="/omnichannel/conversations" title="Atendimentos">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path d="M3 13V5.5l6-4 6 4V13H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
               <path d="M3 8h12" stroke="currentColor" strokeWidth="1.4" />

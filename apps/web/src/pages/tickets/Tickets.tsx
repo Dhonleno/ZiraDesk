@@ -120,7 +120,22 @@ export function TicketsPage() {
   const total   = ticketsData?.meta.total ?? 0;
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── KPI bar — full width ── */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+        padding: '12px 16px', borderBottom: '1px solid var(--line)',
+        background: 'var(--bg-2)', flexShrink: 0,
+      }}>
+        <KpiCard label={t('tickets.stats.open')}          value={stats?.open_tickets}        color="var(--blue)"   loading={statsLoading} />
+        <KpiCard label={t('tickets.stats.inProgress')}    value={stats?.in_progress_tickets} color="var(--amber)"  loading={statsLoading} />
+        <KpiCard label={t('tickets.stats.waiting')}       value={stats?.waiting_tickets}     color="var(--purple)" loading={statsLoading} />
+        <KpiCard label={t('tickets.stats.resolvedToday')} value={stats?.resolved_today}      color="var(--green)"  loading={statsLoading} />
+      </div>
+
+      {/* ── Panels row ── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
       {/* ── Left panel ── */}
       <div style={{
@@ -152,14 +167,6 @@ export function TicketsPage() {
               </svg>
               {t('tickets.new')}
             </button>
-          </div>
-
-          {/* KPIs */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <KpiCard label={t('tickets.stats.open')}        value={stats?.open_tickets}        color="var(--blue)"   loading={statsLoading} />
-            <KpiCard label={t('tickets.stats.inProgress')}  value={stats?.in_progress_tickets} color="var(--amber)"  loading={statsLoading} />
-            <KpiCard label={t('tickets.stats.waiting')}     value={stats?.waiting_tickets}     color="var(--purple)" loading={statsLoading} />
-            <KpiCard label={t('tickets.stats.resolvedToday')} value={stats?.resolved_today}    color="var(--green)"  loading={statsLoading} />
           </div>
 
           {/* Search */}
@@ -239,6 +246,8 @@ export function TicketsPage() {
       {/* ── Right panel (detail) ── */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
         <TicketDetail ticketId={selectedId} />
+      </div>
+
       </div>
 
       <CreateTicketModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />

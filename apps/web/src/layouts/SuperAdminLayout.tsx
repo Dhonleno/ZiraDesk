@@ -1,129 +1,272 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { useCallback, useEffect } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-type NavItemStyle = { isActive: boolean };
+/* ── Theme toggle ─────────────────────────────────────────────────────────── */
+function ThemeToggle() {
+  const toggle = useCallback(() => {
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('zd-theme', next); } catch (_) {}
+  }, []);
 
-const navClass = ({ isActive }: NavItemStyle) =>
-  [
-    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-    isActive
-      ? 'font-medium border-l-[3px] border-l-[#00C9A7] text-[#00C9A7]'
-      : 'font-normal border-l-[3px] border-l-transparent text-[#9DA3AE] hover:bg-[#22252B] hover:text-[#F0F1F3]',
-  ].join(' ');
-
-const navStyle = ({ isActive }: NavItemStyle): React.CSSProperties =>
-  isActive ? { background: 'rgba(0,201,167,.15)' } : {};
-
-export function SuperAdminLayout() {
-  const { user, logout } = useAuth();
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'zd-theme' && e.newValue) {
+        document.documentElement.setAttribute('data-theme', e.newValue);
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
 
   return (
-    <div className="flex h-screen text-[#F0F1F3]" style={{ background: '#0E0F11' }}>
-      <aside
-        className="flex w-60 flex-col"
-        style={{ background: '#141518', borderRight: '1px solid rgba(255,255,255,.07)' }}
-      >
-        {/* Logo */}
+    <button onClick={toggle} className="tb-icon-btn theme-toggle" aria-label="Alternar tema">
+      <svg className="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.4" />
+        <path
+          d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+      </svg>
+      <svg className="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+/* ── Logo SVG ─────────────────────────────────────────────────────────────── */
+function Logo() {
+  return (
+    <svg width="120" height="28" viewBox="0 0 160 36" style={{ display: 'block' }} aria-label="ZiraDesk">
+      <rect x="0" y="0" width="36" height="36" rx="8" className="brand-logo-bg" />
+      <rect x="0" y="0" width="36" height="36" rx="8" fill="none" className="brand-logo-stroke" strokeWidth="1" />
+      <path
+        d="M9 10 L27 10 L9 26 L27 26"
+        fill="none"
+        className="brand-logo-z"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <text x="46" y="23" fontFamily="'IBM Plex Sans',system-ui" fontSize="16" fontWeight="700" className="brand-logo-zira" letterSpacing="-0.3">
+        Zira
+      </text>
+      <text x="82" y="23" fontFamily="'IBM Plex Sans',system-ui" fontSize="16" fontWeight="300" className="brand-logo-desk" letterSpacing="-0.3">
+        Desk
+      </text>
+    </svg>
+  );
+}
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
+const ROUTE_LABELS: Record<string, string> = {
+  '/super-admin': 'Dashboard',
+  '/super-admin/tenants': 'Tenants',
+  '/super-admin/plans': 'Planos',
+};
+
+function Breadcrumb() {
+  const { pathname } = useLocation();
+  const label = ROUTE_LABELS[pathname] ?? '';
+  if (!label) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--txt-3)', fontSize: 12 }}>
+      <span>Super Admin</span>
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+        <path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span style={{ color: 'var(--txt)', fontWeight: 500 }}>{label}</span>
+    </div>
+  );
+}
+
+/* ── Nav item ─────────────────────────────────────────────────────────────── */
+type NavItemProps = { to: string; end?: true; title: string; children: React.ReactNode };
+
+function NavItem({ to, end, title, children }: NavItemProps) {
+  return (
+    <NavLink
+      to={to}
+      {...(end ? { end } : {})}
+      title={title}
+      className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+    >
+      {children}
+    </NavLink>
+  );
+}
+
+/* ── SuperAdminLayout ─────────────────────────────────────────────────────── */
+export function SuperAdminLayout() {
+  const { user, logout } = useAuth();
+  const initial = user?.name.charAt(0).toUpperCase() ?? '?';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)' }}>
+
+      {/* ── Topbar ── */}
+      <header style={{
+        height: 52,
+        minHeight: 52,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '0 16px',
+        background: 'var(--bg-2)',
+        borderBottom: '1px solid var(--line)',
+        zIndex: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <Logo />
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <Breadcrumb />
+        </div>
+
+        {/* Super Admin badge */}
+        <span style={{
+          padding: '2px 8px',
+          borderRadius: 'var(--r)',
+          fontSize: 11,
+          fontWeight: 600,
+          background: 'var(--teal-dim)',
+          color: 'var(--teal)',
+          border: '1px solid var(--teal-glow)',
+        }}>
+          Super Admin
+        </span>
+
+        <ThemeToggle />
+
+        {/* Avatar */}
         <div
-          className="flex h-16 items-center gap-2 px-4"
-          style={{ borderBottom: '1px solid rgba(255,255,255,.07)' }}
+          title={user?.name}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--teal), #00A88C)',
+            border: '2px solid var(--bg-5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--on-teal)',
+            cursor: 'default',
+          }}
         >
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-[10px]"
-            style={{
-              background: 'rgba(0,201,167,.15)',
-              border: '1px solid rgba(0,201,167,.25)',
-              color: '#00C9A7',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 56 56" fill="none" aria-hidden>
+          {initial}
+        </div>
+
+        <button onClick={() => logout()} className="tb-icon-btn" aria-label="Sair">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </header>
+
+      {/* ── Body ── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Nav rail */}
+        <nav
+          aria-label="Navegação Super Admin"
+          style={{
+            width: 68,
+            minWidth: 68,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '10px 0',
+            gap: 4,
+            background: 'var(--bg-2)',
+            borderRight: '1px solid var(--line)',
+          }}
+        >
+          {/* Dashboard */}
+          <NavItem to="/super-admin" end title="Dashboard">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </NavItem>
+
+          {/* Tenants */}
+          <NavItem to="/super-admin/tenants" title="Tenants">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
-                d="M14 16 L42 16 L14 40 L42 40"
+                d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
                 stroke="currentColor"
-                strokeWidth="4"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M9 22V12h6v10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </NavItem>
+
+          {/* Planos */}
+          <NavItem to="/super-admin/plans" title="Planos">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                stroke="currentColor"
+                strokeWidth="1.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
-          </div>
-          <div className="flex items-center gap-2">
-            <span style={{ color: '#F0F1F3' }}>
-              <span style={{ fontWeight: 700 }}>Zira</span>
-              <span style={{ fontWeight: 300 }}>Desk</span>
-            </span>
-            <span
-              className="rounded px-1.5 py-0.5 text-xs font-medium"
-              style={{
-                background: 'rgba(0,201,167,.15)',
-                color: '#00C9A7',
-                border: '1px solid rgba(0,201,167,.25)',
-              }}
-            >
-              Admin
-            </span>
-          </div>
-        </div>
+          </NavItem>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-0.5">
-          <NavLink to="/super-admin" end className={navClass} style={navStyle}>
-            Dashboard
-          </NavLink>
-          <NavLink to="/super-admin/tenants" className={navClass} style={navStyle}>
-            Tenants
-          </NavLink>
-          <NavLink to="/super-admin/plans" className={navClass} style={navStyle}>
-            Planos
-          </NavLink>
+          <div style={{ flex: 1 }} />
+
+          {/* Bottom avatar */}
+          <div
+            title={user?.email}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--teal), #00A88C)',
+              border: '2px solid var(--bg-5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--on-teal)',
+              marginBottom: 6,
+            }}
+          >
+            {initial}
+          </div>
         </nav>
 
-        {/* Footer user */}
-        <div
-          className="p-3"
-          style={{ borderTop: '1px solid rgba(255,255,255,.07)', background: '#1A1C20' }}
-        >
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-              style={{ background: '#22252B', color: '#9DA3AE' }}
-            >
-              {user?.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium" style={{ color: '#F0F1F3' }}>
-                {user?.name}
-              </p>
-              <p className="truncate text-xs" style={{ color: '#9DA3AE' }}>
-                Super Admin
-              </p>
-            </div>
-            <button
-              onClick={() => logout()}
-              className="transition-colors"
-              style={{ color: '#5C6370' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#9DA3AE')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#5C6370')}
-              aria-label="Sair"
-            >
-              <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
-                <path
-                  d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <main className="flex flex-1 flex-col overflow-hidden" style={{ background: '#0E0F11' }}>
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Content */}
+        <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
           <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

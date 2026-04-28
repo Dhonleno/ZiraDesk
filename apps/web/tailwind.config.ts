@@ -2,49 +2,66 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'class',
+  // Theme is driven by data-theme attribute + CSS variables — no Tailwind darkMode needed
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f0f4ff',
-          100: '#dce8ff',
-          200: '#c0d3ff',
-          300: '#93b4ff',
-          400: '#6090ff',
-          500: '#3d6eff',
-          600: '#2550f5',
-          700: '#1d3de1',
-          800: '#1e33b6',
-          900: '#1e308f',
-          950: '#161f57',
-        },
-        // ── Design System ZiraDesk ──────────────────────────────
+        // All design system colors reference CSS variables from tokens.css
         bg: {
-          DEFAULT: '#0E0F11',
-          2: '#141518',
-          3: '#1A1C20',
-          4: '#22252B',
-          5: '#2A2E36',
+          DEFAULT: 'var(--bg)',
+          2: 'var(--bg-2)',
+          3: 'var(--bg-3)',
+          4: 'var(--bg-4)',
+          5: 'var(--bg-5)',
         },
         teal: {
-          DEFAULT: '#00C9A7',
-          hover: '#00E8C0',
-          dim: 'rgba(0,201,167,.15)',
+          DEFAULT: 'var(--teal)',
+          dim: 'var(--teal-dim)',
+          glow: 'var(--teal-glow)',
         },
         txt: {
-          DEFAULT: '#F0F1F3',
-          2: '#9DA3AE',
-          3: '#5C6370',
+          DEFAULT: 'var(--txt)',
+          2: 'var(--txt-2)',
+          3: 'var(--txt-3)',
         },
         line: {
-          DEFAULT: 'rgba(255,255,255,.07)',
-          2: 'rgba(255,255,255,.12)',
+          DEFAULT: 'var(--line)',
+          2: 'var(--line-2)',
+        },
+        green: {
+          DEFAULT: 'var(--green)',
+          dim: 'var(--green-dim)',
+        },
+        amber: {
+          DEFAULT: 'var(--amber)',
+          dim: 'var(--amber-dim)',
+        },
+        red: {
+          DEFAULT: 'var(--red)',
+          dim: 'var(--red-dim)',
+        },
+        blue: {
+          DEFAULT: 'var(--blue)',
+          dim: 'var(--blue-dim)',
+        },
+        purple: {
+          DEFAULT: 'var(--purple)',
+          dim: 'var(--purple-dim)',
+        },
+        pink: {
+          DEFAULT: 'var(--pink)',
+          dim: 'var(--pink-dim)',
         },
       },
       fontFamily: {
         sans: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
         mono: ['IBM Plex Mono', 'monospace'],
+      },
+      borderRadius: {
+        DEFAULT: 'var(--r)',
+        lg: 'var(--r-lg)',
+        xl: 'var(--r-xl)',
+        pill: 'var(--r-pill)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

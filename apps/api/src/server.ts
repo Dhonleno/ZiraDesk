@@ -7,7 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { superAdminRoutes } from './modules/super-admin/index.js';
-import { tenantRoutes } from './modules/tenant/index.js';
+import { omnichannelModuleRoutes } from './modules/omnichannel/index.js';
 import { adminRoutes } from './modules/admin/index.js';
 import { crmRoutes } from './modules/crm/index.js';
 import { ticketModuleRoutes } from './modules/tickets/index.js';
@@ -15,6 +15,7 @@ import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
 const app = Fastify({
+  ignoreTrailingSlash: true,
   logger: {
     level: env.NODE_ENV === 'development' ? 'info' : 'warn',
     ...(env.NODE_ENV === 'development'
@@ -51,7 +52,7 @@ async function bootstrap(): Promise<void> {
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
-  await app.register(tenantRoutes, { prefix: '/api/tenant' });
+  await app.register(omnichannelModuleRoutes, { prefix: '/api/omnichannel' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(crmRoutes, { prefix: '/api/crm' });
   await app.register(ticketModuleRoutes, { prefix: '/api/tickets' });

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ConversationList } from '../../components/tenant/conversations/ConversationList';
-import { ChatArea } from '../../components/tenant/conversations/ChatArea';
-import { InfoPanel } from '../../components/tenant/conversations/InfoPanel';
+import { ConversationList } from '../../components/omnichannel/ConversationList';
+import { ChatArea } from '../../components/omnichannel/ChatArea';
+import { InfoPanel } from '../../components/omnichannel/InfoPanel';
 import { subscribeToEvent } from '../../services/socket';
 
 export function ConversationsPage() {

@@ -176,10 +176,10 @@ export async function getClient(id: string) {
        u.id AS responsible_id, u.name AS responsible_name, u.email AS responsible_email
      FROM clients c
      LEFT JOIN users u ON u.id = c.responsible_id
-     WHERE c.id = $1
-     LIMIT 1`,
-    id,
-  );
+	     WHERE c.id = $1::uuid
+	     LIMIT 1`,
+	    id,
+	  );
   if (!rows[0]) throw new NotFoundError('Cliente');
   return rows[0];
 }
@@ -249,10 +249,10 @@ export async function updateClient(id: string, data: UpdateClientInput, updatedB
 
   if (data.email && data.email !== existing.email) {
     const emailCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-      `SELECT id FROM clients WHERE email = $1 AND id != $2 LIMIT 1`,
-      data.email,
-      id,
-    );
+	      `SELECT id FROM clients WHERE email = $1 AND id != $2::uuid LIMIT 1`,
+	      data.email,
+	      id,
+	    );
     if (emailCheck[0]) throw new ConflictError('E-mail já cadastrado para outro cliente');
   }
 
@@ -282,8 +282,8 @@ export async function updateClient(id: string, data: UpdateClientInput, updatedB
        tags            = COALESCE($19::text[],   tags),
        custom_fields   = COALESCE($20::jsonb,    custom_fields),
        updated_at      = NOW()
-     WHERE id = $21
-     RETURNING *`,
+	     WHERE id = $21::uuid
+	     RETURNING *`,
     data.type ?? null,
     data.name ?? null,
     data.email ?? null,
@@ -326,10 +326,10 @@ export async function deleteClient(id: string, deletedBy: string) {
 
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
     `UPDATE clients SET status = 'inativo', updated_at = NOW()
-     WHERE id = $1
-     RETURNING *`,
-    id,
-  );
+	     WHERE id = $1::uuid
+	     RETURNING *`,
+	    id,
+	  );
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
@@ -486,10 +486,10 @@ export async function addTag(clientId: string, tag: string) {
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
     `UPDATE clients
      SET tags = array_append(tags, $1), updated_at = NOW()
-     WHERE id = $2
-     RETURNING *`,
-    tag,
-    clientId,
+	     WHERE id = $2::uuid
+	     RETURNING *`,
+	    tag,
+	    clientId,
   );
 
   await prisma.$executeRawUnsafe(
@@ -509,10 +509,10 @@ export async function removeTag(clientId: string, tag: string) {
   const rows = await prisma.$queryRawUnsafe<ClientRow[]>(
     `UPDATE clients
      SET tags = array_remove(tags, $1), updated_at = NOW()
-     WHERE id = $2
-     RETURNING *`,
-    tag,
-    clientId,
+	     WHERE id = $2::uuid
+	     RETURNING *`,
+	    tag,
+	    clientId,
   );
 
   await prisma.$executeRawUnsafe(

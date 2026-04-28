@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexCRM — Clientes</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root, [data-theme="dark"] {
+  --bg: #0E0F11;
+  --bg-2: #141518;
+  --bg-3: #1A1C20;
+  --bg-4: #22252B;
+  --bg-5: #2A2E36;
+  --line: rgba(255,255,255,.07);
+  --line-2: rgba(255,255,255,.12);
+  --txt: #F0F1F3;
+  --txt-2: #9DA3AE;
+  --txt-3: #5C6370;
+  --teal: #00C9A7;
+  --teal-dim: rgba(0,201,167,.15);
+  --green: #3ECF8E;
+  --green-dim: rgba(62,207,142,.15);
+  --amber: #F59E0B;
+  --amber-dim: rgba(245,158,11,.15);
+  --red: #F87171;
+  --red-dim: rgba(248,113,113,.15);
+  --blue: #60A5FA;
+  --blue-dim: rgba(96,165,250,.15);
+  --purple: #A78BFA;
+  --purple-dim: rgba(167,139,250,.15);
+  --pink: #F472B6;
+  --pink-dim: rgba(244,114,182,.15);
+  --font: 'IBM Plex Sans', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --r: 8px; --r-lg: 12px; --r-pill: 999px;
+  --shadow-pop: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px var(--line);
+  --on-teal: #0E0F11;
+  --hero-glow: rgba(102,126,234,.18);
+}
+
+[data-theme="light"] {
+  --bg: #F7F8FA;
+  --bg-2: #FFFFFF;
+  --bg-3: #FFFFFF;
+  --bg-4: #F1F3F6;
+  --bg-5: #E6E9EF;
+  --line: rgba(15,18,24,.08);
+  --line-2: rgba(15,18,24,.14);
+  --txt: #14171C;
+  --txt-2: #54606E;
+  --txt-3: #8A94A1;
+  --teal: #00A88C;
+  --teal-dim: rgba(0,168,140,.12);
+  --green: #16A06B;
+  --green-dim: rgba(22,160,107,.12);
+  --amber: #B7791F;
+  --amber-dim: rgba(245,158,11,.14);
+  --red: #DC2F4E;
+  --red-dim: rgba(220,47,78,.10);
+  --blue: #2563EB;
+  --blue-dim: rgba(37,99,235,.10);
+  --purple: #7C3AED;
+  --purple-dim: rgba(124,58,237,.10);
+  --pink: #DB2777;
+  --pink-dim: rgba(219,39,119,.10);
+  --shadow-pop: 0 20px 50px rgba(15,18,24,.10), 0 0 0 1px var(--line);
+  --on-teal: #FFFFFF;
+  --hero-glow: rgba(0,168,140,.10);
+}
+
+html, body { height: 100%; overflow: hidden; }
+html { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--txt);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TOPBAR (mesmo do app) */
+.topbar { height: 52px; background: var(--bg-2); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 16px; gap: 12px; flex-shrink: 0; }
+.topbar-logo { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; padding-right: 16px; border-right: 1px solid var(--line); }
+.logo-mark { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, var(--teal), #00A88C); display: flex; align-items: center; justify-content: center; }
+.topbar-title { flex: 1; font-size: 13px; color: var(--txt-2); display: flex; align-items: center; gap: 6px; }
+.topbar-title strong { color: var(--txt); font-weight: 500; }
+.topbar-actions { display: flex; align-items: center; gap: 6px; }
+.tb-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: var(--r); font-size: 12px; font-weight: 500; font-family: var(--font); cursor: pointer; border: 1px solid var(--line-2); background: var(--bg-4); color: var(--txt-2); transition: all .15s; white-space: nowrap; }
+.tb-btn:hover { background: var(--bg-5); color: var(--txt); }
+.tb-btn-primary { background: var(--teal); border-color: var(--teal); color: var(--on-teal); font-weight: 600; }
+.tb-btn-primary:hover { filter: brightness(1.08); }
+.tb-icon-btn { width: 32px; height: 32px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; background: var(--bg-4); border: 1px solid var(--line); cursor: pointer; color: var(--txt-3); transition: all .15s; }
+.tb-icon-btn:hover { background: var(--bg-5); color: var(--txt); }
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+/* Brand logo theming */
+.brand-logo-bg     { fill: #1E293B; }
+.brand-logo-stroke { stroke: #334155; }
+.brand-logo-z      { stroke: #F1F5F9; }
+.brand-logo-zira   { fill: #F1F5F9; }
+.brand-logo-desk   { fill: #94A3B8; }
+[data-theme="light"] .brand-logo-bg     { fill: #14171C; }
+[data-theme="light"] .brand-logo-stroke { stroke: #14171C; }
+[data-theme="light"] .brand-logo-z      { stroke: #FFFFFF; }
+[data-theme="light"] .brand-logo-zira   { fill: #14171C; }
+[data-theme="light"] .brand-logo-desk   { fill: #54606E; }
+.status-indicator { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); background: var(--green-dim); border: 1px solid rgba(62,207,142,.25); font-size: 11px; font-weight: 500; color: var(--green); }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); position: relative; }
+.pulse::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; background: var(--green); opacity: .3; animation: pulse-ring 2s ease infinite; }
+@keyframes pulse-ring { 0%{transform:scale(1);opacity:.4} 70%{transform:scale(1.8);opacity:0} 100%{transform:scale(1.8);opacity:0} }
+.nav-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--purple), #8B5CF6); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; }
+
+/* MAIN LAYOUT */
+.main { display: grid; grid-template-columns: 68px 1fr; flex: 1; overflow: hidden; }
+
+/* NAV RAIL */
+.nav-rail { background: var(--bg-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; }
+.nav-item { width: 44px; height: 44px; border-radius: var(--r-lg); display: flex; align-items: center; justify-content: center; color: var(--txt-3); cursor: pointer; transition: all .15s; position: relative; }
+.nav-item:hover { background: var(--bg-4); color: var(--txt-2); }
+.nav-item.active { background: var(--teal-dim); color: var(--teal); }
+.nav-item .badge { position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; border-radius: var(--r-pill); background: var(--red); color: #fff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 4px; font-family: var(--mono); }
+.nav-divider { width: 32px; height: 1px; background: var(--line); margin: 6px 0; }
+.nav-bottom { margin-top: auto; }
+.nav-rail .nav-avatar { width: 32px; height: 32px; border: 2px solid var(--bg-5); cursor: pointer; }
+
+/* CONTENT */
+.content { display: grid; grid-template-columns: 1fr 380px; overflow: hidden; }
+
+.list-area { display: flex; flex-direction: column; overflow: hidden; }
+
+/* Page header */
+.page-head { padding: 18px 24px 12px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.page-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; }
+.page-head .count { font-family: var(--mono); font-size: 12px; color: var(--txt-3); padding: 3px 9px; border-radius: var(--r-pill); background: var(--bg-3); border: 1px solid var(--line); }
+.page-head-spacer { flex: 1; }
+.page-head .tb-btn svg { color: inherit; }
+
+/* KPIs */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px 24px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.kpi { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; position: relative; overflow: hidden; }
+.kpi-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--txt-3); font-weight: 600; }
+.kpi-val { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; font-family: var(--mono); display: flex; align-items: baseline; gap: 6px; }
+.kpi-val .delta { font-size: 11px; font-family: var(--mono); padding: 2px 6px; border-radius: var(--r-pill); }
+.delta.up { background: var(--green-dim); color: var(--green); }
+.delta.down { background: var(--red-dim); color: var(--red); }
+.kpi-spark { display: flex; align-items: end; gap: 2px; height: 22px; margin-top: 2px; }
+.kpi-spark span { flex: 1; background: linear-gradient(180deg, var(--teal), rgba(0,201,167,.2)); border-radius: 1px; opacity: .6; }
+.kpi-blue .kpi-spark span { background: linear-gradient(180deg, var(--blue), rgba(96,165,250,.2)); }
+.kpi-amber .kpi-spark span { background: linear-gradient(180deg, var(--amber), rgba(245,158,11,.2)); }
+.kpi-purple .kpi-spark span { background: linear-gradient(180deg, var(--purple), rgba(167,139,250,.2)); }
+
+/* Filter bar */
+.filter-bar { padding: 12px 24px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; flex-wrap: wrap; }
+.search-box { display: flex; align-items: center; gap: 8px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: var(--r); padding: 7px 11px; flex: 1; max-width: 320px; min-width: 200px; transition: all .15s; }
+.search-box:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-dim); }
+.search-box svg { color: var(--txt-3); flex-shrink: 0; }
+.search-box input { background: none; border: none; outline: none; font-size: 12px; font-family: var(--font); color: var(--txt); width: 100%; }
+.search-box input::placeholder { color: var(--txt-3); }
+.search-box .kbd-hint { font-family: var(--mono); font-size: 10px; color: var(--txt-3); padding: 2px 5px; border-radius: 4px; background: var(--bg-4); border: 1px solid var(--line); }
+
+.fchip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: var(--r); border: 1px solid var(--line-2); background: var(--bg-3); color: var(--txt-2); font-size: 12px; cursor: pointer; transition: all .15s; }
+.fchip:hover { background: var(--bg-4); color: var(--txt); }
+.fchip.has-val { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
+.fchip svg { opacity: .7; }
+
+.filter-bar-spacer { flex: 1; }
+
+.view-toggle { display: flex; background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); padding: 2px; }
+.view-toggle .vt-opt { padding: 5px 9px; border-radius: 6px; cursor: pointer; color: var(--txt-3); display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; transition: all .15s; }
+.view-toggle .vt-opt:hover { color: var(--txt-2); }
+.view-toggle .vt-opt.active { background: var(--bg-5); color: var(--txt); }
+
+/* Segments tabs */
+.seg-tabs { display: flex; padding: 0 24px; gap: 2px; border-bottom: 1px solid var(--line); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
+.seg-tabs::-webkit-scrollbar { display: none; }
+.seg-tab { padding: 10px 14px; font-size: 12px; font-weight: 500; color: var(--txt-3); cursor: pointer; border-bottom: 2px solid transparent; display: flex; align-items: center; gap: 7px; white-space: nowrap; transition: all .15s; margin-bottom: -1px; }
+.seg-tab:hover { color: var(--txt-2); }
+.seg-tab.active { color: var(--teal); border-color: var(--teal); }
+.seg-tab .seg-count { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--bg-4); color: var(--txt-3); }
+.seg-tab.active .seg-count { background: var(--teal-dim); color: var(--teal); }
+
+/* Table */
+.table-wrap { flex: 1; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--bg-5) transparent; }
+.table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--bg-5); border-radius: 4px; }
+
+table.clients { width: 100%; border-collapse: collapse; min-width: 1100px; }
+table.clients thead th {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--txt-3); text-align: left;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+table.clients thead th .sort { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+table.clients thead th .sort:hover { color: var(--txt-2); }
+table.clients tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; transition: background .12s; }
+table.clients tbody tr:hover { background: var(--bg-2); }
+table.clients tbody tr.selected { background: rgba(0,201,167,.06); }
+table.clients tbody tr.selected td:first-child { box-shadow: inset 2px 0 0 var(--teal); }
+table.clients td { padding: 10px 14px; vertical-align: middle; }
+
+th.col-cb, td.col-cb { width: 36px; padding-right: 0; }
+.cb { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--line-2); background: var(--bg-3); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cb:hover { border-color: var(--txt-3); }
+.cb.checked { background: var(--teal); border-color: var(--teal); }
+.cb.checked::after { content: ''; width: 7px; height: 4px; border-left: 1.5px solid var(--on-teal); border-bottom: 1.5px solid var(--on-teal); transform: rotate(-45deg) translate(0px,-1px); }
+
+.cell-name { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+.tbl-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; }
+.cell-name-body { min-width: 0; }
+.cell-name-name { font-size: 13px; font-weight: 500; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-name-sub { font-size: 11px; color: var(--txt-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tag-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: var(--r-pill); white-space: nowrap; }
+.tag-cliente { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,201,167,.25); }
+.tag-lead { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,.25); }
+.tag-prospect { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(96,165,250,.25); }
+.tag-vip { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,.25); }
+.tag-inativo { background: var(--bg-4); color: var(--txt-3); border: 1px solid var(--line-2); }
+.tag-negociando { background: var(--pink-dim); color: var(--pink); border: 1px solid rgba(244,114,182,.25); }
+
+.ch-stack { display: flex; gap: -4px; }
+.ch-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); margin-left: -6px; flex-shrink: 0; }
+.ch-icon:first-child { margin-left: 0; }
+.ch-wa { background: rgba(37,211,102,.18); color: #25D366; }
+.ch-ig { background: rgba(244,114,182,.18); color: var(--pink); }
+.ch-mail { background: rgba(96,165,250,.18); color: var(--blue); }
+.ch-sms { background: rgba(167,139,250,.18); color: var(--purple); }
+.ch-tel { background: rgba(62,207,142,.18); color: var(--green); }
+
+.mono { font-family: var(--mono); font-size: 12px; color: var(--txt); }
+.muted { color: var(--txt-3); }
+.money { font-family: var(--mono); font-weight: 500; }
+
+.health { display: flex; align-items: center; gap: 8px; }
+.health-bar { width: 60px; height: 5px; background: var(--bg-4); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.health-bar-fill { height: 100%; border-radius: 3px; }
+.health-good { background: var(--green); }
+.health-mid { background: var(--amber); }
+.health-low { background: var(--red); }
+.health-num { font-family: var(--mono); font-size: 11px; color: var(--txt-2); min-width: 28px; }
+
+.row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+tr:hover .row-actions, tr.selected .row-actions { opacity: 1; }
+.row-act-btn { width: 26px; height: 26px; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--txt-3); cursor: pointer; }
+.row-act-btn:hover { background: var(--bg-4); color: var(--txt); border-color: var(--line-2); }
+
+/* Footer / pagination */
+.tbl-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-top: 1px solid var(--line); background: var(--bg-2); flex-shrink: 0; font-size: 12px; color: var(--txt-3); }
+.tbl-foot-left { display: flex; align-items: center; gap: 14px; }
+.pagi { display: flex; gap: 4px; align-items: center; }
+.pagi-btn { width: 28px; height: 28px; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--txt-2); cursor: pointer; font-size: 11px; font-family: var(--mono); }
+.pagi-btn:hover { background: var(--bg-4); color: var(--txt); }
+.pagi-btn.active { background: var(--teal); color: var(--on-teal); border-color: var(--teal); font-weight: 600; }
+
+/* Right detail panel */
+.detail-panel { background: var(--bg-2); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+.detail-scroll { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--bg-5) transparent; }
+.detail-scroll::-webkit-scrollbar { width: 4px; }
+.detail-scroll::-webkit-scrollbar-thumb { background: var(--bg-5); border-radius: 2px; }
+
+.detail-hero { padding: 24px 20px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; border-bottom: 1px solid var(--line); position: relative; }
+.detail-hero::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 80px; background: radial-gradient(ellipse at top, var(--hero-glow), transparent 70%); pointer-events: none; }
+.detail-avatar-lg { width: 76px; height: 76px; border-radius: 50%; background: linear-gradient(135deg,#667eea,#764ba2); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 600; color: #fff; border: 3px solid var(--bg-2); position: relative; z-index: 1; box-shadow: 0 8px 24px rgba(102,126,234,.3); }
+.detail-name { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+.detail-role { font-size: 12px; color: var(--txt-3); }
+.detail-hero-tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+
+.detail-actions { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.dact { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px; border-radius: var(--r); background: var(--bg-3); border: 1px solid var(--line); color: var(--txt-2); cursor: pointer; transition: all .15s; font-size: 10px; font-weight: 500; }
+.dact:hover { background: var(--bg-4); color: var(--teal); border-color: var(--teal); }
+.dact-ic { width: 26px; height: 26px; border-radius: 7px; background: var(--bg-4); display: flex; align-items: center; justify-content: center; }
+.dact:hover .dact-ic { background: var(--teal-dim); color: var(--teal); }
+
+.detail-section { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.detail-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.detail-section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--txt-3); }
+.detail-section-action { font-size: 11px; color: var(--teal); cursor: pointer; }
+
+.kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.kv { display: flex; flex-direction: column; gap: 2px; }
+.kv-lbl { font-size: 10px; color: var(--txt-3); text-transform: uppercase; letter-spacing: 0.05em; }
+.kv-val { font-size: 12px; color: var(--txt); }
+.kv-val.mono { font-family: var(--mono); font-size: 11px; }
+.kv-val.link { color: var(--teal); }
+
+.metric-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.metric { background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; text-align: center; }
+.metric-val { font-size: 18px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.3px; }
+.metric-val.green { color: var(--green); }
+.metric-lbl { font-size: 10px; color: var(--txt-3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 18px; }
+.timeline::before { content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px; background: var(--line-2); }
+.tl-item { position: relative; padding: 6px 0 12px; }
+.tl-dot { position: absolute; left: -16px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-2); border: 2px solid var(--teal); }
+.tl-dot.muted { border-color: var(--txt-3); }
+.tl-dot.amber { border-color: var(--amber); }
+.tl-dot.blue { border-color: var(--blue); }
+.tl-head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--txt); }
+.tl-head .tl-time { font-family: var(--mono); font-size: 10px; color: var(--txt-3); margin-left: auto; }
+.tl-body { font-size: 11px; color: var(--txt-2); margin-top: 1px; line-height: 1.5; }
+.tl-body .channel-mini { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: var(--r-pill); font-size: 10px; margin-right: 4px; }
+
+/* Empty state when no client selected */
+.detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--txt-3); padding: 40px 20px; text-align: center; gap: 12px; }
+.detail-empty-ic { width: 56px; height: 56px; border-radius: 14px; background: var(--bg-3); display: flex; align-items: center; justify-content: center; }
+.detail-empty-title { font-size: 13px; color: var(--txt-2); font-weight: 500; }
+.detail-empty-sub { font-size: 11px; max-width: 220px; line-height: 1.5; }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+table.clients tbody tr { animation: fadeIn .25s ease both; }
+.kpi { animation: fadeIn .3s ease both; }
+
+</style>
+<script>
+  // No-flash theme: apply before paint
+  (function(){
+    try {
+      var t = localStorage.getItem('zd-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch(e) { document.documentElement.setAttribute('data-theme','dark'); }
+  })();
+</script>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-logo" style="padding-right:14px;gap:0;">
+    <svg class="brand-logo" width="120" height="28" viewBox="0 0 160 36" style="display:block;">
+      <rect x="0" y="0" width="36" height="36" rx="8" class="brand-logo-bg"/>
+      <rect x="0" y="0" width="36" height="36" rx="8" fill="none" class="brand-logo-stroke" stroke-width="1"/>
+      <path d="M9 10 L27 10 L9 26 L27 26" fill="none" class="brand-logo-z" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="46" y="23" font-family="'IBM Plex Sans',system-ui" font-size="16" font-weight="700" class="brand-logo-zira" letter-spacing="-0.3">Zira</text>
+      <text x="82" y="23" font-family="'IBM Plex Sans',system-ui" font-size="16" font-weight="300" class="brand-logo-desk" letter-spacing="-0.3">Desk</text>
+    </svg>
+  </div>
+  <div class="topbar-title">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.3" stroke="currentColor" stroke-width="1.3"/><path d="M2 12c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    CRM
+    <span style="color:var(--txt-3);margin:0 2px;">/</span>
+    <strong>Clientes</strong>
+  </div>
+  <div class="topbar-actions">
+    <div class="status-indicator"><div class="pulse"></div>Online</div>
+    <button class="tb-icon-btn theme-toggle" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">
+      <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7L3.4 3.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="tb-btn">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2h7l-.5 4-3 3-3-3-.5-4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2.5 6.5h7" stroke="currentColor" stroke-width="1.2"/></svg>
+      Importar CSV
+    </button>
+    <button class="tb-btn tb-btn-primary">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Novo cliente
+    </button>
+    <div style="width:1px;height:20px;background:var(--line);margin:0 2px;"></div>
+    <div class="nav-avatar">AM</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- NAV RAIL -->
+  <div class="nav-rail">
+    <a href="Omnichannel - Modais.html" class="nav-item" title="Atendimentos" style="text-decoration:none;">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 13V5.5l6-4 6 4V13H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M3 8h12" stroke="currentColor" stroke-width="1.4"/></svg>
+    </a>
+    <div class="nav-item active" title="Clientes">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 16c0-3.5 3-6 7-6s7 2.5 7 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <div class="nav-item" title="Tickets">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7h7M5.5 10h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <div class="badge">4</div>
+    </div>
+    <div class="nav-item" title="Campanhas">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 12l3-7 3 4 2-2 4 5H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-item" title="Relatórios">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M6 11V9M9 11V7M12 11V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <div class="nav-item" title="Configurações">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </div>
+    <div class="nav-bottom">
+      <div class="nav-avatar" style="width:32px;height:32px;font-size:12px;">AM</div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="list-area">
+
+      <!-- Page header -->
+      <div class="page-head">
+        <h1>Clientes</h1>
+        <span class="count">2.847 cadastros</span>
+        <div class="page-head-spacer"></div>
+        <button class="tb-btn">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4h8M3.5 7h5M5 10h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Filtros avançados
+        </button>
+        <button class="tb-btn">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M2 3h8M2 9h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Colunas
+        </button>
+        <button class="tb-btn">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v8M3 6l3 3 3-3M2 11h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Exportar
+        </button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-lbl">Total ativos</div>
+          <div class="kpi-val">2.847 <span class="delta up">↑ 4,8%</span></div>
+          <div class="kpi-spark">
+            <span style="height:30%"></span><span style="height:45%"></span><span style="height:38%"></span>
+            <span style="height:55%"></span><span style="height:48%"></span><span style="height:65%"></span>
+            <span style="height:60%"></span><span style="height:75%"></span><span style="height:82%"></span>
+            <span style="height:78%"></span><span style="height:88%"></span><span style="height:100%"></span>
+          </div>
+        </div>
+        <div class="kpi kpi-blue">
+          <div class="kpi-lbl">Leads no funil</div>
+          <div class="kpi-val">412 <span class="delta up">↑ 12%</span></div>
+          <div class="kpi-spark">
+            <span style="height:50%"></span><span style="height:42%"></span><span style="height:60%"></span>
+            <span style="height:58%"></span><span style="height:72%"></span><span style="height:65%"></span>
+            <span style="height:80%"></span><span style="height:75%"></span><span style="height:90%"></span>
+            <span style="height:85%"></span><span style="height:95%"></span><span style="height:100%"></span>
+          </div>
+        </div>
+        <div class="kpi kpi-amber">
+          <div class="kpi-lbl">Em negociação</div>
+          <div class="kpi-val">87 <span class="delta down">↓ 2%</span></div>
+          <div class="kpi-spark">
+            <span style="height:80%"></span><span style="height:90%"></span><span style="height:75%"></span>
+            <span style="height:88%"></span><span style="height:70%"></span><span style="height:78%"></span>
+            <span style="height:65%"></span><span style="height:72%"></span><span style="height:60%"></span>
+            <span style="height:68%"></span><span style="height:55%"></span><span style="height:62%"></span>
+          </div>
+        </div>
+        <div class="kpi kpi-purple">
+          <div class="kpi-lbl">LTV médio</div>
+          <div class="kpi-val">R$ 8.4k <span class="delta up">↑ 6,1%</span></div>
+          <div class="kpi-spark">
+            <span style="height:40%"></span><span style="height:55%"></span><span style="height:48%"></span>
+            <span style="height:62%"></span><span style="height:58%"></span><span style="height:70%"></span>
+            <span style="height:65%"></span><span style="height:78%"></span><span style="height:72%"></span>
+            <span style="height:85%"></span><span style="height:80%"></span><span style="height:92%"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <div class="search-box">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.2"/><path d="M9 9l2.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          <input type="text" placeholder="Buscar por nome, e-mail, telefone, CPF..." oninput="filterTable(this.value)">
+          <span class="kbd-hint">⌘K</span>
+        </div>
+        <div class="fchip has-val">
+          Status: Todos
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </div>
+        <div class="fchip">
+          Canal
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </div>
+        <div class="fchip">
+          Atribuído a
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </div>
+        <div class="fchip">
+          Tags
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </div>
+        <div class="fchip">
+          Data
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </div>
+        <div class="filter-bar-spacer"></div>
+        <div class="view-toggle">
+          <div class="vt-opt active" title="Tabela">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1.5" y="1.5" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 4h8M1.5 6.5h8M5 1.5v8" stroke="currentColor" stroke-width="1.2"/></svg>
+            Tabela
+          </div>
+          <div class="vt-opt" title="Kanban">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="1.5" width="2.5" height="8" rx=".5" stroke="currentColor" stroke-width="1.2"/><rect x="4.3" y="1.5" width="2.5" height="6" rx=".5" stroke="currentColor" stroke-width="1.2"/><rect x="7.5" y="1.5" width="2.5" height="4" rx=".5" stroke="currentColor" stroke-width="1.2"/></svg>
+            Kanban
+          </div>
+        </div>
+      </div>
+
+      <!-- Segments -->
+      <div class="seg-tabs">
+        <div class="seg-tab active" onclick="setSegTab(this,'all')">Todos <span class="seg-count">2.847</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'clientes')">Clientes <span class="seg-count">1.926</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'leads')">Leads <span class="seg-count">412</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'prospects')">Prospects <span class="seg-count">298</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'negociando')">Negociando <span class="seg-count">87</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'vip')">VIP <span class="seg-count">34</span></div>
+        <div class="seg-tab" onclick="setSegTab(this,'inativos')">Inativos <span class="seg-count">90</span></div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table class="clients" id="clients-table">
+          <thead>
+            <tr>
+              <th class="col-cb"><div class="cb" onclick="toggleAll(this)"></div></th>
+              <th><span class="sort">Cliente <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1.5v6M2.5 5.5l2 2 2-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th>Status</th>
+              <th>Canais</th>
+              <th><span class="sort">Último contato <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1.5v6M2.5 5.5l2 2 2-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th><span class="sort">LTV <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1.5v6M2.5 5.5l2 2 2-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th>
+              <th>Saúde</th>
+              <th>Atribuído</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <!-- Rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div class="tbl-foot">
+        <div class="tbl-foot-left">
+          <span>Mostrando <strong style="color:var(--txt);font-family:var(--mono);">1–12</strong> de <strong style="color:var(--txt);font-family:var(--mono);">2.847</strong></span>
+          <span class="muted">·</span>
+          <span class="muted">12 por página</span>
+        </div>
+        <div class="pagi">
+          <div class="pagi-btn">←</div>
+          <div class="pagi-btn active">1</div>
+          <div class="pagi-btn">2</div>
+          <div class="pagi-btn">3</div>
+          <div class="pagi-btn">4</div>
+          <div class="pagi-btn">…</div>
+          <div class="pagi-btn">238</div>
+          <div class="pagi-btn">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-panel" id="detail-panel">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+// ───── Data
+const CLIENTS = [
+  { id:1, name:'Douglas Santos Silva', sub:'douglas@gmail.com', initials:'DS', grad:'#667eea,#764ba2',
+    status:'lead', tag:'Lead', channels:['wa','ig','mail'], last:'há 5 min', lastFull:'09:42 — hoje',
+    ltv:'R$ —', ltvSub:'sem compras', health:91, healthClass:'good',
+    owner:'Ana Martins', ownerInit:'AM', ownerGrad:'#00C9A7,#009E82',
+    role:'Pessoa Física · Goiânia, GO',
+    info:{ tel:'+55 35 6266 5888', cpf:'797.192.470-45', cep:'74853-230', empresa:'—', cargo:'—', desde:'22/03/2026' },
+    metrics:{ atend:3, msgs:7, nps:'—' },
+    timeline:[
+      {dot:'', head:'Mensagem recebida', sub:'WhatsApp · "Olá! Gostaria de saber mais..."', time:'09:42'},
+      {dot:'', head:'Atendimento iniciado', sub:'Por Ana Martins', time:'09:40'},
+      {dot:'amber', head:'Lead qualificado', sub:'Origem: site /planos · Plano Pro', time:'ontem'},
+      {dot:'blue', head:'Visitou /planos', sub:'5 min de sessão · 4 páginas', time:'ontem'},
+      {dot:'muted', head:'Cadastrado', sub:'Via formulário do site', time:'22/03'},
+    ]},
+  { id:2, name:'Marina Ferreira', sub:'@marina.ferreira', initials:'MF', grad:'#f093fb,#f5576c',
+    status:'cliente', tag:'Cliente', channels:['ig','wa'], last:'há 11 min', lastFull:'09:31 — hoje',
+    ltv:'R$ 4.850', ltvSub:'2 contratos', health:78, healthClass:'good',
+    owner:'Bruno Tavares', ownerInit:'BT', ownerGrad:'#fa709a,#fee140',
+    role:'Designer · São Paulo, SP',
+    info:{ tel:'+55 11 98221-4566', cpf:'421.755.180-22', cep:'04513-000', empresa:'Estúdio MF', cargo:'Founder', desde:'14/11/2024' },
+    metrics:{ atend:12, msgs:84, nps:'9' },
+    timeline:[
+      {dot:'', head:'Resposta automática enviada', sub:'Instagram · template "Boas-vindas"', time:'09:31'},
+      {dot:'amber', head:'Renovação de contrato', sub:'Plano Pro · R$ 297/mês', time:'há 3 dias'},
+      {dot:'', head:'Atendimento resolvido', sub:'CSAT 5★ · Suporte', time:'há 5 dias'},
+    ]},
+  { id:3, name:'Roberto Carlos Lima', sub:'roberto@empresa.com.br', initials:'RC', grad:'#4facfe,#00f2fe',
+    status:'prospect', tag:'Prospect', channels:['mail','tel'], last:'há 1h', lastFull:'08:55 — hoje',
+    ltv:'R$ —', ltvSub:'em proposta', health:62, healthClass:'mid',
+    owner:'Carla Mendonça', ownerInit:'CM', ownerGrad:'#667eea,#764ba2',
+    role:'CEO · Empresa S.A.',
+    info:{ tel:'+55 21 3344-1212', cpf:'—', cep:'22640-100', empresa:'Empresa S.A.', cargo:'CEO', desde:'02/04/2026' },
+    metrics:{ atend:5, msgs:31, nps:'—' },
+    timeline:[
+      {dot:'amber', head:'Proposta enviada', sub:'Plano Enterprise · R$ 1.290/mês', time:'08:55'},
+      {dot:'blue', head:'Reunião realizada', sub:'45 min · Apresentação comercial', time:'ontem'},
+    ]},
+  { id:4, name:'Ana Paula Lima', sub:'ana.lima@yahoo.com', initials:'AL', grad:'#43e97b,#38f9d7',
+    status:'cliente', tag:'Cliente', channels:['wa','mail'], last:'há 4h', lastFull:'08:12 — hoje',
+    ltv:'R$ 12.420', ltvSub:'3 anos', health:96, healthClass:'good',
+    owner:'Ana Martins', ownerInit:'AM', ownerGrad:'#00C9A7,#009E82',
+    role:'Contadora · Belo Horizonte, MG',
+    info:{ tel:'+55 31 98765-1234', cpf:'332.410.770-01', cep:'30130-100', empresa:'Lima Contabilidade', cargo:'Sócia', desde:'08/02/2023' },
+    metrics:{ atend:38, msgs:412, nps:'10' },
+    timeline:[]},
+  { id:5, name:'João Mendes Pereira', sub:'@joao.mp', initials:'JM', grad:'#fa709a,#fee140',
+    status:'cliente', tag:'Cliente', channels:['ig','wa','mail'], last:'ontem', lastFull:'18:24 — 26/04',
+    ltv:'R$ 2.376', ltvSub:'1 contrato', health:71, healthClass:'good',
+    owner:'Diego Rocha', ownerInit:'DR', ownerGrad:'#43e97b,#38f9d7',
+    role:'Pessoa Física · Curitiba, PR',
+    info:{}, metrics:{ atend:6, msgs:42, nps:'8' }, timeline:[]},
+  { id:6, name:'Paula Souza Andrade', sub:'paula.souza@gmail.com', initials:'PS', grad:'#a18cd1,#fbc2eb',
+    status:'negociando', tag:'Negociando', channels:['mail','tel','wa'], last:'ontem', lastFull:'15:10 — 26/04',
+    ltv:'R$ 890', ltvSub:'em renovação', health:54, healthClass:'mid',
+    owner:'Erika Sales', ownerInit:'ES', ownerGrad:'#a18cd1,#fbc2eb',
+    role:'Advogada · Rio de Janeiro, RJ',
+    info:{}, metrics:{ atend:9, msgs:67, nps:'7' }, timeline:[]},
+  { id:7, name:'Thiago Costa Almeida', sub:'thiago@startup.io', initials:'TC', grad:'#f7971e,#ffd200',
+    status:'lead', tag:'Lead', channels:['wa'], last:'22/04', lastFull:'14:30 — 22/04',
+    ltv:'R$ —', ltvSub:'novo lead', health:84, healthClass:'good',
+    owner:'Ana Martins', ownerInit:'AM', ownerGrad:'#00C9A7,#009E82',
+    role:'CTO · Startup.io',
+    info:{}, metrics:{ atend:1, msgs:4, nps:'—' }, timeline:[]},
+  { id:8, name:'Camila Rodrigues', sub:'camila.r@hotmail.com', initials:'CR', grad:'#ee9ca7,#ffdde1',
+    status:'vip', tag:'VIP', channels:['wa','mail','tel'], last:'há 2 dias', lastFull:'10:00 — 25/04',
+    ltv:'R$ 38.600', ltvSub:'5 anos · 12 contratos', health:99, healthClass:'good',
+    owner:'Bruno Tavares', ownerInit:'BT', ownerGrad:'#fa709a,#fee140',
+    role:'Diretora · Rede Camila & Cia',
+    info:{}, metrics:{ atend:124, msgs:'2.1k', nps:'10' }, timeline:[]},
+  { id:9, name:'Rafael Nogueira', sub:'rafa.ng@outlook.com', initials:'RN', grad:'#5ee7df,#b490ca',
+    status:'prospect', tag:'Prospect', channels:['mail','sms'], last:'há 3 dias', lastFull:'11:15 — 24/04',
+    ltv:'R$ —', ltvSub:'em demo', health:48, healthClass:'mid',
+    owner:'Carla Mendonça', ownerInit:'CM', ownerGrad:'#667eea,#764ba2',
+    role:'Gerente · Construtora RN', info:{}, metrics:{ atend:2, msgs:8, nps:'—' }, timeline:[]},
+  { id:10, name:'Beatriz Oliveira', sub:'beatriz@studio.com', initials:'BO', grad:'#fbc2eb,#a6c1ee',
+    status:'inativo', tag:'Inativo', channels:['mail'], last:'há 4 meses', lastFull:'18/12/2025',
+    ltv:'R$ 1.450', ltvSub:'última: 2025', health:22, healthClass:'low',
+    owner:'—', ownerInit:'·', ownerGrad:'#5C6370,#3a3f48',
+    role:'Studio · Recife, PE', info:{}, metrics:{ atend:7, msgs:38, nps:'5' }, timeline:[]},
+  { id:11, name:'Lucas Almeida Vieira', sub:'lucas@agencia.co', initials:'LV', grad:'#84fab0,#8fd3f4',
+    status:'cliente', tag:'Cliente', channels:['wa','ig'], last:'há 6 dias', lastFull:'12:00 — 21/04',
+    ltv:'R$ 6.290', ltvSub:'2 contratos', health:88, healthClass:'good',
+    owner:'Diego Rocha', ownerInit:'DR', ownerGrad:'#43e97b,#38f9d7',
+    role:'Diretor · Agência Norte', info:{}, metrics:{ atend:18, msgs:142, nps:'9' }, timeline:[]},
+  { id:12, name:'Fernanda Borges', sub:'@fer.borges', initials:'FB', grad:'#fad0c4,#ffd1ff',
+    status:'negociando', tag:'Negociando', channels:['ig','wa','tel'], last:'há 1 sem', lastFull:'14:45 — 20/04',
+    ltv:'R$ 3.180', ltvSub:'avaliando upgrade', health:67, healthClass:'mid',
+    owner:'Felipe Nunes', ownerInit:'FN', ownerGrad:'#f7971e,#ffd200',
+    role:'Influencer · São Paulo, SP', info:{}, metrics:{ atend:14, msgs:96, nps:'8' }, timeline:[]},
+];
+
+const CH_ICONS = {
+  wa:   '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 8C2 9.5 3.5 10.5 5 10.5c2.5 0 4-2 4-4.5S7.5 1.5 5 1.5 1 3.5 1 6c0 1 .3 1.8.8 2.5L1.5 10z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
+  ig:   '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1.5" y="1.5" width="8" height="8" rx="2.4" stroke="currentColor" stroke-width="1.1"/><circle cx="5.5" cy="5.5" r="2" stroke="currentColor" stroke-width="1.1"/><circle cx="8" cy="3" r=".6" fill="currentColor"/></svg>',
+  mail: '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="2.5" width="9" height="6.5" rx="1.2" stroke="currentColor" stroke-width="1.1"/><path d="M1 4l4.5 3 4.5-3" stroke="currentColor" stroke-width="1.1"/></svg>',
+  sms:  '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 7.5V3a1.2 1.2 0 011.2-1.2h5.6A1.2 1.2 0 019.5 3v3a1.2 1.2 0 01-1.2 1.2H4.5l-3 2.3z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
+  tel:  '<svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 2s1-.4 1.6 1.2c.3.8-.5 1.2-.5 2s.7 1.5 1.5 2.3 1.7 1.5 2.5 1.5.7-.8 1.4-.5c1.5.6 1.2 1.5 1.2 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
+};
+
+// ───── Render
+function renderTable() {
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = CLIENTS.map(c => {
+    const tagCls = ({lead:'tag-lead',cliente:'tag-cliente',prospect:'tag-prospect',vip:'tag-vip',inativo:'tag-inativo',negociando:'tag-negociando'})[c.status] || 'tag-cliente';
+    return `
+    <tr data-id="${c.id}" onclick="selectClient(${c.id})">
+      <td class="col-cb" onclick="event.stopPropagation()"><div class="cb" onclick="this.classList.toggle('checked')"></div></td>
+      <td>
+        <div class="cell-name">
+          <div class="tbl-avatar" style="background:linear-gradient(135deg,${c.grad});">${c.initials}</div>
+          <div class="cell-name-body">
+            <div class="cell-name-name">${c.name}</div>
+            <div class="cell-name-sub">${c.sub}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="tag-pill ${tagCls}">${c.tag}</span></td>
+      <td><div class="ch-stack">${c.channels.map(ch => `<div class="ch-icon ch-${ch}" title="${ch}">${CH_ICONS[ch]}</div>`).join('')}</div></td>
+      <td><div class="mono">${c.last}</div><div class="muted" style="font-size:10px;">${c.lastFull}</div></td>
+      <td><div class="money">${c.ltv}</div><div class="muted" style="font-size:10px;">${c.ltvSub}</div></td>
+      <td>
+        <div class="health">
+          <div class="health-bar"><div class="health-bar-fill health-${c.healthClass}" style="width:${c.health}%"></div></div>
+          <span class="health-num">${c.health}</span>
+        </div>
+      </td>
+      <td>
+        ${c.owner === '—' ? '<span class="muted" style="font-size:11px;">Sem dono</span>' : `
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div class="tbl-avatar" style="width:22px;height:22px;font-size:9px;background:linear-gradient(135deg,${c.ownerGrad});">${c.ownerInit}</div>
+          <span style="font-size:11px;color:var(--txt-2);">${c.owner}</span>
+        </div>`}
+      </td>
+      <td onclick="event.stopPropagation()">
+        <div class="row-actions">
+          <div class="row-act-btn" title="Conversar">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 8.5V3.5a1 1 0 011-1h6a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2v-1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="row-act-btn" title="Editar">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="row-act-btn" title="Mais">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="6" r="1" fill="currentColor"/></svg>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function selectClient(id) {
+  document.querySelectorAll('table.clients tbody tr').forEach(r => r.classList.toggle('selected', +r.dataset.id === id));
+  const c = CLIENTS.find(x => x.id === id);
+  if (!c) return;
+  const tagCls = ({lead:'tag-lead',cliente:'tag-cliente',prospect:'tag-prospect',vip:'tag-vip',inativo:'tag-inativo',negociando:'tag-negociando'})[c.status] || 'tag-cliente';
+  const info = c.info || {};
+  const tl = (c.timeline && c.timeline.length) ? c.timeline : [
+    {dot:'muted', head:'Sem atividade recente', sub:'Última interação registrada há mais tempo', time:c.last},
+  ];
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-scroll">
+      <div class="detail-hero">
+        <div class="detail-avatar-lg" style="background:linear-gradient(135deg,${c.grad});">${c.initials}</div>
+        <div>
+          <div class="detail-name">${c.name}</div>
+          <div class="detail-role">${c.role || ''}</div>
+        </div>
+        <div class="detail-hero-tags">
+          <span class="tag-pill ${tagCls}">${c.tag}</span>
+          ${c.channels.map(ch => `<span class="tag-pill" style="background:var(--bg-4);color:var(--txt-2);border:1px solid var(--line);"><span style="display:inline-flex;color:${ch==='wa'?'#25D366':ch==='ig'?'var(--pink)':ch==='mail'?'var(--blue)':ch==='sms'?'var(--purple)':'var(--green)'}">${CH_ICONS[ch]}</span> ${({wa:'WhatsApp',ig:'Instagram',mail:'E-mail',sms:'SMS',tel:'Telefone'})[ch]}</span>`).join('')}
+        </div>
+      </div>
+
+      <div class="detail-actions">
+        <div class="dact"><div class="dact-ic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 9.5V4a1.2 1.2 0 011.2-1.2h7.6A1.2 1.2 0 0112 4v4.5a1.2 1.2 0 01-1.2 1.2H5L2 12v-2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></div>Mensagem</div>
+        <div class="dact"><div class="dact-ic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 2.5s1.2-.4 1.7 1.4c.2.8-.5 1.3-.4 2.2.2 1 .8 1.8 1.7 2.7s1.7 1.5 2.7 1.7c.9.1 1.4-.6 2.2-.4 1.8.5 1.4 1.7 1.4 1.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>Ligar</div>
+        <div class="dact"><div class="dact-ic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2.5" width="10" height="9" rx="1.3" stroke="currentColor" stroke-width="1.3"/><path d="M2 5h10M4.5 1.5v2M9.5 1.5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>Agendar</div>
+        <div class="dact"><div class="dact-ic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="3.5" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="10.5" r="1" fill="currentColor"/></svg></div>Mais</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-head">
+          <div class="detail-section-title">Métricas</div>
+        </div>
+        <div class="metric-row">
+          <div class="metric"><div class="metric-val">${c.metrics.atend}</div><div class="metric-lbl">Atendimentos</div></div>
+          <div class="metric"><div class="metric-val">${c.metrics.msgs}</div><div class="metric-lbl">Mensagens</div></div>
+          <div class="metric"><div class="metric-val ${c.metrics.nps !== '—' ? 'green' : ''}">${c.metrics.nps}</div><div class="metric-lbl">NPS</div></div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-head">
+          <div class="detail-section-title">Informações</div>
+          <span class="detail-section-action">Editar</span>
+        </div>
+        <div class="kv-grid">
+          <div class="kv"><div class="kv-lbl">E-mail</div><div class="kv-val link">${c.sub}</div></div>
+          <div class="kv"><div class="kv-lbl">Telefone</div><div class="kv-val mono">${info.tel || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">CPF / CNPJ</div><div class="kv-val mono">${info.cpf || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">CEP</div><div class="kv-val mono">${info.cep || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">Empresa</div><div class="kv-val">${info.empresa || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">Cargo</div><div class="kv-val">${info.cargo || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">Cliente desde</div><div class="kv-val">${info.desde || '—'}</div></div>
+          <div class="kv"><div class="kv-lbl">Atribuído</div><div class="kv-val">${c.owner}</div></div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-head">
+          <div class="detail-section-title">Atividade recente</div>
+          <span class="detail-section-action">Ver tudo</span>
+        </div>
+        <div class="timeline">
+          ${tl.map(t => `
+            <div class="tl-item">
+              <div class="tl-dot ${t.dot || ''}"></div>
+              <div class="tl-head">${t.head} <span class="tl-time">${t.time}</span></div>
+              <div class="tl-body">${t.sub}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setSegTab(el, key) {
+  document.querySelectorAll('.seg-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('table.clients tbody tr').forEach(r => {
+    const id = +r.dataset.id;
+    const c = CLIENTS.find(x => x.id === id);
+    r.style.display = (key === 'all' || c.status === key) ? '' : 'none';
+  });
+}
+
+function filterTable(q) {
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('table.clients tbody tr').forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function toggleAll(el) {
+  el.classList.toggle('checked');
+  const on = el.classList.contains('checked');
+  document.querySelectorAll('table.clients tbody .cb').forEach(cb => cb.classList.toggle('checked', on));
+}
+
+// Init
+renderTable();
+selectClient(1);
+
+// ───── Theme toggle
+(function(){
+  var btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('zd-theme', next); } catch(e){}
+  });
+  // sync across tabs
+  window.addEventListener('storage', function(e){
+    if (e.key === 'zd-theme' && e.newValue) {
+      document.documentElement.setAttribute('data-theme', e.newValue);
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

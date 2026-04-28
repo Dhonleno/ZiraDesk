@@ -26,10 +26,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     try {
       // Se tenantSlug fornecido (dev sem subdomain), resolve o schema manualmente
       let tenantSchemaName: string | undefined;
+      let tenantId: string | undefined;
       if (tenantSlug) {
         const tenant = await prisma.tenant.findUnique({
           where: { slug: tenantSlug },
-          select: { schemaName: true, status: true },
+          select: { id: true, schemaName: true, status: true },
         });
         if (!tenant) {
           return reply.code(404).send({ error: 'Tenant não encontrado' });
@@ -37,11 +38,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         if (tenant.status !== 'active' && tenant.status !== 'trial') {
           return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
         }
-        await prisma.$executeRawUnsafe(`SET search_path TO "${tenant.schemaName}", public`);
         tenantSchemaName = tenant.schemaName;
+        tenantId = tenant.id;
       }
 
-      const { tokens, user } = await loginWithEmailPassword(email, password, lang, tenantSchemaName);
+      const { tokens, user } = await loginWithEmailPassword(email, password, lang, tenantSchemaName, tenantId);
 
       reply.setCookie(REFRESH_COOKIE, tokens.refreshToken, {
         httpOnly: true,

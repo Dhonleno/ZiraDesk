@@ -21,7 +21,20 @@
       "Bash(pnpm --filter @ziradesk/web add i18next@^23.11.5 react-i18next@^14.1.3 i18next-browser-languagedetector@^7.2.1)",
       "Bash(node -e \"const pkg = require\\('./node_modules/.pnpm/node_modules/i18next/package.json'\\); console.log\\(pkg.version\\)\")",
       "Bash(node -e \"const pkg = require\\('./apps/web/node_modules/i18next/package.json'\\); console.log\\(pkg.version\\)\")",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(pnpm --filter @ziradesk/api db:seed)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(pnpm --filter @ziradesk/api dev)",
+      "Bash(curl -s -X POST http://localhost:3333/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@ziradesk.com.br\",\"password\":\"ZiraDesk@2025\"}' -w '\\\\nHTTP %{http_code}')",
+      "Bash(curl -s -X POST http://localhost:3333/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@ziradesk.com.br\",\"password\":\"ZiraDesk@2025\"}')",
+      "Bash(curl -s http://localhost:3333/api/super-admin/metrics/overview -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbW9oMG5wbGswMDAzdGdsM2w4Znc2a2xuIiwiZW1haWwiOiJhZG1pbkB6aXJhZGVzay5jb20uYnIiLCJuYW1lIjoiU3VwZXIgQWRtaW4iLCJyb2xlIjoic3VwZXJfYWRtaW4iLCJpc1N1cGVyQWRtaW4iOnRydWUsImlhdCI6MTc3NzI4NDA4NywiZXhwIjoxNzc3Mjg0OTg3fQ.E4MFiZGZOJ9yKFNqb2C2_Ed8REyATrojnmyJvxiiDaQ' -w '\\\\nHTTP %{http_code}')",
+      "Bash(pnpm --filter @ziradesk/api build)",
+      "Bash(curl -s -X POST http://localhost:3333/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"owner@demo.ziradesk.com\",\"password\":\"Owner@2025\",\"tenantSlug\":\"demo\"}')",
+      "Bash(node -e ' *)",
+      "Bash(node --input-type=module)",
+      "Bash(psql -h localhost -U ziradesk -d ziradesk -c ' *)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

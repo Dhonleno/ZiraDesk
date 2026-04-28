@@ -1,0 +1,151 @@
+/* ── ZiraDesk Design System — CSS Tokens ─────────────────────────────────── */
+/* Fonte da verdade: ARQUITETURA_TECNICA.md §3.2                             */
+/* Não editar hex diretamente — atualize o doc e propague aqui.              */
+
+:root,
+[data-theme="dark"] {
+  /* Surfaces — escala de profundidade */
+  --bg:   #0E0F11;
+  --bg-2: #141518;
+  --bg-3: #1A1C20;
+  --bg-4: #22252B;
+  --bg-5: #2A2E36;
+
+  /* Lines */
+  --line:   rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.12);
+
+  /* Text */
+  --txt:   #F0F1F3;
+  --txt-2: #9DA3AE;
+  --txt-3: #5C6370;
+
+  /* Acento (teal) */
+  --teal:      #00C9A7;
+  --teal-dim:  rgba(0, 201, 167, 0.15);
+  --teal-glow: rgba(0, 201, 167, 0.3);
+
+  /* Estados semânticos */
+  --green:      #3ECF8E;
+  --green-dim:  rgba(62, 207, 142, 0.15);
+  --amber:      #F59E0B;
+  --amber-dim:  rgba(245, 158, 11, 0.15);
+  --red:        #F87171;
+  --red-dim:    rgba(248, 113, 113, 0.15);
+  --blue:       #60A5FA;
+  --blue-dim:   rgba(96, 165, 250, 0.15);
+  --purple:     #A78BFA;
+  --purple-dim: rgba(167, 139, 250, 0.15);
+  --pink:       #F472B6;
+  --pink-dim:   rgba(244, 114, 182, 0.15);
+
+  /* Tipografia */
+  --font: 'IBM Plex Sans', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+
+  /* Geometria */
+  --r:    8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+
+  /* Helpers */
+  --on-teal:    #0E0F11;
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--line);
+  --backdrop:   rgba(8, 9, 11, 0.72);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg:   #F4F6F9;
+  --bg-2: #FFFFFF;
+  --bg-3: #FFFFFF;
+  --bg-4: #F0F2F6;
+  --bg-5: #E5E8EE;
+
+  --line:   rgba(15, 18, 24, 0.08);
+  --line-2: rgba(15, 18, 24, 0.14);
+
+  --txt:   #14171C;
+  --txt-2: #54606E;
+  --txt-3: #8A94A1;
+
+  --teal:      #00A88C;
+  --teal-dim:  rgba(0, 168, 140, 0.12);
+  --teal-glow: rgba(0, 168, 140, 0.25);
+
+  --green:      #16A06B;
+  --green-dim:  rgba(22, 160, 107, 0.12);
+  --amber:      #B7791F;
+  --amber-dim:  rgba(245, 158, 11, 0.14);
+  --red:        #DC2F4E;
+  --red-dim:    rgba(220, 47, 78, 0.10);
+  --blue:       #2563EB;
+  --blue-dim:   rgba(37, 99, 235, 0.10);
+  --purple:     #7C3AED;
+  --purple-dim: rgba(124, 58, 237, 0.10);
+  --pink:       #DB2777;
+  --pink-dim:   rgba(219, 39, 119, 0.10);
+
+  --on-teal:    #FFFFFF;
+  --shadow-pop: 0 24px 60px rgba(15, 18, 24, 0.14), 0 0 0 1px var(--line);
+  --backdrop:   rgba(20, 23, 28, 0.42);
+
+  color-scheme: light;
+}
+
+/* ── Logo — classes temáveis ──────────────────────────────────────────────── */
+.brand-logo-bg     { fill: var(--txt); }
+.brand-logo-stroke { stroke: var(--line-2); }
+.brand-logo-z      { stroke: var(--bg-2); }
+.brand-logo-zira   { fill: var(--txt); }
+.brand-logo-desk   { fill: var(--txt-2); }
+
+/* ── Theme toggle ─────────────────────────────────────────────────────────── */
+.theme-toggle .icon-sun  { display: none; }
+.theme-toggle .icon-moon { display: block; }
+[data-theme="light"] .theme-toggle .icon-sun  { display: block; }
+[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+/* ── Nav-rail active state ────────────────────────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-lg);
+  color: var(--txt-3);
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover {
+  background: var(--bg-4);
+  color: var(--txt-2);
+}
+
+.nav-item.active {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+/* ── Topbar icon buttons ──────────────────────────────────────────────────── */
+.tb-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r);
+  color: var(--txt-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tb-icon-btn:hover {
+  background: var(--bg-4);
+  color: var(--txt);
+}

@@ -19,7 +19,7 @@ import { getSocketServer } from '../../../socket/index.js';
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
 export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/tenant/conversations
+  // GET /api/omnichannel/conversations
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const parsed = listConversationsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -32,7 +32,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ success: true, ...result });
   });
 
-  // GET /api/tenant/conversations/:id
+  // GET /api/omnichannel/conversations/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
     try {
       const result = await getConversationWithMessages(request.params.id);
@@ -45,7 +45,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/tenant/conversations/:id/messages
+  // POST /api/omnichannel/conversations/:id/messages
   app.post<{ Params: { id: string } }>(
     '/:id/messages',
     { preHandler: guard },
@@ -77,7 +77,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /api/tenant/conversations/:id
+  // PATCH /api/omnichannel/conversations/:id
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
     const parsed = updateConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
