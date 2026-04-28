@@ -1,4 +1,5 @@
 import './config/env.js'; // valida env antes de qualquer coisa
+import './jobs/send-message.job.js'; // inicia o worker de mensagens
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
@@ -11,6 +12,7 @@ import { omnichannelModuleRoutes } from './modules/omnichannel/index.js';
 import { adminRoutes } from './modules/admin/index.js';
 import { crmRoutes } from './modules/crm/index.js';
 import { ticketModuleRoutes } from './modules/tickets/index.js';
+import { webhookRoutes } from './modules/webhooks/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
@@ -49,6 +51,9 @@ async function bootstrap(): Promise<void> {
 
   // Detecta idioma em todas as requisições via Accept-Language
   app.addHook('onRequest', languageMiddleware);
+
+  // Webhooks sem auth JWT e sem tenant middleware — registrar primeiro
+  await app.register(webhookRoutes, { prefix: '/api/webhooks' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });

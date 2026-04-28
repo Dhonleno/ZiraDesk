@@ -1,5 +1,25 @@
 # Changelog — ZiraDesk
 
+## [0.5.0-backend] — Sprint 5A — Omnichannel Backend
+### Adicionado
+- Padronização de status: open, pending, resolved, bot (substituído in_service)
+- Filtro assigned_to_me na listagem de conversas
+- Criação de nova conversa via POST /api/omnichannel/conversations
+- Rota de assign separada: POST /api/omnichannel/conversations/:id/assign
+- Rota de transfer: POST /api/omnichannel/conversations/:id/transfer
+- Socket.io: agent rooms (agent:{userId}) para notificações direcionadas
+- Webhooks sem auth JWT: WhatsApp (Evolution API), Instagram (Meta Graph), Email (Resend inbound)
+- Verificação HMAC-SHA256 no webhook WhatsApp via EVOLUTION_API_KEY
+- Verificação de token no webhook Instagram via META_VERIFY_TOKEN
+- Lookup cross-tenant por instance/page_id/email nas credenciais dos canais
+- Processamento de webhooks em transações Prisma com SET LOCAL search_path
+- Fila de mensagens BullMQ (3 tentativas, backoff exponencial 2s)
+- Worker de envio real via Evolution API para WhatsApp
+- config/redis.ts centralizado com ioredis
+- utils/crypto.ts com decryptCredentials compartilhado
+
+---
+
 ## [0.1.1] — i18n
 ### Adicionado
 - i18next + react-i18next no frontend

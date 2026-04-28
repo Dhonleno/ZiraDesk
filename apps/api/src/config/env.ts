@@ -9,6 +9,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   APP_URL: z.string().url('APP_URL deve ser uma URL válida'),
   ENCRYPTION_KEY: z.string().length(32, 'ENCRYPTION_KEY deve ter exatamente 32 caracteres'),
+  EVOLUTION_API_KEY: z.string().optional(),
+  META_VERIFY_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -38,7 +38,9 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
 
   io.on('connection', (socket) => {
     const tenantId = socket.data.tenantId as string;
+    const userId = socket.data.userId as string;
     void socket.join(`tenant:${tenantId}`);
+    void socket.join(`agent:${userId}`);
 
     socket.on('disconnect', () => {
       // cleanup se necessário

@@ -1,0 +1,160 @@
+import type { FastifyInstance } from 'fastify';
+import { prisma } from '../../config/database.js';
+import { env } from '../../config/env.js';
+import { decryptCredentials } from '../../utils/crypto.js';
+import { getSocketServer } from '../../socket/index.js';
+
+interface InstagramMessagingEntry {
+  sender: { id: string };
+  recipient: { id: string };
+  message?: { text?: string; mid?: string };
+}
+
+interface InstagramPayload {
+  object: string;
+  entry: Array<{
+    id: string;
+    messaging?: InstagramMessagingEntry[];
+  }>;
+}
+
+interface TenantRow {
+  id: string;
+  schema_name: string;
+}
+
+interface ChannelRow {
+  id: string;
+  credentials: string;
+}
+
+async function findTenantByPageId(pageId: string) {
+  const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
+    `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
+  );
+
+  for (const tenant of tenants) {
+    const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+      `SELECT id, credentials FROM "${tenant.schema_name}".channels WHERE type = 'instagram' AND status = 'active'`,
+    );
+
+    for (const channel of channels) {
+      const creds = decryptCredentials(channel.credentials);
+      if (creds['page_id'] === pageId) {
+        return { tenant, channel, credentials: creds };
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/webhooks/instagram — Meta webhook verification
+  app.get<{
+    Querystring: { 'hub.mode'?: string; 'hub.verify_token'?: string; 'hub.challenge'?: string };
+  }>('/instagram', async (request, reply) => {
+    const mode = request.query['hub.mode'];
+    const token = request.query['hub.verify_token'];
+    const challenge = request.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === env.META_VERIFY_TOKEN) {
+      return reply.code(200).send(challenge);
+    }
+
+    return reply.code(403).send({ error: 'Forbidden' });
+  });
+
+  // POST /api/webhooks/instagram — receive messages
+  app.post<{ Body: InstagramPayload }>('/instagram', async (request, reply) => {
+    const payload = request.body;
+
+    for (const entry of payload.entry ?? []) {
+      const pageId = entry.id;
+      const found = await findTenantByPageId(pageId);
+      if (!found) continue;
+
+      const { tenant, channel } = found;
+
+      for (const messaging of entry.messaging ?? []) {
+        const senderId = messaging.sender.id;
+        const text = messaging.message?.text ?? '[mídia]';
+        const externalId = messaging.message?.mid;
+
+        const result = await prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(
+            `SET LOCAL search_path TO "${tenant.schema_name}", public`,
+          );
+
+          const clientRows = await tx.$queryRawUnsafe<[{ id: string }]>(
+            `SELECT id FROM clients WHERE custom_fields->>'instagram_id' = $1 LIMIT 1`,
+            senderId,
+          );
+
+          let clientId: string;
+          if (clientRows[0]) {
+            clientId = clientRows[0].id;
+          } else {
+            const newClient = await tx.$queryRawUnsafe<[{ id: string }]>(
+              `INSERT INTO clients (name, status, custom_fields)
+               VALUES ($1, 'lead', $2::jsonb) RETURNING id`,
+              `Instagram user ${senderId}`,
+              JSON.stringify({ instagram_id: senderId }),
+            );
+            clientId = newClient[0]!.id;
+          }
+
+          const convRows = await tx.$queryRawUnsafe<[{ id: string }]>(
+            `SELECT id FROM conversations
+             WHERE client_id = $1 AND channel_id = $2 AND status = 'open'
+             LIMIT 1`,
+            clientId,
+            channel.id,
+          );
+
+          let conversationId: string;
+          if (convRows[0]) {
+            conversationId = convRows[0].id;
+          } else {
+            const newConv = await tx.$queryRawUnsafe<[{ id: string }]>(
+              `INSERT INTO conversations (client_id, channel_id, channel_type, status)
+               VALUES ($1, $2, 'instagram', 'open') RETURNING id`,
+              clientId,
+              channel.id,
+            );
+            conversationId = newConv[0]!.id;
+          }
+
+          const msgRows = await tx.$queryRawUnsafe<
+            [{ id: string; content: string; created_at: Date; sender_type: string }]
+          >(
+            `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, external_id, status)
+             VALUES ($1, 'client', $2, $3, 'text', $4, 'delivered')
+             RETURNING id, content, created_at, sender_type`,
+            conversationId,
+            clientId,
+            text,
+            externalId ?? null,
+          );
+          const message = msgRows[0]!;
+
+          await tx.$executeRawUnsafe(
+            `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+            text.slice(0, 255),
+            conversationId,
+          );
+
+          return { conversationId, message };
+        });
+
+        const io = getSocketServer();
+        io.to(`tenant:${tenant.id}`).emit('conversation:message', {
+          conversationId: result.conversationId,
+          message: result.message,
+        });
+      }
+    }
+
+    return reply.send({ success: true });
+  });
+}

@@ -4,17 +4,25 @@ import { authMiddleware } from '../../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   listConversationsQuerySchema,
+  createConversationBodySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
+  assignConversationBodySchema,
+  transferConversationBodySchema,
 } from './conversations.schema.js';
 import {
   listConversations,
   getConversationWithMessages,
   sendMessage,
   updateConversation,
+  createConversation,
+  assignConversation,
+  transferConversation,
   NotFoundError,
 } from './conversations.service.js';
 import { getSocketServer } from '../../../socket/index.js';
+import { messageQueue } from '../../../jobs/queue.js';
+import { decryptCredentials } from '../../../utils/crypto.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
@@ -28,8 +36,33 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Query inválida', details: parsed.error.flatten() },
       });
     }
-    const result = await listConversations(parsed.data);
+    const result = await listConversations(parsed.data, request.user.id);
     return reply.send({ success: true, ...result });
+  });
+
+  // POST /api/omnichannel/conversations
+  app.post('/', { preHandler: guard }, async (request, reply) => {
+    const parsed = createConversationBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const conversation = await createConversation(parsed.data, request.user.id);
+      const tenantUser = request.user as AuthUser;
+
+      const io = getSocketServer();
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation });
+
+      return reply.code(201).send({ success: true, data: conversation });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // GET /api/omnichannel/conversations/:id
@@ -58,16 +91,97 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const message = await sendMessage(request.params.id, request.user.id, parsed.data);
+        const result = await sendMessage(request.params.id, request.user.id, parsed.data);
         const tenantUser = request.user as AuthUser;
 
         const io = getSocketServer();
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:new_message', {
           conversationId: request.params.id,
-          message,
+          message: result.message,
         });
 
-        return reply.code(201).send({ success: true, data: message });
+        if (result.channelCredentials) {
+          const creds = decryptCredentials(result.channelCredentials);
+          await messageQueue.add('send', {
+            messageId: result.message.id,
+            conversationId: request.params.id,
+            channelType: result.channelType,
+            channelCredentials: creds,
+            content: parsed.data.content,
+            to: result.clientPhone ?? result.clientEmail ?? '',
+          });
+        }
+
+        return reply.code(201).send({ success: true, data: result.message });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /api/omnichannel/conversations/:id/assign
+  app.post<{ Params: { id: string } }>(
+    '/:id/assign',
+    { preHandler: guard },
+    async (request, reply) => {
+      const parsed = assignConversationBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+        });
+      }
+      try {
+        const conversation = await assignConversation(request.params.id, parsed.data.user_id);
+        const tenantUser = request.user as AuthUser;
+
+        const io = getSocketServer();
+        io.to(`agent:${parsed.data.user_id}`).emit('conversation:assigned', {
+          conversationId: request.params.id,
+        });
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
+          conversationId: request.params.id,
+        });
+
+        return reply.send({ success: true, data: conversation });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // POST /api/omnichannel/conversations/:id/transfer
+  app.post<{ Params: { id: string } }>(
+    '/:id/transfer',
+    { preHandler: guard },
+    async (request, reply) => {
+      const parsed = transferConversationBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+        });
+      }
+      try {
+        const conversation = await transferConversation(request.params.id, parsed.data.user_id);
+        const tenantUser = request.user as AuthUser;
+
+        const io = getSocketServer();
+        io.to(`agent:${parsed.data.user_id}`).emit('conversation:transferred', {
+          conversationId: request.params.id,
+          reason: parsed.data.reason,
+        });
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
+          conversationId: request.params.id,
+        });
+
+        return reply.send({ success: true, data: conversation });
       } catch (err) {
         if (err instanceof NotFoundError) {
           return reply.code(404).send({ success: false, error: { message: err.message } });
