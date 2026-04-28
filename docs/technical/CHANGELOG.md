@@ -1,5 +1,19 @@
 # Changelog — ZiraDesk
 
+## [0.6.1] — Sprint 6B — Preparação para produção
+### Adicionado
+- Code splitting com manualChunks (bundle < 500kB)
+- Rota /health com verificação de banco e Redis
+- Graceful shutdown (SIGTERM/SIGINT)
+- CORS restrito para domínios ZiraDesk em produção
+- Rate limiting por tipo de rota
+- Dockerfile otimizado multi-stage para a API
+- railway.toml para configuração de deploy
+- scripts/deploy.sh automatizado
+- docs/technical/DEPLOY.md completo
+
+---
+
 ## [0.6.0] — Sprint 6 — Polimento MVP
 ### Adicionado
 - Central de notificações in-app com badge e dropdown

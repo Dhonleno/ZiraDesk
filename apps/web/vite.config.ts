@@ -22,4 +22,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-form': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'vendor-socket': ['socket.io-client'],
+          'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          'vendor-state': ['zustand'],
+          'vendor-http': ['axios'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 });

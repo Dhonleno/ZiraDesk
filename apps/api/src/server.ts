@@ -6,6 +6,8 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
+import { prisma } from './config/database.js';
+import { redis } from './config/redis.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { superAdminRoutes } from './modules/super-admin/index.js';
 import { omnichannelModuleRoutes } from './modules/omnichannel/index.js';
@@ -28,18 +30,36 @@ const app = Fastify({
   },
 });
 
+function corsOrigin() {
+  if (env.NODE_ENV !== 'production') return '*';
+  return ['https://app.ziradesk.com.br', /\.ziradesk\.com\.br$/];
+}
+
+function rateLimitMax(requestUrl: string) {
+  if (requestUrl.startsWith('/api/auth/')) return 10;
+  if (requestUrl.startsWith('/api/webhooks/')) return 1000;
+  return 200;
+}
+
 async function bootstrap(): Promise<void> {
   await app.register(helmet, { contentSecurityPolicy: false });
 
   await app.register(cors, {
-    origin: env.APP_URL,
+    origin: corsOrigin(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   await app.register(rateLimit, {
-    max: 100,
+    max: (request) => rateLimitMax(request.url),
     timeWindow: '1 minute',
+    keyGenerator: (request) => {
+      if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
+        return request.ip;
+      }
+      return request.headers.authorization ?? request.ip;
+    },
+    allowList: (request) => request.url === '/health',
     errorResponseBuilder: () => ({
       statusCode: 429,
       error: 'Too Many Requests',
@@ -66,7 +86,32 @@ async function bootstrap(): Promise<void> {
   await app.register(notificationsRoutes, { prefix: '/api/notifications' });
   await app.register(searchRoutes, { prefix: '/api/search' });
 
-  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  app.get('/health', async (_request, reply) => {
+    const services = {
+      database: 'ok' as 'ok' | 'error',
+      redis: 'ok' as 'ok' | 'error',
+    };
+
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {
+      services.database = 'error';
+    }
+
+    try {
+      await redis.ping();
+    } catch {
+      services.redis = 'error';
+    }
+
+    const healthy = services.database === 'ok' && services.redis === 'ok';
+    return reply.code(healthy ? 200 : 503).send({
+      status: healthy ? 'ok' : 'error',
+      version: process.env['npm_package_version'] ?? '0.1.0',
+      timestamp: new Date().toISOString(),
+      services,
+    });
+  });
 
   // Inicia o servidor HTTP e anexa Socket.io
   const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
@@ -75,6 +120,17 @@ async function bootstrap(): Promise<void> {
 
   app.log.info(`🚀 ZiraDesk API rodando em ${address}`);
 }
+
+const signals = ['SIGTERM', 'SIGINT'] as const;
+signals.forEach((signal) => {
+  process.on(signal, async () => {
+    console.log(`[Server] Received ${signal}, shutting down gracefully`);
+    await app.close();
+    await prisma.$disconnect();
+    redis.disconnect();
+    process.exit(0);
+  });
+});
 
 bootstrap().catch((err) => {
   console.error(err);
