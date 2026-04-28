@@ -18,6 +18,7 @@
       "avgLtv": "Avg LTV"
     },
     "filters": {
+      "status": "Status",
       "statusAll": "Status: All",
       "channel": "Channel",
       "assignedTo": "Assigned to",
@@ -94,6 +95,45 @@
       "chat": "Message",
       "edit": "Edit",
       "moreOptions": "More options"
+    },
+    "modal": {
+      "newTitle": "New client",
+      "step1": "Basic info",
+      "step2": "Additional info",
+      "next": "Next →",
+      "back": "← Back",
+      "submit": "Create client",
+      "submitting": "Creating...",
+      "tagsHint": "Type and press Enter to add",
+      "zipLoading": "Looking up ZIP...",
+      "zipError": "ZIP code not found",
+      "successCreated": "Client created successfully",
+      "fields": {
+        "type": "Type",
+        "name": "Full name",
+        "email": "Email",
+        "phone": "Phone",
+        "document": "Tax ID",
+        "status": "Status",
+        "zip": "ZIP code",
+        "street": "Street",
+        "city": "City",
+        "state": "State",
+        "segment": "Segment",
+        "leadSource": "Lead source",
+        "tags": "Tags"
+      },
+      "types": {
+        "person": "Individual",
+        "company": "Company"
+      },
+      "sources": {
+        "site": "Website",
+        "indicacao": "Referral",
+        "redes_sociais": "Social media",
+        "whatsapp": "WhatsApp",
+        "outro": "Other"
+      }
     }
   }
 }

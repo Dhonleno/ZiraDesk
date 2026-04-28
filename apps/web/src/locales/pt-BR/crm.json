@@ -18,6 +18,7 @@
       "avgLtv": "LTV médio"
     },
     "filters": {
+      "status": "Status",
       "statusAll": "Status: Todos",
       "channel": "Canal",
       "assignedTo": "Atribuído a",
@@ -94,6 +95,45 @@
       "chat": "Conversar",
       "edit": "Editar",
       "moreOptions": "Mais opções"
+    },
+    "modal": {
+      "newTitle": "Novo cliente",
+      "step1": "Dados básicos",
+      "step2": "Dados complementares",
+      "next": "Próximo →",
+      "back": "← Voltar",
+      "submit": "Criar cliente",
+      "submitting": "Criando...",
+      "tagsHint": "Digite e pressione Enter para adicionar",
+      "zipLoading": "Buscando CEP...",
+      "zipError": "CEP não encontrado",
+      "successCreated": "Cliente criado com sucesso",
+      "fields": {
+        "type": "Tipo",
+        "name": "Nome completo",
+        "email": "E-mail",
+        "phone": "Telefone",
+        "document": "CPF / CNPJ",
+        "status": "Status",
+        "zip": "CEP",
+        "street": "Logradouro",
+        "city": "Cidade",
+        "state": "Estado",
+        "segment": "Segmento",
+        "leadSource": "Origem do lead",
+        "tags": "Tags"
+      },
+      "types": {
+        "person": "Pessoa Física",
+        "company": "Empresa"
+      },
+      "sources": {
+        "site": "Site",
+        "indicacao": "Indicação",
+        "redes_sociais": "Redes sociais",
+        "whatsapp": "WhatsApp",
+        "outro": "Outro"
+      }
     }
   }
 }

@@ -18,6 +18,7 @@
       "avgLtv": "LTV promedio"
     },
     "filters": {
+      "status": "Estado",
       "statusAll": "Estado: Todos",
       "channel": "Canal",
       "assignedTo": "Asignado a",
@@ -94,6 +95,45 @@
       "chat": "Mensaje",
       "edit": "Editar",
       "moreOptions": "Más opciones"
+    },
+    "modal": {
+      "newTitle": "Nuevo cliente",
+      "step1": "Datos básicos",
+      "step2": "Datos complementarios",
+      "next": "Siguiente →",
+      "back": "← Volver",
+      "submit": "Crear cliente",
+      "submitting": "Creando...",
+      "tagsHint": "Escribe y presiona Enter para agregar",
+      "zipLoading": "Buscando código postal...",
+      "zipError": "Código postal no encontrado",
+      "successCreated": "Cliente creado exitosamente",
+      "fields": {
+        "type": "Tipo",
+        "name": "Nombre completo",
+        "email": "Correo",
+        "phone": "Teléfono",
+        "document": "RFC / ID",
+        "status": "Estado",
+        "zip": "Código postal",
+        "street": "Dirección",
+        "city": "Ciudad",
+        "state": "Estado",
+        "segment": "Segmento",
+        "leadSource": "Origen del lead",
+        "tags": "Etiquetas"
+      },
+      "types": {
+        "person": "Persona física",
+        "company": "Empresa"
+      },
+      "sources": {
+        "site": "Sitio web",
+        "indicacao": "Referido",
+        "redes_sociais": "Redes sociales",
+        "whatsapp": "WhatsApp",
+        "outro": "Otro"
+      }
     }
   }
 }

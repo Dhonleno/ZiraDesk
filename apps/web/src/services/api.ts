@@ -225,10 +225,21 @@ interface CreateCrmClientPayload {
   email?: string;
   phone?: string;
   document?: string;
+  website?: string;
   status?: string;
+  address_street?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
+  birth_date?: string;
+  gender?: string;
+  occupation?: string;
+  income?: number;
   segment?: string;
+  lead_source?: string;
   responsible_id?: string;
   tags?: string[];
+  custom_fields?: Record<string, unknown>;
 }
 
 // ── CRM API ───────────────────────────────────────────────────────────────────

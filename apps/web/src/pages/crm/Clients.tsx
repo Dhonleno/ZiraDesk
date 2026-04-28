@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { crmApi } from '../../services/api';
 import type { CrmClient, CrmTimelineEvent } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
+import { CreateClientModal } from '../../components/crm/CreateClientModal';
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 const AVATAR_GRADS = [
@@ -281,6 +282,7 @@ export function CrmClientsPage() {
   const { t } = useTranslation('crm');
   const [searchRaw, setSearchRaw] = useState('');
   const [segStatus, setSegStatus] = useState<string | undefined>(undefined);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -382,6 +384,20 @@ export function CrmClientsPage() {
               {b.icon}{b.label}
             </button>
           ))}
+          <div style={{ width: 1, height: 20, background: 'var(--line)', margin: '0 2px' }} />
+          <button
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--bg-4)', color: 'var(--txt-2)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2.5 2h7l-.5 4-3 3-3-3-.5-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M2.5 6.5h7" stroke="currentColor" strokeWidth="1.2" /></svg>
+            {t('clients.importCsv')}
+          </button>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            {t('clients.newClient')}
+          </button>
         </div>
 
         {/* KPI row */}
@@ -422,14 +438,33 @@ export function CrmClientsPage() {
             />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', padding: '2px 5px', borderRadius: 4, background: 'var(--bg-4)', border: '1px solid var(--line)', flexShrink: 0 }}>⌘K</span>
           </div>
+          {/* Status chip — synced with segment tabs */}
+          {(() => {
+            const statusActive = segStatus !== undefined;
+            const activeTab = SEG_TABS.find((t) => t.key === segStatus);
+            const statusLabel = statusActive
+              ? `${t('clients.filters.status')}: ${activeTab?.label ?? segStatus}`
+              : t('clients.filters.statusAll');
+            return (
+              <button
+                onClick={() => handleSegChange(undefined)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 'var(--r)', border: statusActive ? '1px solid var(--teal)' : '1px solid var(--line-2)', background: statusActive ? 'var(--teal-dim)' : 'var(--bg-3)', color: statusActive ? 'var(--teal)' : 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)' }}
+              >
+                {statusLabel}
+                {statusActive
+                  ? <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ opacity: 0.7 }} aria-hidden><path d="M2 2l5 5M7 2L2 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                  : <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ opacity: 0.7 }} aria-hidden><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+                }
+              </button>
+            );
+          })()}
           {[
-            t('clients.filters.statusAll'),
             t('clients.filters.channel'),
             t('clients.filters.assignedTo'),
             t('clients.filters.tags'),
             t('clients.filters.date'),
-          ].map((label, i) => (
-            <button key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 'var(--r)', border: i === 0 ? '1px solid var(--teal)' : '1px solid var(--line-2)', background: i === 0 ? 'var(--teal-dim)' : 'var(--bg-3)', color: i === 0 ? 'var(--teal)' : 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)' }}>
+          ].map((label) => (
+            <button key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)' }}>
               {label}
               <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ opacity: 0.7 }} aria-hidden><path d="M2 3.5l2.5 2.5L7 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
             </button>
@@ -650,6 +685,7 @@ export function CrmClientsPage() {
         t={t}
       />
 
+      <CreateClientModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
     </div>
   );
 }

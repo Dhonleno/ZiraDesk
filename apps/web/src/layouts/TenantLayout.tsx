@@ -194,21 +194,6 @@ export function TenantLayout() {
             </>
           )}
 
-          {/* CRM-specific topbar actions */}
-          {pathname.startsWith('/crm') && (
-            <>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--bg-4)', color: 'var(--txt-2)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2.5 2h7l-.5 4-3 3-3-3-.5-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M2.5 6.5h7" stroke="currentColor" strokeWidth="1.2"/></svg>
-                Importar CSV
-              </button>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                Novo cliente
-              </button>
-              <div style={{ width: 1, height: 20, background: 'var(--line)', margin: '0 2px' }} />
-            </>
-          )}
-
           {/* Avatar */}
           <div
             title={user?.name}
