@@ -1,0 +1,81 @@
+{
+  "tickets": {
+    "title": "Tickets",
+    "new": "New ticket",
+    "noResults": "No tickets found",
+    "noSelection": "Select a ticket to view details",
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "all": "All"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent",
+      "all": "All priorities"
+    },
+    "stats": {
+      "open": "Open",
+      "inProgress": "In Progress",
+      "waiting": "Waiting",
+      "resolvedToday": "Resolved today"
+    },
+    "fields": {
+      "title": "Title",
+      "description": "Description",
+      "status": "Status",
+      "priority": "Priority",
+      "assignedTo": "Assigned to",
+      "client": "Client",
+      "category": "Category",
+      "dueDate": "Due date",
+      "tags": "Tags",
+      "createdAt": "Created at",
+      "updatedAt": "Updated at",
+      "noResponsible": "Unassigned",
+      "noClient": "No client linked",
+      "noDueDate": "No due date"
+    },
+    "comments": {
+      "title": "Comments",
+      "placeholder": "Add a comment...",
+      "internal": "Internal",
+      "send": "Send",
+      "noComments": "No comments yet",
+      "delete": "Delete comment",
+      "sending": "Sending..."
+    },
+    "actions": {
+      "assign": "Assign",
+      "resolve": "Resolve",
+      "close": "Close",
+      "reopen": "Reopen",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "create": "Create ticket",
+      "creating": "Creating...",
+      "created": "Ticket created successfully",
+      "updated": "Ticket updated",
+      "resolved": "Ticket resolved",
+      "closed": "Ticket closed",
+      "assigned": "Ticket assigned",
+      "selectPriority": "Select priority",
+      "selectStatus": "Select status",
+      "searchClient": "Search client...",
+      "noClient": "No client",
+      "searchUser": "Search user...",
+      "noUser": "No assignee"
+    },
+    "realtime": {
+      "newTicket": "New ticket created",
+      "assignedToYou": "A ticket was assigned to you"
+    }
+  }
+}

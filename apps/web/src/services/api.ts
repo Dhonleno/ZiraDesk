@@ -12,7 +12,7 @@ interface TenantSettings {
   language: string;
 }
 
-interface TenantUser {
+export interface TenantUser {
   id: string;
   name: string;
   email: string;
@@ -356,6 +356,146 @@ export const adminApi = {
     const res = await api.post<{ success: boolean; data: { connected: boolean; channel_id: string } }>(
       `/admin/channels/${id}/test`,
     );
+    return res.data;
+  },
+};
+
+// ── Tickets Types ─────────────────────────────────────────────────────────────
+
+export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface Ticket {
+  id:              string;
+  client_id:       string | null;
+  conversation_id: string | null;
+  title:           string;
+  description:     string | null;
+  status:          TicketStatus;
+  priority:        TicketPriority;
+  category:        string | null;
+  assigned_to:     string | null;
+  resolved_at:     string | null;
+  due_date:        string | null;
+  tags:            string[];
+  custom_fields:   Record<string, unknown>;
+  created_at:      string;
+  updated_at:      string;
+  assignee_name:   string | null;
+  assignee_avatar: string | null;
+  client_name:     string | null;
+  client_email:    string | null;
+}
+
+export interface TicketComment {
+  id:            string;
+  ticket_id:     string;
+  user_id:       string;
+  content:       string;
+  is_internal:   boolean;
+  created_at:    string;
+  author_name:   string | null;
+  author_avatar: string | null;
+}
+
+export interface TicketStats {
+  total_tickets:            number;
+  open_tickets:             number;
+  in_progress_tickets:      number;
+  waiting_tickets:          number;
+  resolved_today:           number;
+  by_priority: { low: number; medium: number; high: number; urgent: number };
+  avg_resolution_time_hours: number | null;
+}
+
+interface TicketListMeta {
+  total:       number;
+  page:        number;
+  per_page:    number;
+  total_pages: number;
+}
+
+export interface ListTicketsParams {
+  page?:        number;
+  per_page?:    number;
+  search?:      string;
+  status?:      TicketStatus;
+  priority?:    TicketPriority;
+  assigned_to?: string;
+  client_id?:   string;
+  category?:    string;
+  sort_by?:     'created_at' | 'updated_at' | 'priority' | 'due_date';
+  sort_order?:  'asc' | 'desc';
+}
+
+export interface CreateTicketPayload {
+  title:           string;
+  description?:    string;
+  status?:         TicketStatus;
+  priority?:       TicketPriority;
+  category?:       string;
+  assigned_to?:    string;
+  client_id?:      string;
+  conversation_id?: string;
+  due_date?:       string;
+  tags?:           string[];
+}
+
+export interface CreateCommentPayload {
+  content:     string;
+  is_internal: boolean;
+}
+
+// ── Tickets API ───────────────────────────────────────────────────────────────
+
+export const ticketsApi = {
+  list: async (params?: ListTicketsParams): Promise<{ data: Ticket[]; meta: TicketListMeta }> => {
+    const res = await api.get<{ success: boolean; data: Ticket[]; meta: TicketListMeta }>('/tickets', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  getStats: async (): Promise<TicketStats> => {
+    const res = await api.get<{ success: boolean; data: TicketStats }>('/tickets/stats');
+    return res.data.data;
+  },
+
+  get: async (id: string): Promise<Ticket> => {
+    const res = await api.get<{ success: boolean; data: Ticket }>(`/tickets/${id}`);
+    return res.data.data;
+  },
+
+  create: async (payload: CreateTicketPayload): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>('/tickets', payload);
+    return res.data.data;
+  },
+
+  update: async (id: string, payload: Partial<CreateTicketPayload>): Promise<Ticket> => {
+    const res = await api.patch<{ success: boolean; data: Ticket }>(`/tickets/${id}`, payload);
+    return res.data.data;
+  },
+
+  delete: async (id: string) => {
+    const res = await api.delete<{ success: boolean; data: Ticket }>(`/tickets/${id}`);
+    return res.data;
+  },
+
+  assign: async (id: string, userId: string): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(`/tickets/${id}/assign`, { user_id: userId });
+    return res.data.data;
+  },
+
+  listComments: async (ticketId: string): Promise<TicketComment[]> => {
+    const res = await api.get<{ success: boolean; data: TicketComment[] }>(`/tickets/${ticketId}/comments`);
+    return res.data.data;
+  },
+
+  addComment: async (ticketId: string, payload: CreateCommentPayload): Promise<TicketComment> => {
+    const res = await api.post<{ success: boolean; data: TicketComment }>(`/tickets/${ticketId}/comments`, payload);
+    return res.data.data;
+  },
+
+  deleteComment: async (ticketId: string, commentId: string) => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(`/tickets/${ticketId}/comments/${commentId}`);
     return res.data;
   },
 };

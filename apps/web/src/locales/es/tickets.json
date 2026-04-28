@@ -1,0 +1,81 @@
+{
+  "tickets": {
+    "title": "Tickets",
+    "new": "Nuevo ticket",
+    "noResults": "No se encontraron tickets",
+    "noSelection": "Seleccione un ticket para ver los detalles",
+    "status": {
+      "open": "Abierto",
+      "in_progress": "En progreso",
+      "waiting": "En espera",
+      "resolved": "Resuelto",
+      "closed": "Cerrado",
+      "all": "Todos"
+    },
+    "priority": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "urgent": "Urgente",
+      "all": "Todas las prioridades"
+    },
+    "stats": {
+      "open": "Abiertos",
+      "inProgress": "En progreso",
+      "waiting": "En espera",
+      "resolvedToday": "Resueltos hoy"
+    },
+    "fields": {
+      "title": "Título",
+      "description": "Descripción",
+      "status": "Estado",
+      "priority": "Prioridad",
+      "assignedTo": "Asignado a",
+      "client": "Cliente",
+      "category": "Categoría",
+      "dueDate": "Fecha límite",
+      "tags": "Etiquetas",
+      "createdAt": "Creado en",
+      "updatedAt": "Actualizado en",
+      "noResponsible": "Sin responsable",
+      "noClient": "Sin cliente vinculado",
+      "noDueDate": "Sin fecha límite"
+    },
+    "comments": {
+      "title": "Comentarios",
+      "placeholder": "Añadir comentario...",
+      "internal": "Interno",
+      "send": "Enviar",
+      "noComments": "Sin comentarios aún",
+      "delete": "Eliminar comentario",
+      "sending": "Enviando..."
+    },
+    "actions": {
+      "assign": "Asignar",
+      "resolve": "Resolver",
+      "close": "Cerrar",
+      "reopen": "Reabrir",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "form": {
+      "create": "Crear ticket",
+      "creating": "Creando...",
+      "created": "Ticket creado con éxito",
+      "updated": "Ticket actualizado",
+      "resolved": "Ticket resuelto",
+      "closed": "Ticket cerrado",
+      "assigned": "Ticket asignado",
+      "selectPriority": "Seleccionar prioridad",
+      "selectStatus": "Seleccionar estado",
+      "searchClient": "Buscar cliente...",
+      "noClient": "Sin cliente",
+      "searchUser": "Buscar usuario...",
+      "noUser": "Sin asignación"
+    },
+    "realtime": {
+      "newTicket": "Nuevo ticket creado",
+      "assignedToYou": "Se te ha asignado un ticket"
+    }
+  }
+}

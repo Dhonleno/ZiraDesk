@@ -13,6 +13,7 @@ import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/tenant/ConversationsPage';
 import { CrmClientsPage } from './pages/crm/Clients';
+import { TicketsPage } from './pages/tickets/Tickets';
 import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Users as AdminUsers } from './pages/admin/Users';
 import { Channels as AdminChannels } from './pages/admin/Channels';
@@ -81,6 +82,8 @@ export function App() {
             <Route index element={<Navigate to="/conversations" replace />} />
             <Route path="conversations" element={<ConversationsPage />} />
             <Route path="crm/clients" element={<CrmClientsPage />} />
+            <Route path="tickets" element={<TicketsPage />} />
+            <Route path="tickets/:id" element={<TicketsPage />} />
             <Route path="admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="admin/dashboard" element={<AdminDashboard />} />
             <Route path="admin/users" element={<AdminUsers />} />

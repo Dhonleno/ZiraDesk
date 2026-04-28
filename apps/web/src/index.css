@@ -1,3 +1,10 @@
+@import './styles/tokens.css';
+
+@keyframes zd-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,9 +14,21 @@
     box-sizing: border-box;
   }
 
-  html {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--txt);
+    background: var(--bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100%;
   }
 
   ::-webkit-scrollbar {
@@ -22,11 +41,11 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #374151;
+    background: var(--bg-5);
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #4b5563;
+    background: var(--txt-3);
   }
 }

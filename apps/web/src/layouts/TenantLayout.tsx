@@ -77,36 +77,46 @@ function Breadcrumb() {
   const { t } = useTranslation('admin');
   const { pathname } = useLocation();
 
-  const isCRM = pathname.startsWith('/crm');
+  const isCRM     = pathname.startsWith('/crm');
   const isConversations = pathname.startsWith('/conversations');
-  const isAdmin = pathname.startsWith('/admin');
+  const isAdmin   = pathname.startsWith('/admin');
+  const isTickets = pathname.startsWith('/tickets');
 
   const routeLabels: Record<string, string> = {
-    '/crm/clients': 'Clientes',
-    '/admin/dashboard': t('tenantAdmin.nav.dashboard'),
-    '/admin/users': t('tenantAdmin.nav.users'),
-    '/admin/channels': t('tenantAdmin.nav.channels'),
-    '/admin/settings': t('tenantAdmin.nav.settings'),
+    '/crm/clients':      'Clientes',
+    '/tickets':          'Tickets',
+    '/admin/dashboard':  t('tenantAdmin.nav.dashboard'),
+    '/admin/users':      t('tenantAdmin.nav.users'),
+    '/admin/channels':   t('tenantAdmin.nav.channels'),
+    '/admin/settings':   t('tenantAdmin.nav.settings'),
   };
 
-  const label = isConversations ? 'Central de Atendimento' : (routeLabels[pathname] ?? '');
-  const section = isAdmin ? 'Admin' : isCRM ? 'CRM' : 'Omnichannel';
-  if (!label) return null;
+  const staticLabel = isConversations ? 'Central de Atendimento' : (routeLabels[pathname] ?? (isTickets ? 'Tickets' : ''));
+  const section = isAdmin ? 'Admin' : isCRM ? 'CRM' : isTickets ? 'Tickets' : 'Omnichannel';
+  if (!staticLabel) return null;
+
+  const iconEl = isCRM ? (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <circle cx="7" cy="5" r="2.3" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2 12c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ) : isTickets ? (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <rect x="1.5" y="2" width="11" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4 5.5h6M4 8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M2 10V4.5L7 2l5 2.5V10H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--txt-3)', fontSize: 12 }}>
-      {isCRM ? (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-          <circle cx="7" cy="5" r="2.3" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M2 12c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      ) : (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-          <path d="M2 10V4.5L7 2l5 2.5V10H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-        </svg>
-      )}
+      {iconEl}
       <span>{section}</span>
       <span style={{ color: 'var(--txt-3)', margin: '0 1px' }}>/</span>
-      <strong style={{ color: 'var(--txt)', fontWeight: 500 }}>{label}</strong>
+      <strong style={{ color: 'var(--txt)', fontWeight: 500 }}>{staticLabel}</strong>
     </div>
   );
 }
@@ -269,14 +279,13 @@ export function TenantLayout() {
             </svg>
           </NavItem>
 
-          {/* Tickets (placeholder) */}
-          <div className="nav-item" title="Tickets" style={{ position: 'relative', opacity: 0.5, cursor: 'default' }}>
+          {/* Tickets */}
+          <NavItem to="/tickets" title="Tickets">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
               <path d="M5.5 7h7M5.5 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
-            <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 'var(--r-pill)', background: 'var(--red)', color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', fontFamily: 'var(--mono)' }}>4</div>
-          </div>
+          </NavItem>
 
           {/* Campanhas (placeholder) */}
           <div className="nav-item" title="Campanhas" style={{ opacity: 0.5, cursor: 'default' }}>

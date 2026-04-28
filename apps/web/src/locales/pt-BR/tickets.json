@@ -1,0 +1,81 @@
+{
+  "tickets": {
+    "title": "Tickets",
+    "new": "Novo ticket",
+    "noResults": "Nenhum ticket encontrado",
+    "noSelection": "Selecione um ticket para ver os detalhes",
+    "status": {
+      "open": "Aberto",
+      "in_progress": "Em andamento",
+      "waiting": "Aguardando",
+      "resolved": "Resolvido",
+      "closed": "Fechado",
+      "all": "Todos"
+    },
+    "priority": {
+      "low": "Baixa",
+      "medium": "Média",
+      "high": "Alta",
+      "urgent": "Urgente",
+      "all": "Todas as prioridades"
+    },
+    "stats": {
+      "open": "Abertos",
+      "inProgress": "Em andamento",
+      "waiting": "Aguardando",
+      "resolvedToday": "Resolvidos hoje"
+    },
+    "fields": {
+      "title": "Título",
+      "description": "Descrição",
+      "status": "Status",
+      "priority": "Prioridade",
+      "assignedTo": "Atribuído a",
+      "client": "Cliente",
+      "category": "Categoria",
+      "dueDate": "Prazo",
+      "tags": "Tags",
+      "createdAt": "Criado em",
+      "updatedAt": "Atualizado em",
+      "noResponsible": "Sem responsável",
+      "noClient": "Sem cliente vinculado",
+      "noDueDate": "Sem prazo"
+    },
+    "comments": {
+      "title": "Comentários",
+      "placeholder": "Adicionar comentário...",
+      "internal": "Interno",
+      "send": "Enviar",
+      "noComments": "Nenhum comentário ainda",
+      "delete": "Excluir comentário",
+      "sending": "Enviando..."
+    },
+    "actions": {
+      "assign": "Atribuir",
+      "resolve": "Resolver",
+      "close": "Fechar",
+      "reopen": "Reabrir",
+      "edit": "Editar",
+      "delete": "Excluir"
+    },
+    "form": {
+      "create": "Criar ticket",
+      "creating": "Criando...",
+      "created": "Ticket criado com sucesso",
+      "updated": "Ticket atualizado",
+      "resolved": "Ticket resolvido",
+      "closed": "Ticket fechado",
+      "assigned": "Ticket atribuído",
+      "selectPriority": "Selecione a prioridade",
+      "selectStatus": "Selecione o status",
+      "searchClient": "Buscar cliente...",
+      "noClient": "Nenhum cliente",
+      "searchUser": "Buscar usuário...",
+      "noUser": "Sem atribuição"
+    },
+    "realtime": {
+      "newTicket": "Novo ticket criado",
+      "assignedToYou": "Um ticket foi atribuído a você"
+    }
+  }
+}
