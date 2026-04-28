@@ -58,7 +58,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
     const token = request.query['hub.verify_token'];
     const challenge = request.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === env.META_VERIFY_TOKEN) {
+    if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
       return reply.code(200).send(challenge);
     }
 

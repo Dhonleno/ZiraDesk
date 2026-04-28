@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormRegister } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -146,17 +146,7 @@ export function AddChannelModal({ open, onClose }: Props) {
           <Input label={t('tenantAdmin.channels.fields.name')} required {...register('name')} />
 
           {selectedType === 'whatsapp' && (
-            <>
-              <Input label="API URL" placeholder="https://api.evolution.com" {...register('api_url')} />
-              <Input label="API Key" type="password" {...register('api_key')} />
-              <Input label="Instance Name" {...register('instance_name')} />
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Webhook URL</label>
-                <div className="h-10 rounded-lg px-3 flex items-center text-sm font-mono" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--txt-3)' }}>
-                  {window.location.origin}/api/webhooks/whatsapp
-                </div>
-              </div>
-            </>
+            <WhatsAppMetaFields register={register} />
           )}
 
           {selectedType === 'instagram' && (
@@ -205,5 +195,44 @@ export function AddChannelModal({ open, onClose }: Props) {
         </form>
       )}
     </Modal>
+  );
+}
+
+interface WhatsAppMetaFieldsProps {
+  register: UseFormRegister<Record<string, string>>;
+}
+
+function WhatsAppMetaFields({ register }: WhatsAppMetaFieldsProps) {
+  const [copied, setCopied] = useState(false);
+  const webhookUrl = `${window.location.origin}/api/webhooks/whatsapp`;
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(webhookUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <>
+      <Input label="Phone Number ID" required placeholder="704423209430762" {...register('phoneNumberId')} />
+      <Input label="WABA ID" required placeholder="1922786558561358" {...register('wabaId')} />
+      <Input label="Access Token" type="password" required {...register('accessToken')} />
+      <Input label="Verify Token" required placeholder="ziradesk-webhook-2025" {...register('verifyToken')} />
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Webhook URL</label>
+        <div className="flex items-center gap-2">
+          <div
+            className="flex-1 h-10 rounded-lg px-3 flex items-center text-sm font-mono overflow-hidden"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--txt-3)' }}
+          >
+            <span className="truncate">{webhookUrl}</span>
+          </div>
+          <Button type="button" variant="secondary" onClick={handleCopy} style={{ minWidth: '72px' }}>
+            {copied ? 'Copiado!' : 'Copiar'}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }

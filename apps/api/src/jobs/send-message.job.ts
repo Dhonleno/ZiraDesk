@@ -16,19 +16,37 @@ const worker = new Worker<SendMessageJob>(
     const { channelType, channelCredentials, content, to } = job.data;
 
     switch (channelType) {
-      case 'whatsapp':
-        await fetch(
-          `${channelCredentials['apiUrl']}/message/sendText/${channelCredentials['instance']}`,
+      case 'whatsapp': {
+        const phoneNumberId = channelCredentials['phoneNumberId'];
+        const accessToken = channelCredentials['accessToken'];
+        const recipientPhone = to.replace('+', '');
+
+        const response = await fetch(
+          `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
           {
             method: 'POST',
             headers: {
+              Authorization: `Bearer ${accessToken}`,
               'Content-Type': 'application/json',
-              apikey: channelCredentials['apiKey'] ?? '',
             },
-            body: JSON.stringify({ number: to, text: content }),
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: recipientPhone,
+              type: 'text',
+              text: { body: content },
+            }),
           },
         );
-        break;
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(`Meta API error: ${JSON.stringify(error)}`);
+        }
+
+        const result = await response.json();
+        return result;
+      }
 
       case 'instagram':
         console.log('[Instagram] send not implemented yet');
