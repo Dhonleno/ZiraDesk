@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { crmApi } from '../../services/api';
 import type { CrmClient } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -126,6 +127,7 @@ function TagPill({ status, label }: { status: string; label: string }) {
 /* ── CrmClientsPage ──────────────────────────────────────────────────────── */
 export function CrmClientsPage() {
   const { t } = useTranslation('crm');
+  const [searchParams] = useSearchParams();
   const [searchRaw, setSearchRaw]           = useState('');
   const [segStatus, setSegStatus]           = useState<string | undefined>(undefined);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -135,6 +137,11 @@ export function CrmClientsPage() {
   const [editClient, setEditClient]         = useState<CrmClient | null>(null);
 
   const search = useDebounce(searchRaw, 300);
+
+  useEffect(() => {
+    const clientId = searchParams.get('client');
+    if (clientId) setSelectedId(clientId);
+  }, [searchParams]);
 
   /* Main list query */
   const { data: listData, isLoading } = useQuery({

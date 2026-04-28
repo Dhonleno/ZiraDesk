@@ -70,13 +70,22 @@ interface TicketRow {
   created_at: Date;
 }
 
-interface MessageCountRow {
-  count: bigint;
-  last_created_at: Date | null;
+interface ClientStatsRow {
+  client_exists: boolean;
+  total_conversations: bigint;
+  open_conversations: bigint;
+  total_tickets: bigint;
+  open_tickets: bigint;
+  total_messages: bigint;
+  last_contact_at: Date | null;
 }
 
 function toPgArray(arr: string[]): string {
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
+}
+
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 // ── Valid sort column whitelist (prevents SQL injection) ──────────────────────
@@ -436,46 +445,63 @@ export async function getClientTimeline(id: string) {
   return events;
 }
 
-export async function getClientStats(id: string) {
-  await getClient(id);
+export async function getClientStats(id: string, tenantId?: string) {
+  if (!tenantId) {
+    await getClient(id);
+  }
 
-  const [convStats, ticketStats, msgStats] = await Promise.all([
-    prisma.$queryRawUnsafe<
-      [{ total: bigint; open: bigint }]
-    >(
-      `SELECT
-         COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status IN ('open', 'in_service')) AS open
-       FROM conversations
-       WHERE client_id = $1::uuid`,
-      id,
-    ),
-    prisma.$queryRawUnsafe<
-      [{ total: bigint; open: bigint }]
-    >(
-      `SELECT
-         COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) AS open
-       FROM tickets
-       WHERE client_id = $1::uuid`,
-      id,
-    ),
-    prisma.$queryRawUnsafe<MessageCountRow[]>(
-      `SELECT COUNT(m.*) AS count, MAX(m.created_at) AS last_created_at
-       FROM messages m
-       JOIN conversations c ON c.id = m.conversation_id
-       WHERE c.client_id = $1::uuid`,
-      id,
-    ),
-  ]);
+  const tenant = tenantId
+    ? await prisma.tenant.findUnique({ where: { id: tenantId }, select: { schemaName: true } })
+    : null;
+  const schemaPrefix = tenant ? `${quoteIdent(tenant.schemaName)}.` : '';
+
+  if (tenantId && !tenant) throw new NotFoundError('Tenant');
+
+  const [stats] = await prisma.$queryRawUnsafe<ClientStatsRow[]>(
+    `WITH client_row AS (
+       SELECT id FROM ${schemaPrefix}clients WHERE id = $1::uuid
+     ),
+     conv_stats AS (
+       SELECT
+         COUNT(*) AS total_conversations,
+         COUNT(*) FILTER (WHERE status IN ('open', 'in_service')) AS open_conversations
+       FROM ${schemaPrefix}conversations
+       WHERE client_id = $1::uuid
+     ),
+     ticket_stats AS (
+       SELECT
+         COUNT(*) AS total_tickets,
+         COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) AS open_tickets
+       FROM ${schemaPrefix}tickets
+       WHERE client_id = $1::uuid
+     ),
+     msg_stats AS (
+       SELECT COUNT(m.*) AS total_messages, MAX(m.created_at) AS last_contact_at
+       FROM ${schemaPrefix}messages m
+       JOIN ${schemaPrefix}conversations c ON c.id = m.conversation_id
+       WHERE c.client_id = $1::uuid
+     )
+     SELECT
+       EXISTS(SELECT 1 FROM client_row) AS client_exists,
+       conv_stats.total_conversations,
+       conv_stats.open_conversations,
+       ticket_stats.total_tickets,
+       ticket_stats.open_tickets,
+       msg_stats.total_messages,
+       msg_stats.last_contact_at
+     FROM conv_stats, ticket_stats, msg_stats`,
+    id,
+  );
+
+  if (!stats?.client_exists) throw new NotFoundError('Cliente');
 
   return {
-    total_conversations: Number(convStats[0]?.total ?? 0),
-    open_conversations: Number(convStats[0]?.open ?? 0),
-    total_tickets: Number(ticketStats[0]?.total ?? 0),
-    open_tickets: Number(ticketStats[0]?.open ?? 0),
-    total_messages: Number(msgStats[0]?.count ?? 0),
-    last_contact_at: msgStats[0]?.last_created_at ?? null,
+    total_conversations: Number(stats.total_conversations ?? 0),
+    open_conversations: Number(stats.open_conversations ?? 0),
+    total_tickets: Number(stats.total_tickets ?? 0),
+    open_tickets: Number(stats.open_tickets ?? 0),
+    total_messages: Number(stats.total_messages ?? 0),
+    last_contact_at: stats.last_contact_at ?? null,
   };
 }
 

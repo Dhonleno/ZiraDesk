@@ -13,6 +13,7 @@ import {
 import {
   listConversations,
   getConversationWithMessages,
+  listConversationMessages,
   sendMessage,
   updateConversation,
   createConversation,
@@ -76,6 +77,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // GET /api/omnichannel/conversations/:id/messages
+  app.get<{ Params: { id: string } }>('/:id/messages', { preHandler: guard }, async (request, reply) => {
+    const messages = await listConversationMessages(request.params.id);
+    return reply.send({ success: true, data: messages });
   });
 
   // POST /api/omnichannel/conversations/:id/messages

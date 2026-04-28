@@ -1,12 +1,19 @@
 import { z } from 'zod';
 
-export const listConversationsQuerySchema = z.object({
-  page: z.coerce.number().int().positive().default(1),
-  perPage: z.coerce.number().int().positive().max(100).default(50),
-  status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
-  search: z.string().optional(),
-  assigned_to_me: z.coerce.boolean().optional(),
-});
+export const listConversationsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    perPage: z.coerce.number().int().positive().max(100).optional(),
+    per_page: z.coerce.number().int().positive().max(100).optional(),
+    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
+    search: z.string().optional(),
+    assigned_to_me: z.coerce.boolean().optional(),
+    client_id: z.string().uuid().optional(),
+  })
+  .transform(({ per_page, perPage, ...query }) => ({
+    ...query,
+    perPage: perPage ?? per_page ?? 50,
+  }));
 
 export const createConversationBodySchema = z.object({
   client_id: z.string().uuid(),

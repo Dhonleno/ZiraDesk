@@ -124,7 +124,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: guard },
     async (request, reply) => {
       try {
-        const stats = await getClientStats(request.params.id);
+        const stats = await getClientStats(request.params.id, request.user.tenantId);
         return reply.send({ success: true, data: stats });
       } catch (err) {
         if (err instanceof NotFoundError)

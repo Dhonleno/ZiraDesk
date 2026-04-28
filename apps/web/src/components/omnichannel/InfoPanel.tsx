@@ -15,8 +15,16 @@ interface Conversation {
   assigned_name: string | null;
   channel_name: string | null;
   subject: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
   created_at: string;
   resolved_at: string | null;
+}
+
+interface ClientStats {
+  total_conversations: number;
+  total_messages: number;
+  open_tickets: number;
 }
 
 const AVATAR_GRADIENTS = [
@@ -35,8 +43,10 @@ function avatarGradient(name: string | null) {
 
 const CH_BADGE: Record<string, { bg: string; color: string; border: string; label: string }> = {
   whatsapp: { bg: 'rgba(37,211,102,.15)', color: '#25D366', border: 'rgba(37,211,102,.25)', label: 'WhatsApp' },
+  instagram:{ bg: 'rgba(244,114,182,.15)', color: '#F472B6', border: 'rgba(244,114,182,.25)', label: 'Instagram' },
   email:    { bg: 'var(--blue-dim)',      color: 'var(--blue)', border: 'rgba(96,165,250,.25)', label: 'E-mail' },
   live_chat:{ bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
+  chat:     { bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
 };
 
 const TABS = ['contact', 'channels', 'history'] as const;
@@ -53,6 +63,44 @@ function SectionTitle({ children, action }: { children: React.ReactNode; action?
       {action}
     </div>
   );
+}
+
+function Skeleton({ height = 20 }: { height?: number }) {
+  return (
+    <div
+      style={{
+        height,
+        borderRadius: 'var(--r)',
+        background: 'linear-gradient(90deg, var(--bg-3), var(--bg-5), var(--bg-3))',
+        border: '1px solid var(--line)',
+      }}
+    />
+  );
+}
+
+function relativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'agora';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+function channelIcon(type: string | undefined) {
+  const color = CH_BADGE[type ?? '']?.color ?? 'var(--txt-3)';
+  if (type === 'whatsapp') {
+    return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10C2.5 12 4.5 13.5 7 13c3-.5 5-3 5-6a5 5 0 10-10 0c0 1.2.4 2.3 1 3.2L2 10z" stroke={color} strokeWidth="1.2" strokeLinejoin="round"/></svg>;
+  }
+  if (type === 'instagram') {
+    return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="3" stroke={color} strokeWidth="1.2"/><circle cx="7" cy="7" r="2.5" stroke={color} strokeWidth="1.2"/><circle cx="10" cy="4" r=".8" fill={color}/></svg>;
+  }
+  if (type === 'email') {
+    return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="3" width="11" height="8.5" rx="1.5" stroke={color} strokeWidth="1.2"/><path d="M1.5 5.5l5.5 3.5 5.5-3.5" stroke={color} strokeWidth="1.2"/></svg>;
+  }
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 9V4a2 2 0 012-2h6a2 2 0 012 2v3.5a2 2 0 01-2 2H6l-4 2V9z" stroke={color} strokeWidth="1.2" strokeLinejoin="round"/></svg>;
 }
 
 function InfoField({
@@ -112,9 +160,38 @@ export function InfoPanel({ conversationId }: Props) {
   });
 
   const conv = data?.conversation;
+  const clientId = conv?.client_id ?? null;
+
+  const { data: clientStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['crm-client-stats', clientId],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/clients/${clientId!}/stats`);
+      return res.data.data;
+    },
+    enabled: !!clientId,
+  });
+
+  const { data: history = [], isLoading: historyLoading } = useQuery({
+    queryKey: ['omnichannel-client-history', clientId, conversationId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ client_id: clientId!, per_page: '5' });
+      const res = await api.get<{ success: boolean; data: Conversation[] }>(
+        `/omnichannel/conversations?${params}`,
+      );
+      return res.data.data.filter((item) => item.id !== conversationId);
+    },
+    enabled: !!clientId,
+  });
+
   const clientName = conv?.client_name?.trim();
   const name = clientName || 'Cliente não identificado';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
+  const currentChannelSub =
+    conv?.channel_type === 'email'
+      ? conv.client_email
+      : conv?.channel_type === 'whatsapp'
+        ? conv.client_phone
+        : conv?.channel_name;
 
   return (
     <div style={{
@@ -181,7 +258,7 @@ export function InfoPanel({ conversationId }: Props) {
               {/* Ver perfil completo */}
               {conv?.client_id && (
                 <button
-                  onClick={() => navigate(`/crm/clients/${conv.client_id}`)}
+                  onClick={() => navigate(`/crm/clients?client=${conv.client_id}`)}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '5px 12px', borderRadius: 'var(--r)',
@@ -200,19 +277,26 @@ export function InfoPanel({ conversationId }: Props) {
               )}
             </div>
 
-            {/* Stats mini — 4 cards */}
+            {/* Stats mini */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-              {([
-                { val: '7', lbl: t('info.messages') },
-                { val: '3', lbl: t('info.attendances') },
-                { val: '22/03', lbl: t('info.firstContact'), small: true },
-                { val: '↑91%', lbl: t('info.engagement'), green: true },
-              ] as { val: string; lbl: string; small?: boolean; green?: boolean }[]).map(({ val, lbl, small, green }) => (
-                <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
-                  <div style={{ fontSize: small ? 14 : green ? 16 : 20, fontWeight: 600, color: green ? 'var(--green)' : 'var(--txt)', letterSpacing: '-0.5px', fontFamily: 'var(--mono)' }}>{val}</div>
-                  <div style={{ fontSize: 10, color: 'var(--txt-3)', marginTop: 1 }}>{lbl}</div>
-                </div>
-              ))}
+              {statsLoading ? (
+                <>
+                  <Skeleton height={58} />
+                  <Skeleton height={58} />
+                  <Skeleton height={58} />
+                </>
+              ) : (
+                ([
+                  { val: clientId ? String(clientStats?.total_messages ?? 0) : '—', lbl: t('info.messages') },
+                  { val: clientId ? String(clientStats?.total_conversations ?? 0) : '—', lbl: t('info.attendances') },
+                  { val: clientId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: 'Tickets abertos' },
+                ] as { val: string; lbl: string }[]).map(({ val, lbl }) => (
+                  <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
+                    <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.5px', fontFamily: 'var(--mono)' }}>{val}</div>
+                    <div style={{ fontSize: 10, color: 'var(--txt-3)', marginTop: 1 }}>{lbl}</div>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Contact info */}
@@ -270,25 +354,31 @@ export function InfoPanel({ conversationId }: Props) {
           <div style={{ padding: '14px 16px' }}>
             <SectionTitle>{t('info.activeChannels')}</SectionTitle>
             <div>
-              {[
-                { bg: 'rgba(37,211,102,.15)', name: 'WhatsApp', sub: conv?.client_phone ?? '—', time: 'agora', count: '3 msgs', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10C2.5 12 4.5 13.5 7 13c3-.5 5-3 5-6a5 5 0 10-10 0c0 1.2.4 2.3 1 3.2L2 10z" stroke="#25D366" strokeWidth="1.2" strokeLinejoin="round"/></svg> },
-                { bg: 'rgba(244,114,182,.15)', name: 'Instagram DM', sub: '—', time: 'Ontem', count: '1 msg', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="3" stroke="#F472B6" strokeWidth="1.2"/><circle cx="7" cy="7" r="2.5" stroke="#F472B6" strokeWidth="1.2"/><circle cx="10" cy="4" r=".8" fill="#F472B6"/></svg> },
-                { bg: 'rgba(96,165,250,.15)', name: 'E-mail', sub: conv?.client_email ?? '—', time: '22/03', count: '2 msgs', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="3" width="11" height="8.5" rx="1.5" stroke="#60A5FA" strokeWidth="1.2"/><path d="M1.5 5.5l5.5 3.5 5.5-3.5" stroke="#60A5FA" strokeWidth="1.2"/></svg> },
-              ].map((ch) => (
-                <div key={ch.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 7, background: ch.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {ch.icon}
+              {conv && chBadge ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 7, background: chBadge.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {channelIcon(conv.channel_type)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{ch.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.sub}</div>
+                    <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{chBadge.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentChannelSub ?? '—'}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>{ch.time}</div>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, background: 'var(--bg-5)', borderRadius: 'var(--r-pill)', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--txt-2)', marginTop: 2, padding: '0 5px' }}>{ch.count}</div>
+                    <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>{relativeTime(conv.last_message_at ?? conv.created_at)}</div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 18, background: 'var(--bg-5)', borderRadius: 'var(--r-pill)', fontSize: 10, color: 'var(--txt-2)', marginTop: 2, padding: '0 7px' }}>Atual</div>
                   </div>
                 </div>
-              ))}
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>—</div>
+              )}
+              {clientId && (
+                <button
+                  onClick={() => navigate(`/crm/clients?client=${clientId}`)}
+                  style={{ marginTop: 12, width: '100%', padding: '8px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer' }}
+                >
+                  Ver todos os canais
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -296,24 +386,41 @@ export function InfoPanel({ conversationId }: Props) {
         {activeTab === 'history' && (
           <div style={{ padding: '14px 16px' }}>
             <SectionTitle>{t('info.recentActivity')}</SectionTitle>
-            <div style={{ position: 'relative', paddingLeft: 18 }}>
-              <div style={{ position: 'absolute', left: 6, top: 6, bottom: 6, width: 1, background: 'var(--line-2)' }} />
-              {[
-                { dot: 'var(--teal)',   label: 'Conversa iniciada',            time: '09:42 hoje' },
-                { dot: 'var(--blue)',   label: 'Mensagem enviada pelo agente', time: '09:45 hoje' },
-                { dot: 'var(--amber)',  label: 'Aguardando resposta',          time: '09:46 hoje' },
-              ].map((ev, i) => (
-                <div key={i} style={{ position: 'relative', padding: '6px 0 12px' }}>
-                  <div style={{
-                    position: 'absolute', left: -16, top: 9,
-                    width: 9, height: 9, borderRadius: '50%',
-                    background: 'var(--bg-2)', border: `2px solid ${ev.dot}`,
-                  }} />
-                  <div style={{ fontSize: 12, color: 'var(--txt)' }}>{ev.label}</div>
-                  <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', marginTop: 1 }}>{ev.time}</div>
-                </div>
-              ))}
-            </div>
+            {historyLoading ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <Skeleton height={52} />
+                <Skeleton height={52} />
+                <Skeleton height={52} />
+              </div>
+            ) : !clientId || history.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>Nenhum atendimento anterior</div>
+            ) : (
+              <div>
+                {history.map((item) => {
+                  const badge = CH_BADGE[item.channel_type];
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => navigate(`/omnichannel/conversations?conversation=${item.id}`)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', border: 'none', borderBottom: '1px solid var(--line)', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: 'var(--font)' }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 7, background: badge?.bg ?? 'var(--bg-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {channelIcon(item.channel_type)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{badge?.label ?? item.channel_type}</div>
+                        <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.last_message ?? item.subject ?? 'Sem mensagens'}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                        {relativeTime(item.last_message_at ?? item.created_at)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

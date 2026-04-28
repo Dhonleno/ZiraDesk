@@ -487,9 +487,11 @@ export interface OmnichannelMessage {
 export interface ListConversationsParams {
   page?: number;
   perPage?: number;
+  per_page?: number;
   search?: string;
   status?: string;
   assigned_to_me?: boolean;
+  client_id?: string;
 }
 
 export interface CreateConversationPayload {

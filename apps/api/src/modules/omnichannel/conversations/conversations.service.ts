@@ -50,12 +50,13 @@ interface MessageRow {
 }
 
 export async function listConversations(query: ListConversationsQuery, userId?: string) {
-  const { page, perPage, status, search, assigned_to_me } = query;
+  const { page, perPage, status, search, assigned_to_me, client_id } = query;
   const offset = (page - 1) * perPage;
 
   const statusParam = status ?? null;
   const searchParam = search ?? null;
   const assignedToParam = assigned_to_me ? (userId ?? null) : null;
+  const clientIdParam = client_id ?? null;
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
@@ -72,6 +73,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
      WHERE ($1::text IS NULL OR c.status = $1)
        AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
        AND ($5::uuid IS NULL OR c.assigned_to = $5::uuid)
+       AND ($6::uuid IS NULL OR c.client_id = $6::uuid)
      ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
      LIMIT $3 OFFSET $4`,
     statusParam,
@@ -79,6 +81,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     perPage,
     offset,
     assignedToParam,
+    clientIdParam,
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
@@ -87,10 +90,12 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
      LEFT JOIN clients cl ON cl.id = c.client_id
      WHERE ($1::text IS NULL OR c.status = $1)
        AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
-       AND ($3::uuid IS NULL OR c.assigned_to = $3::uuid)`,
+       AND ($3::uuid IS NULL OR c.assigned_to = $3::uuid)
+       AND ($4::uuid IS NULL OR c.client_id = $4::uuid)`,
     statusParam,
     searchParam,
     assignedToParam,
+    clientIdParam,
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -119,7 +124,7 @@ export async function getConversationWithMessages(conversationId: string) {
      LEFT JOIN clients cl ON cl.id = c.client_id
      LEFT JOIN users u ON u.id = c.assigned_to
      LEFT JOIN channels ch ON ch.id = c.channel_id
-     WHERE c.id = $1
+     WHERE c.id = $1::uuid
      LIMIT 1`,
     conversationId,
   );
@@ -130,12 +135,25 @@ export async function getConversationWithMessages(conversationId: string) {
     `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
             media_url, external_id, status, is_internal, created_at, metadata
      FROM messages
-     WHERE conversation_id = $1
+     WHERE conversation_id = $1::uuid
      ORDER BY created_at ASC`,
     conversationId,
   );
 
   return { conversation: convRows[0], messages };
+}
+
+export async function listConversationMessages(conversationId: string) {
+  const messages = await prisma.$queryRawUnsafe<MessageRow[]>(
+    `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
+            media_url, external_id, status, is_internal, created_at, metadata
+     FROM messages
+     WHERE conversation_id = $1::uuid
+     ORDER BY created_at ASC`,
+    conversationId,
+  );
+
+  return messages;
 }
 
 export interface SendMessageResult {
@@ -169,7 +187,7 @@ export async function sendMessage(
      FROM conversations c
      LEFT JOIN clients cl ON cl.id = c.client_id
      LEFT JOIN channels ch ON ch.id = c.channel_id
-     WHERE c.id = $1
+     WHERE c.id = $1::uuid
      LIMIT 1`,
     conversationId,
   );
@@ -178,7 +196,7 @@ export async function sendMessage(
 
   const msgRows = await prisma.$queryRawUnsafe<MessageRow[]>(
     `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type)
-     VALUES ($1, 'agent', $2, $3, $4)
+     VALUES ($1::uuid, 'agent', $2::uuid, $3, $4)
      RETURNING *`,
     conversationId,
     senderId,
@@ -193,7 +211,7 @@ export async function sendMessage(
      SET last_message = $1,
          last_message_at = NOW(),
          status = CASE WHEN status = 'open' THEN 'pending' ELSE status END
-     WHERE id = $2`,
+     WHERE id = $2::uuid`,
     body.content.slice(0, 255),
     conversationId,
   );
@@ -210,20 +228,20 @@ export async function sendMessage(
 
 export async function createConversation(data: CreateConversationBody, userId: string) {
   const clientCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM clients WHERE id = $1 LIMIT 1`,
+    `SELECT id FROM clients WHERE id = $1::uuid LIMIT 1`,
     data.client_id,
   );
   if (!clientCheck[0]) throw new NotFoundError('Cliente não encontrado');
 
   const channelCheck = await prisma.$queryRawUnsafe<[{ id: string; type: string }]>(
-    `SELECT id, type FROM channels WHERE id = $1 AND status = 'active' LIMIT 1`,
+    `SELECT id, type FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
     data.channel_id,
   );
   if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
 
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `INSERT INTO conversations (client_id, channel_id, channel_type, status, assigned_to, subject)
-     VALUES ($1, $2, $3, 'open', $4::uuid, $5)
+     VALUES ($1::uuid, $2::uuid, $3, 'open', $4::uuid, $5)
      RETURNING *`,
     data.client_id,
     data.channel_id,
@@ -236,13 +254,13 @@ export async function createConversation(data: CreateConversationBody, userId: s
   if (data.initial_message) {
     await prisma.$queryRawUnsafe(
       `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type)
-       VALUES ($1, 'agent', $2::uuid, $3, 'text')`,
+       VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text')`,
       conversation.id,
       userId,
       data.initial_message,
     );
     await prisma.$executeRawUnsafe(
-      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
       data.initial_message.slice(0, 255),
       conversation.id,
     );
@@ -255,7 +273,7 @@ export async function assignConversation(conversationId: string, assignToUserId:
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET assigned_to = $1::uuid
-     WHERE id = $2
+     WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
     conversationId,
@@ -277,7 +295,7 @@ export async function transferConversation(conversationId: string, assignToUserI
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET assigned_to = $1::uuid
-     WHERE id = $2
+     WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
     conversationId,
@@ -291,7 +309,7 @@ export async function updateConversation(
   body: UpdateConversationBody,
 ) {
   const convCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM conversations WHERE id = $1 LIMIT 1`,
+    `SELECT id FROM conversations WHERE id = $1::uuid LIMIT 1`,
     conversationId,
   );
   if (!convCheck[0]) throw new NotFoundError('Conversa não encontrada');
@@ -309,7 +327,7 @@ export async function updateConversation(
          WHEN $1 IS NOT NULL AND $1 != 'resolved' THEN NULL
          ELSE resolved_at
        END
-     WHERE id = $4
+     WHERE id = $4::uuid
      RETURNING *`,
     body.status ?? null,
     hasAssignedTo,
