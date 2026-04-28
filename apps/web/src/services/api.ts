@@ -10,6 +10,8 @@ interface TenantSettings {
   primary_color: string | null;
   timezone: string;
   language: string;
+  created_at?: string;
+  plan?: { id: string; name: string; slug: string; priceMonth: string };
 }
 
 export interface TenantUser {
@@ -487,7 +489,7 @@ export interface ListConversationsParams {
   perPage?: number;
   search?: string;
   status?: string;
-  assignedToMe?: boolean;
+  assigned_to_me?: boolean;
 }
 
 export interface CreateConversationPayload {
@@ -501,6 +503,32 @@ export interface SendMessagePayload {
   content: string;
   contentType?: string;
   isInternal?: boolean;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
+  title: string;
+  message: string;
+  read: boolean;
+  created_at: string;
+  href: string;
+}
+
+export interface GlobalSearchResult {
+  clients: Array<{ id: string; name: string; email: string | null; phone: string | null }>;
+  tickets: Array<{ id: string; title: string; status: string }>;
+  conversations: Array<{ id: string; last_message: string | null; client_name: string | null }>;
+}
+
+export interface OnboardingStatus {
+  has_users: boolean;
+  has_channels: boolean;
+  has_clients: boolean;
+  has_conversations: boolean;
+  tenant_created_at?: string;
+  completion?: number;
+  is_new_tenant?: boolean;
 }
 
 // ── Omnichannel API ───────────────────────────────────────────────────────────
@@ -565,6 +593,39 @@ export const omnichannelApi = {
       `/omnichannel/conversations/${conversationId}/transfer`,
       { user_id: userId, reason },
     );
+    return res.data.data;
+  },
+};
+
+export const notificationsApi = {
+  list: async (): Promise<NotificationItem[]> => {
+    const res = await api.get<{ success: boolean; data: NotificationItem[] }>('/notifications');
+    return res.data.data;
+  },
+
+  markRead: async (id: string) => {
+    const res = await api.patch<{ success: boolean; data: { read: boolean } }>(`/notifications/${id}/read`);
+    return res.data.data;
+  },
+
+  markAllRead: async () => {
+    const res = await api.patch<{ success: boolean; data: { read: number } }>('/notifications/read-all');
+    return res.data.data;
+  },
+};
+
+export const searchApi = {
+  global: async (q: string, limit = 5): Promise<GlobalSearchResult> => {
+    const res = await api.get<{ success: boolean; data: GlobalSearchResult }>('/search', {
+      params: { q, limit },
+    });
+    return res.data.data;
+  },
+};
+
+export const onboardingApi = {
+  getStatus: async (): Promise<OnboardingStatus> => {
+    const res = await api.get<{ success: boolean; data: OnboardingStatus }>('/admin/onboarding-status');
     return res.data.data;
   },
 };

@@ -52,3 +52,10 @@ Frontend faz requisicao com access token expirado
 -> API valida refresh token e retorna novo access token
 -> Interceptor repete a requisicao original com novo token
 -> Usuario nao percebe nada — experiencia continua
+
+## Fluxo 10 — Onboarding de novo tenant
+Owner faz primeiro login
+-> Sistema detecta tenant novo (< 7 dias)
+-> Checklist aparece no canto inferior direito
+-> Owner completa os 5 passos guiados
+-> Ao completar: confetti e checklist desaparece

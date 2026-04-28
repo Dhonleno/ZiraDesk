@@ -297,6 +297,13 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     const io = getSocketServer();
     io.to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
     io.to(`agent:${userId}`).emit('ticket:assigned', { ticket });
+    io.to(`agent:${userId}`).emit('notification:new', {
+      id,
+      type: 'ticket_assigned',
+      title: 'Ticket atribuído',
+      message: `Você recebeu o ticket "${ticket.title}".`,
+      href: `/tickets/${id}`,
+    });
   } catch { /* socket não inicializado em testes */ }
 
   return ticket;
@@ -323,7 +330,7 @@ export async function listComments(ticketId: string) {
 
 /* ── addComment ──────────────────────────────────────────────────────────── */
 export async function addComment(ticketId: string, data: CreateCommentInput, userId: string, tenantId: string) {
-  await getTicket(ticketId);
+  const ticket = await getTicket(ticketId);
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
@@ -343,7 +350,17 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
   );
 
   try {
-    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:comment_added', { comment });
+    const io = getSocketServer();
+    io.to(`tenant:${tenantId}`).emit('ticket:comment_added', { comment });
+    if (ticket.assigned_to && ticket.assigned_to !== userId) {
+      io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+        id: comment.id,
+        type: 'ticket_comment',
+        title: 'Novo comentário',
+        message: `Novo comentário em "${ticket.title}".`,
+        href: `/tickets/${ticketId}`,
+      });
+    }
   } catch { /* socket não inicializado em testes */ }
 
   return comment;

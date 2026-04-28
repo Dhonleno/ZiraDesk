@@ -112,7 +112,8 @@ export function InfoPanel({ conversationId }: Props) {
   });
 
   const conv = data?.conversation;
-  const name = conv?.client_name ?? 'Visitante';
+  const clientName = conv?.client_name?.trim();
+  const name = clientName || 'Cliente não identificado';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
 
   return (

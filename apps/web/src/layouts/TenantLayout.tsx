@@ -1,8 +1,13 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
+import { adminApi } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { GlobalSearch } from '../components/ui/GlobalSearch';
+import { NotificationCenter } from '../components/ui/NotificationCenter';
+import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -142,6 +147,13 @@ export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { user, token, logout, isLoggingOut } = useAuth();
   const { pathname } = useLocation();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const { data: settings } = useQuery({
+    queryKey: ['admin', 'settings'],
+    queryFn: adminApi.getSettings,
+    staleTime: 5 * 60_000,
+  });
 
   useEffect(() => {
     if (token && user?.tenantId) {
@@ -149,6 +161,17 @@ export function TenantLayout() {
     }
     return () => { disconnectSocket(); };
   }, [token, user?.tenantId]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const initial = user?.name.charAt(0).toUpperCase() ?? '?';
 
@@ -186,6 +209,21 @@ export function TenantLayout() {
           </div>
 
           <ThemeToggle />
+
+          <button
+            onClick={() => setSearchOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 32, minWidth: 168, padding: '0 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12 }}
+            aria-label="Abrir busca global"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M20 20l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Buscar
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, border: '1px solid var(--line-2)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>
+          </button>
+
+          <NotificationCenter />
 
           {/* Conversations-specific topbar actions */}
           {pathname.startsWith('/omnichannel') && (
@@ -341,6 +379,26 @@ export function TenantLayout() {
           >
             {initial}
           </div>
+
+          <NavLink
+            to="/settings/upgrade"
+            title={`Plano atual: ${settings?.plan?.name ?? '—'}`}
+            style={({ isActive }) => ({
+              width: 56,
+              display: 'block',
+              textAlign: 'center',
+              textDecoration: 'none',
+              borderRadius: 'var(--r)',
+              border: `1px solid ${isActive ? 'rgba(0,201,167,.35)' : 'var(--line)'}`,
+              background: isActive ? 'var(--teal-dim)' : 'var(--bg-3)',
+              color: isActive ? 'var(--teal)' : 'var(--txt-2)',
+              padding: '6px 4px',
+              marginBottom: 8,
+            })}
+          >
+            <span style={{ display: 'block', fontSize: 9, lineHeight: 1.1, color: 'var(--txt-3)' }}>Plano atual</span>
+            <strong style={{ display: 'block', fontSize: 10, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis' }}>{settings?.plan?.name ?? '—'}</strong>
+          </NavLink>
         </nav>
 
         {/* Content area */}
@@ -348,6 +406,8 @@ export function TenantLayout() {
           <Outlet />
         </main>
       </div>
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <OnboardingChecklist />
     </div>
   );
 }

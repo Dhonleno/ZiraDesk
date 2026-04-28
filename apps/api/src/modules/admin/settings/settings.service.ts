@@ -4,7 +4,13 @@ import type { UpdateSettingsInput } from './settings.schema.js';
 export async function getSettings(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true, settings: true },
+    select: {
+      id: true,
+      name: true,
+      settings: true,
+      createdAt: true,
+      plan: { select: { id: true, name: true, slug: true, priceMonth: true } },
+    },
   });
   if (!tenant) throw new Error('Tenant não encontrado');
   const s = (tenant.settings as Record<string, unknown>) ?? {};
@@ -15,6 +21,8 @@ export async function getSettings(tenantId: string) {
     primary_color: (s.primary_color as string | undefined) ?? null,
     timezone: (s.timezone as string | undefined) ?? 'America/Sao_Paulo',
     language: (s.language as string | undefined) ?? 'pt-BR',
+    created_at: tenant.createdAt,
+    plan: tenant.plan,
   };
 }
 

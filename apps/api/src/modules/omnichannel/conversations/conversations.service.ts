@@ -251,7 +251,7 @@ export async function createConversation(data: CreateConversationBody, userId: s
   return conversation;
 }
 
-export async function assignConversation(conversationId: string, assignToUserId: string) {
+export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET assigned_to = $1::uuid
@@ -261,6 +261,15 @@ export async function assignConversation(conversationId: string, assignToUserId:
     conversationId,
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'conversation.assigned', 'conversation', $2::uuid, $3::jsonb)`,
+    assignedBy,
+    conversationId,
+    JSON.stringify({ assigned_to: assignToUserId }),
+  );
+
   return rows[0];
 }
 

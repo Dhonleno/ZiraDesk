@@ -135,12 +135,19 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const conversation = await assignConversation(request.params.id, parsed.data.user_id);
+        const conversation = await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
         const tenantUser = request.user as AuthUser;
 
         const io = getSocketServer();
         io.to(`agent:${parsed.data.user_id}`).emit('conversation:assigned', {
           conversationId: request.params.id,
+        });
+        io.to(`agent:${parsed.data.user_id}`).emit('notification:new', {
+          id: request.params.id,
+          type: 'conversation_assigned',
+          title: 'Conversa atribuída',
+          message: 'Você recebeu uma nova conversa.',
+          href: `/omnichannel/conversations?conversation=${request.params.id}`,
         });
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
           conversationId: request.params.id,

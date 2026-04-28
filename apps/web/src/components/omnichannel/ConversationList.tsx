@@ -19,7 +19,7 @@ interface ConversationItem {
   unread_count?: number;
 }
 
-type StatusFilter = '' | 'open' | 'in_service' | 'mine' | 'resolved';
+type StatusFilter = '' | 'open' | 'in_service' | 'pending' | 'mine' | 'resolved';
 
 /* avatar gradient por inicial */
 const AVATAR_GRADIENTS = [
@@ -109,7 +109,8 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const STATUS_TABS: Array<{ value: StatusFilter; labelKey: string }> = [
     { value: '', labelKey: 'status.all' },
     { value: 'open', labelKey: 'status.open' },
-    { value: 'in_service', labelKey: 'status.pending' },
+    { value: 'in_service', labelKey: 'status.in_service' },
+    { value: 'pending', labelKey: 'status.pending' },
     { value: 'resolved', labelKey: 'status.resolved' },
   ];
 
@@ -118,7 +119,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
     queryFn: async () => {
       const params = new URLSearchParams({ perPage: '50' });
       if (myOnly || status === 'mine') {
-        params.set('assignedToMe', 'true');
+        params.set('assigned_to_me', 'true');
       }
       if (status && status !== 'mine') {
         params.set('status', status);

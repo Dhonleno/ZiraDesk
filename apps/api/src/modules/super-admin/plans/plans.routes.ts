@@ -15,7 +15,7 @@ import {
 const guard = [authMiddleware, hasRole('super_admin')];
 
 export async function plansRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', { preHandler: guard }, async (_request, reply) => {
+  app.get('/', async (_request, reply) => {
     const plans = await listPlans();
     return reply.send({ success: true, data: plans });
   });

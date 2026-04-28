@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const listConversationsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(50),
-  status: z.enum(['open', 'pending', 'resolved', 'bot']).optional(),
+  status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
   search: z.string().optional(),
   assigned_to_me: z.coerce.boolean().optional(),
 });
@@ -22,7 +22,7 @@ export const sendMessageBodySchema = z.object({
 
 export const updateConversationBodySchema = z
   .object({
-    status: z.enum(['open', 'pending', 'resolved', 'bot']).optional(),
+    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
     assignedTo: z.string().uuid().nullable().optional(),
   })
   .refine((data) => data.status !== undefined || data.assignedTo !== undefined, {

@@ -1,5 +1,18 @@
 # Changelog — ZiraDesk
 
+## [0.6.0] — Sprint 6 — Polimento MVP
+### Adicionado
+- Central de notificações in-app com badge e dropdown
+- Busca global com atalho ⌘K/Ctrl+K
+- Onboarding checklist para novos tenants
+- Página de upgrade de plano
+- Error boundary global
+- Toast notifications em todas as ações
+- Página 404 customizada
+- Empty states em todas as listas
+
+---
+
 ## [0.5.0] — Sprint 5B — Omnichannel Frontend completo
 ### Adicionado
 - Layout 3 painéis: lista de conversas, chat e painel de info do contato

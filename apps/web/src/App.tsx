@@ -19,6 +19,9 @@ import { Users as AdminUsers } from './pages/admin/Users';
 import { Channels as AdminChannels } from './pages/admin/Channels';
 import { Settings as AdminSettings } from './pages/admin/Settings';
 import { Toaster } from './components/ui/Toaster';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { Upgrade } from './pages/settings/Upgrade';
+import { NotFound } from './pages/NotFound';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,7 +61,9 @@ export function App() {
             element={
               <RequireAuth>
                 <RequireSuperAdmin>
-                  <SuperAdminLayout />
+                  <ErrorBoundary>
+                    <SuperAdminLayout />
+                  </ErrorBoundary>
                 </RequireSuperAdmin>
               </RequireAuth>
             }
@@ -75,7 +80,9 @@ export function App() {
             path="/*"
             element={
               <RequireAuth>
-                <TenantLayout />
+                <ErrorBoundary>
+                  <TenantLayout />
+                </ErrorBoundary>
               </RequireAuth>
             }
           >
@@ -89,6 +96,8 @@ export function App() {
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/channels" element={<AdminChannels />} />
             <Route path="admin/settings" element={<AdminSettings />} />
+            <Route path="settings/upgrade" element={<Upgrade />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

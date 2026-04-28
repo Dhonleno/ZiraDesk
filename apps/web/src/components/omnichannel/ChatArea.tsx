@@ -47,15 +47,10 @@ const CH_BADGE: Record<string, { bg: string; color: string; border: string; labe
   live_chat:{ bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Aberto',
-  in_service: 'Em atendimento',
-  resolved: 'Resolvido',
-};
-
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string }> = {
   open:       { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
   in_service: { color: 'var(--teal)',  bg: 'var(--teal-dim)',  border: 'rgba(0,201,167,.25)'  },
+  pending:    { color: 'var(--blue)',  bg: 'var(--blue-dim)',  border: 'rgba(96,165,250,.25)' },
   resolved:   { color: 'var(--txt-3)', bg: 'var(--bg-4)',      border: 'var(--line)'           },
 };
 
@@ -221,7 +216,7 @@ export function ChatArea({ conversationId }: Props) {
                   fontSize: 10, fontWeight: 500,
                   background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}`,
                 }}>
-                  {STATUS_LABEL[conv?.status ?? ''] ?? conv?.status}
+                  {conv?.status ? t(`status.${conv.status}`, { defaultValue: conv.status }) : ''}
                 </span>
               )}
             </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { ConversationList } from '../../components/omnichannel/ConversationList';
 import { ChatArea } from '../../components/omnichannel/ChatArea';
 import { InfoPanel } from '../../components/omnichannel/InfoPanel';
@@ -11,7 +12,13 @@ export function ConversationsPage() {
   const { t } = useTranslation('omnichannel');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation');
+    if (conversationId) setSelectedId(conversationId);
+  }, [searchParams]);
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);
@@ -88,4 +95,3 @@ export function ConversationsPage() {
     </div>
   );
 }
-

@@ -13,6 +13,8 @@ import { adminRoutes } from './modules/admin/index.js';
 import { crmRoutes } from './modules/crm/index.js';
 import { ticketModuleRoutes } from './modules/tickets/index.js';
 import { webhookRoutes } from './modules/webhooks/index.js';
+import { notificationsRoutes } from './modules/notifications/notifications.routes.js';
+import { searchRoutes } from './modules/search/search.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
@@ -61,6 +63,8 @@ async function bootstrap(): Promise<void> {
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(crmRoutes, { prefix: '/api/crm' });
   await app.register(ticketModuleRoutes, { prefix: '/api/tickets' });
+  await app.register(notificationsRoutes, { prefix: '/api/notifications' });
+  await app.register(searchRoutes, { prefix: '/api/search' });
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 

@@ -19,6 +19,11 @@
   40%           { transform: translateY(-5px); opacity: 1; }
 }
 
+@keyframes zd-confetti {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(360px) rotate(540deg); opacity: 0; }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
