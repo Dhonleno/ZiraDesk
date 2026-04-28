@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ConversationList } from '../../components/omnichannel/ConversationList';
 import { ChatArea } from '../../components/omnichannel/ChatArea';
 import { InfoPanel } from '../../components/omnichannel/InfoPanel';
+import { CreateConversationModal } from '../../components/omnichannel/CreateConversationModal';
 import { subscribeToEvent } from '../../services/socket';
 
 export function ConversationsPage() {
+  const { t } = useTranslation('omnichannel');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const handleOpenModal = () => setShowModal(true);
+    window.addEventListener('omnichannel:open-modal', handleOpenModal);
+    return () => window.removeEventListener('omnichannel:open-modal', handleOpenModal);
+  }, []);
 
   useEffect(() => {
     const unsubNew = subscribeToEvent<{ conversationId: string }>(
@@ -26,15 +36,23 @@ export function ConversationsPage() {
       },
     );
 
+    const unsubCreated = subscribeToEvent<{ conversation: { id: string } }>(
+      'conversation:created',
+      () => {
+        void qc.invalidateQueries({ queryKey: ['conversations'] });
+      },
+    );
+
     return () => {
       unsubNew();
       unsubUpdated();
+      unsubCreated();
     };
   }, [qc]);
 
   return (
     <div className="flex h-full overflow-hidden">
-      <ConversationList selectedId={selectedId} onSelect={setSelectedId} />
+      <ConversationList selectedId={selectedId} onSelect={setSelectedId} onNew={() => setShowModal(true)} />
 
       {selectedId ? (
         <>
@@ -55,10 +73,19 @@ export function ConversationsPage() {
                 />
               </svg>
             </div>
-            <p className="text-sm text-txt-3">Selecione uma conversa para começar</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>{t('noSelection')}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--txt-3)' }}>{t('noSelectionSub')}</p>
           </div>
         </div>
+      )}
+
+      {showModal && (
+        <CreateConversationModal
+          onClose={() => setShowModal(false)}
+          onCreated={(id) => setSelectedId(id)}
+        />
       )}
     </div>
   );
 }
+

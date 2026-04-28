@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 
 interface Conversation {
   id: string;
   status: string;
   channel_type: string;
+  client_id: string | null;
   client_name: string | null;
   client_email: string | null;
   client_phone: string | null;
@@ -36,7 +39,7 @@ const CH_BADGE: Record<string, { bg: string; color: string; border: string; labe
   live_chat:{ bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
 };
 
-const TABS = ['Contato', 'Canais', 'Histórico'] as const;
+const TABS = ['contact', 'channels', 'history'] as const;
 type Tab = typeof TABS[number];
 
 function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
@@ -93,7 +96,9 @@ interface Props {
 }
 
 export function InfoPanel({ conversationId }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('Contato');
+  const { t } = useTranslation('omnichannel');
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<Tab>('contact');
 
   const { data } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -137,7 +142,7 @@ export function InfoPanel({ conversationId }: Props) {
                 marginBottom: 8,
               }}
             >
-              {tab}
+              {t(`info.${tab}`)}
             </button>
           ))}
         </div>
@@ -145,7 +150,7 @@ export function InfoPanel({ conversationId }: Props) {
 
       <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
 
-        {activeTab === 'Contato' && (
+        {activeTab === 'contact' && (
           <>
             {/* Contact card */}
             <div style={{
@@ -165,22 +170,42 @@ export function InfoPanel({ conversationId }: Props) {
               </div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)' }}>{name}</div>
-                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>Cliente</div>
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{t('info.client')}</div>
               </div>
               {chBadge && (
                 <span style={{ padding: '2px 10px', borderRadius: 'var(--r-pill)', fontSize: 10, fontWeight: 500, background: chBadge.bg, color: chBadge.color, border: `1px solid ${chBadge.border}` }}>
                   {chBadge.label}
                 </span>
               )}
+              {/* Ver perfil completo */}
+              {conv?.client_id && (
+                <button
+                  onClick={() => navigate(`/crm/clients/${conv.client_id}`)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '5px 12px', borderRadius: 'var(--r)',
+                    border: '1px solid var(--line-2)', background: 'var(--bg-3)',
+                    color: 'var(--teal)', fontSize: 11, fontWeight: 500,
+                    fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--teal-dim)'; e.currentTarget.style.borderColor = 'rgba(0,201,167,.3)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.borderColor = 'var(--line-2)'; }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                    <path d="M6 1h4v4M10 1L4 7M2 3H1v7h7V9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  {t('info.viewFullProfile')}
+                </button>
+              )}
             </div>
 
             {/* Stats mini — 4 cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
               {([
-                { val: '7', lbl: 'Mensagens trocadas' },
-                { val: '3', lbl: 'Atendimentos' },
-                { val: '22/03', lbl: '1º contato', small: true },
-                { val: '↑91%', lbl: 'Engajamento', green: true },
+                { val: '7', lbl: t('info.messages') },
+                { val: '3', lbl: t('info.attendances') },
+                { val: '22/03', lbl: t('info.firstContact'), small: true },
+                { val: '↑91%', lbl: t('info.engagement'), green: true },
               ] as { val: string; lbl: string; small?: boolean; green?: boolean }[]).map(({ val, lbl, small, green }) => (
                 <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
                   <div style={{ fontSize: small ? 14 : green ? 16 : 20, fontWeight: 600, color: green ? 'var(--green)' : 'var(--txt)', letterSpacing: '-0.5px', fontFamily: 'var(--mono)' }}>{val}</div>
@@ -191,11 +216,11 @@ export function InfoPanel({ conversationId }: Props) {
 
             {/* Contact info */}
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-              <SectionTitle action={<span style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}>Editar</span>}>Informações</SectionTitle>
+              <SectionTitle action={<span style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}>Editar</span>}>{t('info.information')}</SectionTitle>
               <InfoField
-                label="E-mail"
+                label={t('info.email')}
                 value={conv?.client_email}
-                empty="Não informado"
+                empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -204,9 +229,9 @@ export function InfoPanel({ conversationId }: Props) {
                 }
               />
               <InfoField
-                label="Telefone"
+                label={t('info.phone')}
                 value={conv?.client_phone}
-                empty="Não informado"
+                empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                     <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.22 1.18 2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -217,13 +242,13 @@ export function InfoPanel({ conversationId }: Props) {
 
             {/* Quick actions */}
             <div style={{ padding: '14px 16px' }}>
-              <SectionTitle>Ações rápidas</SectionTitle>
+              <SectionTitle>{t('info.quickActions')}</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {[
-                  { label: 'Criar proposta', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: 'Agendar', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: 'Ver tickets', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: 'Ver perfil', icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="4.5" r="1.8" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 10.5c0-2 2-3.5 4.5-3.5s4.5 1.5 4.5 3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.createProposal'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.schedule'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.viewTickets'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.createTicket'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                 ].map((a) => (
                   <button
                     key={a.label}
@@ -240,9 +265,9 @@ export function InfoPanel({ conversationId }: Props) {
           </>
         )}
 
-        {activeTab === 'Canais' && (
+        {activeTab === 'channels' && (
           <div style={{ padding: '14px 16px' }}>
-            <SectionTitle>Canais ativos</SectionTitle>
+            <SectionTitle>{t('info.activeChannels')}</SectionTitle>
             <div>
               {[
                 { bg: 'rgba(37,211,102,.15)', name: 'WhatsApp', sub: conv?.client_phone ?? '—', time: 'agora', count: '3 msgs', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10C2.5 12 4.5 13.5 7 13c3-.5 5-3 5-6a5 5 0 10-10 0c0 1.2.4 2.3 1 3.2L2 10z" stroke="#25D366" strokeWidth="1.2" strokeLinejoin="round"/></svg> },
@@ -267,9 +292,9 @@ export function InfoPanel({ conversationId }: Props) {
           </div>
         )}
 
-        {activeTab === 'Histórico' && (
+        {activeTab === 'history' && (
           <div style={{ padding: '14px 16px' }}>
-            <SectionTitle>Atividade recente</SectionTitle>
+            <SectionTitle>{t('info.recentActivity')}</SectionTitle>
             <div style={{ position: 'relative', paddingLeft: 18 }}>
               <div style={{ position: 'absolute', left: 6, top: 6, bottom: 6, width: 1, background: 'var(--line-2)' }} />
               {[

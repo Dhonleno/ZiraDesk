@@ -448,6 +448,129 @@ export interface CreateCommentPayload {
 
 // ── Tickets API ───────────────────────────────────────────────────────────────
 
+// ── Omnichannel Types ─────────────────────────────────────────────────────────
+
+export interface OmnichannelConversation {
+  id: string;
+  status: string;
+  channel_type: string;
+  subject: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  client_email: string | null;
+  client_phone: string | null;
+  assigned_to: string | null;
+  assigned_name: string | null;
+  channel_id: string | null;
+  channel_name: string | null;
+  unread_count?: number;
+}
+
+export interface OmnichannelMessage {
+  id: string;
+  conversation_id: string;
+  sender_type: 'agent' | 'client' | 'bot' | 'system';
+  sender_id: string | null;
+  content: string;
+  content_type: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  is_internal: boolean;
+  created_at: string;
+}
+
+export interface ListConversationsParams {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  status?: string;
+  assignedToMe?: boolean;
+}
+
+export interface CreateConversationPayload {
+  client_id: string;
+  channel_id: string;
+  subject?: string;
+  initial_message?: string;
+}
+
+export interface SendMessagePayload {
+  content: string;
+  contentType?: string;
+  isInternal?: boolean;
+}
+
+// ── Omnichannel API ───────────────────────────────────────────────────────────
+
+export const omnichannelApi = {
+  listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {
+    const res = await api.get<{ success: boolean; data: OmnichannelConversation[] }>(
+      '/omnichannel/conversations',
+      { params },
+    );
+    return res.data.data;
+  },
+
+  getConversation: async (id: string): Promise<{ conversation: OmnichannelConversation; messages: OmnichannelMessage[] }> => {
+    const res = await api.get<{ success: boolean; data: { conversation: OmnichannelConversation; messages: OmnichannelMessage[] } }>(
+      `/omnichannel/conversations/${id}`,
+    );
+    return res.data.data;
+  },
+
+  createConversation: async (payload: CreateConversationPayload): Promise<OmnichannelConversation> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      '/omnichannel/conversations',
+      payload,
+    );
+    return res.data.data;
+  },
+
+  listMessages: async (conversationId: string): Promise<OmnichannelMessage[]> => {
+    const res = await api.get<{ success: boolean; data: OmnichannelMessage[] }>(
+      `/omnichannel/conversations/${conversationId}/messages`,
+    );
+    return res.data.data;
+  },
+
+  sendMessage: async (conversationId: string, payload: SendMessagePayload): Promise<OmnichannelMessage> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelMessage }>(
+      `/omnichannel/conversations/${conversationId}/messages`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  resolve: async (conversationId: string): Promise<OmnichannelConversation> => {
+    const res = await api.patch<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/conversations/${conversationId}`,
+      { status: 'resolved' },
+    );
+    return res.data.data;
+  },
+
+  assign: async (conversationId: string, userId: string): Promise<OmnichannelConversation> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/conversations/${conversationId}/assign`,
+      { user_id: userId },
+    );
+    return res.data.data;
+  },
+
+  transfer: async (conversationId: string, userId: string, reason?: string): Promise<OmnichannelConversation> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/conversations/${conversationId}/transfer`,
+      { user_id: userId, reason },
+    );
+    return res.data.data;
+  },
+};
+
+// ── Tickets Types ─────────────────────────────────────────────────────────────
+
 export const ticketsApi = {
   list: async (params?: ListTicketsParams): Promise<{ data: Ticket[]; meta: TicketListMeta }> => {
     const res = await api.get<{ success: boolean; data: Ticket[]; meta: TicketListMeta }>('/tickets', { params });

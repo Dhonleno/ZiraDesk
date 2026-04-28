@@ -1,5 +1,28 @@
 # Changelog — ZiraDesk
 
+## [0.5.0] — Sprint 5B — Omnichannel Frontend completo
+### Adicionado
+- Layout 3 painéis: lista de conversas, chat e painel de info do contato
+- Mensagens em tempo real via Socket.io (conversation:new_message, conversation:updated, conversation:created)
+- Balões de mensagem com status de entrega (enviado / entregue / lido) e ícones de check
+- Indicador de digitação animado (3 pontos pulsantes)
+- Notas internas com fundo âmbar e label "NOTA INTERNA"
+- Respostas rápidas como chips clicáveis no chat
+- Auto-resize do textarea de mensagem
+- Painel de info do contato com tabs: Contato, Canais, Histórico
+- Mini-stats do cliente: mensagens, atendimentos, 1º contato, engajamento
+- Botão "Ver perfil completo" navegando para /crm/clients/:id
+- Ações rápidas: criar proposta, agendar, ver tickets, criar ticket
+- Modal de criação de nova conversa (busca de cliente + seleção de canal + assunto + mensagem inicial)
+- Filtro "Meus atendimentos" com toggle animado na lista
+- Unread dot e nome/preview em negrito para conversas com mensagens não lidas
+- Badge de contagem de conversas no header da lista
+- Botão "Novo atendimento" funcional na topbar e na lista (via CustomEvent)
+- Namespace i18n `omnichannel` em pt-BR, en-US e es
+- omnichannelApi em services/api.ts: listConversations, getConversation, createConversation, listMessages, sendMessage, resolve, assign, transfer
+
+---
+
 ## [0.5.0-backend] — Sprint 5A — Omnichannel Backend
 ### Adicionado
 - Padronização de status: open, pending, resolved, bot (substituído in_service)

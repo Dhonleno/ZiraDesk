@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -15,17 +16,10 @@ interface ConversationItem {
   client_email: string | null;
   assigned_name: string | null;
   channel_name: string | null;
+  unread_count?: number;
 }
 
 type StatusFilter = '' | 'open' | 'in_service' | 'mine' | 'resolved';
-
-const STATUS_TABS: Array<{ value: StatusFilter; label: string }> = [
-  { value: '', label: 'Todos' },
-  { value: 'open', label: 'Abertos' },
-  { value: 'in_service', label: 'Aguardando' },
-  { value: 'mine', label: 'Meus' },
-  { value: 'resolved', label: 'Resolvidos' },
-];
 
 /* avatar gradient por inicial */
 const AVATAR_GRADIENTS = [
@@ -102,20 +96,31 @@ function ChannelDot({ type }: { type: string }) {
 interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onNew?: () => void;
 }
 
-export function ConversationList({ selectedId, onSelect }: Props) {
+export function ConversationList({ selectedId, onSelect, onNew }: Props) {
+  const { t } = useTranslation('omnichannel');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('');
+  const [myOnly, setMyOnly] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
 
+  const STATUS_TABS: Array<{ value: StatusFilter; labelKey: string }> = [
+    { value: '', labelKey: 'status.all' },
+    { value: 'open', labelKey: 'status.open' },
+    { value: 'in_service', labelKey: 'status.pending' },
+    { value: 'resolved', labelKey: 'status.resolved' },
+  ];
+
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', { status, search: debouncedSearch }],
+    queryKey: ['conversations', { status, search: debouncedSearch, myOnly }],
     queryFn: async () => {
       const params = new URLSearchParams({ perPage: '50' });
-      if (status === 'mine') {
+      if (myOnly || status === 'mine') {
         params.set('assignedToMe', 'true');
-      } else if (status) {
+      }
+      if (status && status !== 'mine') {
         params.set('status', status);
       }
       if (debouncedSearch) params.set('search', debouncedSearch);
@@ -142,18 +147,39 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       {/* Header */}
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Atendimentos</span>
-          <span style={{
-            background: 'var(--bg-4)',
-            border: '1px solid var(--line)',
-            borderRadius: 'var(--r-pill)',
-            padding: '2px 8px',
-            fontSize: 11,
-            fontFamily: 'var(--mono)',
-            color: 'var(--txt-2)',
-          }}>
-            {count}
-          </span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{t('title')}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              background: 'var(--bg-4)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-pill)',
+              padding: '2px 8px',
+              fontSize: 11,
+              fontFamily: 'var(--mono)',
+              color: 'var(--txt-2)',
+            }}>
+              {count}
+            </span>
+            {onNew && (
+              <button
+                onClick={onNew}
+                title={t('new')}
+                style={{
+                  width: 24, height: 24,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--teal)', border: 'none',
+                  borderRadius: 'var(--r)', cursor: 'pointer', color: '#0E1A18',
+                  transition: 'all .15s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                  <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search */}
@@ -175,7 +201,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           </svg>
           <input
             type="text"
-            placeholder="Buscar..."
+            placeholder={t('search')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -188,7 +214,61 @@ export function ConversationList({ selectedId, onSelect }: Props) {
               width: '100%',
             }}
           />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', display: 'flex', padding: 0 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
+
+        {/* Meus atendimentos toggle */}
+        <button
+          onClick={() => setMyOnly((v) => !v)}
+          style={{
+            marginTop: 8,
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: myOnly ? 'var(--teal-dim)' : 'var(--bg-3)',
+            border: `1px solid ${myOnly ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
+            borderRadius: 'var(--r)',
+            padding: '6px 10px',
+            cursor: 'pointer',
+            color: myOnly ? 'var(--teal)' : 'var(--txt-3)',
+            fontSize: 11,
+            fontWeight: 500,
+            fontFamily: 'var(--font)',
+            transition: 'all .15s',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <circle cx="6" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M1.5 10c0-2 2-3.5 4.5-3.5s4.5 1.5 4.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            {t('myAttendances')}
+          </span>
+          {/* Toggle pill */}
+          <div style={{
+            width: 28, height: 16, borderRadius: 8,
+            background: myOnly ? 'var(--teal)' : 'var(--bg-5)',
+            position: 'relative', transition: 'background .15s',
+          }}>
+            <div style={{
+              position: 'absolute', top: 2,
+              left: myOnly ? 14 : 2,
+              width: 12, height: 12, borderRadius: '50%',
+              background: myOnly ? '#0E1A18' : 'var(--txt-3)',
+              transition: 'left .15s',
+            }} />
+          </div>
+        </button>
       </div>
 
       {/* Status filter tabs */}
@@ -218,7 +298,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
               transition: 'all .15s',
             }}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -235,13 +315,14 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           : (data ?? []).length === 0
           ? (
               <div style={{ padding: '48px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>
-                Nenhuma conversa encontrada
+                {t('noConversations')}
               </div>
             )
           : (data ?? []).map((conv) => {
               const isActive = selectedId === conv.id;
               const name = conv.client_name ?? 'Visitante';
               const chStyle = CH_STYLE[conv.channel_type];
+              const hasUnread = (conv.unread_count ?? 0) > 0;
               return (
                 <button
                   key={conv.id}
@@ -256,7 +337,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                     cursor: 'pointer',
                     borderBottom: '1px solid var(--line)',
                     background: isActive ? 'var(--bg-3)' : 'transparent',
-                    boxShadow: isActive ? 'inset 2px 0 0 var(--teal)' : 'none',
+                    boxShadow: isActive ? 'inset 3px 0 0 var(--teal)' : 'none',
                     transition: 'background .15s',
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; }}
@@ -284,20 +365,39 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                   {/* Body */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{
+                        fontSize: 13,
+                        fontWeight: hasUnread ? 600 : 500,
+                        color: 'var(--txt)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
                         {name}
                       </span>
-                      <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0, marginLeft: 6 }}>
-                        {relativeTime(conv.last_message_at ?? conv.created_at)}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 6 }}>
+                        {hasUnread && (
+                          <div style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: 'var(--teal)',
+                            boxShadow: '0 0 0 2px var(--teal-dim)',
+                          }} />
+                        )}
+                        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                          {relativeTime(conv.last_message_at ?? conv.created_at)}
+                        </span>
+                      </div>
                     </div>
 
-                    <p style={{ fontSize: 12, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{
+                      fontSize: 12,
+                      color: hasUnread ? 'var(--txt-2)' : 'var(--txt-3)',
+                      fontWeight: hasUnread ? 500 : 400,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
                       {conv.last_message ?? conv.subject ?? '—'}
                     </p>
 
-                    {chStyle && (
-                      <div style={{ marginTop: 5 }}>
+                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {chStyle && (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 500,
@@ -309,8 +409,18 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         }}>
                           {chStyle.label}
                         </span>
-                      </div>
-                    )}
+                      )}
+                      {conv.status === 'resolved' && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 500,
+                          padding: '1px 7px', borderRadius: 'var(--r-pill)',
+                          background: 'var(--bg-4)', color: 'var(--txt-3)',
+                          border: '1px solid var(--line)',
+                        }}>
+                          {t('status.resolved')}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );

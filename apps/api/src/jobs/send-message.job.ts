@@ -11,7 +11,7 @@ interface SendMessageJob {
 }
 
 const worker = new Worker<SendMessageJob>(
-  'ziradesk:messages',
+  'ziradesk-messages',
   async (job) => {
     const { channelType, channelCredentials, content, to } = job.data;
 

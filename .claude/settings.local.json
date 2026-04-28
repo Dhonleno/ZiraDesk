@@ -34,7 +34,9 @@
       "Bash(node -e ' *)",
       "Bash(node --input-type=module)",
       "Bash(psql -h localhost -U ziradesk -d ziradesk -c ' *)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(pnpm --filter @ziradesk/api add bullmq)"
     ]
   }
 }

@@ -7,25 +7,28 @@ import ptBRAuth from '../locales/pt-BR/auth.json';
 import ptBRAdmin from '../locales/pt-BR/admin.json';
 import ptBRCrm from '../locales/pt-BR/crm.json';
 import ptBRTickets from '../locales/pt-BR/tickets.json';
+import ptBROmnichannel from '../locales/pt-BR/omnichannel.json';
 import enUSCommon from '../locales/en-US/common.json';
 import enUSAuth from '../locales/en-US/auth.json';
 import enUSAdmin from '../locales/en-US/admin.json';
 import enUSCrm from '../locales/en-US/crm.json';
 import enUSTickets from '../locales/en-US/tickets.json';
+import enUSOmnichannel from '../locales/en-US/omnichannel.json';
 import esCommon from '../locales/es/common.json';
 import esAuth from '../locales/es/auth.json';
 import esAdmin from '../locales/es/admin.json';
 import esCrm from '../locales/es/crm.json';
 import esTickets from '../locales/es/tickets.json';
+import esOmnichannel from '../locales/es/omnichannel.json';
 
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      'pt-BR': { common: ptBRCommon, auth: ptBRAuth, admin: ptBRAdmin, crm: ptBRCrm, tickets: ptBRTickets },
-      'en-US': { common: enUSCommon, auth: enUSAuth, admin: enUSAdmin, crm: enUSCrm, tickets: enUSTickets },
-      es: { common: esCommon, auth: esAuth, admin: esAdmin, crm: esCrm, tickets: esTickets },
+      'pt-BR': { common: ptBRCommon, auth: ptBRAuth, admin: ptBRAdmin, crm: ptBRCrm, tickets: ptBRTickets, omnichannel: ptBROmnichannel },
+      'en-US': { common: enUSCommon, auth: enUSAuth, admin: enUSAdmin, crm: enUSCrm, tickets: enUSTickets, omnichannel: enUSOmnichannel },
+      es: { common: esCommon, auth: esAuth, admin: esAdmin, crm: esCrm, tickets: esTickets, omnichannel: esOmnichannel },
     },
     fallbackLng: 'pt-BR',
     defaultNS: 'common',

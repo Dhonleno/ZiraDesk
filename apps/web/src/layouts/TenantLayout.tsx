@@ -190,7 +190,9 @@ export function TenantLayout() {
           {/* Conversations-specific topbar actions */}
           {pathname.startsWith('/omnichannel') && (
             <>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: '#0E1A18', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('omnichannel:open-modal'))}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: '#0E1A18', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 Novo atendimento
               </button>

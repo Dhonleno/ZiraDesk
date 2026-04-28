@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 
@@ -77,10 +78,14 @@ interface Props {
 }
 
 export function ChatArea({ conversationId }: Props) {
+  const { t } = useTranslation('omnichannel');
   const [content, setContent] = useState('');
+  const [isInternal, setIsInternal] = useState(false);
+  const [isTyping, _setIsTyping] = useState(false);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -99,13 +104,18 @@ export function ChatArea({ conversationId }: Props) {
 
   const sendMutation = useMutation({
     mutationFn: async (text: string) =>
-      api.post(`/omnichannel/conversations/${conversationId}/messages`, { content: text, contentType: 'text' }),
+      api.post(`/omnichannel/conversations/${conversationId}/messages`, {
+        content: text,
+        contentType: 'text',
+        isInternal,
+      }),
     onSuccess: () => {
       setContent('');
+      setIsInternal(false);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => toast.error('Erro ao enviar mensagem'),
+    onError: () => toast.error(t('chat.send') + ' — erro'),
   });
 
   const resolveMutation = useMutation({
@@ -113,7 +123,7 @@ export function ChatArea({ conversationId }: Props) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
-      toast.success('Conversa marcada como resolvida');
+      toast.success(t('chat.resolve') + ' — OK');
     },
     onError: () => toast.error('Erro ao atualizar conversa'),
   });
@@ -125,9 +135,19 @@ export function ChatArea({ conversationId }: Props) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  }
+
+  /* auto-resize textarea */
+  function handleContentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setContent(e.target.value);
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
     }
   }
 
@@ -212,7 +232,7 @@ export function ChatArea({ conversationId }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Transferir */}
           <button
-            title="Transferir"
+            title={t('chat.transfer')}
             style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', borderRadius: 'var(--r)', color: 'var(--txt-3)', cursor: 'pointer', transition: 'all .15s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--txt-2)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--txt-3)'; }}
@@ -222,7 +242,7 @@ export function ChatArea({ conversationId }: Props) {
 
           {/* Silenciar */}
           <button
-            title="Silenciar"
+            title={t('chat.mute')}
             style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', borderRadius: 'var(--r)', color: 'var(--txt-3)', cursor: 'pointer', transition: 'all .15s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--txt-2)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--txt-3)'; }}
@@ -245,15 +265,15 @@ export function ChatArea({ conversationId }: Props) {
               }}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M2 9.5V4L6 1.5 10 4v5.5H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                <path d="M2 6.5l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Resolver
+              {t('chat.resolve')}
             </button>
           )}
 
           {/* Mais opções */}
           <button
-            title="Mais opções"
+            title={t('chat.more')}
             style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', borderRadius: 'var(--r)', color: 'var(--txt-3)', cursor: 'pointer', transition: 'all .15s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--txt-2)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--txt-3)'; }}
@@ -284,7 +304,7 @@ export function ChatArea({ conversationId }: Props) {
           </div>
         ) : messages.length === 0 ? (
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', padding: '32px 0' }}>
-            Nenhuma mensagem ainda
+            {t('chat.noMessages')}
           </p>
         ) : (
           grouped.map(({ date, msgs }) => (
@@ -304,6 +324,14 @@ export function ChatArea({ conversationId }: Props) {
 
               {msgs.map((msg) => {
                 const isOut = msg.sender_type === 'agent';
+                const isSystem = msg.sender_type === 'system';
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} style={{ textAlign: 'center', margin: '8px 0', fontSize: 11, color: 'var(--txt-3)', fontStyle: 'italic' }}>
+                      {msg.content}
+                    </div>
+                  );
+                }
                 return (
                   <div key={msg.id} style={{
                     display: 'flex',
@@ -337,16 +365,27 @@ export function ChatArea({ conversationId }: Props) {
                         fontSize: 13,
                         lineHeight: 1.55,
                         wordBreak: 'break-word',
-                        background: isOut ? 'var(--teal)' : 'var(--bg-3)',
-                        color: isOut ? '#0a1a18' : 'var(--txt)',
-                        border: isOut ? 'none' : '1px solid var(--line)',
+                        background: msg.is_internal
+                          ? 'var(--amber-dim)'
+                          : isOut ? 'var(--teal)' : 'var(--bg-3)',
+                        color: msg.is_internal
+                          ? 'var(--amber)'
+                          : isOut ? '#0a1a18' : 'var(--txt)',
+                        border: msg.is_internal
+                          ? '1px solid rgba(245,158,11,.3)'
+                          : isOut ? 'none' : '1px solid var(--line)',
                       }}>
+                        {msg.is_internal && (
+                          <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            {t('chat.internalNote')}
+                          </div>
+                        )}
                         {msg.content}
                       </div>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 5,
+                        gap: 4,
                         marginTop: 4,
                         fontSize: 10,
                         fontFamily: 'var(--mono)',
@@ -354,6 +393,15 @@ export function ChatArea({ conversationId }: Props) {
                         justifyContent: isOut ? 'flex-end' : 'flex-start',
                       }}>
                         {formatTime(msg.created_at)}
+                        {isOut && (
+                          <span title={msg.status === 'read' ? t('chat.messageRead') : t('chat.messageDelivered')} style={{ color: msg.status === 'read' ? 'var(--blue)' : 'var(--txt-3)' }}>
+                            {msg.status === 'sent' ? (
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            ) : (
+                              <svg width="16" height="12" viewBox="0 0 16 12" fill="none" aria-hidden><path d="M1 6l3 3 5-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 6l3 3 5-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -363,6 +411,21 @@ export function ChatArea({ conversationId }: Props) {
           ))
         )}
         <div ref={bottomRef} />
+
+        {/* Typing indicator */}
+        {isTyping && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarGradient(conv?.client_name ?? null), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 12, borderBottomLeftRadius: 4, padding: '8px 12px' }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--txt-3)', animation: `bounce 1.2s ease infinite ${i * 0.2}s` }} />
+              ))}
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('chat.typing')}</span>
+          </div>
+        )}
       </div>
 
       {/* Quick replies */}
@@ -371,14 +434,14 @@ export function ChatArea({ conversationId }: Props) {
           display: 'flex', gap: 6, padding: '0 20px 10px',
           overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0,
         }}>
-          {[
-            'Enviar proposta',
-            '📅 Agendar ligação',
-            '💳 Enviar link de pagamento',
-            '📋 Enviar contrato',
-            '🎯 Qualificar lead',
-            '📂 Ver histórico completo',
-          ].map((r) => (
+          {([
+            t('chat.sendProposal'),
+            t('chat.scheduleCall'),
+            t('chat.sendPaymentLink'),
+            t('chat.awaitReturn'),
+            t('chat.sendContract'),
+            t('chat.qualifyLead'),
+          ] as string[]).map((r) => (
             <button
               key={r}
               onClick={() => setContent((prev) => prev ? prev + ' ' + r : r)}
@@ -408,11 +471,11 @@ export function ChatArea({ conversationId }: Props) {
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 8 }}>
           {([
-            { key: 'b', title: 'Negrito', icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M3.5 6.5h4a2 2 0 000-4H3.5v4zM3.5 6.5h4.5a2.5 2.5 0 010 5H3.5V6.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> },
-            { key: 'i', title: 'Itálico', icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M5 2.5h5M3 10.5h5M7.5 2.5l-2 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-            { key: 'e', title: 'Emoji', icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><circle cx="4.5" cy="5.5" r=".7" fill="currentColor"/><circle cx="8.5" cy="5.5" r=".7" fill="currentColor"/><path d="M4 8.5c.5 1 3.5 1 4.5 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-            { key: 'a', title: 'Anexar', icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M11 6.5L6 11.5a3.5 3.5 0 01-5-5l5.5-5.5a2 2 0 013 3L5 9.5a.5.5 0 01-1-1L9.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
-            { key: 'm', title: 'Imagem', icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><rect x="1.5" y="2.5" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="4.5" cy="5" r="1" fill="currentColor"/><path d="M1.5 8.5l3-3L7 8l2-1.5 2.5 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+            { key: 'b', title: t('chat.bold'), icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M3.5 6.5h4a2 2 0 000-4H3.5v4zM3.5 6.5h4.5a2.5 2.5 0 010 5H3.5V6.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> },
+            { key: 'i', title: t('chat.italic'), icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M5 2.5h5M3 10.5h5M7.5 2.5l-2 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
+            { key: 'e', title: t('chat.emoji'), icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><circle cx="4.5" cy="5.5" r=".7" fill="currentColor"/><circle cx="8.5" cy="5.5" r=".7" fill="currentColor"/><path d="M4 8.5c.5 1 3.5 1 4.5 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
+            { key: 'a', title: t('chat.attach'), icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M11 6.5L6 11.5a3.5 3.5 0 01-5-5l5.5-5.5a2 2 0 013 3L5 9.5a.5.5 0 01-1-1L9.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> },
+            { key: 'm', title: t('chat.image'), icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><rect x="1.5" y="2.5" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="4.5" cy="5" r="1" fill="currentColor"/><path d="M1.5 8.5l3-3L7 8l2-1.5 2.5 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
           ] as { key: string; title: string; icon: React.ReactNode }[]).map(({ key, title, icon }) => (
             <button
               key={key}
@@ -436,7 +499,7 @@ export function ChatArea({ conversationId }: Props) {
           {/* Respostas rápidas */}
           <button
             disabled={isResolved}
-            title="Respostas rápidas"
+            title={t('chat.quickReplies')}
             style={{ width: 28, height: 28, borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', color: 'var(--txt-3)', cursor: isResolved ? 'default' : 'pointer', transition: 'all .15s' }}
             onMouseEnter={(e) => { if (!isResolved) { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--txt-2)'; } }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--txt-3)'; }}
@@ -444,13 +507,20 @@ export function ChatArea({ conversationId }: Props) {
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M2 9V3.5a1 1 0 011-1h7a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M4.5 5.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
           </button>
 
-          {/* Nota interna */}
+          {/* Nota interna toggle */}
           <button
             disabled={isResolved}
-            title="Nota interna"
-            style={{ width: 28, height: 28, borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', color: 'var(--amber)', cursor: isResolved ? 'default' : 'pointer', transition: 'all .15s' }}
-            onMouseEnter={(e) => { if (!isResolved) { e.currentTarget.style.background = 'var(--bg-4)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+            onClick={() => setIsInternal((v) => !v)}
+            title={t('chat.internalNote')}
+            style={{
+              width: 28, height: 28, borderRadius: 'var(--r)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isInternal ? 'var(--amber-dim)' : 'none',
+              border: isInternal ? '1px solid rgba(245,158,11,.3)' : 'none',
+              color: 'var(--amber)', cursor: isResolved ? 'default' : 'pointer', transition: 'all .15s',
+            }}
+            onMouseEnter={(e) => { if (!isResolved) { e.currentTarget.style.background = isInternal ? 'var(--amber-dim)' : 'var(--bg-4)'; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = isInternal ? 'var(--amber-dim)' : 'none'; }}
           >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden><path d="M2 9.5L3.5 8l6-6 1.5 1.5-6 6L2 11v-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
           </button>
@@ -462,27 +532,28 @@ export function ChatArea({ conversationId }: Props) {
             display: 'flex',
             alignItems: 'flex-end',
             gap: 8,
-            background: 'var(--bg-3)',
-            border: '1px solid var(--line-2)',
+            background: isInternal ? 'var(--amber-dim)' : 'var(--bg-3)',
+            border: `1px solid ${isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)'}`,
             borderRadius: 'var(--r-lg)',
             padding: '10px 12px',
-            transition: 'border-color .15s, box-shadow .15s',
+            transition: 'border-color .15s, box-shadow .15s, background .15s',
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = 'var(--teal)';
-            e.currentTarget.style.boxShadow = '0 0 0 3px var(--teal-dim)';
+            e.currentTarget.style.borderColor = isInternal ? 'var(--amber)' : 'var(--teal)';
+            e.currentTarget.style.boxShadow = isInternal ? '0 0 0 3px var(--amber-dim)' : '0 0 0 3px var(--teal-dim)';
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = 'var(--line-2)';
+            e.currentTarget.style.borderColor = isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)';
             e.currentTarget.style.boxShadow = 'none';
           }}
         >
           <textarea
-            rows={2}
+            ref={textareaRef}
+            rows={1}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={handleContentChange}
             onKeyDown={handleKeyDown}
-            placeholder={isResolved ? 'Esta conversa foi resolvida' : 'Escreva uma mensagem...'}
+            placeholder={isResolved ? t('chat.resolvedPlaceholder') : isInternal ? t('chat.internalNote') + '...' : t('chat.inputPlaceholder')}
             disabled={isResolved}
             style={{
               flex: 1,
@@ -491,10 +562,10 @@ export function ChatArea({ conversationId }: Props) {
               outline: 'none',
               fontSize: 13,
               fontFamily: 'var(--font)',
-              color: 'var(--txt)',
+              color: isInternal ? 'var(--amber)' : 'var(--txt)',
               resize: 'none',
               minHeight: 20,
-              maxHeight: 100,
+              maxHeight: 120,
               lineHeight: 1.5,
               opacity: isResolved ? 0.5 : 1,
             }}
@@ -504,7 +575,7 @@ export function ChatArea({ conversationId }: Props) {
             disabled={!content.trim() || sendMutation.isPending || isResolved}
             style={{
               width: 32, height: 32, borderRadius: 'var(--r)',
-              background: 'var(--teal)', border: 'none',
+              background: isInternal ? 'var(--amber)' : 'var(--teal)', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', flexShrink: 0,
               color: '#0E1A18',
@@ -513,7 +584,7 @@ export function ChatArea({ conversationId }: Props) {
             }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-            aria-label="Enviar"
+            aria-label={t('chat.send')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -524,10 +595,14 @@ export function ChatArea({ conversationId }: Props) {
         {/* Input footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>
-            {content.length > 0 ? `${content.length} caracteres` : 'Ctrl+Enter para enviar'}
+            {content.length > 0
+              ? t('chat.charCount', { count: content.length })
+              : isInternal
+              ? <span style={{ color: 'var(--amber)', fontWeight: 500 }}>{t('chat.internalNoteActive')}</span>
+              : t('chat.ctrlEnter')}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--txt-3)' }}>
-            <span>Via</span>
+            <span>{t('chat.via')}</span>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 4,
               background: 'var(--bg-4)', border: '1px solid var(--line)',
