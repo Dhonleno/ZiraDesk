@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { getSocketServer } from '../../socket/index.js';
+import { decryptCredentials } from '../../utils/crypto.js';
 
 interface MetaMessage {
   from: string;
@@ -52,6 +53,7 @@ interface TenantRow {
 
 interface ChannelRow {
   id: string;
+  credentials: string | object;
 }
 
 interface ClientRow {
@@ -67,6 +69,10 @@ interface MessageRow {
   conversation_id: string;
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function findChannelByPhoneNumberId(
   phoneNumberId: string,
 ): Promise<{ tenantId: string; schemaName: string; channelId: string } | null> {
@@ -76,15 +82,16 @@ async function findChannelByPhoneNumberId(
 
   for (const tenant of tenants) {
     const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
-      `SELECT id FROM "${tenant.schema_name}".channels
+      `SELECT id, credentials FROM "${tenant.schema_name}".channels
        WHERE type = 'whatsapp' AND status = 'active'
-       AND credentials->>'phoneNumberId' = $1
-       LIMIT 1`,
-      phoneNumberId,
+       LIMIT 100`,
     );
 
-    if (channels[0]) {
-      return { tenantId: tenant.id, schemaName: tenant.schema_name, channelId: channels[0].id };
+    for (const channel of channels) {
+      const credentials = decryptCredentials(channel.credentials);
+      if (credentials['phoneNumberId'] === phoneNumberId) {
+        return { tenantId: tenant.id, schemaName: tenant.schema_name, channelId: channel.id };
+      }
     }
   }
 
@@ -168,13 +175,30 @@ async function processIncomingMessage(
       clientId = newClient[0]!.id;
     }
 
+    console.log('[WhatsApp] clientId:', clientId, 'channelId:', channelId);
+    if (!isUuid(clientId) || !isUuid(channelId)) {
+      throw new Error(`[WhatsApp] Invalid UUID for client/channel: ${clientId}/${channelId}`);
+    }
+
+    await tx.$executeRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text)::bigint)`,
+      clientId,
+      channelId,
+    );
+
+    console.log('[WhatsApp Webhook] Looking for conversation:', { clientId, channelId });
+
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id FROM conversations
-       WHERE client_id = $1::uuid AND channel_id = $2::uuid AND status = 'open'
+       WHERE client_id = $1::uuid
+         AND channel_id = $2::uuid
+         AND status IN ('open', 'pending', 'bot')
        ORDER BY created_at DESC LIMIT 1`,
       clientId,
       channelId,
     );
+
+    console.log('[WhatsApp Webhook] Found conversation:', convRows[0] ?? null);
 
     let conversationId: string;
     if (convRows[0]) {
