@@ -19,7 +19,12 @@ const worker = new Worker<SendMessageJob>(
       case 'whatsapp': {
         const phoneNumberId = channelCredentials['phoneNumberId'];
         const accessToken = channelCredentials['accessToken'];
-        const recipientPhone = to.replace('+', '');
+        // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
+        const sanitizedPhone = to.replace(/\D/g, '');
+
+        console.log('[WhatsApp Send] PhoneNumberId:', phoneNumberId);
+        console.log('[WhatsApp Send] Sending to:', sanitizedPhone);
+        console.log('[WhatsApp Send] Content:', content);
 
         const response = await fetch(
           `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
@@ -32,7 +37,7 @@ const worker = new Worker<SendMessageJob>(
             body: JSON.stringify({
               messaging_product: 'whatsapp',
               recipient_type: 'individual',
-              to: recipientPhone,
+              to: sanitizedPhone,
               type: 'text',
               text: { body: content },
             }),
