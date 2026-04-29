@@ -127,6 +127,7 @@ export function ChatArea({ conversationId }: Props) {
   const { t: tAdmin } = useTranslation('admin');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const currentUserRole = useAuthStore((state) => state.user?.role);
+  const currentUserName = useAuthStore((state) => state.user?.name);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isTyping, _setIsTyping] = useState(false);
@@ -684,6 +685,24 @@ export function ChatArea({ conversationId }: Props) {
     setIsAssuming(true);
     try {
       await omnichannelApi.assign(conversationId, currentUserId);
+
+      // Atualiza cache imediatamente para evitar badge/status obsoleto
+      qc.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation; messages: OmnichannelMessage[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            conversation: {
+              ...old.conversation,
+              assigned_to: currentUserId,
+              assigned_name: currentUserName ?? null,
+              status: 'open',
+            },
+          };
+        },
+      );
+
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       toast.success('Atendimento assumido!');
