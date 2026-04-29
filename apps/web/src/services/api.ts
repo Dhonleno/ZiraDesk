@@ -507,6 +507,18 @@ export interface SendMessagePayload {
   isInternal?: boolean;
 }
 
+export interface ListMessagesParams {
+  page?: number;
+  per_page?: number;
+  before?: string;
+}
+
+export interface OmnichannelMessagesPage {
+  data: OmnichannelMessage[];
+  has_more: boolean;
+  total: number;
+}
+
 export interface NotificationItem {
   id: string;
   type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
@@ -559,11 +571,15 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  listMessages: async (conversationId: string): Promise<OmnichannelMessage[]> => {
-    const res = await api.get<{ success: boolean; data: OmnichannelMessage[] }>(
+  listMessages: async (
+    conversationId: string,
+    params?: ListMessagesParams,
+  ): Promise<OmnichannelMessagesPage> => {
+    const res = await api.get<{ success: boolean; data: OmnichannelMessage[]; has_more: boolean; total: number }>(
       `/omnichannel/conversations/${conversationId}/messages`,
+      { params },
     );
-    return res.data.data;
+    return { data: res.data.data, has_more: res.data.has_more, total: res.data.total };
   },
 
   sendMessage: async (conversationId: string, payload: SendMessagePayload): Promise<OmnichannelMessage> => {
@@ -574,12 +590,44 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  resolve: async (conversationId: string): Promise<OmnichannelConversation> => {
+  updateConversation: async (
+    conversationId: string,
+    payload: {
+      status?: 'open' | 'in_service' | 'pending' | 'resolved' | 'bot' | 'closed';
+      assignedTo?: string | null;
+      csat_score?: number;
+      csat_comment?: string;
+    },
+  ): Promise<OmnichannelConversation> => {
     const res = await api.patch<{ success: boolean; data: OmnichannelConversation }>(
       `/omnichannel/conversations/${conversationId}`,
-      { status: 'resolved' },
+      payload,
     );
     return res.data.data;
+  },
+
+  resolve: async (
+    conversationId: string,
+    payload?: { csat_score?: number; csat_comment?: string },
+  ): Promise<OmnichannelConversation> => {
+    const body: {
+      status: 'resolved';
+      csat_score?: number;
+      csat_comment?: string;
+    } = {
+      status: 'resolved',
+    };
+    if (payload?.csat_score !== undefined) body.csat_score = payload.csat_score;
+    if (payload?.csat_comment !== undefined) body.csat_comment = payload.csat_comment;
+    return omnichannelApi.updateConversation(conversationId, body);
+  },
+
+  close: async (conversationId: string): Promise<OmnichannelConversation> => {
+    return omnichannelApi.updateConversation(conversationId, { status: 'closed' });
+  },
+
+  reopen: async (conversationId: string): Promise<OmnichannelConversation> => {
+    return omnichannelApi.updateConversation(conversationId, { status: 'open' });
   },
 
   assign: async (conversationId: string, userId: string): Promise<OmnichannelConversation> => {

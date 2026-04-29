@@ -4,6 +4,7 @@ import { authMiddleware } from '../../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   listConversationsQuerySchema,
+  listMessagesQuerySchema,
   createConversationBodySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
@@ -81,8 +82,21 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/omnichannel/conversations/:id/messages
   app.get<{ Params: { id: string } }>('/:id/messages', { preHandler: guard }, async (request, reply) => {
-    const messages = await listConversationMessages(request.params.id);
-    return reply.send({ success: true, data: messages });
+    const parsed = listMessagesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const result = await listConversationMessages(request.params.id, parsed.data);
+    return reply.send({
+      success: true,
+      data: result.messages,
+      has_more: result.has_more,
+      total: result.total,
+    });
   });
 
   // POST /api/omnichannel/conversations/:id/messages
@@ -183,7 +197,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const conversation = await transferConversation(request.params.id, parsed.data.user_id);
+        const conversation = await transferConversation(
+          request.params.id,
+          parsed.data.user_id,
+          request.user.id,
+          parsed.data.reason,
+        );
         const tenantUser = request.user as AuthUser;
 
         const io = getSocketServer();
@@ -215,10 +234,15 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const conversation = await updateConversation(request.params.id, parsed.data);
+      const conversation = await updateConversation(request.params.id, parsed.data, request.user.id);
       const tenantUser = request.user as AuthUser;
 
       const io = getSocketServer();
+      if (parsed.data.status === 'resolved') {
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
+          conversationId: request.params.id,
+        });
+      }
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
 
       return reply.send({ success: true, data: conversation });

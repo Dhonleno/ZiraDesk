@@ -5,7 +5,7 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
-    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
+    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: z.coerce.boolean().optional(),
     client_id: z.string().uuid().optional(),
@@ -25,14 +25,23 @@ export const createConversationBodySchema = z.object({
 export const sendMessageBodySchema = z.object({
   content: z.string().min(1).max(4000),
   contentType: z.enum(['text', 'image']).default('text'),
+  isInternal: z.coerce.boolean().optional(),
+});
+
+export const listMessagesQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  per_page: z.coerce.number().int().positive().max(100).default(50),
+  before: z.string().uuid().optional(),
 });
 
 export const updateConversationBodySchema = z
   .object({
-    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot']).optional(),
+    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     assignedTo: z.string().uuid().nullable().optional(),
+    csat_score: z.number().min(1).max(5).optional(),
+    csat_comment: z.string().optional(),
   })
-  .refine((data) => data.status !== undefined || data.assignedTo !== undefined, {
+  .refine((data) => data.status !== undefined || data.assignedTo !== undefined || data.csat_score !== undefined || data.csat_comment !== undefined, {
     message: 'Ao menos um campo deve ser fornecido',
   });
 
@@ -48,6 +57,7 @@ export const transferConversationBodySchema = z.object({
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type CreateConversationBody = z.infer<typeof createConversationBodySchema>;
 export type SendMessageBody = z.infer<typeof sendMessageBodySchema>;
+export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export type UpdateConversationBody = z.infer<typeof updateConversationBodySchema>;
 export type AssignConversationBody = z.infer<typeof assignConversationBodySchema>;
 export type TransferConversationBody = z.infer<typeof transferConversationBodySchema>;

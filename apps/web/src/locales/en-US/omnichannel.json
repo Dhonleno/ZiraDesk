@@ -11,6 +11,7 @@
     "in_service": "In service",
     "pending": "Pending",
     "resolved": "Resolved",
+    "closed": "Closed",
     "bot": "Bot",
     "all": "All",
     "mine": "Mine"
@@ -29,6 +30,7 @@
     "send": "Send",
     "resolve": "Resolve",
     "transfer": "Transfer",
+    "close": "Close",
     "assign": "Assign",
     "mute": "Mute",
     "more": "More options",
@@ -54,6 +56,40 @@
     "messageRead": "Read",
     "via": "Via",
     "internalNoteActive": "Internal note active"
+  },
+  "resolve": {
+    "title": "Resolve conversation",
+    "subtitle": "How was the customer experience?",
+    "csatLabel": "Rating (optional)",
+    "commentLabel": "Internal note",
+    "commentPlaceholder": "Add an internal note about this conversation...",
+    "confirm": "Resolve conversation",
+    "cancel": "Cancel",
+    "resolved": "Conversation resolved",
+    "resolvedBanner": "This conversation has been resolved",
+    "reopen": "Reopen conversation",
+    "ratings": {
+      "1": "Very bad",
+      "2": "Bad",
+      "3": "Regular",
+      "4": "Good",
+      "5": "Excellent"
+    }
+  },
+  "transfer": {
+    "title": "Transfer conversation",
+    "searchAgent": "Search agent...",
+    "reason": "Reason (optional)",
+    "reasonPlaceholder": "Why are you transferring?",
+    "confirm": "Transfer",
+    "cancel": "Cancel",
+    "transferred": "Conversation transferred to {{name}}",
+    "systemMessage": "Conversation transferred to {{name}}"
+  },
+  "history": {
+    "loadMore": "Load previous messages",
+    "loading": "Loading...",
+    "noMore": "Start of the conversation"
   },
   "info": {
     "contact": "Contact",

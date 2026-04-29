@@ -1,6 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import type {
   ListConversationsQuery,
+  ListMessagesQuery,
   SendMessageBody,
   UpdateConversationBody,
   CreateConversationBody,
@@ -47,6 +48,20 @@ interface MessageRow {
   is_internal: boolean;
   created_at: Date;
   metadata: unknown;
+}
+
+interface MessageCursorRow {
+  created_at: Date;
+}
+
+interface MessageCountRow {
+  count: bigint;
+}
+
+interface MessagePageResult {
+  messages: MessageRow[];
+  has_more: boolean;
+  total: number;
 }
 
 export async function listConversations(query: ListConversationsQuery, userId?: string) {
@@ -143,17 +158,65 @@ export async function getConversationWithMessages(conversationId: string) {
   return { conversation: convRows[0], messages };
 }
 
-export async function listConversationMessages(conversationId: string) {
-  const messages = await prisma.$queryRawUnsafe<MessageRow[]>(
-    `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
-            media_url, external_id, status, is_internal, created_at, metadata
+export async function listConversationMessages(
+  conversationId: string,
+  query: ListMessagesQuery,
+): Promise<MessagePageResult> {
+  const limit = Math.max(1, query.per_page);
+  const fetchLimit = limit + 1;
+  let rows: MessageRow[] = [];
+
+  if (query.before) {
+    const cursorRows = await prisma.$queryRawUnsafe<MessageCursorRow[]>(
+      `SELECT created_at
+       FROM messages
+       WHERE id = $1::uuid AND conversation_id = $2::uuid
+       LIMIT 1`,
+      query.before,
+      conversationId,
+    );
+    const cursor = cursorRows[0];
+
+    if (cursor) {
+      rows = await prisma.$queryRawUnsafe<MessageRow[]>(
+        `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
+                media_url, external_id, status, is_internal, created_at, metadata
+         FROM messages
+         WHERE conversation_id = $1::uuid
+           AND created_at < $2
+         ORDER BY created_at DESC
+         LIMIT $3`,
+        conversationId,
+        cursor.created_at,
+        fetchLimit,
+      );
+    }
+  } else {
+    rows = await prisma.$queryRawUnsafe<MessageRow[]>(
+      `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
+              media_url, external_id, status, is_internal, created_at, metadata
+       FROM messages
+       WHERE conversation_id = $1::uuid
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      conversationId,
+      fetchLimit,
+    );
+  }
+
+  const has_more = rows.length > limit;
+  const slice = has_more ? rows.slice(0, limit) : rows;
+  const messages = slice.reverse();
+
+  const totalRows = await prisma.$queryRawUnsafe<MessageCountRow[]>(
+    `SELECT COUNT(*) AS count
      FROM messages
-     WHERE conversation_id = $1::uuid
-     ORDER BY created_at ASC`,
+     WHERE conversation_id = $1::uuid`,
     conversationId,
   );
+  const total = Number(totalRows[0]?.count ?? 0);
 
-  return messages;
+  return { messages, has_more, total };
 }
 
 export interface SendMessageResult {
@@ -195,13 +258,14 @@ export async function sendMessage(
   const conv = convRows[0];
 
   const msgRows = await prisma.$queryRawUnsafe<MessageRow[]>(
-    `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type)
-     VALUES ($1::uuid, 'agent', $2::uuid, $3, $4)
+    `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, is_internal)
+     VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5)
      RETURNING *`,
     conversationId,
     senderId,
     body.content,
     body.contentType,
+    body.isInternal ?? false,
   );
 
   const message = msgRows[0]!;
@@ -291,7 +355,12 @@ export async function assignConversation(conversationId: string, assignToUserId:
   return rows[0];
 }
 
-export async function transferConversation(conversationId: string, assignToUserId: string) {
+export async function transferConversation(
+  conversationId: string,
+  assignToUserId: string,
+  transferredBy: string,
+  reason?: string,
+) {
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET assigned_to = $1::uuid
@@ -301,27 +370,51 @@ export async function transferConversation(conversationId: string, assignToUserI
     conversationId,
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'conversation.transferred', 'conversation', $2::uuid, $3::jsonb)`,
+    transferredBy,
+    conversationId,
+    JSON.stringify({ assigned_to: assignToUserId, reason: reason ?? null }),
+  );
+
   return rows[0];
 }
 
 export async function updateConversation(
   conversationId: string,
   body: UpdateConversationBody,
+  actorUserId: string,
 ) {
-  const convCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM conversations WHERE id = $1::uuid LIMIT 1`,
+  const convCheck = await prisma.$queryRawUnsafe<[{ id: string; metadata: unknown }]>(
+    `SELECT id, metadata FROM conversations WHERE id = $1::uuid LIMIT 1`,
     conversationId,
   );
   if (!convCheck[0]) throw new NotFoundError('Conversa não encontrada');
 
   const hasAssignedTo = 'assignedTo' in body;
   const assignedToValue = body.assignedTo ?? null;
+  const shouldPersistCsat =
+    body.status === 'resolved' && (body.csat_score !== undefined || body.csat_comment !== undefined);
+  const metadataBase =
+    typeof convCheck[0].metadata === 'object' && convCheck[0].metadata !== null
+      ? (convCheck[0].metadata as Record<string, unknown>)
+      : {};
+  const metadataPatch = shouldPersistCsat
+    ? {
+        ...metadataBase,
+        csat_score: body.csat_score ?? null,
+        csat_comment: body.csat_comment ?? null,
+      }
+    : null;
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET
        status = COALESCE($1::text, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
+       metadata = COALESCE($5::jsonb, metadata),
        resolved_at = CASE
          WHEN $1 = 'resolved' THEN NOW()
          WHEN $1 IS NOT NULL AND $1 != 'resolved' THEN NULL
@@ -333,7 +426,22 @@ export async function updateConversation(
     hasAssignedTo,
     assignedToValue,
     conversationId,
+    metadataPatch ? JSON.stringify(metadataPatch) : null,
   );
+
+  if (body.status === 'resolved') {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, 'conversation.resolved', 'conversation', $2::uuid, $3::jsonb)`,
+      actorUserId,
+      conversationId,
+      JSON.stringify({
+        status: 'resolved',
+        csat_score: body.csat_score ?? null,
+        csat_comment: body.csat_comment ?? null,
+      }),
+    );
+  }
 
   return rows[0]!;
 }

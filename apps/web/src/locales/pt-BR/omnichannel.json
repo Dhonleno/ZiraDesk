@@ -11,6 +11,7 @@
     "in_service": "Em atendimento",
     "pending": "Aguardando",
     "resolved": "Resolvido",
+    "closed": "Fechado",
     "bot": "Bot",
     "all": "Todos",
     "mine": "Meus"
@@ -29,6 +30,7 @@
     "send": "Enviar",
     "resolve": "Resolver",
     "transfer": "Transferir",
+    "close": "Fechar",
     "assign": "Atribuir",
     "mute": "Silenciar",
     "more": "Mais opções",
@@ -54,6 +56,40 @@
     "messageRead": "Lido",
     "via": "Via",
     "internalNoteActive": "Nota interna ativa"
+  },
+  "resolve": {
+    "title": "Resolver atendimento",
+    "subtitle": "Como foi a experiência do cliente?",
+    "csatLabel": "Avaliação (opcional)",
+    "commentLabel": "Observação interna",
+    "commentPlaceholder": "Adicione uma observação sobre este atendimento...",
+    "confirm": "Resolver atendimento",
+    "cancel": "Cancelar",
+    "resolved": "Atendimento resolvido",
+    "resolvedBanner": "Este atendimento foi resolvido",
+    "reopen": "Reabrir atendimento",
+    "ratings": {
+      "1": "Muito ruim",
+      "2": "Ruim",
+      "3": "Regular",
+      "4": "Bom",
+      "5": "Excelente"
+    }
+  },
+  "transfer": {
+    "title": "Transferir atendimento",
+    "searchAgent": "Buscar agente...",
+    "reason": "Motivo (opcional)",
+    "reasonPlaceholder": "Por que está transferindo?",
+    "confirm": "Transferir",
+    "cancel": "Cancelar",
+    "transferred": "Conversa transferida para {{name}}",
+    "systemMessage": "Atendimento transferido para {{name}}"
+  },
+  "history": {
+    "loadMore": "Carregar mensagens anteriores",
+    "loading": "Carregando...",
+    "noMore": "Início da conversa"
   },
   "info": {
     "contact": "Contato",
