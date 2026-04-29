@@ -70,7 +70,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/omnichannel/conversations/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
     try {
-      const result = await getConversationWithMessages(request.params.id);
+      const result = await getConversationWithMessages(request.params.id, request.user.tenantId);
       return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -90,7 +90,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    const result = await listConversationMessages(request.params.id, parsed.data);
+    const result = await listConversationMessages(request.params.id, parsed.data, request.user.tenantId);
     return reply.send({
       success: true,
       data: result.messages,
@@ -123,13 +123,30 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
 
         if (result.channelCredentials) {
           const creds = decryptCredentials(result.channelCredentials);
-          await messageQueue.add('send', {
+          const queueData = {
             messageId: result.message.id,
             conversationId: request.params.id,
             channelType: result.channelType,
             channelCredentials: creds,
-            content: parsed.data.content,
+            content: parsed.data.content ?? '',
             to: result.clientPhone ?? result.clientEmail ?? '',
+            mediaId: result.mediaId,
+            mediaType: result.mediaType,
+            mediaFilename: result.mediaFilename,
+          };
+          request.log.info(
+            {
+              conversationId: request.params.id,
+              messageId: result.message.id,
+              mediaId: queueData.mediaId,
+              mediaType: queueData.mediaType,
+              mediaFilename: queueData.mediaFilename,
+              to: queueData.to,
+            },
+            '[Omnichannel] enqueue send job',
+          );
+          await messageQueue.add('send', {
+            ...queueData,
           });
         }
 
