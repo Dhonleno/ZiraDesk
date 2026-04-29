@@ -38,7 +38,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Query inválida', details: parsed.error.flatten() },
       });
     }
-    const result = await listConversations(parsed.data, request.user.id);
+    const result = await listConversations(parsed.data, request.user.id, request.user.tenantId);
     return reply.send({ success: true, ...result });
   });
 
@@ -52,13 +52,26 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const conversation = await createConversation(parsed.data, request.user.id);
+      const result = await createConversation(parsed.data, request.user.id, request.user.tenantId);
       const tenantUser = request.user as AuthUser;
 
       const io = getSocketServer();
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation: result.conversation });
 
-      return reply.code(201).send({ success: true, data: conversation });
+      if (result.protocolDispatch?.channelCredentials && result.protocolDispatch.clientPhone) {
+        await messageQueue.add('send', {
+          messageId: result.protocolDispatch.messageId,
+          conversationId: result.conversation.id,
+          tenantId: tenantUser.tenantId ?? null,
+          tenantSchema: tenantUser.schemaName ?? null,
+          channelType: result.protocolDispatch.channelType,
+          channelCredentials: result.protocolDispatch.channelCredentials,
+          content: result.protocolDispatch.content,
+          to: result.protocolDispatch.clientPhone,
+        });
+      }
+
+      return reply.code(201).send({ success: true, data: result.conversation });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
@@ -126,6 +139,8 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           const queueData = {
             messageId: result.message.id,
             conversationId: request.params.id,
+            tenantId: tenantUser.tenantId ?? null,
+            tenantSchema: tenantUser.schemaName ?? null,
             channelType: result.channelType,
             channelCredentials: creds,
             content: parsed.data.content ?? '',

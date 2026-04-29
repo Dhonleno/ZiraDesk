@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { messageQueue } from '../../jobs/queue.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
+import {
+  buildProtocolMessage,
+  ensureConversationProtocolInfrastructure,
+  generateConversationProtocol,
+} from '../omnichannel/conversations/protocols.js';
 
 interface MetaMessage {
   from: string;
@@ -84,7 +90,12 @@ function isUuid(value: string): boolean {
 
 async function findChannelByPhoneNumberId(
   phoneNumberId: string,
-): Promise<{ tenantId: string; schemaName: string; channelId: string } | null> {
+): Promise<{
+  tenantId: string;
+  schemaName: string;
+  channelId: string;
+  channelCredentials: Record<string, string>;
+} | null> {
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
   );
@@ -99,7 +110,12 @@ async function findChannelByPhoneNumberId(
     for (const channel of channels) {
       const credentials = decryptCredentials(channel.credentials);
       if (credentials['phoneNumberId'] === phoneNumberId) {
-        return { tenantId: tenant.id, schemaName: tenant.schema_name, channelId: channel.id };
+        return {
+          tenantId: tenant.id,
+          schemaName: tenant.schema_name,
+          channelId: channel.id,
+          channelCredentials: credentials as Record<string, string>,
+        };
       }
     }
   }
@@ -129,7 +145,7 @@ async function processIncomingMessage(
     return;
   }
 
-  const { tenantId, schemaName, channelId } = found;
+  const { tenantId, schemaName, channelId, channelCredentials } = found;
 
   const formattedPhone = senderPhone.startsWith('55')
     ? `+${senderPhone}`
@@ -181,6 +197,7 @@ async function processIncomingMessage(
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+    await ensureConversationProtocolInfrastructure(tx, schemaName);
 
     const clientRows = await tx.$queryRawUnsafe<ClientRow[]>(
       `SELECT id FROM clients WHERE phone = $1 LIMIT 1`,
@@ -226,14 +243,19 @@ async function processIncomingMessage(
 
     let conversationId: string;
     let isNewConversation = false;
+    let protocolNumber: string | null = null;
+    let protocolMessageId: string | null = null;
+    let protocolMessageContent: string | null = null;
     if (convRows[0]) {
       conversationId = convRows[0].id;
     } else {
+      protocolNumber = await generateConversationProtocol(tx, schemaName);
       const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
-        `INSERT INTO conversations (client_id, channel_id, channel_type, status)
-         VALUES ($1::uuid, $2::uuid, 'whatsapp', 'open') RETURNING id`,
+        `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number)
+         VALUES ($1::uuid, $2::uuid, 'whatsapp', 'open', $3) RETURNING id`,
         clientId,
         channelId,
+        protocolNumber,
       );
       conversationId = newConv[0]!.id;
       isNewConversation = true;
@@ -261,7 +283,26 @@ async function processIncomingMessage(
       conversationId,
     );
 
-    return { conversationId, isNewConversation, message: savedMessage };
+    if (isNewConversation && protocolNumber) {
+      protocolMessageContent = buildProtocolMessage(protocolNumber);
+      const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+         VALUES ($1::uuid, 'system', $2, 'text', false)
+         RETURNING id`,
+        conversationId,
+        protocolMessageContent,
+      );
+      protocolMessageId = protocolRows[0]!.id;
+    }
+
+    return {
+      conversationId,
+      isNewConversation,
+      message: savedMessage,
+      protocolNumber,
+      protocolMessageId,
+      protocolMessageContent,
+    };
   });
 
   const io = getSocketServer();
@@ -274,6 +315,19 @@ async function processIncomingMessage(
     conversationId: result.conversationId,
     message: result.message,
   });
+
+  if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
+    await messageQueue.add('send', {
+      messageId: result.protocolMessageId,
+      conversationId: result.conversationId,
+      tenantId,
+      tenantSchema: schemaName,
+      channelType: 'whatsapp',
+      channelCredentials,
+      content: result.protocolMessageContent,
+      to: formattedPhone,
+    });
+  }
 
   // Notify assigned agent if conversation has one
   const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; client_name: string | null }]>(

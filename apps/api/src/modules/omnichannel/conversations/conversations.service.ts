@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import { decryptCredentials } from '../../../utils/crypto.js';
 import type {
   ListConversationsQuery,
   ListMessagesQuery,
@@ -6,6 +7,12 @@ import type {
   UpdateConversationBody,
   CreateConversationBody,
 } from './conversations.schema.js';
+import {
+  buildProtocolMessage,
+  ensureConversationProtocolInfrastructure,
+  generateConversationProtocol,
+  quoteIdent,
+} from './protocols.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -14,18 +21,20 @@ export class NotFoundError extends Error {
   }
 }
 
-function quoteIdent(identifier: string): string {
-  return `"${identifier.replace(/"/g, '""')}"`;
-}
-
-async function getSchemaPrefix(tenantId?: string): Promise<string> {
-  if (!tenantId) return '';
+async function getSchemaName(tenantId?: string): Promise<string | null> {
+  if (!tenantId) return null;
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { schemaName: true },
   });
   if (!tenant) throw new NotFoundError('Tenant não encontrado');
-  return `${quoteIdent(tenant.schemaName)}.`;
+  return tenant.schemaName;
+}
+
+async function getSchemaPrefix(tenantId?: string): Promise<string> {
+  const schemaName = await getSchemaName(tenantId);
+  if (!schemaName) return '';
+  return `${quoteIdent(schemaName)}.`;
 }
 
 interface ConversationRow {
@@ -35,6 +44,7 @@ interface ConversationRow {
   channel_type: string;
   external_id: string | null;
   status: string;
+  protocol_number: string | null;
   assigned_to: string | null;
   subject: string | null;
   last_message: string | null;
@@ -79,7 +89,8 @@ interface MessagePageResult {
   total: number;
 }
 
-export async function listConversations(query: ListConversationsQuery, userId?: string) {
+export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
+  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
   const { page, perPage, status, search, assigned_to_me, client_id } = query;
   const offset = (page - 1) * perPage;
 
@@ -91,7 +102,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
        c.id, c.client_id, c.channel_id, c.channel_type, c.external_id,
-       c.status, c.assigned_to, c.subject, c.last_message, c.last_message_at,
+       c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
        cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
        u.name AS assigned_name,
@@ -142,11 +153,12 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
 }
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
+  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
        c.id, c.client_id, c.channel_id, c.channel_type, c.external_id,
-       c.status, c.assigned_to, c.subject, c.last_message, c.last_message_at,
+       c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
        cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
        u.name AS assigned_name,
@@ -253,6 +265,21 @@ export interface SendMessageResult {
   mediaFilename: string | null;
 }
 
+export interface ProtocolDispatchPayload {
+  messageId: string;
+  protocolNumber: string;
+  content: string;
+  channelType: string;
+  channelCredentials: Record<string, string> | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
+}
+
+export interface CreateConversationResult {
+  conversation: ConversationRow;
+  protocolDispatch: ProtocolDispatchPayload | null;
+}
+
 export async function sendMessage(
   conversationId: string,
   senderId: string,
@@ -339,30 +366,51 @@ export async function sendMessage(
   };
 }
 
-export async function createConversation(data: CreateConversationBody, userId: string) {
-  const clientCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM clients WHERE id = $1::uuid LIMIT 1`,
+export async function createConversation(
+  data: CreateConversationBody,
+  userId: string,
+  tenantId?: string,
+): Promise<CreateConversationResult> {
+  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+
+  const clientCheck = await prisma.$queryRawUnsafe<
+    [{ id: string; phone: string | null; email: string | null }]
+  >(
+    `SELECT id, phone, email FROM clients WHERE id = $1::uuid LIMIT 1`,
     data.client_id,
   );
   if (!clientCheck[0]) throw new NotFoundError('Cliente não encontrado');
 
-  const channelCheck = await prisma.$queryRawUnsafe<[{ id: string; type: string }]>(
-    `SELECT id, type FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+  const channelCheck = await prisma.$queryRawUnsafe<
+    [{ id: string; type: string; credentials: string | object | null }]
+  >(
+    `SELECT id, type, credentials FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
     data.channel_id,
   );
   if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
 
+  const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (client_id, channel_id, channel_type, status, assigned_to, subject)
-     VALUES ($1::uuid, $2::uuid, $3, 'open', $4::uuid, $5)
+    `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number, assigned_to, subject)
+     VALUES ($1::uuid, $2::uuid, $3, 'open', $4, $5::uuid, $6)
      RETURNING *`,
     data.client_id,
     data.channel_id,
     channelCheck[0].type,
+    protocolNumber,
     userId,
     data.subject ?? null,
   );
   const conversation = convRows[0]!;
+  const protocolMessage = buildProtocolMessage(protocolNumber);
+  const protocolMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+     VALUES ($1::uuid, 'system', $2, 'text', false)
+     RETURNING id`,
+    conversation.id,
+    protocolMessage,
+  );
+  let lastMessagePreview = protocolMessage.slice(0, 255);
 
   if (data.initial_message) {
     await prisma.$queryRawUnsafe(
@@ -372,14 +420,29 @@ export async function createConversation(data: CreateConversationBody, userId: s
       userId,
       data.initial_message,
     );
-    await prisma.$executeRawUnsafe(
-      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
-      data.initial_message.slice(0, 255),
-      conversation.id,
-    );
+    lastMessagePreview = data.initial_message.slice(0, 255);
   }
 
-  return conversation;
+  await prisma.$executeRawUnsafe(
+    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
+    lastMessagePreview,
+    conversation.id,
+  );
+
+  const protocolDispatch =
+    channelCheck[0].type === 'whatsapp'
+      ? {
+          messageId: protocolMessageRows[0]!.id,
+          protocolNumber,
+          content: protocolMessage,
+          channelType: channelCheck[0].type,
+          channelCredentials: channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null,
+          clientPhone: clientCheck[0].phone,
+          clientEmail: clientCheck[0].email,
+        }
+      : null;
+
+  return { conversation, protocolDispatch };
 }
 
 export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {

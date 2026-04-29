@@ -88,6 +88,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       channel_id      UUID REFERENCES "${schemaName}".channels(id) ON DELETE SET NULL,
       channel_type    VARCHAR(30)  NOT NULL,
       external_id     VARCHAR(255),
+      protocol_number VARCHAR(20)  UNIQUE,
       status          VARCHAR(20)  NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       subject         VARCHAR(255),
@@ -97,6 +98,28 @@ async function createTenantTables(schemaName: string): Promise<void> {
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE OR REPLACE FUNCTION "${schemaName}".generate_protocol()
+    RETURNS VARCHAR AS $$
+    DECLARE
+      year_month TEXT;
+      next_seq INTEGER;
+      protocol TEXT;
+    BEGIN
+      year_month := TO_CHAR(NOW(), 'YYYYMM');
+      PERFORM pg_advisory_xact_lock(hashtext('protocol:' || year_month)::bigint);
+
+      SELECT COALESCE(MAX(CAST(SUBSTRING(protocol_number FROM 11) AS INTEGER)), 0) + 1
+        INTO next_seq
+        FROM "${schemaName}".conversations
+       WHERE protocol_number LIKE 'ZD-' || year_month || '-%';
+
+      protocol := 'ZD-' || year_month || '-' || LPAD(next_seq::TEXT, 6, '0');
+      RETURN protocol;
+    END;
+    $$ LANGUAGE plpgsql
   `);
 
   await prisma.$executeRawUnsafe(`

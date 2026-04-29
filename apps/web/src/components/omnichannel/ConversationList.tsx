@@ -9,6 +9,7 @@ interface ConversationItem {
   id: string;
   status: string;
   channel_type: string;
+  protocol_number?: string | null;
   subject: string | null;
   last_message: string | null;
   last_message_at: string | null;
@@ -104,7 +105,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const { t } = useTranslation('omnichannel');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('');
-  const [myOnly, setMyOnly] = useState(false);
+  const [myOnly, setMyOnly] = useState(true);
   const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -503,14 +504,29 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                   {/* Body */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <span style={{
-                        fontSize: 13,
-                        fontWeight: hasUnread ? 600 : 500,
-                        color: 'var(--txt)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {name}
-                      </span>
+                      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{
+                          fontSize: 13,
+                          fontWeight: hasUnread ? 600 : 500,
+                          color: 'var(--txt)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {name}
+                        </span>
+                        {conv.protocol_number && (
+                          <span
+                            title={conv.protocol_number}
+                            style={{
+                              fontSize: 10,
+                              fontFamily: 'var(--mono)',
+                              color: 'var(--txt-3)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {conv.protocol_number}
+                          </span>
+                        )}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 6 }}>
                         {isNewConversation && (
                           <span className="zd-badge-new">Novo</span>

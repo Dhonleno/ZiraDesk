@@ -520,6 +520,7 @@ export interface OmnichannelConversation {
   id: string;
   status: string;
   channel_type: string;
+  protocol_number?: string | null;
   subject: string | null;
   last_message: string | null;
   last_message_at: string | null;

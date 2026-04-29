@@ -668,6 +668,15 @@ export function ChatArea({ conversationId }: Props) {
     setShowEmojiPicker(false);
   }
 
+  async function copyProtocol(protocolNumber: string) {
+    try {
+      await navigator.clipboard.writeText(protocolNumber);
+      toast.success('Protocolo copiado!');
+    } catch {
+      toast.error('Não foi possível copiar o protocolo');
+    }
+  }
+
   const conv = data?.conversation as Conversation | undefined;
   const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
   const isAssignedToMe =
@@ -749,6 +758,37 @@ export function ChatArea({ conversationId }: Props) {
                 >
                   {chBadge.label}
                 </span>
+              )}
+              {conv?.protocol_number && (
+                <button
+                  type="button"
+                  title="Número do protocolo"
+                  onClick={() => void copyProtocol(conv.protocol_number!)}
+                  style={{
+                    fontFamily: 'var(--mono)',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: 'var(--txt-3)',
+                    background: 'var(--bg-4)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--r-pill)',
+                    padding: '2px 8px',
+                    transition: 'all .15s',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.color = 'var(--teal)';
+                    event.currentTarget.style.borderColor = 'rgba(0,201,167,.22)';
+                    event.currentTarget.style.background = 'var(--teal-dim)';
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.color = 'var(--txt-3)';
+                    event.currentTarget.style.borderColor = 'var(--line)';
+                    event.currentTarget.style.background = 'var(--bg-4)';
+                  }}
+                >
+                  📋 {conv.protocol_number}
+                </button>
               )}
               {statusStyle && (
                 <span
@@ -952,9 +992,25 @@ export function ChatArea({ conversationId }: Props) {
 	                const showMessageContent = Boolean(msg.content) && !hideAudioLabel;
 	                if (isSystem) {
 	                  return (
-	                    <div key={msg.id} style={{ textAlign: 'center', margin: '8px 0', fontSize: 11, color: 'var(--txt-3)', fontStyle: 'italic' }}>
-                      {msg.content}
-                    </div>
+	                    <div
+                        key={msg.id}
+                        style={{
+                          textAlign: 'center',
+                          margin: '8px auto',
+                          maxWidth: 400,
+                          background: 'var(--bg-3)',
+                          border: '1px solid var(--line)',
+                          borderRadius: 'var(--r-pill)',
+                          padding: '6px 16px',
+                          fontSize: 12,
+                          color: 'var(--txt-3)',
+                          fontStyle: 'italic',
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {msg.content}
+                      </div>
                   );
                 }
 
