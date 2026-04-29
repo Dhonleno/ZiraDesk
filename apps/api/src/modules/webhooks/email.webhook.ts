@@ -20,6 +20,17 @@ interface ChannelRow {
   credentials: string;
 }
 
+interface ConversationRow {
+  id: string;
+  metadata: unknown;
+}
+
+function isActiveOutboundConversation(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const data = metadata as Record<string, unknown>;
+  return data['type'] === 'outbound' && data['outbound_activated'] !== true;
+}
+
 async function findTenantByEmailAddress(toAddress: string) {
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
@@ -83,21 +94,25 @@ export async function emailWebhookRoutes(app: FastifyInstance): Promise<void> {
         clientId = newClient[0]!.id;
       }
 
-      const convRows = await tx.$queryRawUnsafe<[{ id: string }]>(
-        `SELECT id FROM conversations
-         WHERE client_id = $1 AND channel_id = $2 AND status = 'open'
+      const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
+        `SELECT id, metadata FROM conversations
+         WHERE client_id = $1 AND channel_id = $2 AND status IN ('open', 'pending', 'in_service', 'bot')
+         ORDER BY created_at DESC
          LIMIT 1`,
         clientId,
         channel.id,
       );
 
       let conversationId: string;
+      let activatesOutbound = false;
       if (convRows[0]) {
         conversationId = convRows[0].id;
+        activatesOutbound = isActiveOutboundConversation(convRows[0].metadata);
       } else {
-        const newConv = await tx.$queryRawUnsafe<[{ id: string }]>(
-          `INSERT INTO conversations (client_id, channel_id, channel_type, status, subject)
-           VALUES ($1, $2, 'email', 'open', $3) RETURNING id`,
+        const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
+          `INSERT INTO conversations (client_id, channel_id, channel_type, status, subject, metadata)
+           VALUES ($1, $2, 'email', 'open', $3, '{"type": "inbound"}'::jsonb)
+           RETURNING id, metadata`,
           clientId,
           channel.id,
           subject ?? null,
@@ -118,15 +133,29 @@ export async function emailWebhookRoutes(app: FastifyInstance): Promise<void> {
       const message = msgRows[0]!;
 
       await tx.$executeRawUnsafe(
-        `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+        `UPDATE conversations
+         SET last_message = $1,
+             last_message_at = NOW(),
+             status = CASE WHEN $3::boolean THEN 'open' ELSE status END,
+             metadata = CASE
+               WHEN $3::boolean THEN metadata || jsonb_build_object('outbound_activated', true, 'outbound_activated_at', NOW())
+               ELSE metadata
+             END
+         WHERE id = $2`,
         content.slice(0, 255),
         conversationId,
+        activatesOutbound,
       );
 
-      return { conversationId, message };
+      return { conversationId, message, activatesOutbound };
     });
 
     const io = getSocketServer();
+    if (result.activatesOutbound) {
+      io.to(`tenant:${tenant.id}`).emit('conversation:activated', {
+        conversationId: result.conversationId,
+      });
+    }
     io.to(`tenant:${tenant.id}`).emit('conversation:message', {
       conversationId: result.conversationId,
       message: result.message,

@@ -6,6 +6,16 @@
   "noSelection": "Selecciona una conversación",
   "noSelectionSub": "Elige una conversación a la izquierda para comenzar",
   "noConversations": "No se encontraron conversaciones",
+  "categories": {
+    "inbound": "Atenciones",
+    "closed": "Cerradas",
+    "outbound": "Activas"
+  },
+  "outbound": {
+    "badge": "Activa",
+    "warning": "Aparecerá en Activas hasta que el cliente responda",
+    "activated": "¡El cliente respondió a la atención activa!"
+  },
   "status": {
     "open": "Abierto",
     "in_service": "En atención",
@@ -149,10 +159,16 @@
     "clientPlaceholder": "Buscar cliente...",
     "channel": "Canal",
     "channelPlaceholder": "Seleccionar canal",
+    "type": "Tipo de atención",
+    "typeInbound": "Receptiva",
+    "typeInboundHelp": "El cliente entró en contacto",
+    "typeOutbound": "Activa",
+    "typeOutboundHelp": "Vas a contactar al cliente",
     "subject": "Asunto",
     "subjectPlaceholder": "Asunto de la atención (opcional)",
     "initialMessage": "Mensaje inicial",
     "initialMessagePlaceholder": "Escribe el primer mensaje (opcional)",
+    "initialMessageOutboundPlaceholder": "Escribe el mensaje que será enviado al cliente",
     "create": "Iniciar atención",
     "creating": "Iniciando...",
     "created": "Atención iniciada con éxito",
@@ -161,6 +177,7 @@
     "errorLoadClients": "Error al cargar clientes",
     "errorLoadChannels": "Error al cargar canales",
     "clientRequired": "Seleccione un cliente",
-    "channelRequired": "Seleccione un canal"
+    "channelRequired": "Seleccione un canal",
+    "initialMessageRequired": "Escribe el mensaje inicial"
   }
 }

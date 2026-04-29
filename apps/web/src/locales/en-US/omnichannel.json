@@ -6,6 +6,16 @@
   "noSelection": "Select a conversation",
   "noSelectionSub": "Pick a conversation on the left to get started",
   "noConversations": "No conversations found",
+  "categories": {
+    "inbound": "Attendances",
+    "closed": "Closed",
+    "outbound": "Active"
+  },
+  "outbound": {
+    "badge": "Active",
+    "warning": "It will appear in Active until the customer replies",
+    "activated": "Customer replied to the active attendance!"
+  },
   "status": {
     "open": "Open",
     "in_service": "In service",
@@ -149,10 +159,16 @@
     "clientPlaceholder": "Search client...",
     "channel": "Channel",
     "channelPlaceholder": "Select channel",
+    "type": "Attendance type",
+    "typeInbound": "Inbound",
+    "typeInboundHelp": "Customer contacted you",
+    "typeOutbound": "Active",
+    "typeOutboundHelp": "You will contact the customer",
     "subject": "Subject",
     "subjectPlaceholder": "Subject of the attendance (optional)",
     "initialMessage": "Initial message",
     "initialMessagePlaceholder": "Type the first message (optional)",
+    "initialMessageOutboundPlaceholder": "Type the message that will be sent to the customer",
     "create": "Start conversation",
     "creating": "Starting...",
     "created": "Conversation started successfully",
@@ -161,6 +177,7 @@
     "errorLoadClients": "Error loading clients",
     "errorLoadChannels": "Error loading channels",
     "clientRequired": "Please select a client",
-    "channelRequired": "Please select a channel"
+    "channelRequired": "Please select a channel",
+    "initialMessageRequired": "Type the initial message"
   }
 }

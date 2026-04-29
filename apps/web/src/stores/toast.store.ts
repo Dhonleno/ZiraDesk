@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useCallback, useMemo } from 'react';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -6,6 +7,7 @@ export interface Toast {
   id: string;
   message: string;
   type: ToastType;
+  icon?: string;
 }
 
 interface ToastState {
@@ -29,9 +31,16 @@ export const useToastStore = create<ToastState>((set) => ({
 
 export function useToast() {
   const { addToast } = useToastStore();
-  return {
-    success: (message: string) => addToast({ message, type: 'success' }),
-    error: (message: string) => addToast({ message, type: 'error' }),
-    info: (message: string) => addToast({ message, type: 'info' }),
-  };
+  const success = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'success', ...options }), [addToast]);
+  const error = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'error', ...options }), [addToast]);
+  const info = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'info', ...options }), [addToast]);
+
+  return useMemo(
+    () => ({
+      success,
+      error,
+      info,
+    }),
+    [error, info, success],
+  );
 }

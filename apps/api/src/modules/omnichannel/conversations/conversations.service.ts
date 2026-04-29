@@ -91,9 +91,10 @@ interface MessagePageResult {
 
 export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
   await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
-  const { page, perPage, status, search, assigned_to_me, client_id } = query;
+  const { page, perPage, category, status, search, assigned_to_me, client_id } = query;
   const offset = (page - 1) * perPage;
 
+  const categoryParam = category ?? null;
   const statusParam = status ?? null;
   const searchParam = search ?? null;
   const assignedToParam = assigned_to_me ? (userId ?? null) : null;
@@ -115,6 +116,24 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
        AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
        AND ($5::uuid IS NULL OR c.assigned_to = $5::uuid)
        AND ($6::uuid IS NULL OR c.client_id = $6::uuid)
+       AND (
+         $7::text IS NULL
+         OR ($7 = 'closed' AND c.status IN ('resolved', 'closed'))
+         OR (
+           $7 = 'outbound'
+           AND c.status NOT IN ('resolved', 'closed')
+           AND c.metadata->>'type' = 'outbound'
+           AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
+         )
+         OR (
+           $7 = 'inbound'
+           AND c.status NOT IN ('resolved', 'closed')
+           AND NOT (
+             c.metadata->>'type' = 'outbound'
+             AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
+           )
+         )
+       )
      ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
      LIMIT $3 OFFSET $4`,
     statusParam,
@@ -123,6 +142,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     offset,
     assignedToParam,
     clientIdParam,
+    categoryParam,
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
@@ -132,11 +152,30 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
      WHERE ($1::text IS NULL OR c.status = $1)
        AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
        AND ($3::uuid IS NULL OR c.assigned_to = $3::uuid)
-       AND ($4::uuid IS NULL OR c.client_id = $4::uuid)`,
+       AND ($4::uuid IS NULL OR c.client_id = $4::uuid)
+       AND (
+         $5::text IS NULL
+         OR ($5 = 'closed' AND c.status IN ('resolved', 'closed'))
+         OR (
+           $5 = 'outbound'
+           AND c.status NOT IN ('resolved', 'closed')
+           AND c.metadata->>'type' = 'outbound'
+           AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
+         )
+         OR (
+           $5 = 'inbound'
+           AND c.status NOT IN ('resolved', 'closed')
+           AND NOT (
+             c.metadata->>'type' = 'outbound'
+             AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
+           )
+         )
+       )`,
     statusParam,
     searchParam,
     assignedToParam,
     clientIdParam,
+    categoryParam,
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -265,9 +304,9 @@ export interface SendMessageResult {
   mediaFilename: string | null;
 }
 
-export interface ProtocolDispatchPayload {
+export interface MessageDispatchPayload {
   messageId: string;
-  protocolNumber: string;
+  protocolNumber?: string;
   content: string;
   channelType: string;
   channelCredentials: Record<string, string> | null;
@@ -277,7 +316,7 @@ export interface ProtocolDispatchPayload {
 
 export interface CreateConversationResult {
   conversation: ConversationRow;
-  protocolDispatch: ProtocolDispatchPayload | null;
+  protocolDispatches: MessageDispatchPayload[];
 }
 
 export async function sendMessage(
@@ -389,17 +428,27 @@ export async function createConversation(
   );
   if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
 
+  const conversationType = data.type ?? 'inbound';
+  const initialMessage = data.initial_message?.trim() ?? '';
+  const initialStatus = conversationType === 'outbound' ? 'pending' : 'open';
+  const metadata = {
+    type: conversationType,
+    ...(conversationType === 'outbound' ? { outbound_activated: false } : {}),
+  };
+
   const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number, assigned_to, subject)
-     VALUES ($1::uuid, $2::uuid, $3, 'open', $4, $5::uuid, $6)
+    `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number, assigned_to, subject, metadata)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7, $8::jsonb)
      RETURNING *`,
     data.client_id,
     data.channel_id,
     channelCheck[0].type,
+    initialStatus,
     protocolNumber,
     userId,
     data.subject ?? null,
+    JSON.stringify(metadata),
   );
   const conversation = convRows[0]!;
   const protocolMessage = buildProtocolMessage(protocolNumber);
@@ -411,16 +460,18 @@ export async function createConversation(
     protocolMessage,
   );
   let lastMessagePreview = protocolMessage.slice(0, 255);
+  let initialMessageRows: Array<{ id: string }> = [];
 
-  if (data.initial_message) {
-    await prisma.$queryRawUnsafe(
+  if (initialMessage) {
+    initialMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type)
-       VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text')`,
+       VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text')
+       RETURNING id`,
       conversation.id,
       userId,
-      data.initial_message,
+      initialMessage,
     );
-    lastMessagePreview = data.initial_message.slice(0, 255);
+    lastMessagePreview = initialMessage.slice(0, 255);
   }
 
   await prisma.$executeRawUnsafe(
@@ -429,20 +480,32 @@ export async function createConversation(
     conversation.id,
   );
 
-  const protocolDispatch =
-    channelCheck[0].type === 'whatsapp'
-      ? {
-          messageId: protocolMessageRows[0]!.id,
-          protocolNumber,
-          content: protocolMessage,
-          channelType: channelCheck[0].type,
-          channelCredentials: channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null,
-          clientPhone: clientCheck[0].phone,
-          clientEmail: clientCheck[0].email,
-        }
-      : null;
+  const protocolDispatches: MessageDispatchPayload[] = [];
+  if (channelCheck[0].type === 'whatsapp') {
+    const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
+    protocolDispatches.push({
+      messageId: protocolMessageRows[0]!.id,
+      protocolNumber,
+      content: protocolMessage,
+      channelType: channelCheck[0].type,
+      channelCredentials,
+      clientPhone: clientCheck[0].phone,
+      clientEmail: clientCheck[0].email,
+    });
 
-  return { conversation, protocolDispatch };
+    if (initialMessageRows[0]) {
+      protocolDispatches.push({
+        messageId: initialMessageRows[0].id,
+        content: initialMessage,
+        channelType: channelCheck[0].type,
+        channelCredentials,
+        clientPhone: clientCheck[0].phone,
+        clientEmail: clientCheck[0].email,
+      });
+    }
+  }
+
+  return { conversation, protocolDispatches };
 }
 
 export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {
@@ -475,7 +538,7 @@ export async function assignConversation(conversationId: string, assignToUserId:
      VALUES ($1::uuid, 'conversation.assigned', 'conversation', $2::uuid, $3::jsonb)`,
     assignedBy,
     conversationId,
-    JSON.stringify({ assigned_to: assignToUserId }),
+    JSON.stringify({ assigned_to: assignToUserId, status: 'open' }),
   );
 
   return rows[0];

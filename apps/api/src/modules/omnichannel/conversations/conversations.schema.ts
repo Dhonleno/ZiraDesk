@@ -5,6 +5,7 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
+    category: z.enum(['inbound', 'closed', 'outbound']).optional(),
     status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: z.coerce.boolean().optional(),
@@ -15,12 +16,18 @@ export const listConversationsQuerySchema = z
     perPage: perPage ?? per_page ?? 50,
   }));
 
-export const createConversationBodySchema = z.object({
-  client_id: z.string().uuid(),
-  channel_id: z.string().uuid(),
-  subject: z.string().max(255).optional(),
-  initial_message: z.string().min(1).max(4000).optional(),
-});
+export const createConversationBodySchema = z
+  .object({
+    client_id: z.string().uuid(),
+    channel_id: z.string().uuid(),
+    type: z.enum(['inbound', 'outbound']).default('inbound'),
+    subject: z.string().max(255).optional(),
+    initial_message: z.string().max(4000).optional(),
+  })
+  .refine((data) => data.type !== 'outbound' || Boolean(data.initial_message?.trim()), {
+    path: ['initial_message'],
+    message: 'Mensagem inicial é obrigatória para atendimento ativo',
+  });
 
 export const sendMessageBodySchema = z.object({
   content: z.string().max(4000).optional(),

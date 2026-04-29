@@ -11,8 +11,12 @@ import { useDebounce } from '../../hooks/useDebounce';
 const schema = z.object({
   client_id: z.string().min(1),
   channel_id: z.string().min(1),
+  type: z.enum(['inbound', 'outbound']),
   subject: z.string().optional(),
   initial_message: z.string().optional(),
+}).refine((data) => data.type !== 'outbound' || Boolean(data.initial_message?.trim()), {
+  path: ['initial_message'],
+  message: 'initialMessageRequired',
 });
 
 type FormData = z.infer<typeof schema>;
@@ -37,10 +41,14 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     setValue,
     watch,
     formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: { type: 'inbound' },
+  });
 
   const selectedClientId = watch('client_id');
   const selectedChannelId = watch('channel_id');
+  const selectedType = watch('type') ?? 'inbound';
 
   // Load channels
   const { data: channels = [] } = useQuery({
@@ -61,6 +69,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
       omnichannelApi.createConversation({
         client_id: data.client_id,
         channel_id: data.channel_id,
+        type: data.type,
         ...(data.subject ? { subject: data.subject } : {}),
         ...(data.initial_message ? { initial_message: data.initial_message } : {}),
       }),
@@ -111,6 +120,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         boxShadow: 'var(--shadow-pop)',
         width: '100%',
         maxWidth: 460,
+        maxHeight: 'calc(100vh - 32px)',
         margin: '0 16px',
         display: 'flex',
         flexDirection: 'column',
@@ -145,7 +155,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         </div>
 
         {/* Form */}
-        <form onSubmit={onSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={onSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
 
           {/* Client search */}
           <div>
@@ -269,6 +279,95 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             )}
           </div>
 
+          {/* Type */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {t('form.type')} *
+            </label>
+            <input type="hidden" {...register('type')} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setValue('type', 'inbound', { shouldValidate: true })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 9,
+                  textAlign: 'left',
+                  background: selectedType === 'inbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  border: `1px solid ${selectedType === 'inbound' ? 'rgba(0,201,167,.28)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r)',
+                  padding: '10px',
+                  color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt-2)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font)',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
+                  <path d="M20 12H5m7-7-7 7 7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt)' }}>
+                    {t('form.typeInbound')}
+                  </span>
+                  <small style={{ fontSize: 10, lineHeight: 1.35, color: 'var(--txt-3)' }}>
+                    {t('form.typeInboundHelp')}
+                  </small>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue('type', 'outbound', { shouldValidate: true })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 9,
+                  textAlign: 'left',
+                  background: selectedType === 'outbound' ? 'rgba(245,158,11,.14)' : 'var(--bg-3)',
+                  border: `1px solid ${selectedType === 'outbound' ? 'rgba(245,158,11,.32)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r)',
+                  padding: '10px',
+                  color: selectedType === 'outbound' ? '#F59E0B' : 'var(--txt-2)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font)',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
+                  <path d="M4 12h15m-7-7 7 7-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: selectedType === 'outbound' ? '#F59E0B' : 'var(--txt)' }}>
+                    {t('form.typeOutbound')}
+                  </span>
+                  <small style={{ fontSize: 10, lineHeight: 1.35, color: 'var(--txt-3)' }}>
+                    {t('form.typeOutboundHelp')}
+                  </small>
+                </span>
+              </button>
+            </div>
+            {selectedType === 'outbound' && (
+              <div style={{
+                marginTop: 8,
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                padding: '8px 10px',
+                borderRadius: 'var(--r)',
+                background: 'rgba(245,158,11,.10)',
+                border: '1px solid rgba(245,158,11,.22)',
+                color: '#F59E0B',
+                fontSize: 11,
+                lineHeight: 1.4,
+              }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
+                  <path d="M12 9v4m0 4h.01M10.3 3.9 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t('outbound.warning')}
+              </div>
+            )}
+          </div>
+
           {/* Subject */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -297,16 +396,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
           {/* Initial message */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {t('form.initialMessage')}
+              {t('form.initialMessage')}{selectedType === 'outbound' ? ' *' : ''}
             </label>
             <textarea
               {...register('initial_message')}
-              placeholder={t('form.initialMessagePlaceholder')}
+              placeholder={t(selectedType === 'outbound' ? 'form.initialMessageOutboundPlaceholder' : 'form.initialMessagePlaceholder')}
               rows={3}
               style={{
                 width: '100%',
                 background: 'var(--bg-3)',
-                border: '1px solid var(--line-2)',
+                border: `1px solid ${errors.initial_message ? 'var(--red)' : 'var(--line-2)'}`,
                 borderRadius: 'var(--r)',
                 padding: '9px 12px',
                 fontSize: 13,
@@ -317,8 +416,11 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 lineHeight: 1.5,
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--teal-dim)'; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.boxShadow = 'none'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = errors.initial_message ? 'var(--red)' : 'var(--line-2)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
+            {errors.initial_message && (
+              <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.initialMessageRequired')}</p>
+            )}
           </div>
 
           {/* Footer */}

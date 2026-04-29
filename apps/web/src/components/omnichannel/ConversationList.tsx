@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { subscribeToEvent } from '../../services/socket';
+import { useToast } from '../../stores/toast.store';
 
 interface ConversationItem {
   id: string;
@@ -21,7 +22,8 @@ interface ConversationItem {
   unread_count?: number;
 }
 
-type StatusFilter = '' | 'open' | 'in_service' | 'pending' | 'mine' | 'resolved';
+type ConversationCategory = 'inbound' | 'closed' | 'outbound';
+type StatusFilter = '';
 
 /* avatar gradient por inicial */
 const AVATAR_GRADIENTS = [
@@ -103,9 +105,11 @@ interface Props {
 
 export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const { t } = useTranslation('omnichannel');
+  const toast = useToast();
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('');
-  const [myOnly, setMyOnly] = useState(true);
+  const [activeCategory, setActiveCategory] = useState<ConversationCategory>('inbound');
+  const statusFilter: StatusFilter = '';
+  const [assignedToMe, setAssignedToMe] = useState(true);
   const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -208,16 +212,27 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       playNotificationSound();
     };
 
+    const handleActivated = () => {
+      if (activeCategory === 'outbound') {
+        void qc.invalidateQueries({ queryKey: ['conversations', 'outbound'] });
+      }
+      void qc.invalidateQueries({ queryKey: ['conversations', 'inbound'] });
+      toast.info(t('outbound.activated'), { icon: '📩' });
+      playNotificationSound();
+    };
+
     const unsubMessage = subscribeToEvent<{ conversationId?: string }>('conversation:new_message', handleMessage);
     const unsubIncoming = subscribeToEvent<{ conversationId?: string }>('conversation:message', handleMessage);
     const unsubCreated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
       'conversation:created',
       handleCreated,
     );
+    const unsubActivated = subscribeToEvent('conversation:activated', handleActivated);
     return () => {
       unsubMessage();
       unsubIncoming();
       unsubCreated();
+      unsubActivated();
 
       for (const timer of activityTimeoutsRef.current.values()) {
         window.clearTimeout(timer);
@@ -228,29 +243,28 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       activityTimeoutsRef.current.clear();
       newConversationTimeoutsRef.current.clear();
     };
-  }, [markConversationActivity, markNewConversation, playNotificationSound, qc]);
+  }, [activeCategory, markConversationActivity, markNewConversation, playNotificationSound, qc, t, toast]);
 
-  const STATUS_TABS: Array<{ value: StatusFilter; labelKey: string }> = [
-    { value: '', labelKey: 'status.all' },
-    { value: 'open', labelKey: 'status.open' },
-    { value: 'in_service', labelKey: 'status.in_service' },
-    { value: 'pending', labelKey: 'status.pending' },
-    { value: 'resolved', labelKey: 'status.resolved' },
+  const CATEGORY_TABS: Array<{ value: ConversationCategory; labelKey: string }> = [
+    { value: 'inbound', labelKey: 'categories.inbound' },
+    { value: 'closed', labelKey: 'categories.closed' },
+    { value: 'outbound', labelKey: 'categories.outbound' },
   ];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', { status, search: debouncedSearch, myOnly }],
+    queryKey: ['conversations', activeCategory, statusFilter, debouncedSearch, assignedToMe],
     queryFn: async () => {
-      const params = new URLSearchParams({ perPage: '50' });
-      if (myOnly || status === 'mine') {
-        params.set('assigned_to_me', 'true');
-      }
-      if (status && status !== 'mine') {
-        params.set('status', status);
-      }
-      if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
-        `/omnichannel/conversations?${params}`,
+        '/omnichannel/conversations',
+        {
+          params: {
+            perPage: 50,
+            category: activeCategory,
+            status: statusFilter || undefined,
+            search: debouncedSearch || undefined,
+            assigned_to_me: assignedToMe || undefined,
+          },
+        },
       );
       return res.data.data;
     },
@@ -353,19 +367,19 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
 
         {/* Meus atendimentos toggle */}
         <button
-          onClick={() => setMyOnly((v) => !v)}
+          onClick={() => setAssignedToMe((v) => !v)}
           style={{
             marginTop: 8,
             width: '100%',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: myOnly ? 'var(--teal-dim)' : 'var(--bg-3)',
-            border: `1px solid ${myOnly ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
+            background: assignedToMe ? 'var(--teal-dim)' : 'var(--bg-3)',
+            border: `1px solid ${assignedToMe ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
             borderRadius: 'var(--r)',
             padding: '6px 10px',
             cursor: 'pointer',
-            color: myOnly ? 'var(--teal)' : 'var(--txt-3)',
+            color: assignedToMe ? 'var(--teal)' : 'var(--txt-3)',
             fontSize: 11,
             fontWeight: 500,
             fontFamily: 'var(--font)',
@@ -382,21 +396,21 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           {/* Toggle pill */}
           <div style={{
             width: 28, height: 16, borderRadius: 8,
-            background: myOnly ? 'var(--teal)' : 'var(--bg-5)',
+            background: assignedToMe ? 'var(--teal)' : 'var(--bg-5)',
             position: 'relative', transition: 'background .15s',
           }}>
             <div style={{
               position: 'absolute', top: 2,
-              left: myOnly ? 14 : 2,
+              left: assignedToMe ? 14 : 2,
               width: 12, height: 12, borderRadius: '50%',
-              background: myOnly ? '#0E1A18' : 'var(--txt-3)',
+              background: assignedToMe ? '#0E1A18' : 'var(--txt-3)',
               transition: 'left .15s',
             }} />
           </div>
         </button>
       </div>
 
-      {/* Status filter tabs */}
+      {/* Category tabs */}
       <div style={{
         display: 'flex',
         padding: '8px 14px',
@@ -406,10 +420,10 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
         overflowX: 'auto',
         scrollbarWidth: 'none',
       }}>
-        {STATUS_TABS.map((tab) => (
+        {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setStatus(tab.value)}
+            onClick={() => setActiveCategory(tab.value)}
             style={{
               padding: '4px 10px',
               borderRadius: 'var(--r-pill)',
@@ -417,9 +431,9 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
               fontWeight: 500,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
-              border: status === tab.value ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
-              background: status === tab.value ? 'var(--teal-dim)' : 'transparent',
-              color: status === tab.value ? 'var(--teal)' : 'var(--txt-3)',
+              border: activeCategory === tab.value ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
+              background: activeCategory === tab.value ? 'var(--teal-dim)' : 'transparent',
+              color: activeCategory === tab.value ? 'var(--teal)' : 'var(--txt-3)',
               transition: 'all .15s',
             }}
           >
@@ -565,6 +579,19 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           border: `1px solid ${chStyle.border}`,
                         }}>
                           {chStyle.label}
+                        </span>
+                      )}
+                      {activeCategory === 'outbound' && (
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          padding: '1px 7px',
+                          borderRadius: 'var(--r-pill)',
+                          background: 'rgba(245,158,11,.14)',
+                          color: '#F59E0B',
+                          border: '1px solid rgba(245,158,11,.28)',
+                        }}>
+                          ↗ {t('outbound.badge')}
                         </span>
                       )}
                       {conv.status === 'resolved' && (

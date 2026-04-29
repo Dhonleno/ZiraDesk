@@ -58,16 +58,17 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const io = getSocketServer();
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation: result.conversation });
 
-      if (result.protocolDispatch?.channelCredentials && result.protocolDispatch.clientPhone) {
+      for (const dispatch of result.protocolDispatches) {
+        if (!dispatch.channelCredentials || !dispatch.clientPhone) continue;
         await messageQueue.add('send', {
-          messageId: result.protocolDispatch.messageId,
+          messageId: dispatch.messageId,
           conversationId: result.conversation.id,
           tenantId: tenantUser.tenantId ?? null,
           tenantSchema: tenantUser.schemaName ?? null,
-          channelType: result.protocolDispatch.channelType,
-          channelCredentials: result.protocolDispatch.channelCredentials,
-          content: result.protocolDispatch.content,
-          to: result.protocolDispatch.clientPhone,
+          channelType: dispatch.channelType,
+          channelCredentials: dispatch.channelCredentials,
+          content: dispatch.content,
+          to: dispatch.clientPhone,
         });
       }
 
@@ -188,7 +189,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
+        const assignedConversation = await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
         const tenantUser = request.user as AuthUser;
 
         // Retorna conversa completa com JOINs para o frontend usar diretamente no cache
@@ -207,6 +208,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
           conversationId: request.params.id,
+          assigned_to: assignedConversation.assigned_to,
+          status: 'open',
+          conversation,
         });
 
         return reply.send({ success: true, data: conversation });

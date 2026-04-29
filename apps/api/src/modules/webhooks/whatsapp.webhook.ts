@@ -77,6 +77,7 @@ interface ClientRow {
 
 interface ConversationRow {
   id: string;
+  metadata: unknown;
 }
 
 interface MessageRow {
@@ -86,6 +87,12 @@ interface MessageRow {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isActiveOutboundConversation(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object') return false;
+  const data = metadata as Record<string, unknown>;
+  return data['type'] === 'outbound' && data['outbound_activated'] !== true;
 }
 
 async function findChannelByPhoneNumberId(
@@ -230,7 +237,7 @@ async function processIncomingMessage(
     console.log('[WhatsApp Webhook] Looking for conversation:', { clientId, channelId });
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-      `SELECT id FROM conversations
+      `SELECT id, metadata FROM conversations
        WHERE client_id = $1::uuid
          AND channel_id = $2::uuid
          AND status IN ('open', 'pending', 'in_service', 'bot')
@@ -243,16 +250,19 @@ async function processIncomingMessage(
 
     let conversationId: string;
     let isNewConversation = false;
+    let activatesOutbound = false;
     let protocolNumber: string | null = null;
     let protocolMessageId: string | null = null;
     let protocolMessageContent: string | null = null;
     if (convRows[0]) {
       conversationId = convRows[0].id;
+      activatesOutbound = isActiveOutboundConversation(convRows[0].metadata);
     } else {
       protocolNumber = await generateConversationProtocol(tx, schemaName);
       const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
-        `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number)
-         VALUES ($1::uuid, $2::uuid, 'whatsapp', 'open', $3) RETURNING id`,
+        `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number, metadata)
+         VALUES ($1::uuid, $2::uuid, 'whatsapp', 'open', $3, '{"type": "inbound"}'::jsonb)
+         RETURNING id, metadata`,
         clientId,
         channelId,
         protocolNumber,
@@ -278,9 +288,18 @@ async function processIncomingMessage(
     const savedMessage = msgRows[0]!;
 
     await tx.$executeRawUnsafe(
-      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
+      `UPDATE conversations
+       SET last_message = $1,
+           last_message_at = NOW(),
+           status = CASE WHEN $3::boolean THEN 'open' ELSE status END,
+           metadata = CASE
+             WHEN $3::boolean THEN metadata || jsonb_build_object('outbound_activated', true, 'outbound_activated_at', NOW())
+             ELSE metadata
+           END
+       WHERE id = $2::uuid`,
       content.slice(0, 255),
       conversationId,
+      activatesOutbound,
     );
 
     if (isNewConversation && protocolNumber) {
@@ -302,12 +321,18 @@ async function processIncomingMessage(
       protocolNumber,
       protocolMessageId,
       protocolMessageContent,
+      activatesOutbound,
     };
   });
 
   const io = getSocketServer();
   if (result.isNewConversation) {
     io.to(`tenant:${tenantId}`).emit('conversation:created', {
+      conversationId: result.conversationId,
+    });
+  }
+  if (result.activatesOutbound) {
+    io.to(`tenant:${tenantId}`).emit('conversation:activated', {
       conversationId: result.conversationId,
     });
   }

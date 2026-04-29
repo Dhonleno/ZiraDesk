@@ -31,7 +31,7 @@ export function Toaster() {
               wrapper,
             ].join(' ')}
           >
-            <span className="mt-0.5 shrink-0 text-sm font-bold">{icon}</span>
+            <span className="mt-0.5 shrink-0 text-sm font-bold">{toast.icon ?? icon}</span>
             <p className="flex-1 text-sm text-txt">{toast.message}</p>
             <button
               onClick={() => removeToast(toast.id)}

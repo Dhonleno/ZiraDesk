@@ -555,6 +555,7 @@ export interface ListConversationsParams {
   page?: number;
   perPage?: number;
   per_page?: number;
+  category?: 'inbound' | 'closed' | 'outbound';
   search?: string;
   status?: string;
   assigned_to_me?: boolean;
@@ -564,6 +565,7 @@ export interface ListConversationsParams {
 export interface CreateConversationPayload {
   client_id: string;
   channel_id: string;
+  type?: 'inbound' | 'outbound';
   subject?: string;
   initial_message?: string;
 }
