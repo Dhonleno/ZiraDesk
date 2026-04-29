@@ -127,7 +127,6 @@ export function ChatArea({ conversationId }: Props) {
   const { t: tAdmin } = useTranslation('admin');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const currentUserRole = useAuthStore((state) => state.user?.role);
-  const currentUserName = useAuthStore((state) => state.user?.name);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isTyping, _setIsTyping] = useState(false);
@@ -461,11 +460,17 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     });
 
+    const unsubUpdated = subscribeToEvent<{ conversationId: string }>('conversation:updated', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    });
+
     return () => {
       unsubNew();
       unsubIncoming();
       unsubResolved();
       unsubTransferred();
+      unsubUpdated();
     };
   }, [conversationId, isNearBottom, loadLatestMessages, qc]);
 
@@ -684,26 +689,17 @@ export function ChatArea({ conversationId }: Props) {
     if (!currentUserId) return;
     setIsAssuming(true);
     try {
-      await omnichannelApi.assign(conversationId, currentUserId);
+      const updated = await omnichannelApi.assign(conversationId, currentUserId);
 
-      // Atualiza cache imediatamente para evitar badge/status obsoleto
+      // Usa dados reais do DB (retornados com JOIN pela rota) para atualizar o cache
       qc.setQueryData(
         ['conversation', conversationId],
         (old: { conversation: Conversation; messages: OmnichannelMessage[] } | undefined) => {
           if (!old) return old;
-          return {
-            ...old,
-            conversation: {
-              ...old.conversation,
-              assigned_to: currentUserId,
-              assigned_name: currentUserName ?? null,
-              status: 'open',
-            },
-          };
+          return { ...old, conversation: updated as Conversation };
         },
       );
 
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       toast.success('Atendimento assumido!');
     } catch {

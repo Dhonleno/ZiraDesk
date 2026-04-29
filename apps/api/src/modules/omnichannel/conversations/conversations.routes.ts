@@ -188,8 +188,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const conversation = await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
+        await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
         const tenantUser = request.user as AuthUser;
+
+        // Retorna conversa completa com JOINs para o frontend usar diretamente no cache
+        const { conversation } = await getConversationWithMessages(request.params.id, tenantUser.tenantId);
 
         const io = getSocketServer();
         io.to(`agent:${parsed.data.user_id}`).emit('conversation:assigned', {
