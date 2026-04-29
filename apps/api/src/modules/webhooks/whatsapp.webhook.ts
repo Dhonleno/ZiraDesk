@@ -192,7 +192,7 @@ async function processIncomingMessage(
       `SELECT id FROM conversations
        WHERE client_id = $1::uuid
          AND channel_id = $2::uuid
-         AND status IN ('open', 'pending', 'bot')
+         AND status IN ('open', 'pending', 'in_service', 'bot')
        ORDER BY created_at DESC LIMIT 1`,
       clientId,
       channelId,
