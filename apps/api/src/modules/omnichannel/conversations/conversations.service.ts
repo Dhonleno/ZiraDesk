@@ -448,13 +448,27 @@ export async function createConversation(
 export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
-     SET assigned_to = $1::uuid
+     SET assigned_to = $1::uuid,
+         status = 'open'
      WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
     conversationId,
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
+
+  const agents = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+    assignToUserId,
+  );
+  const agentName = agents[0]?.name ?? 'Agente';
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+     VALUES (gen_random_uuid(), $1::uuid, 'system', $2, 'text', false, NOW())`,
+    conversationId,
+    `Atendimento assumido por ${agentName}`,
+  );
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)

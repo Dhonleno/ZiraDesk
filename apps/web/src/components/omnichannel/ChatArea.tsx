@@ -126,6 +126,7 @@ export function ChatArea({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const { t: tAdmin } = useTranslation('admin');
   const currentUserId = useAuthStore((state) => state.user?.id);
+  const currentUserRole = useAuthStore((state) => state.user?.role);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isTyping, _setIsTyping] = useState(false);
@@ -143,6 +144,7 @@ export function ChatArea({ conversationId }: Props) {
   const [shortcutSuggestions, setShortcutSuggestions] = useState<QuickReply[]>([]);
   const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
   const [unseenMessageCount, setUnseenMessageCount] = useState(0);
+  const [isAssuming, setIsAssuming] = useState(false);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -677,15 +679,31 @@ export function ChatArea({ conversationId }: Props) {
     }
   }
 
+  async function handleAssume() {
+    if (!currentUserId) return;
+    setIsAssuming(true);
+    try {
+      await omnichannelApi.assign(conversationId, currentUserId);
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success('Atendimento assumido!');
+    } catch {
+      toast.error('Erro ao assumir atendimento');
+    } finally {
+      setIsAssuming(false);
+    }
+  }
+
   const conv = data?.conversation as Conversation | undefined;
   const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
-  const isAssignedToMe =
-    !conv || conv.assigned_to === null || (currentUserId ? conv.assigned_to === currentUserId : false);
+  const isUnassigned = !conv?.assigned_to;
+  const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
+  const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
+  const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole ?? '');
   const canSendMessage = isAssignedToMe && !isResolved;
+  const canAssume = isUnassigned && !isResolved;
+  const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isResolved;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
-  const blockedMessage = isResolved
-    ? 'Este atendimento foi encerrado'
-    : 'Esta conversa foi transferida para outro agente';
   const name = conv?.client_name ?? 'Visitante';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
@@ -815,70 +833,103 @@ export function ChatArea({ conversationId }: Props) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button
-            title={t('chat.transfer')}
-            onClick={() => setShowTransferModal(true)}
-            style={{
-              width: 30,
-              height: 30,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'none',
-              border: 'none',
-              borderRadius: 'var(--r)',
-              color: 'var(--txt-3)',
-              cursor: 'pointer',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-              <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-
-          {!isResolved && (
+          {canAssume ? (
             <button
-              onClick={() => setShowResolveModal(true)}
-              disabled={resolveMutation.isPending}
+              onClick={() => void handleAssume()}
+              disabled={isAssuming}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '5px 11px',
+                gap: 6,
+                padding: '6px 14px',
                 borderRadius: 'var(--r)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                border: '1px solid var(--teal)',
                 background: 'var(--teal)',
-                color: '#0E1A18',
-                opacity: resolveMutation.isPending ? 0.55 : 1,
-              }}
-            >
-              {t('chat.resolve')}
-            </button>
-          )}
-
-          {!isResolved && (
-            <button
-              onClick={() => closeMutation.mutate()}
-              disabled={closeMutation.isPending}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '5px 11px',
-                borderRadius: 'var(--r)',
-                fontSize: 12,
+                border: 'none',
+                color: '#0a1a18',
+                fontSize: 13,
                 fontWeight: 600,
-                cursor: 'pointer',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-4)',
-                color: 'var(--txt-2)',
-                opacity: closeMutation.isPending ? 0.55 : 1,
+                fontFamily: 'var(--font)',
+                cursor: isAssuming ? 'not-allowed' : 'pointer',
+                opacity: isAssuming ? 0.6 : 1,
+                transition: 'all .15s',
               }}
             >
-              {t('chat.close', { defaultValue: 'Fechar' })}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
             </button>
+          ) : (
+            <>
+              {canTransfer && (
+                <button
+                  title={t('chat.transfer')}
+                  onClick={() => setShowTransferModal(true)}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: 'var(--r)',
+                    color: 'var(--txt-3)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+
+              {isAssignedToMe && !isResolved && (
+                <button
+                  onClick={() => setShowResolveModal(true)}
+                  disabled={resolveMutation.isPending}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 11px',
+                    borderRadius: 'var(--r)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: '1px solid var(--teal)',
+                    background: 'var(--teal)',
+                    color: '#0E1A18',
+                    opacity: resolveMutation.isPending ? 0.55 : 1,
+                  }}
+                >
+                  {t('chat.resolve')}
+                </button>
+              )}
+
+              {isAssignedToMe && !isResolved && (
+                <button
+                  onClick={() => closeMutation.mutate()}
+                  disabled={closeMutation.isPending}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '5px 11px',
+                    borderRadius: 'var(--r)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: '1px solid var(--line-2)',
+                    background: 'var(--bg-4)',
+                    color: 'var(--txt-2)',
+                    opacity: closeMutation.isPending ? 0.55 : 1,
+                  }}
+                >
+                  {t('chat.close', { defaultValue: 'Fechar' })}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1592,6 +1643,132 @@ export function ChatArea({ conversationId }: Props) {
                   </span>
                 </button>
               </div>
+            ) : isUnassigned ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  background: 'var(--bg-2)',
+                  borderTop: '1px solid var(--line)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                }}
+              >
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '50%',
+                    background: 'var(--bg-4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--txt-3)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" />
+                    <path d="M3 18c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', marginBottom: 2 }}>
+                    Nenhum agente responsável
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                    Assuma o atendimento para enviar mensagens
+                  </div>
+                </div>
+                <button
+                  onClick={() => void handleAssume()}
+                  disabled={isAssuming}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 'var(--r)',
+                    background: 'var(--teal)',
+                    border: 'none',
+                    color: '#0a1a18',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'var(--font)',
+                    cursor: isAssuming ? 'not-allowed' : 'pointer',
+                    opacity: isAssuming ? 0.6 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
+                </button>
+              </div>
+            ) : isAssignedToOther && !isResolved ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  background: 'var(--bg-2)',
+                  borderTop: '1px solid var(--line)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                }}
+              >
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: '50%',
+                    background: 'var(--bg-4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--amber)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <path d="M10 3v8M10 14v1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.4" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', marginBottom: 2 }}>
+                    Em atendimento por {conv?.assigned_name ?? 'outro agente'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                    Você pode visualizar mas não enviar mensagens
+                  </div>
+                </div>
+                {isOwnerOrAdmin && (
+                  <button
+                    onClick={() => setShowTransferModal(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 14px',
+                      borderRadius: 'var(--r)',
+                      background: 'var(--bg-4)',
+                      border: '1px solid var(--line-2)',
+                      color: 'var(--txt-2)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: 'var(--font)',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Transferir para mim
+                  </button>
+                )}
+              </div>
             ) : (
               <div
                 style={{
@@ -1608,26 +1785,24 @@ export function ChatArea({ conversationId }: Props) {
                   cursor: 'not-allowed',
                 }}
               >
-                <span>{blockedMessage}</span>
-                {isResolved && (
-                  <button
-                    onClick={() => reopenMutation.mutate()}
-                    disabled={reopenMutation.isPending}
-                    style={{
-                      background: 'var(--bg-2)',
-                      border: '1px solid rgba(0,201,167,.25)',
-                      color: 'var(--teal)',
-                      borderRadius: 'var(--r)',
-                      padding: '4px 10px',
-                      fontSize: 12,
-                      fontStyle: 'normal',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {t('resolve.reopen', { defaultValue: 'Reabrir' })}
-                  </button>
-                )}
+                <span>Este atendimento foi encerrado</span>
+                <button
+                  onClick={() => reopenMutation.mutate()}
+                  disabled={reopenMutation.isPending}
+                  style={{
+                    background: 'var(--bg-2)',
+                    border: '1px solid rgba(0,201,167,.25)',
+                    color: 'var(--teal)',
+                    borderRadius: 'var(--r)',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontStyle: 'normal',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('resolve.reopen', { defaultValue: 'Reabrir' })}
+                </button>
               </div>
             )}
 
