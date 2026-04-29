@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
+import { subscribeToEvent } from '../../services/socket';
 
 interface ConversationItem {
   id: string;
@@ -105,6 +106,17 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const [status, setStatus] = useState<StatusFilter>('');
   const [myOnly, setMyOnly] = useState(false);
   const debouncedSearch = useDebounce(search, 300);
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const invalidate = () => void qc.invalidateQueries({ queryKey: ['conversations'] });
+    const unsubMessage = subscribeToEvent('conversation:new_message', invalidate);
+    const unsubCreated = subscribeToEvent('conversation:created', invalidate);
+    return () => {
+      unsubMessage?.();
+      unsubCreated?.();
+    };
+  }, [qc]);
 
   const STATUS_TABS: Array<{ value: StatusFilter; labelKey: string }> = [
     { value: '', labelKey: 'status.all' },

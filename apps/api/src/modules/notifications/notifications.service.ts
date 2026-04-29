@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database.js';
 
-type NotificationType = 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
+type NotificationType = 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment' | 'conversation_message';
 
 interface NotificationRow {
   id: string;
@@ -62,6 +62,20 @@ function toNotification(row: NotificationRow): NotificationItem {
     };
   }
 
+  if (row.action === 'conversation.message') {
+    const label = row.client_name ?? row.conversation_subject ?? 'Cliente';
+    const preview = String((row.new_data as Record<string, unknown>)?.['preview'] ?? 'Nova mensagem recebida');
+    return {
+      id: row.id,
+      type: 'conversation_message',
+      title: `Nova mensagem de ${label}`,
+      message: preview,
+      read: row.read,
+      created_at: row.created_at,
+      href: `/omnichannel/conversations?conversation=${row.entity_id ?? ''}`,
+    };
+  }
+
   const ticketId = String(row.new_data?.['ticket_id'] ?? '');
   return {
     id: row.id,
@@ -110,6 +124,9 @@ export async function listNotifications(userId: string) {
        al.action = 'ticket.comment_added'
        AND t.assigned_to = $1::uuid
        AND (al.user_id IS NULL OR al.user_id <> $1::uuid)
+     ) OR (
+       al.action = 'conversation.message'
+       AND al.new_data->>'assigned_to' = $1
      )
      ORDER BY al.created_at DESC
      LIMIT 20`,

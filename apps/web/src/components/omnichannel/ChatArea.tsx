@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { subscribeToEvent } from '../../services/socket';
 
 interface Message {
   id: string;
@@ -92,6 +93,18 @@ export function ChatArea({ conversationId }: Props) {
       return res.data.data;
     },
   });
+
+  useEffect(() => {
+    const unsub = subscribeToEvent(
+      'conversation:new_message',
+      (data: { conversationId: string }) => {
+        if (data.conversationId === conversationId) {
+          void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+        }
+      },
+    );
+    return unsub;
+  }, [conversationId, qc]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

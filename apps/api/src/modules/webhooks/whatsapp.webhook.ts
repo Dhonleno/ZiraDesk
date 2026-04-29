@@ -237,10 +237,37 @@ async function processIncomingMessage(
   });
 
   const io = getSocketServer();
-  io.to(`tenant:${tenantId}`).emit('conversation:message', {
+  io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
     conversationId: result.conversationId,
     message: result.message,
   });
+
+  // Notify assigned agent if conversation has one
+  const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; client_name: string | null }]>(
+    `SELECT c.assigned_to, cl.name AS client_name
+     FROM "${schemaName}".conversations c
+     LEFT JOIN "${schemaName}".clients cl ON cl.id = c.client_id
+     WHERE c.id = $1::uuid LIMIT 1`,
+    result.conversationId,
+  );
+  const assignedUserId = convAssigned[0]?.assigned_to ?? null;
+  if (assignedUserId) {
+    const clientName = convAssigned[0]?.client_name ?? senderName;
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${schemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,
+      assignedUserId,
+      result.conversationId,
+      JSON.stringify({ assigned_to: assignedUserId, conversationId: result.conversationId, clientName, preview: content.substring(0, 100) }),
+    );
+    io.to(`agent:${assignedUserId}`).emit('notification:new', {
+      type: 'conversation.message',
+      title: `Nova mensagem de ${clientName}`,
+      message: content.substring(0, 80),
+      conversationId: result.conversationId,
+      createdAt: new Date().toISOString(),
+    });
+  }
 
   console.log(`[WhatsApp] Message processed: ${senderName} → ${content.substring(0, 50)}`);
 }
