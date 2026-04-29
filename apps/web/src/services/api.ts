@@ -334,6 +334,11 @@ export const adminApi = {
     return res.data;
   },
 
+  resetUserPassword: async (id: string) => {
+    const res = await api.post<{ success: boolean; data: { tempPassword: string } }>(`/admin/users/${id}/reset-password`);
+    return res.data;
+  },
+
   listChannels: async (): Promise<Channel[]> => {
     const res = await api.get<{ success: boolean; data: Channel[] }>('/admin/channels');
     return res.data.data;
@@ -478,10 +483,12 @@ export interface OmnichannelMessage {
   sender_type: 'agent' | 'client' | 'bot' | 'system';
   sender_id: string | null;
   content: string;
-  content_type: string;
+  content_type: 'text' | 'image' | 'audio' | 'video' | 'document' | string;
+  media_url?: string | null;
   status: 'sent' | 'delivered' | 'read' | 'failed';
   is_internal: boolean;
   created_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ListConversationsParams {
@@ -502,9 +509,19 @@ export interface CreateConversationPayload {
 }
 
 export interface SendMessagePayload {
-  content: string;
-  contentType?: string;
+  content?: string;
+  contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
   isInternal?: boolean;
+  media_id?: string;
+  media_type?: 'image' | 'audio' | 'video' | 'document';
+  media_filename?: string;
+}
+
+export interface UploadedMediaResponse {
+  media_id: string;
+  media_type: 'image' | 'audio' | 'video' | 'document';
+  filename: string;
+  size: number;
 }
 
 export interface ListMessagesParams {
@@ -588,6 +605,37 @@ export const omnichannelApi = {
       payload,
     );
     return res.data.data;
+  },
+
+  uploadMedia: async (conversationId: string, file: File): Promise<UploadedMediaResponse> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('conversation_id', conversationId);
+
+    const res = await api.post<{ success: boolean; data: UploadedMediaResponse }>(
+      '/omnichannel/media/upload',
+      form,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    );
+    return res.data.data;
+  },
+
+  getMediaInfo: async (mediaId: string, conversationId: string) => {
+    const res = await api.get<{ success: boolean; data: { url: string; mime_type?: string; file_size?: number } }>(
+      `/omnichannel/media/${mediaId}/info`,
+      { params: { conversation_id: conversationId } },
+    );
+    return res.data.data;
+  },
+
+  downloadMedia: async (mediaId: string, conversationId: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/media/${mediaId}/content`, {
+      params: { conversation_id: conversationId },
+      responseType: 'blob',
+    });
+    return res.data;
   },
 
   updateConversation: async (

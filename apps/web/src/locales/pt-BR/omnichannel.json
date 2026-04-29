@@ -91,6 +91,22 @@
     "loading": "Carregando...",
     "noMore": "Início da conversa"
   },
+  "media": {
+    "upload": "Enviar arquivo",
+    "uploadImage": "Enviar imagem",
+    "record": "Gravar áudio",
+    "recording": "Gravando...",
+    "stopRecording": "Parar gravação",
+    "preview": "Pré-visualização",
+    "send": "Enviar",
+    "cancel": "Cancelar",
+    "caption": "Legenda (opcional)",
+    "maxSize": "Tamanho máximo: 16MB",
+    "typeNotSupported": "Tipo de arquivo não suportado",
+    "permissionDenied": "Permissão de microfone negada",
+    "uploadError": "Erro ao enviar arquivo",
+    "downloadFile": "Baixar arquivo"
+  },
   "info": {
     "contact": "Contato",
     "channels": "Canais",

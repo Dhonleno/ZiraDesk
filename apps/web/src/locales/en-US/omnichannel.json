@@ -91,6 +91,22 @@
     "loading": "Loading...",
     "noMore": "Start of the conversation"
   },
+  "media": {
+    "upload": "Upload file",
+    "uploadImage": "Upload image",
+    "record": "Record audio",
+    "recording": "Recording...",
+    "stopRecording": "Stop recording",
+    "preview": "Preview",
+    "send": "Send",
+    "cancel": "Cancel",
+    "caption": "Caption (optional)",
+    "maxSize": "Max size: 16MB",
+    "typeNotSupported": "File type not supported",
+    "permissionDenied": "Microphone permission denied",
+    "uploadError": "Error uploading file",
+    "downloadFile": "Download file"
+  },
   "info": {
     "contact": "Contact",
     "channels": "Channels",

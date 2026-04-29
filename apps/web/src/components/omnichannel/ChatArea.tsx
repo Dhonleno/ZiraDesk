@@ -3,9 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { omnichannelApi, type OmnichannelConversation, type OmnichannelMessage } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
 import { ResolveModal } from './ResolveModal';
 import { TransferModal } from './TransferModal';
+import { MediaUpload, type MediaUploadHandle } from './MediaUpload';
+import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
+import { MessageMedia } from './MessageMedia';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
@@ -58,6 +62,7 @@ interface Props {
 
 export function ChatArea({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [isTyping, _setIsTyping] = useState(false);
@@ -73,13 +78,28 @@ export function ChatArea({ conversationId }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaUploadRef = useRef<MediaUploadHandle>(null);
+  const audioRecorderRef = useRef<AudioRecorderHandle>(null);
+  const lastMessagesErrorAtRef = useRef(0);
+  const isLoadingLatestRef = useRef(false);
+  const [isMediaActive, setIsMediaActive] = useState(false);
+  const [isAudioActive, setIsAudioActive] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversation', conversationId],
     queryFn: () => omnichannelApi.getConversation(conversationId),
   });
 
+  const notifyMessagesLoadError = useCallback(() => {
+    const now = Date.now();
+    if (now - lastMessagesErrorAtRef.current < 2500) return;
+    lastMessagesErrorAtRef.current = now;
+    toast.error(t('history.error', { defaultValue: 'Erro ao carregar mensagens' }));
+  }, [t, toast]);
+
   const loadLatestMessages = useCallback(async (preserveOlder: boolean, scrollToBottom: boolean) => {
+    if (isLoadingLatestRef.current) return;
+    isLoadingLatestRef.current = true;
     setIsMessagesLoading(true);
     try {
       const result = await omnichannelApi.listMessages(conversationId, { per_page: 50, page: 1 });
@@ -102,11 +122,12 @@ export function ChatArea({ conversationId }: Props) {
         });
       }
     } catch {
-      toast.error(t('history.error', { defaultValue: 'Erro ao carregar mensagens' }));
+      notifyMessagesLoadError();
     } finally {
+      isLoadingLatestRef.current = false;
       setIsMessagesLoading(false);
     }
-  }, [conversationId, t, toast]);
+  }, [conversationId, notifyMessagesLoadError]);
 
   useEffect(() => {
     setContent('');
@@ -242,13 +263,14 @@ export function ChatArea({ conversationId }: Props) {
         container.scrollTop = previousTop + heightDiff;
       });
     } catch {
-      toast.error(t('history.error', { defaultValue: 'Erro ao carregar mensagens' }));
+      notifyMessagesLoadError();
     } finally {
       setIsLoadingMore(false);
     }
   }
 
   function handleSend() {
+    if (!canSendMessage) return;
     const text = content.trim();
     if (!text || sendMutation.isPending) return;
     sendMutation.mutate({ text, isInternalMessage: isInternal });
@@ -271,7 +293,14 @@ export function ChatArea({ conversationId }: Props) {
   }
 
   const conv = data?.conversation as Conversation | undefined;
-  const isLocked = conv?.status === 'resolved' || conv?.status === 'closed';
+  const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
+  const isAssignedToMe =
+    !conv || conv.assigned_to === null || (currentUserId ? conv.assigned_to === currentUserId : false);
+  const canSendMessage = isAssignedToMe && !isResolved;
+  const isComposerAttachmentActive = isMediaActive || isAudioActive;
+  const blockedMessage = isResolved
+    ? 'Este atendimento foi encerrado'
+    : 'Esta conversa foi transferida para outro agente';
   const name = conv?.client_name ?? 'Visitante';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
@@ -389,7 +418,7 @@ export function ChatArea({ conversationId }: Props) {
             </svg>
           </button>
 
-          {!isLocked && (
+          {!isResolved && (
             <button
               onClick={() => setShowResolveModal(true)}
               disabled={resolveMutation.isPending}
@@ -412,7 +441,7 @@ export function ChatArea({ conversationId }: Props) {
             </button>
           )}
 
-          {!isLocked && (
+          {!isResolved && (
             <button
               onClick={() => closeMutation.mutate()}
               disabled={closeMutation.isPending}
@@ -435,40 +464,6 @@ export function ChatArea({ conversationId }: Props) {
           )}
         </div>
       </div>
-
-      {isLocked && (
-        <div
-          style={{
-            borderBottom: '1px solid var(--line)',
-            background: 'var(--teal-dim)',
-            color: 'var(--teal)',
-            padding: '8px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            fontSize: 12,
-            fontWeight: 500,
-          }}
-        >
-          <span>{t('resolve.resolvedBanner')}</span>
-          <button
-            onClick={() => reopenMutation.mutate()}
-            disabled={reopenMutation.isPending}
-            style={{
-              background: 'var(--bg-2)',
-              border: '1px solid rgba(0,201,167,.25)',
-              color: 'var(--teal)',
-              borderRadius: 'var(--r)',
-              padding: '4px 10px',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-          >
-            {t('resolve.reopen')}
-          </button>
-        </div>
-      )}
 
       <div
         ref={messagesContainerRef}
@@ -631,6 +626,11 @@ export function ChatArea({ conversationId }: Props) {
                             {t('chat.internalNote')}
                           </div>
                         )}
+                        {msg.content_type !== 'text' && (
+                          <div style={{ marginBottom: msg.content ? 6 : 0 }}>
+                            <MessageMedia message={msg} conversationId={conversationId} />
+                          </div>
+                        )}
                         {msg.content}
                       </div>
                       <div
@@ -672,7 +672,7 @@ export function ChatArea({ conversationId }: Props) {
         )}
       </div>
 
-      {!isLocked && (
+      {canSendMessage && !isComposerAttachmentActive && (
         <div style={{ display: 'flex', gap: 6, padding: '0 20px 10px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
           {([
             t('chat.sendProposal'),
@@ -706,9 +706,97 @@ export function ChatArea({ conversationId }: Props) {
       )}
 
       <div style={{ background: 'var(--bg-2)', borderTop: '1px solid var(--line)', padding: '12px 16px', flexShrink: 0 }}>
+        {canSendMessage && (
+          <>
+            <MediaUpload
+              ref={mediaUploadRef}
+              conversationId={conversationId}
+              disabled={!canSendMessage}
+              onActiveChange={setIsMediaActive}
+              onSent={async () => {
+                void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+                void qc.invalidateQueries({ queryKey: ['conversations'] });
+                await loadLatestMessages(true, true);
+              }}
+            />
+            <AudioRecorder
+              ref={audioRecorderRef}
+              conversationId={conversationId}
+              disabled={!canSendMessage}
+              onActiveChange={setIsAudioActive}
+              onSent={async () => {
+                void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+                void qc.invalidateQueries({ queryKey: ['conversations'] });
+                await loadLatestMessages(true, true);
+              }}
+            />
+          </>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 8 }}>
+          {canSendMessage && (
+            <>
+              <button
+                type="button"
+                onClick={() => mediaUploadRef.current?.openPicker('image/jpeg,image/png,image/webp,audio/ogg,audio/mpeg,audio/webm,video/mp4,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+                title={t('media.upload')}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--r)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--txt-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                📎
+              </button>
+              <button
+                type="button"
+                onClick={() => mediaUploadRef.current?.openPicker('image/*')}
+                title={t('media.uploadImage')}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--r)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--txt-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                🖼️
+              </button>
+              <button
+                type="button"
+                onClick={() => void audioRecorderRef.current?.start()}
+                title={t('media.record')}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--r)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--txt-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                🎤
+              </button>
+            </>
+          )}
           <button
-            disabled={isLocked}
+            disabled={!canSendMessage}
             onClick={() => setIsInternal((prev) => !prev)}
             title={t('chat.internalNote')}
             style={{
@@ -721,7 +809,8 @@ export function ChatArea({ conversationId }: Props) {
               background: isInternal ? 'var(--amber-dim)' : 'none',
               border: isInternal ? '1px solid rgba(245,158,11,.3)' : 'none',
               color: 'var(--amber)',
-              cursor: isLocked ? 'default' : 'pointer',
+              cursor: canSendMessage ? 'pointer' : 'not-allowed',
+              opacity: canSendMessage ? 1 : 0.5,
             }}
           >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
@@ -730,70 +819,110 @@ export function ChatArea({ conversationId }: Props) {
           </button>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: 8,
-            background: isInternal ? 'var(--amber-dim)' : 'var(--bg-3)',
-            border: `1px solid ${isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)'}`,
-            borderRadius: 'var(--r-lg)',
-            padding: '10px 12px',
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={content}
-            onChange={handleContentChange}
-            onKeyDown={handleKeyDown}
-            placeholder={isLocked ? t('chat.resolvedPlaceholder') : isInternal ? t('chat.internalNote') + '...' : t('chat.inputPlaceholder')}
-            disabled={isLocked}
+        {canSendMessage ? (
+          <div
             style={{
-              flex: 1,
-              background: 'none',
-              border: 'none',
-              outline: 'none',
-              fontSize: 13,
-              fontFamily: 'var(--font)',
-              color: isInternal ? 'var(--amber)' : 'var(--txt)',
-              resize: 'none',
-              minHeight: 20,
-              maxHeight: 120,
-              lineHeight: 1.5,
-              opacity: isLocked ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: 8,
+              background: isInternal ? 'var(--amber-dim)' : 'var(--bg-3)',
+              border: `1px solid ${isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)'}`,
+              borderRadius: 'var(--r-lg)',
+              padding: '10px 12px',
             }}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!content.trim() || sendMutation.isPending || isLocked}
+          >
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={content}
+              onChange={handleContentChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isComposerAttachmentActive ? t('media.caption') : isInternal ? t('chat.internalNote') + '...' : t('chat.inputPlaceholder')}
+              disabled={!canSendMessage || isComposerAttachmentActive}
+              style={{
+                flex: 1,
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                fontSize: 13,
+                fontFamily: 'var(--font)',
+                color: isInternal ? 'var(--amber)' : 'var(--txt)',
+                resize: 'none',
+                minHeight: 20,
+                maxHeight: 120,
+                lineHeight: 1.5,
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!content.trim() || sendMutation.isPending || !canSendMessage || isComposerAttachmentActive}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 'var(--r)',
+                background: isInternal ? 'var(--amber)' : 'var(--teal)',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                color: '#0E1A18',
+                opacity: (!content.trim() || sendMutation.isPending || !canSendMessage || isComposerAttachmentActive) ? 0.4 : 1,
+              }}
+              aria-label={t('chat.send')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 'var(--r)',
-              background: isInternal ? 'var(--amber)' : 'var(--teal)',
-              border: 'none',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flexShrink: 0,
-              color: '#0E1A18',
-              opacity: (!content.trim() || sendMutation.isPending || isLocked) ? 0.4 : 1,
+              justifyContent: 'space-between',
+              gap: 8,
+              background: 'var(--bg-3)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 'var(--r-lg)',
+              padding: '11px 12px',
+              color: 'var(--txt-3)',
+              fontStyle: 'italic',
+              cursor: 'not-allowed',
             }}
-            aria-label={t('chat.send')}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+            <span>{blockedMessage}</span>
+            {isResolved && (
+              <button
+                onClick={() => reopenMutation.mutate()}
+                disabled={reopenMutation.isPending}
+                style={{
+                  background: 'var(--bg-2)',
+                  border: '1px solid rgba(0,201,167,.25)',
+                  color: 'var(--teal)',
+                  borderRadius: 'var(--r)',
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  fontStyle: 'normal',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('resolve.reopen', { defaultValue: 'Reabrir' })}
+              </button>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>
-            {content.length > 0
+            {isComposerAttachmentActive
+              ? t('media.caption')
+              : canSendMessage && content.length > 0
               ? t('chat.charCount', { count: content.length })
-              : isInternal
+              : canSendMessage && isInternal
                 ? <span style={{ color: 'var(--amber)', fontWeight: 500 }}>{t('chat.internalNoteActive')}</span>
                 : t('chat.ctrlEnter')}
           </span>

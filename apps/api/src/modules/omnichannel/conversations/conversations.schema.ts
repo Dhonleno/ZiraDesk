@@ -23,9 +23,16 @@ export const createConversationBodySchema = z.object({
 });
 
 export const sendMessageBodySchema = z.object({
-  content: z.string().min(1).max(4000),
-  contentType: z.enum(['text', 'image']).default('text'),
+  content: z.string().max(4000).optional(),
+  contentType: z.enum(['text', 'image', 'audio', 'video', 'document']).default('text'),
   isInternal: z.coerce.boolean().optional(),
+  media_id: z.string().optional(),
+  media_type: z.enum(['image', 'audio', 'video', 'document']).optional(),
+  media_filename: z.string().max(255).optional(),
+}).refine((data) => Boolean(data.content?.trim()) || Boolean(data.media_id), {
+  message: 'Mensagem deve conter texto ou mídia',
+}).refine((data) => !data.media_id || Boolean(data.media_type), {
+  message: 'media_type é obrigatório quando media_id for informado',
 });
 
 export const listMessagesQuerySchema = z.object({

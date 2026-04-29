@@ -14,6 +14,20 @@ export class NotFoundError extends Error {
   }
 }
 
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+async function getSchemaPrefix(tenantId?: string): Promise<string> {
+  if (!tenantId) return '';
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { schemaName: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant não encontrado');
+  return `${quoteIdent(tenant.schemaName)}.`;
+}
+
 interface ConversationRow {
   id: string;
   client_id: string | null;
@@ -127,7 +141,8 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   };
 }
 
-export async function getConversationWithMessages(conversationId: string) {
+export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
+  const schemaPrefix = await getSchemaPrefix(tenantId);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
        c.id, c.client_id, c.channel_id, c.channel_type, c.external_id,
@@ -136,10 +151,10 @@ export async function getConversationWithMessages(conversationId: string) {
        cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
        u.name AS assigned_name,
        ch.name AS channel_name
-     FROM conversations c
-     LEFT JOIN clients cl ON cl.id = c.client_id
-     LEFT JOIN users u ON u.id = c.assigned_to
-     LEFT JOIN channels ch ON ch.id = c.channel_id
+     FROM ${schemaPrefix}conversations c
+     LEFT JOIN ${schemaPrefix}clients cl ON cl.id = c.client_id
+     LEFT JOIN ${schemaPrefix}users u ON u.id = c.assigned_to
+     LEFT JOIN ${schemaPrefix}channels ch ON ch.id = c.channel_id
      WHERE c.id = $1::uuid
      LIMIT 1`,
     conversationId,
@@ -150,7 +165,7 @@ export async function getConversationWithMessages(conversationId: string) {
   const messages = await prisma.$queryRawUnsafe<MessageRow[]>(
     `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
             media_url, external_id, status, is_internal, created_at, metadata
-     FROM messages
+     FROM ${schemaPrefix}messages
      WHERE conversation_id = $1::uuid
      ORDER BY created_at ASC`,
     conversationId,
@@ -162,7 +177,9 @@ export async function getConversationWithMessages(conversationId: string) {
 export async function listConversationMessages(
   conversationId: string,
   query: ListMessagesQuery,
+  tenantId?: string,
 ): Promise<MessagePageResult> {
+  const schemaPrefix = await getSchemaPrefix(tenantId);
   const limit = Math.max(1, query.per_page);
   const fetchLimit = limit + 1;
   let rows: MessageRow[] = [];
@@ -170,7 +187,7 @@ export async function listConversationMessages(
   if (query.before) {
     const cursorRows = await prisma.$queryRawUnsafe<MessageCursorRow[]>(
       `SELECT id, created_at
-       FROM messages
+       FROM ${schemaPrefix}messages
        WHERE id = $1::uuid AND conversation_id = $2::uuid
        LIMIT 1`,
       query.before,
@@ -182,7 +199,7 @@ export async function listConversationMessages(
       rows = await prisma.$queryRawUnsafe<MessageRow[]>(
         `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
                 media_url, external_id, status, is_internal, created_at, metadata
-         FROM messages
+         FROM ${schemaPrefix}messages
          WHERE conversation_id = $1::uuid
            AND (
              created_at < $2
@@ -200,7 +217,7 @@ export async function listConversationMessages(
     rows = await prisma.$queryRawUnsafe<MessageRow[]>(
       `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
               media_url, external_id, status, is_internal, created_at, metadata
-       FROM messages
+       FROM ${schemaPrefix}messages
        WHERE conversation_id = $1::uuid
        ORDER BY created_at DESC, id DESC
        LIMIT $2`,
@@ -215,7 +232,7 @@ export async function listConversationMessages(
 
   const totalRows = await prisma.$queryRawUnsafe<MessageCountRow[]>(
     `SELECT COUNT(*) AS count
-     FROM messages
+     FROM ${schemaPrefix}messages
      WHERE conversation_id = $1::uuid`,
     conversationId,
   );
@@ -231,6 +248,9 @@ export interface SendMessageResult {
   clientPhone: string | null;
   clientEmail: string | null;
   channelCredentials: string | null;
+  mediaId: string | null;
+  mediaType: 'image' | 'audio' | 'video' | 'document' | null;
+  mediaFilename: string | null;
 }
 
 export async function sendMessage(
@@ -262,18 +282,39 @@ export async function sendMessage(
   if (!convRows[0]) throw new NotFoundError('Conversa não encontrada');
   const conv = convRows[0];
 
+  const contentType =
+    body.media_id && body.media_type
+      ? body.media_type
+      : body.contentType ?? 'text';
+
+  const content = body.content?.trim() ?? '';
+  const mediaId = body.media_id ?? null;
+  const mediaFilename = body.media_filename ?? null;
+  const metadataPatch = mediaFilename ? JSON.stringify({ filename: mediaFilename }) : '{}';
+
   const msgRows = await prisma.$queryRawUnsafe<MessageRow[]>(
-    `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, is_internal)
-     VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5)
+    `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, media_url, is_internal, metadata)
+     VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5, $6, $7::jsonb)
      RETURNING *`,
     conversationId,
     senderId,
-    body.content,
-    body.contentType,
+    content,
+    contentType,
+    mediaId,
     body.isInternal ?? false,
+    metadataPatch,
   );
 
   const message = msgRows[0]!;
+  const mediaPreviewLabel: Record<'image' | 'audio' | 'video' | 'document', string> = {
+    image: '[Imagem]',
+    audio: '[Áudio]',
+    video: '[Vídeo]',
+    document: '[Documento]',
+  };
+  const lastMessagePreview =
+    content.slice(0, 255) ||
+    (contentType !== 'text' ? mediaPreviewLabel[contentType as keyof typeof mediaPreviewLabel] : '[Mensagem]');
 
   await prisma.$executeRawUnsafe(
     `UPDATE conversations
@@ -281,7 +322,7 @@ export async function sendMessage(
          last_message_at = NOW(),
          status = CASE WHEN status = 'open' THEN 'pending' ELSE status END
      WHERE id = $2::uuid`,
-    body.content.slice(0, 255),
+    lastMessagePreview,
     conversationId,
   );
 
@@ -292,6 +333,9 @@ export async function sendMessage(
     clientPhone: conv.client_phone,
     clientEmail: conv.client_email,
     channelCredentials: conv.channel_credentials,
+    mediaId,
+    mediaType: mediaId ? (contentType as 'image' | 'audio' | 'video' | 'document') : null,
+    mediaFilename,
   };
 }
 
