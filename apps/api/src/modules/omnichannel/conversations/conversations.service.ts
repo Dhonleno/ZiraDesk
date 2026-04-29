@@ -51,6 +51,7 @@ interface MessageRow {
 }
 
 interface MessageCursorRow {
+  id: string;
   created_at: Date;
 }
 
@@ -168,7 +169,7 @@ export async function listConversationMessages(
 
   if (query.before) {
     const cursorRows = await prisma.$queryRawUnsafe<MessageCursorRow[]>(
-      `SELECT created_at
+      `SELECT id, created_at
        FROM messages
        WHERE id = $1::uuid AND conversation_id = $2::uuid
        LIMIT 1`,
@@ -183,11 +184,15 @@ export async function listConversationMessages(
                 media_url, external_id, status, is_internal, created_at, metadata
          FROM messages
          WHERE conversation_id = $1::uuid
-           AND created_at < $2
-         ORDER BY created_at DESC
-         LIMIT $3`,
+           AND (
+             created_at < $2
+             OR (created_at = $2 AND id < $3::uuid)
+           )
+         ORDER BY created_at DESC, id DESC
+         LIMIT $4`,
         conversationId,
         cursor.created_at,
+        cursor.id,
         fetchLimit,
       );
     }
@@ -197,7 +202,7 @@ export async function listConversationMessages(
               media_url, external_id, status, is_internal, created_at, metadata
        FROM messages
        WHERE conversation_id = $1::uuid
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT $2`,
       conversationId,
       fetchLimit,
