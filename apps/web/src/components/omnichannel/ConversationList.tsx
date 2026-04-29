@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
@@ -105,18 +105,129 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('');
   const [myOnly, setMyOnly] = useState(false);
+  const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
+  const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
+  const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const newConversationTimeoutsRef = useRef<Map<string, number>>(new Map());
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
 
+  const clearTimer = useCallback((timers: Map<string, number>, id: string) => {
+    const timer = timers.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timers.delete(id);
+    }
+  }, []);
+
+  const playNotificationSound = useCallback(() => {
+    try {
+      const ctx = new window.AudioContext();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1);
+      gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.25);
+      window.setTimeout(() => void ctx.close(), 350);
+    } catch {
+      // Browser may block audio until a user interaction happens.
+    }
+  }, []);
+
+  const markConversationActivity = useCallback((conversationId: string) => {
+    setNewActivity((prev) => {
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+    window.requestAnimationFrame(() => {
+      setNewActivity((prev) => {
+        const next = new Set(prev);
+        next.add(conversationId);
+        return next;
+      });
+    });
+
+    clearTimer(activityTimeoutsRef.current, conversationId);
+    const timer = window.setTimeout(() => {
+      setNewActivity((prev) => {
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+      activityTimeoutsRef.current.delete(conversationId);
+    }, 5000);
+    activityTimeoutsRef.current.set(conversationId, timer);
+  }, [clearTimer]);
+
+  const markNewConversation = useCallback((conversationId: string) => {
+    setNewConversations((prev) => {
+      const next = new Set(prev);
+      next.add(conversationId);
+      return next;
+    });
+
+    markConversationActivity(conversationId);
+    clearTimer(newConversationTimeoutsRef.current, conversationId);
+    const timer = window.setTimeout(() => {
+      setNewConversations((prev) => {
+        const next = new Set(prev);
+        next.delete(conversationId);
+        return next;
+      });
+      newConversationTimeoutsRef.current.delete(conversationId);
+    }, 10_000);
+    newConversationTimeoutsRef.current.set(conversationId, timer);
+  }, [clearTimer, markConversationActivity]);
+
   useEffect(() => {
-    const invalidate = () => void qc.invalidateQueries({ queryKey: ['conversations'] });
-    const unsubMessage = subscribeToEvent('conversation:new_message', invalidate);
-    const unsubCreated = subscribeToEvent('conversation:created', invalidate);
-    return () => {
-      unsubMessage?.();
-      unsubCreated?.();
+    const handleMessage = (data: { conversationId?: string }) => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      const conversationId = data.conversationId;
+      if (conversationId) {
+        markConversationActivity(conversationId);
+      }
+      playNotificationSound();
     };
-  }, [qc]);
+
+    const handleCreated = (data: { conversationId?: string; conversation?: { id: string } }) => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      const conversationId = data.conversationId ?? data.conversation?.id;
+      if (conversationId) {
+        markNewConversation(conversationId);
+      }
+      playNotificationSound();
+    };
+
+    const unsubMessage = subscribeToEvent<{ conversationId?: string }>('conversation:new_message', handleMessage);
+    const unsubIncoming = subscribeToEvent<{ conversationId?: string }>('conversation:message', handleMessage);
+    const unsubCreated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
+      'conversation:created',
+      handleCreated,
+    );
+    return () => {
+      unsubMessage();
+      unsubIncoming();
+      unsubCreated();
+
+      for (const timer of activityTimeoutsRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      for (const timer of newConversationTimeoutsRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      activityTimeoutsRef.current.clear();
+      newConversationTimeoutsRef.current.clear();
+    };
+  }, [markConversationActivity, markNewConversation, playNotificationSound, qc]);
 
   const STATUS_TABS: Array<{ value: StatusFilter; labelKey: string }> = [
     { value: '', labelKey: 'status.all' },
@@ -336,9 +447,17 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
               const name = conv.client_name ?? 'Visitante';
               const chStyle = CH_STYLE[conv.channel_type];
               const hasUnread = (conv.unread_count ?? 0) > 0;
+              const hasNewActivity = newActivity.has(conv.id);
+              const isNewConversation = newConversations.has(conv.id);
+              const itemClassName = [
+                hasNewActivity ? 'zd-flash' : '',
+                isNewConversation ? 'zd-slide-down' : '',
+              ].filter(Boolean).join(' ');
+
               return (
                 <button
                   key={conv.id}
+                  className={itemClassName}
                   onClick={() => onSelect(conv.id)}
                   style={{
                     width: '100%',
@@ -373,6 +492,12 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                       {name.charAt(0).toUpperCase()}
                     </div>
                     <ChannelDot type={conv.channel_type} />
+                    {(hasNewActivity || isNewConversation) && (
+                      <span
+                        className="zd-pulse-dot"
+                        style={{ position: 'absolute', top: -2, right: -2, zIndex: 10 }}
+                      />
+                    )}
                   </div>
 
                   {/* Body */}
@@ -387,6 +512,9 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                         {name}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 6 }}>
+                        {isNewConversation && (
+                          <span className="zd-badge-new">Novo</span>
+                        )}
                         {hasUnread && (
                           <div style={{
                             width: 8, height: 8, borderRadius: '50%',

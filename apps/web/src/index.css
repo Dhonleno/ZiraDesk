@@ -24,6 +24,55 @@
   100% { transform: translateY(360px) rotate(540deg); opacity: 0; }
 }
 
+@keyframes zd-pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
+@keyframes zd-flash {
+  0% { background-color: rgba(0, 201, 167, 0.15); }
+  100% { background-color: transparent; }
+}
+
+@keyframes zd-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.zd-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: zd-pulse-dot 1s ease-in-out infinite;
+  box-shadow: 0 0 0 3px var(--teal-dim);
+}
+
+.zd-flash {
+  animation: zd-flash 1s ease-out 1;
+}
+
+.zd-slide-down {
+  animation: zd-slide-down 0.3s ease-out 1;
+}
+
+.zd-badge-new {
+  background: var(--teal-dim);
+  color: var(--teal);
+  border: 1px solid rgba(0, 201, 167, 0.3);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  animation: zd-pulse-dot 1.5s ease-in-out infinite;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
