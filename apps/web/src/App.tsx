@@ -17,7 +17,9 @@ import { TicketsPage } from './pages/tickets/Tickets';
 import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Users as AdminUsers } from './pages/admin/Users';
 import { Channels as AdminChannels } from './pages/admin/Channels';
+import { QuickReplies as AdminQuickReplies } from './pages/admin/QuickReplies';
 import { Settings as AdminSettings } from './pages/admin/Settings';
+import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Upgrade } from './pages/settings/Upgrade';
@@ -47,7 +49,12 @@ function RequireSuperAdmin({ children }: { children: ReactNode }) {
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Routes>
           {/* Rotas públicas de autenticação */}
           <Route element={<AuthLayout />}>
@@ -91,11 +98,14 @@ export function App() {
             <Route path="crm/clients" element={<CrmClientsPage />} />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="tickets/:id" element={<TicketsPage />} />
-            <Route path="admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="admin/dashboard" element={<AdminDashboard />} />
-            <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/channels" element={<AdminChannels />} />
-            <Route path="admin/settings" element={<AdminSettings />} />
+            <Route path="admin" element={<AdminLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="channels" element={<AdminChannels />} />
+              <Route path="quick-replies" element={<AdminQuickReplies />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />
             <Route path="*" element={<NotFound />} />
           </Route>

@@ -9,6 +9,7 @@
       "remove": "Remove",
       "deactivate": "Deactivate",
       "activate": "Activate",
+      "reactivate": "Reactivate",
       "test": "Test",
       "invite": "Invite",
       "inviting": "Inviting...",
@@ -23,6 +24,7 @@
       "dashboard": "Dashboard",
       "users": "Users",
       "channels": "Channels",
+      "quickReplies": "Quick Replies",
       "settings": "Settings"
     },
     "settings": {
@@ -46,6 +48,7 @@
       "inviteUser": "Invite user",
       "noUsers": "No users found",
       "editUser": "Edit user",
+      "resetPassword": "Reset password",
       "search": "Search user...",
       "roles": {
         "owner": "Owner",
@@ -70,7 +73,11 @@
         "updated": "User updated",
         "deactivated": "User deactivated",
         "cantDeleteSelf": "You cannot remove yourself",
-        "tempPassword": "Temporary password"
+        "tempPassword": "Temporary password",
+        "reactivated": "User reactivated successfully",
+        "passwordReset": "Password for {{name}} has been reset",
+        "tempPasswordHint": "Share this password with the user. It will expire after first login.",
+        "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated."
       }
     },
     "channels": {
@@ -101,6 +108,40 @@
         "deleted": "Channel removed",
         "testSuccess": "Channel connected successfully",
         "testFail": "Connection failed — check your credentials"
+      }
+    },
+    "quickReplies": {
+      "title": "Quick Replies",
+      "subtitle": "Create text shortcuts to speed up support",
+      "new": "New reply",
+      "search": "Search by title, shortcut or content...",
+      "shortcut": "Shortcut",
+      "shortcutHelper": "Type /{{shortcut}} in chat to use it",
+      "shortcutPlaceholder": "e.g. hello, proposal, bye",
+      "title_field": "Title",
+      "content": "Content",
+      "contentPlaceholder": "Text that will be inserted into the chat...",
+      "category": "Category",
+      "categories": {
+        "greeting": "Greeting",
+        "service": "Service",
+        "commercial": "Commercial",
+        "closing": "Closing",
+        "support": "Support",
+        "other": "Other"
+      },
+      "preview": "Preview",
+      "noReplies": "No quick replies yet",
+      "noRepliesHint": "Create your first quick reply to speed up support",
+      "messages": {
+        "created": "Quick reply created",
+        "updated": "Quick reply updated",
+        "deleted": "Quick reply removed"
+      },
+      "chat": {
+        "title": "Quick replies",
+        "search": "Search or type /shortcut",
+        "hint": "Type / in chat to search shortcuts"
       }
     },
     "dashboard": {

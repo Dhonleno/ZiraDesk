@@ -117,6 +117,18 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".quick_replies (
+      id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      title       VARCHAR(120) NOT NULL,
+      shortcut    VARCHAR(50)  NOT NULL UNIQUE,
+      content     TEXT         NOT NULL,
+      category    VARCHAR(30)  NOT NULL DEFAULT 'other',
+      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".tickets (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       client_id       UUID REFERENCES "${schemaName}".clients(id) ON DELETE SET NULL,

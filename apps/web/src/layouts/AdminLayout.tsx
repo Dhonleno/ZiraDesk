@@ -1,0 +1,105 @@
+import { NavLink, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../hooks/useAuth';
+
+type AdminNavItemProps = { to: string; end?: true; children: React.ReactNode; label: string };
+
+function AdminNavItem({ to, end, children, label }: AdminNavItemProps) {
+  return (
+    <NavLink
+      to={to}
+      {...(end ? { end } : {})}
+      style={({ isActive }) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '7px 12px',
+        borderRadius: 'var(--r)',
+        fontSize: 13,
+        fontWeight: 500,
+        textDecoration: 'none',
+        color: isActive ? 'var(--teal)' : 'var(--txt-2)',
+        background: isActive ? 'var(--teal-dim)' : 'transparent',
+        transition: 'background 0.12s, color 0.12s',
+      })}
+    >
+      {children}
+      {label}
+    </NavLink>
+  );
+}
+
+export function AdminLayout() {
+  const { t } = useTranslation('admin');
+  const { user } = useAuth();
+  const canManageUsers = user?.role === 'owner' || user?.role === 'admin';
+
+  return (
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Admin sidebar */}
+      <aside style={{
+        width: 200,
+        minWidth: 200,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '16px 10px',
+        gap: 2,
+        background: 'var(--bg-2)',
+        borderRight: '1px solid var(--line)',
+        overflowY: 'auto',
+      }}>
+        <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', padding: '0 12px 8px' }}>
+          Administração
+        </p>
+
+        <AdminNavItem to="/admin/dashboard" label={t('tenantAdmin.nav.dashboard')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="8.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="1.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="8.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </AdminNavItem>
+
+        {canManageUsers && (
+          <AdminNavItem to="/admin/users" label={t('tenantAdmin.nav.users')}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <circle cx="7.5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M2 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </AdminNavItem>
+        )}
+
+        <AdminNavItem to="/admin/channels" label={t('tenantAdmin.nav.channels')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <path d="M2.5 11V5L7.5 2l5 3v6h-10z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path d="M5.5 11V8.5h4V11" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          </svg>
+        </AdminNavItem>
+
+        <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </AdminNavItem>
+
+        <AdminNavItem to="/admin/settings" label={t('tenantAdmin.nav.settings')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+            <path
+              d="M7.5 1.5v1.5M7.5 12v1.5M1.5 7.5H3M12 7.5h1.5M3.2 3.2l1.1 1.1M10.7 10.7l1.1 1.1M3.2 11.8l1.1-1.1M10.7 4.3l1.1-1.1"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </AdminNavItem>
+      </aside>
+
+      {/* Page content */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Outlet />
+      </div>
+    </div>
+  );
+}

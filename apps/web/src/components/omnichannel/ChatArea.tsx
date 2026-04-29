@@ -1,7 +1,13 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { omnichannelApi, type OmnichannelConversation, type OmnichannelMessage } from '../../services/api';
+import {
+  adminApi,
+  omnichannelApi,
+  type OmnichannelConversation,
+  type OmnichannelMessage,
+  type QuickReply,
+} from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
@@ -54,6 +60,12 @@ function formatDate(dateStr: string) {
   yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+}
+
+function revokeIfBlobUrl(url: string | null | undefined) {
+  if (!url) return;
+  if (!url.startsWith('blob:')) return;
+  URL.revokeObjectURL(url);
 }
 
 const COMMON_EMOJIS = [
@@ -112,6 +124,7 @@ interface Props {
 
 export function ChatArea({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
+  const { t: tAdmin } = useTranslation('admin');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -126,21 +139,29 @@ export function ChatArea({ conversationId }: Props) {
   const [localMediaUrls, setLocalMediaUrls] = useState<Record<string, string>>({});
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showShortcutSuggestions, setShowShortcutSuggestions] = useState(false);
+  const [shortcutSuggestions, setShortcutSuggestions] = useState<QuickReply[]>([]);
+  const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
+  const [unseenMessageCount, setUnseenMessageCount] = useState(0);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const quickRepliesRef = useRef<HTMLDivElement>(null);
+  const shortcutDropdownRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaUploadRef = useRef<MediaUploadHandle>(null);
   const audioRecorderRef = useRef<AudioRecorderHandle>(null);
   const lastMessagesErrorAtRef = useRef(0);
   const isLoadingLatestRef = useRef(false);
   const shouldAutoScrollNextRef = useRef(true);
+  const stickToBottomRef = useRef(true);
   const pendingInitialScrollRef = useRef(true);
   const nextScrollBehaviorRef = useRef<ScrollBehavior>('smooth');
   const localMediaUrlsRef = useRef<Record<string, string>>({});
+  const messagesRef = useRef<Message[]>([]);
+  const pendingIncomingNoticeRef = useRef(false);
   const [isMediaActive, setIsMediaActive] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
 
@@ -167,11 +188,30 @@ export function ChatArea({ conversationId }: Props) {
     return distanceToBottom <= threshold;
   }, []);
 
+  const syncBottomAnchor = useCallback(() => {
+    const nearBottom = isNearBottom();
+    stickToBottomRef.current = nearBottom;
+    shouldAutoScrollNextRef.current = nearBottom;
+    if (nearBottom) {
+      pendingIncomingNoticeRef.current = false;
+      setUnseenMessageCount(0);
+    }
+  }, [isNearBottom]);
+
+  const jumpToLatestMessages = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    pendingIncomingNoticeRef.current = false;
+    stickToBottomRef.current = true;
+    shouldAutoScrollNextRef.current = true;
+    nextScrollBehaviorRef.current = behavior;
+    setUnseenMessageCount(0);
+    scrollToBottom(behavior);
+  }, [scrollToBottom]);
+
   const registerLocalMediaPreview = useCallback((payload: SentMediaPayload) => {
     setLocalMediaUrls((prev) => {
       const currentForMedia = prev[payload.mediaId];
       if (currentForMedia && currentForMedia !== payload.localPreviewUrl) {
-        URL.revokeObjectURL(currentForMedia);
+        revokeIfBlobUrl(currentForMedia);
       }
       return {
         ...prev,
@@ -183,7 +223,7 @@ export function ChatArea({ conversationId }: Props) {
   const clearLocalMediaPreviews = useCallback(() => {
     setLocalMediaUrls((prev) => {
       for (const url of Object.values(prev)) {
-        URL.revokeObjectURL(url);
+        revokeIfBlobUrl(url);
       }
       return {};
     });
@@ -194,9 +234,13 @@ export function ChatArea({ conversationId }: Props) {
   }, [localMediaUrls]);
 
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     return () => {
       for (const url of Object.values(localMediaUrlsRef.current)) {
-        URL.revokeObjectURL(url);
+        revokeIfBlobUrl(url);
       }
     };
   }, []);
@@ -218,15 +262,28 @@ export function ChatArea({ conversationId }: Props) {
       ) {
         setShowQuickReplies(false);
       }
+      if (
+        showShortcutSuggestions &&
+        shortcutDropdownRef.current &&
+        !shortcutDropdownRef.current.contains(target)
+      ) {
+        setShowShortcutSuggestions(false);
+      }
     };
 
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [showEmojiPicker, showQuickReplies]);
+  }, [showEmojiPicker, showQuickReplies, showShortcutSuggestions]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversation', conversationId],
     queryFn: () => omnichannelApi.getConversation(conversationId),
+  });
+
+  const { data: quickReplies = [] } = useQuery({
+    queryKey: ['admin', 'quick-replies', 'chat'],
+    queryFn: () => adminApi.quickReplies.list(),
+    staleTime: 5 * 60 * 1000,
   });
 
   const notifyMessagesLoadError = useCallback(() => {
@@ -244,6 +301,11 @@ export function ChatArea({ conversationId }: Props) {
     }
     try {
       const result = await omnichannelApi.listMessages(conversationId, { per_page: 50, page: 1 });
+      const currentMessages = messagesRef.current;
+      const currentIds = new Set(currentMessages.map((msg) => msg.id));
+      const newlyAddedCount = preserveOlder
+        ? result.data.reduce((count, msg) => count + (currentIds.has(msg.id) ? 0 : 1), 0)
+        : 0;
       setHasMore(result.has_more);
       setTotalMessages(result.total);
       setMessages((prev) => {
@@ -256,6 +318,12 @@ export function ChatArea({ conversationId }: Props) {
         });
         return [...olderMessages, ...result.data];
       });
+      if (preserveOlder && pendingIncomingNoticeRef.current && !shouldAutoScrollNextRef.current && newlyAddedCount > 0) {
+        setUnseenMessageCount((prev) => prev + newlyAddedCount);
+        pendingIncomingNoticeRef.current = false;
+      } else if (!preserveOlder || shouldAutoScrollNextRef.current) {
+        setUnseenMessageCount(0);
+      }
 
     } catch {
       notifyMessagesLoadError();
@@ -272,10 +340,16 @@ export function ChatArea({ conversationId }: Props) {
     setIsInternal(false);
     setShowEmojiPicker(false);
     setShowQuickReplies(false);
+    setShowShortcutSuggestions(false);
+    setShortcutSuggestions([]);
+    setSelectedShortcutIndex(0);
     clearLocalMediaPreviews();
     pendingInitialScrollRef.current = true;
+    stickToBottomRef.current = true;
+    pendingIncomingNoticeRef.current = false;
     shouldAutoScrollNextRef.current = true;
     nextScrollBehaviorRef.current = 'auto';
+    setUnseenMessageCount(0);
     void loadLatestMessages(false);
   }, [clearLocalMediaPreviews, conversationId, loadLatestMessages]);
 
@@ -304,12 +378,62 @@ export function ChatArea({ conversationId }: Props) {
   }, [latestMessageKey, messages.length, scrollToBottom]);
 
   useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const keepBottomAnchored = () => {
+      if (!pendingInitialScrollRef.current && !stickToBottomRef.current) return;
+      nextScrollBehaviorRef.current = 'auto';
+      scrollToBottom('auto');
+    };
+
+    const mutationObserver = new MutationObserver(() => {
+      keepBottomAnchored();
+    });
+
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    const handleMediaLayout = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLImageElement ||
+        target instanceof HTMLVideoElement ||
+        target instanceof HTMLAudioElement
+      ) {
+        keepBottomAnchored();
+      }
+    };
+
+    container.addEventListener('load', handleMediaLayout, true);
+    container.addEventListener('loadedmetadata', handleMediaLayout, true);
+
+    return () => {
+      mutationObserver.disconnect();
+      container.removeEventListener('load', handleMediaLayout, true);
+      container.removeEventListener('loadedmetadata', handleMediaLayout, true);
+    };
+  }, [conversationId, scrollToBottom]);
+
+  useEffect(() => {
+    const handleIncomingConversationUpdate = () => {
+      const nearBottom = isNearBottom();
+      shouldAutoScrollNextRef.current = nearBottom;
+      stickToBottomRef.current = nearBottom;
+      if (nearBottom) {
+        nextScrollBehaviorRef.current = 'smooth';
+        setUnseenMessageCount(0);
+      } else {
+        pendingIncomingNoticeRef.current = true;
+      }
+    };
+
     const unsubNew = subscribeToEvent<{ conversationId: string }>('conversation:new_message', (event) => {
       if (event.conversationId !== conversationId) return;
-      shouldAutoScrollNextRef.current = isNearBottom();
-      if (shouldAutoScrollNextRef.current) {
-        nextScrollBehaviorRef.current = 'smooth';
-      }
+      handleIncomingConversationUpdate();
       void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
@@ -317,10 +441,7 @@ export function ChatArea({ conversationId }: Props) {
 
     const unsubIncoming = subscribeToEvent<{ conversationId: string }>('conversation:message', (event) => {
       if (event.conversationId !== conversationId) return;
-      shouldAutoScrollNextRef.current = isNearBottom();
-      if (shouldAutoScrollNextRef.current) {
-        nextScrollBehaviorRef.current = 'smooth';
-      }
+      handleIncomingConversationUpdate();
       void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
@@ -428,6 +549,7 @@ export function ChatArea({ conversationId }: Props) {
       setHasMore(result.has_more);
       setTotalMessages(result.total);
       shouldAutoScrollNextRef.current = false;
+      stickToBottomRef.current = false;
       setMessages((prev) => [...result.data, ...prev]);
 
       window.requestAnimationFrame(() => {
@@ -449,7 +571,72 @@ export function ChatArea({ conversationId }: Props) {
     sendMutation.mutate({ text, isInternalMessage: isInternal });
   }
 
+  function resizeComposer() {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  }
+
+  const updateShortcutSuggestions = useCallback((value: string) => {
+    if (!value.startsWith('/')) {
+      setShowShortcutSuggestions(false);
+      setShortcutSuggestions([]);
+      setSelectedShortcutIndex(0);
+      return;
+    }
+
+    const search = value.slice(1).trim().toLowerCase();
+    const filtered = quickReplies.filter((reply) =>
+      reply.shortcut.toLowerCase().includes(search) ||
+      reply.title.toLowerCase().includes(search),
+    );
+
+    setShortcutSuggestions(filtered);
+    setSelectedShortcutIndex(0);
+    setShowShortcutSuggestions(filtered.length > 0);
+  }, [quickReplies]);
+
+  useEffect(() => {
+    if (!content.startsWith('/')) return;
+    updateShortcutSuggestions(content);
+  }, [content, quickReplies, updateShortcutSuggestions]);
+
+  function applyQuickReply(reply: QuickReply) {
+    applyComposerText(reply.content);
+    setShowQuickReplies(false);
+    setShowShortcutSuggestions(false);
+    setShortcutSuggestions([]);
+    setSelectedShortcutIndex(0);
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (showShortcutSuggestions && shortcutSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelectedShortcutIndex((prev) => (prev + 1) % shortcutSuggestions.length);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelectedShortcutIndex((prev) => (prev - 1 + shortcutSuggestions.length) % shortcutSuggestions.length);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowShortcutSuggestions(false);
+        return;
+      }
+
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        applyQuickReply(shortcutSuggestions[selectedShortcutIndex]!);
+        return;
+      }
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSend();
@@ -457,33 +644,28 @@ export function ChatArea({ conversationId }: Props) {
   }
 
   function handleContentChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
-    setContent(event.target.value);
-    const ta = textareaRef.current;
-    if (ta) {
-      ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
-    }
+    const value = event.target.value;
+    setContent(value);
+    resizeComposer();
+    updateShortcutSuggestions(value);
   }
 
   function applyComposerText(text: string) {
     setContent(text);
+    setShowShortcutSuggestions(false);
+    setShortcutSuggestions([]);
+    setSelectedShortcutIndex(0);
     window.requestAnimationFrame(() => {
       const ta = textareaRef.current;
       if (!ta) return;
       ta.focus();
-      ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+      resizeComposer();
     });
   }
 
   function appendEmojiToComposer(emoji: string) {
     applyComposerText(`${content}${emoji}`);
     setShowEmojiPicker(false);
-  }
-
-  function handleQuickReplySelect(reply: string) {
-    applyComposerText(reply);
-    setShowQuickReplies(false);
   }
 
   const conv = data?.conversation as Conversation | undefined;
@@ -500,14 +682,6 @@ export function ChatArea({ conversationId }: Props) {
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
-  const quickReplyOptions = useMemo(() => ([
-    t('chat.sendProposal'),
-    t('chat.scheduleCall'),
-    t('chat.sendPaymentLink'),
-    t('chat.awaitReturn'),
-    t('chat.sendContract'),
-    t('chat.qualifyLead'),
-  ]), [t]);
 
   const grouped = useMemo(() => {
     const list: Array<{ date: string; msgs: Message[] }> = [];
@@ -670,18 +844,26 @@ export function ChatArea({ conversationId }: Props) {
       </div>
 
       <div
-        ref={messagesContainerRef}
         style={{
+          position: 'relative',
           flex: 1,
-          overflowY: 'auto',
-          padding: 20,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'var(--bg-4) transparent',
+          minHeight: 0,
         }}
       >
+        <div
+          ref={messagesContainerRef}
+          onScroll={syncBottomAnchor}
+          style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: 20,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--bg-4) transparent',
+          }}
+        >
         {hasMore && (
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
             <button
@@ -880,6 +1062,37 @@ export function ChatArea({ conversationId }: Props) {
             <span style={{ fontSize: 10, color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('chat.typing')}</span>
           </div>
         )}
+        </div>
+
+        {unseenMessageCount > 0 && (
+          <button
+            type="button"
+            onClick={() => jumpToLatestMessages('smooth')}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 18,
+              transform: 'translateX(-50%)',
+              zIndex: 8,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 14px',
+              borderRadius: 'var(--r-pill)',
+              border: '1px solid rgba(0,201,167,.28)',
+              background: 'rgba(9,20,19,.96)',
+              color: 'var(--teal)',
+              boxShadow: '0 10px 24px rgba(0,0,0,.28)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <span aria-hidden>↓</span>
+            {unseenMessageCount === 1 ? '1 nova mensagem' : `${unseenMessageCount} novas mensagens`}
+          </button>
+        )}
       </div>
 
       <div
@@ -941,14 +1154,14 @@ export function ChatArea({ conversationId }: Props) {
             }}
           >
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)' }}>
-              ⚡ Respostas rápidas
+              ⚡ {tAdmin('tenantAdmin.quickReplies.chat.title')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {quickReplyOptions.map((reply) => (
+              {quickReplies.length > 0 ? quickReplies.map((reply) => (
                 <button
-                  key={reply}
+                  key={reply.id}
                   type="button"
-                  onClick={() => handleQuickReplySelect(reply)}
+                  onClick={() => applyQuickReply(reply)}
                   style={{
                     textAlign: 'left',
                     padding: '10px 12px',
@@ -963,9 +1176,31 @@ export function ChatArea({ conversationId }: Props) {
                   onMouseEnter={(event) => { event.currentTarget.style.background = 'var(--bg-4)'; }}
                   onMouseLeave={(event) => { event.currentTarget.style.background = 'transparent'; }}
                 >
-                  {reply}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--mono)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: 'var(--teal)',
+                        background: 'var(--teal-dim)',
+                        borderRadius: 999,
+                        padding: '2px 7px',
+                      }}
+                    >
+                      /{reply.shortcut}
+                    </span>
+                    <span style={{ fontWeight: 500 }}>{reply.title}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {reply.content}
+                  </div>
                 </button>
-              ))}
+              )) : (
+                <div style={{ padding: '12px', fontSize: 12, color: 'var(--txt-3)' }}>
+                  {tAdmin('tenantAdmin.quickReplies.noReplies')}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1111,6 +1346,7 @@ export function ChatArea({ conversationId }: Props) {
             {canSendMessage ? (
               <div
                 style={{
+                  position: 'relative',
                   display: 'flex',
                   alignItems: 'flex-end',
                   gap: 8,
@@ -1120,6 +1356,88 @@ export function ChatArea({ conversationId }: Props) {
                   padding: '10px 10px 10px 12px',
                 }}
               >
+                {showShortcutSuggestions && shortcutSuggestions.length > 0 && !isComposerAttachmentActive ? (
+                  <div
+                    ref={shortcutDropdownRef}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: 'calc(100% + 10px)',
+                      background: 'var(--bg-2)',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 14,
+                      boxShadow: '0 -4px 20px rgba(0,0,0,.3)',
+                      maxHeight: 280,
+                      overflowY: 'auto',
+                      zIndex: 30,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid var(--line)',
+                        fontSize: 12,
+                        color: 'var(--txt-3)',
+                      }}
+                    >
+                      {tAdmin('tenantAdmin.quickReplies.chat.search')}
+                    </div>
+                    {shortcutSuggestions.map((reply, index) => {
+                      const isActive = index === selectedShortcutIndex;
+                      return (
+                        <button
+                          key={reply.id}
+                          type="button"
+                          onClick={() => applyQuickReply(reply)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            border: 'none',
+                            borderBottom: index === shortcutSuggestions.length - 1 ? 'none' : '1px solid var(--line)',
+                            background: isActive ? 'var(--bg-3)' : 'transparent',
+                            transition: 'background .15s',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: 'var(--mono)',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: 'var(--teal)',
+                              background: 'var(--teal-dim)',
+                              padding: '2px 7px',
+                              borderRadius: 999,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            /{reply.shortcut}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', whiteSpace: 'nowrap' }}>
+                            {reply.title}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: 'var(--txt-3)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              flex: 1,
+                            }}
+                          >
+                            {reply.content}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -1261,6 +1579,8 @@ export function ChatArea({ conversationId }: Props) {
               <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>
                 {isComposerAttachmentActive
                   ? t('media.caption')
+                  : showShortcutSuggestions
+                  ? tAdmin('tenantAdmin.quickReplies.chat.hint')
                   : canSendMessage && content.length > 0
                   ? t('chat.charCount', { count: content.length })
                   : canSendMessage && isInternal

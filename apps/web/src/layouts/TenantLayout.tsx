@@ -93,6 +93,7 @@ function Breadcrumb() {
     '/admin/dashboard':  t('tenantAdmin.nav.dashboard'),
     '/admin/users':      t('tenantAdmin.nav.users'),
     '/admin/channels':   t('tenantAdmin.nav.channels'),
+    '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/settings':   t('tenantAdmin.nav.settings'),
   };
 
@@ -148,11 +149,13 @@ export function TenantLayout() {
   const { user, token, logout, isLoggingOut } = useAuth();
   const { pathname } = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
+  const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
     staleTime: 5 * 60_000,
+    enabled: canAccessAdminData,
   });
 
   useEffect(() => {
@@ -345,8 +348,8 @@ export function TenantLayout() {
             </svg>
           </div>
 
-          {/* Configurações */}
-          <NavItem to="/admin/settings" title={t('tenantAdmin.nav.settings')}>
+          {/* Configurações / Admin */}
+          <NavItem to="/admin" title={t('tenantAdmin.nav.settings')}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.4" />
               <path
@@ -407,7 +410,7 @@ export function TenantLayout() {
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <OnboardingChecklist />
+      {canAccessAdminData ? <OnboardingChecklist /> : null}
     </div>
   );
 }

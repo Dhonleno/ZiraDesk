@@ -9,6 +9,7 @@
       "remove": "Eliminar",
       "deactivate": "Desactivar",
       "activate": "Activar",
+      "reactivate": "Reactivar",
       "test": "Probar",
       "invite": "Invitar",
       "inviting": "Invitando...",
@@ -23,6 +24,7 @@
       "dashboard": "Panel",
       "users": "Usuarios",
       "channels": "Canales",
+      "quickReplies": "Respuestas Rápidas",
       "settings": "Configuración"
     },
     "settings": {
@@ -46,6 +48,7 @@
       "inviteUser": "Invitar usuario",
       "noUsers": "No se encontraron usuarios",
       "editUser": "Editar usuario",
+      "resetPassword": "Restablecer contraseña",
       "search": "Buscar usuario...",
       "roles": {
         "owner": "Propietario",
@@ -70,7 +73,11 @@
         "updated": "Usuario actualizado",
         "deactivated": "Usuario desactivado",
         "cantDeleteSelf": "No puedes eliminarte a ti mismo",
-        "tempPassword": "Contraseña temporal"
+        "tempPassword": "Contraseña temporal",
+        "reactivated": "Usuario reactivado con éxito",
+        "passwordReset": "Contraseña de {{name}} restablecida",
+        "tempPasswordHint": "Comparte esta contraseña con el usuario. Expirará después del primer inicio de sesión.",
+        "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal."
       }
     },
     "channels": {
@@ -101,6 +108,40 @@
         "deleted": "Canal eliminado",
         "testSuccess": "Canal conectado con éxito",
         "testFail": "Error de conexión — verifica las credenciales"
+      }
+    },
+    "quickReplies": {
+      "title": "Respuestas Rápidas",
+      "subtitle": "Crea atajos de texto para agilizar la atención",
+      "new": "Nueva respuesta",
+      "search": "Buscar por título, atajo o contenido...",
+      "shortcut": "Atajo",
+      "shortcutHelper": "Escribe /{{shortcut}} en el chat para usarlo",
+      "shortcutPlaceholder": "ej: hola, propuesta, chau",
+      "title_field": "Título",
+      "content": "Contenido",
+      "contentPlaceholder": "Texto que se insertará en el chat...",
+      "category": "Categoría",
+      "categories": {
+        "greeting": "Saludo",
+        "service": "Atención",
+        "commercial": "Comercial",
+        "closing": "Cierre",
+        "support": "Soporte",
+        "other": "Otro"
+      },
+      "preview": "Vista previa",
+      "noReplies": "No hay respuestas rápidas registradas",
+      "noRepliesHint": "Crea tu primera respuesta para agilizar la atención",
+      "messages": {
+        "created": "Respuesta rápida creada",
+        "updated": "Respuesta rápida actualizada",
+        "deleted": "Respuesta rápida eliminada"
+      },
+      "chat": {
+        "title": "Respuestas rápidas",
+        "search": "Buscar o escribir /atajo",
+        "hint": "Escribe / en el chat para buscar atajos"
       }
     },
     "dashboard": {

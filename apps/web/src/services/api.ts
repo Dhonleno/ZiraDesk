@@ -69,6 +69,36 @@ interface CreateChannelPayload {
   settings?: Record<string, unknown>;
 }
 
+export type QuickReplyCategory =
+  | 'greeting'
+  | 'service'
+  | 'commercial'
+  | 'closing'
+  | 'support'
+  | 'other';
+
+export interface QuickReply {
+  id: string;
+  title: string;
+  shortcut: string;
+  content: string;
+  category: QuickReplyCategory;
+  created_at: string;
+  updated_at: string;
+}
+
+interface QuickRepliesListParams {
+  search?: string;
+  category?: QuickReplyCategory;
+}
+
+interface CreateQuickReplyPayload {
+  title: string;
+  shortcut: string;
+  content: string;
+  category: QuickReplyCategory;
+}
+
 interface UpdateChannelPayload {
   name?: string;
   credentials?: Record<string, unknown>;
@@ -371,6 +401,28 @@ export const adminApi = {
       `/admin/channels/${id}/test`,
     );
     return res.data;
+  },
+
+  quickReplies: {
+    list: async (params?: QuickRepliesListParams): Promise<QuickReply[]> => {
+      const res = await api.get<{ success: boolean; data: QuickReply[] }>('/admin/quick-replies', { params });
+      return res.data.data;
+    },
+
+    create: async (data: CreateQuickReplyPayload): Promise<QuickReply> => {
+      const res = await api.post<{ success: boolean; data: QuickReply }>('/admin/quick-replies', data);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: Partial<CreateQuickReplyPayload>): Promise<QuickReply> => {
+      const res = await api.patch<{ success: boolean; data: QuickReply }>(`/admin/quick-replies/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<QuickReply> => {
+      const res = await api.delete<{ success: boolean; data: QuickReply }>(`/admin/quick-replies/${id}`);
+      return res.data.data;
+    },
   },
 };
 

@@ -262,6 +262,55 @@ async function seedDemoConversations() {
   console.log(`  ✓ ${messages.length} mensagens`);
 }
 
+async function seedDemoQuickReplies() {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: 'demo' } });
+  if (!tenant) {
+    console.log('  · Tenant demo não encontrado para respostas rápidas, pulando');
+    return;
+  }
+
+  const s = tenant.schemaName;
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${s}".quick_replies (
+      id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      title       VARCHAR(120) NOT NULL,
+      shortcut    VARCHAR(50)  NOT NULL UNIQUE,
+      content     TEXT         NOT NULL,
+      category    VARCHAR(30)  NOT NULL DEFAULT 'other',
+      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const quickReplies = [
+    { title: 'Saudação inicial', shortcut: 'oi', content: 'Olá! Tudo bem? Como posso te ajudar hoje?', category: 'greeting' },
+    { title: 'Enviar proposta', shortcut: 'proposta', content: 'Perfeito! Vou preparar a proposta e te envio em seguida.', category: 'commercial' },
+    { title: 'Agendar ligação', shortcut: 'ligacao', content: 'Claro! Me diga o melhor horário para agendarmos uma ligação.', category: 'service' },
+    { title: 'Link de pagamento', shortcut: 'pagamento', content: 'Segue o link de pagamento para darmos continuidade: {{link}}', category: 'commercial' },
+    { title: 'Aguardar retorno', shortcut: 'retorno', content: 'Sem problemas. Vou aguardar seu retorno por aqui.', category: 'closing' },
+    { title: 'Encerramento', shortcut: 'tchau', content: 'Fico à disposição. Qualquer coisa, é só me chamar.', category: 'closing' },
+  ];
+
+  for (const reply of quickReplies) {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${s}".quick_replies (title, shortcut, content, category)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (shortcut) DO UPDATE
+         SET title = EXCLUDED.title,
+             content = EXCLUDED.content,
+             category = EXCLUDED.category,
+             updated_at = NOW()`,
+      reply.title,
+      reply.shortcut,
+      reply.content,
+      reply.category,
+    );
+  }
+
+  console.log(`  ✓ ${quickReplies.length} respostas rápidas`);
+}
+
 async function main() {
   console.log('\n━━━ ZiraDesk Seed ━━━\n');
 
@@ -276,6 +325,9 @@ async function main() {
 
   console.log('\nConversas Mock:');
   await seedDemoConversations();
+
+  console.log('\nRespostas rápidas:');
+  await seedDemoQuickReplies();
 
   console.log('\n━━━ Seed concluído ━━━\n');
 }
