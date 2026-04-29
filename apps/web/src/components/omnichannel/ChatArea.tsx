@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
 import { ResolveModal } from './ResolveModal';
 import { TransferModal } from './TransferModal';
-import { MediaUpload, type MediaUploadHandle } from './MediaUpload';
+import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
 import { MessageMedia } from './MessageMedia';
 
@@ -73,6 +73,7 @@ export function ChatArea({ conversationId }: Props) {
   const [totalMessages, setTotalMessages] = useState(0);
   const [isMessagesLoading, setIsMessagesLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [localMediaUrls, setLocalMediaUrls] = useState<Record<string, string>>({});
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -82,8 +83,51 @@ export function ChatArea({ conversationId }: Props) {
   const audioRecorderRef = useRef<AudioRecorderHandle>(null);
   const lastMessagesErrorAtRef = useRef(0);
   const isLoadingLatestRef = useRef(false);
+  const skipNextAutoScrollRef = useRef(false);
+  const nextScrollBehaviorRef = useRef<ScrollBehavior>('smooth');
+  const localMediaUrlsRef = useRef<Record<string, string>>({});
   const [isMediaActive, setIsMediaActive] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior, block: 'end' });
+    });
+  }, []);
+
+  const registerLocalMediaPreview = useCallback((payload: SentMediaPayload) => {
+    setLocalMediaUrls((prev) => {
+      const currentForMedia = prev[payload.mediaId];
+      if (currentForMedia && currentForMedia !== payload.localPreviewUrl) {
+        URL.revokeObjectURL(currentForMedia);
+      }
+      return {
+        ...prev,
+        [payload.mediaId]: payload.localPreviewUrl,
+      };
+    });
+  }, []);
+
+  const clearLocalMediaPreviews = useCallback(() => {
+    setLocalMediaUrls((prev) => {
+      for (const url of Object.values(prev)) {
+        URL.revokeObjectURL(url);
+      }
+      return {};
+    });
+  }, []);
+
+  useEffect(() => {
+    localMediaUrlsRef.current = localMediaUrls;
+  }, [localMediaUrls]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(localMediaUrlsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -97,7 +141,7 @@ export function ChatArea({ conversationId }: Props) {
     toast.error(t('history.error', { defaultValue: 'Erro ao carregar mensagens' }));
   }, [t, toast]);
 
-  const loadLatestMessages = useCallback(async (preserveOlder: boolean, scrollToBottom: boolean) => {
+  const loadLatestMessages = useCallback(async (preserveOlder: boolean) => {
     if (isLoadingLatestRef.current) return;
     isLoadingLatestRef.current = true;
     setIsMessagesLoading(true);
@@ -116,11 +160,6 @@ export function ChatArea({ conversationId }: Props) {
         return [...olderMessages, ...result.data];
       });
 
-      if (scrollToBottom) {
-        window.requestAnimationFrame(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'auto' });
-        });
-      }
     } catch {
       notifyMessagesLoadError();
     } finally {
@@ -132,28 +171,40 @@ export function ChatArea({ conversationId }: Props) {
   useEffect(() => {
     setContent('');
     setIsInternal(false);
-    void loadLatestMessages(false, true);
-  }, [conversationId, loadLatestMessages]);
+    clearLocalMediaPreviews();
+    nextScrollBehaviorRef.current = 'auto';
+    void loadLatestMessages(false);
+  }, [clearLocalMediaPreviews, conversationId, loadLatestMessages]);
+
+  const latestMessageKey = messages.length
+    ? `${messages.length}:${messages[messages.length - 1]?.id ?? ''}`
+    : '0';
+
+  useEffect(() => {
+    if (!messages.length) return;
+    if (skipNextAutoScrollRef.current) {
+      skipNextAutoScrollRef.current = false;
+      return;
+    }
+
+    const behavior = nextScrollBehaviorRef.current;
+    nextScrollBehaviorRef.current = 'smooth';
+    scrollToBottom(behavior);
+  }, [latestMessageKey, messages.length, scrollToBottom]);
 
   useEffect(() => {
     const unsubNew = subscribeToEvent<{ conversationId: string }>('conversation:new_message', (event) => {
       if (event.conversationId !== conversationId) return;
-      const container = messagesContainerRef.current;
-      const shouldStickBottom = container
-        ? container.scrollHeight - (container.scrollTop + container.clientHeight) < 80
-        : false;
-      void loadLatestMessages(true, shouldStickBottom);
+      nextScrollBehaviorRef.current = 'smooth';
+      void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
 
     const unsubIncoming = subscribeToEvent<{ conversationId: string }>('conversation:message', (event) => {
       if (event.conversationId !== conversationId) return;
-      const container = messagesContainerRef.current;
-      const shouldStickBottom = container
-        ? container.scrollHeight - (container.scrollTop + container.clientHeight) < 80
-        : false;
-      void loadLatestMessages(true, shouldStickBottom);
+      nextScrollBehaviorRef.current = 'smooth';
+      void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
@@ -187,9 +238,10 @@ export function ChatArea({ conversationId }: Props) {
     onSuccess: () => {
       setContent('');
       setIsInternal(false);
+      nextScrollBehaviorRef.current = 'smooth';
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
-      void loadLatestMessages(true, true);
+      void loadLatestMessages(true);
     },
     onError: () => toast.error(t('chat.send') + ' — erro'),
   });
@@ -232,7 +284,8 @@ export function ChatArea({ conversationId }: Props) {
         isInternal: true,
       }),
     onSuccess: () => {
-      void loadLatestMessages(true, true);
+      nextScrollBehaviorRef.current = 'smooth';
+      void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
@@ -255,6 +308,7 @@ export function ChatArea({ conversationId }: Props) {
       });
       setHasMore(result.has_more);
       setTotalMessages(result.total);
+      skipNextAutoScrollRef.current = true;
       setMessages((prev) => [...result.data, ...prev]);
 
       window.requestAnimationFrame(() => {
@@ -628,7 +682,11 @@ export function ChatArea({ conversationId }: Props) {
                         )}
                         {msg.content_type !== 'text' && (
                           <div style={{ marginBottom: msg.content ? 6 : 0 }}>
-                            <MessageMedia message={msg} conversationId={conversationId} />
+                            <MessageMedia
+                              message={msg}
+                              conversationId={conversationId}
+                              localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
+                            />
                           </div>
                         )}
                         {msg.content}
@@ -655,7 +713,7 @@ export function ChatArea({ conversationId }: Props) {
           ))
         )}
 
-        <div ref={bottomRef} />
+        <div ref={bottomRef} style={{ height: 1 }} />
 
         {isTyping && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
@@ -713,10 +771,12 @@ export function ChatArea({ conversationId }: Props) {
               conversationId={conversationId}
               disabled={!canSendMessage}
               onActiveChange={setIsMediaActive}
-              onSent={async () => {
+              onSent={async (payload) => {
+                registerLocalMediaPreview(payload);
+                nextScrollBehaviorRef.current = 'smooth';
                 void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
                 void qc.invalidateQueries({ queryKey: ['conversations'] });
-                await loadLatestMessages(true, true);
+                await loadLatestMessages(true);
               }}
             />
             <AudioRecorder
@@ -724,10 +784,12 @@ export function ChatArea({ conversationId }: Props) {
               conversationId={conversationId}
               disabled={!canSendMessage}
               onActiveChange={setIsAudioActive}
-              onSent={async () => {
+              onSent={async (payload) => {
+                registerLocalMediaPreview(payload);
+                nextScrollBehaviorRef.current = 'smooth';
                 void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
                 void qc.invalidateQueries({ queryKey: ['conversations'] });
-                await loadLatestMessages(true, true);
+                await loadLatestMessages(true);
               }}
             />
           </>
@@ -738,7 +800,7 @@ export function ChatArea({ conversationId }: Props) {
             <>
               <button
                 type="button"
-                onClick={() => mediaUploadRef.current?.openPicker('image/jpeg,image/png,image/webp,audio/ogg,audio/mpeg,audio/webm,video/mp4,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+                onClick={() => mediaUploadRef.current?.openPicker('image/jpeg,image/png,image/webp,image/gif,audio/ogg,audio/mp4,audio/mpeg,audio/amr,audio/aac,audio/opus,video/mp4,video/3gpp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain')}
                 title={t('media.upload')}
                 style={{
                   width: 28,

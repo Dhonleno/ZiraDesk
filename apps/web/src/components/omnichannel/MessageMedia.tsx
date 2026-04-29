@@ -7,35 +7,54 @@ import { Lightbox } from '../ui/Lightbox';
 interface MessageMediaProps {
   message: OmnichannelMessage;
   conversationId: string;
+  localMediaUrl?: string | undefined;
 }
 
-export function MessageMedia({ message, conversationId }: MessageMediaProps) {
+function getMetadataMediaId(metadata: OmnichannelMessage['metadata']): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const mediaId = (metadata as Record<string, unknown>).media_id;
+  return typeof mediaId === 'string' && mediaId.trim().length > 0 ? mediaId : null;
+}
+
+export function MessageMedia({ message, conversationId, localMediaUrl }: MessageMediaProps) {
   const { t } = useTranslation('omnichannel');
   const [openLightbox, setOpenLightbox] = useState(false);
-  const mediaId = message.media_url;
+  const mediaId = message.media_url ?? getMetadataMediaId(message.metadata);
 
-  const { data: mediaBlob, isLoading } = useQuery({
+  const { data: mediaBlob, isLoading, isError } = useQuery({
     queryKey: ['omnichannel-media', conversationId, mediaId],
-    queryFn: () => omnichannelApi.downloadMedia(mediaId!, conversationId),
-    enabled: Boolean(mediaId),
+    queryFn: () => omnichannelApi.downloadMediaById(mediaId!),
+    enabled: Boolean(mediaId) && !localMediaUrl,
     staleTime: 60 * 60 * 1000,
   });
 
   const mediaUrl = useMemo(() => {
+    if (localMediaUrl) return localMediaUrl;
     if (!mediaBlob) return null;
     return URL.createObjectURL(mediaBlob);
-  }, [mediaBlob]);
+  }, [localMediaUrl, mediaBlob]);
 
   useEffect(() => {
     return () => {
-      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+      if (mediaUrl && !localMediaUrl) URL.revokeObjectURL(mediaUrl);
     };
-  }, [mediaUrl]);
+  }, [localMediaUrl, mediaUrl]);
 
-  if (!mediaId) return null;
-  if (isLoading || !mediaUrl) {
+  if (!mediaId && !localMediaUrl) return null;
+
+  if (isLoading && !mediaUrl) {
     return <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('history.loading')}</div>;
   }
+
+  if (isError && !mediaUrl) {
+    return (
+      <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+        {t('media.unavailable', { defaultValue: 'Mídia indisponível' })}
+      </div>
+    );
+  }
+
+  if (!mediaUrl) return null;
 
   if (message.content_type === 'image') {
     return (

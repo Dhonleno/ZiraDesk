@@ -92,6 +92,13 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Deixa o browser definir o boundary automaticamente para multipart/form-data
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    const headers = config.headers as Record<string, unknown>;
+    delete headers['Content-Type'];
+  }
+
   return config;
 });
 
@@ -609,15 +616,12 @@ export const omnichannelApi = {
 
   uploadMedia: async (conversationId: string, file: File): Promise<UploadedMediaResponse> => {
     const form = new FormData();
-    form.append('file', file);
     form.append('conversation_id', conversationId);
+    form.append('file', file);
 
     const res = await api.post<{ success: boolean; data: UploadedMediaResponse }>(
       '/omnichannel/media/upload',
       form,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      },
     );
     return res.data.data;
   },
@@ -633,6 +637,13 @@ export const omnichannelApi = {
   downloadMedia: async (mediaId: string, conversationId: string): Promise<Blob> => {
     const res = await api.get<Blob>(`/omnichannel/media/${mediaId}/content`, {
       params: { conversation_id: conversationId },
+      responseType: 'blob',
+    });
+    return res.data;
+  },
+
+  downloadMediaById: async (mediaId: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/media/${mediaId}`, {
       responseType: 'blob',
     });
     return res.data;

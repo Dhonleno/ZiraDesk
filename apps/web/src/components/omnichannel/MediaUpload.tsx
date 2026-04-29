@@ -8,10 +8,15 @@ export interface MediaUploadHandle {
   clear: () => void;
 }
 
+export interface SentMediaPayload {
+  mediaId: string;
+  localPreviewUrl: string;
+}
+
 interface MediaUploadProps {
   conversationId: string;
   disabled?: boolean;
-  onSent: () => Promise<void> | void;
+  onSent: (payload: SentMediaPayload) => Promise<void> | void;
   onActiveChange?: (active: boolean) => void;
 }
 
@@ -75,6 +80,8 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
     const onUpload = async () => {
       if (!selectedFile || isUploading) return;
       setIsUploading(true);
+      let localPreviewUrl: string | null = null;
+      let handedOffToParent = false;
       try {
         const upload = await omnichannelApi.uploadMedia(conversationId, selectedFile);
         await omnichannelApi.sendMessage(conversationId, {
@@ -84,11 +91,20 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
           media_filename: upload.filename,
           contentType: upload.media_type,
         });
+
+        localPreviewUrl = URL.createObjectURL(selectedFile);
         clear();
-        await onSent();
+        await onSent({
+          mediaId: upload.media_id,
+          localPreviewUrl,
+        });
+        handedOffToParent = true;
       } catch {
         toast.error(t('media.uploadError'));
       } finally {
+        if (localPreviewUrl && !handedOffToParent) {
+          URL.revokeObjectURL(localPreviewUrl);
+        }
         setIsUploading(false);
       }
     };

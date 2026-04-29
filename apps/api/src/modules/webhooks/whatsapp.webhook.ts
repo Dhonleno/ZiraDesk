@@ -21,6 +21,15 @@ interface MetaStatus {
   status: 'sent' | 'delivered' | 'read' | 'failed';
   timestamp: string;
   recipient_id: string;
+  errors?: Array<{
+    code?: number;
+    title?: string;
+    message?: string;
+    error_data?: {
+      details?: string;
+      messaging_product?: string;
+    };
+  }>;
 }
 
 interface MetaWebhookPayload {
@@ -128,6 +137,8 @@ async function processIncomingMessage(
 
   let content = '';
   let contentType = 'text';
+  let externalMediaId: string | null = null;
+  const mediaMetadata: Record<string, unknown> = {};
 
   switch (message.type) {
     case 'text':
@@ -137,22 +148,35 @@ async function processIncomingMessage(
     case 'image':
       content = message.image?.caption ?? '📷 Imagem';
       contentType = 'image';
+      externalMediaId = message.image?.id ?? null;
+      if (message.image?.mime_type) mediaMetadata.mime_type = message.image.mime_type;
       break;
     case 'audio':
       content = '🎵 Áudio';
       contentType = 'audio';
+      externalMediaId = message.audio?.id ?? null;
+      if (message.audio?.mime_type) mediaMetadata.mime_type = message.audio.mime_type;
       break;
     case 'video':
       content = message.video?.caption ?? '🎬 Vídeo';
       contentType = 'video';
+      externalMediaId = message.video?.id ?? null;
+      if (message.video?.mime_type) mediaMetadata.mime_type = message.video.mime_type;
       break;
     case 'document':
       content = `📄 ${message.document?.filename ?? 'Documento'}`;
       contentType = 'document';
+      externalMediaId = message.document?.id ?? null;
+      if (message.document?.filename) mediaMetadata.filename = message.document.filename;
+      if (message.document?.mime_type) mediaMetadata.mime_type = message.document.mime_type;
       break;
     default:
       content = '📎 Anexo';
       contentType = 'text';
+  }
+
+  if (externalMediaId) {
+    mediaMetadata.media_id = externalMediaId;
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -201,6 +225,7 @@ async function processIncomingMessage(
     console.log('[WhatsApp Webhook] Found conversation:', convRows[0] ?? null);
 
     let conversationId: string;
+    let isNewConversation = false;
     if (convRows[0]) {
       conversationId = convRows[0].id;
     } else {
@@ -211,19 +236,22 @@ async function processIncomingMessage(
         channelId,
       );
       conversationId = newConv[0]!.id;
+      isNewConversation = true;
     }
 
     const msgRows = await tx.$queryRawUnsafe<
       [{ id: string; content: string; created_at: Date; sender_type: string }]
     >(
-      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, external_id, status)
-       VALUES ($1::uuid, 'client', $2::uuid, $3, $4, $5, 'delivered')
+      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, media_url, external_id, status, metadata)
+       VALUES ($1::uuid, 'client', $2::uuid, $3, $4, $5, $6, 'delivered', $7::jsonb)
        RETURNING id, content, created_at, sender_type`,
       conversationId,
       clientId,
       content,
       contentType,
+      externalMediaId,
       message.id,
+      JSON.stringify(mediaMetadata),
     );
     const savedMessage = msgRows[0]!;
 
@@ -233,10 +261,15 @@ async function processIncomingMessage(
       conversationId,
     );
 
-    return { conversationId, message: savedMessage };
+    return { conversationId, isNewConversation, message: savedMessage };
   });
 
   const io = getSocketServer();
+  if (result.isNewConversation) {
+    io.to(`tenant:${tenantId}`).emit('conversation:created', {
+      conversationId: result.conversationId,
+    });
+  }
   io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
     conversationId: result.conversationId,
     message: result.message,
@@ -283,6 +316,12 @@ async function processStatusUpdate(
     failed: 'failed',
   };
   const mappedStatus = statusMap[status.status] ?? 'sent';
+  const statusMetadata = {
+    whatsapp_status: status.status,
+    webhook_timestamp: status.timestamp,
+    recipient_id: status.recipient_id,
+    errors: status.errors ?? null,
+  };
 
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
@@ -291,14 +330,27 @@ async function processStatusUpdate(
   for (const tenant of tenants) {
     const result = await prisma.$queryRawUnsafe<MessageRow[]>(
       `UPDATE "${tenant.schema_name}".messages
-       SET status = $1
+       SET status = $1,
+           metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
        WHERE external_id = $2
        RETURNING id, conversation_id`,
       mappedStatus,
       status.id,
+      JSON.stringify(statusMetadata),
     );
 
     if (result[0]) {
+      if (status.status === 'failed') {
+        console.error('[WhatsApp Status] Delivery failed', JSON.stringify({
+          tenantId: tenant.id,
+          messageId: result[0].id,
+          conversationId: result[0].conversation_id,
+          externalId: status.id,
+          recipientId: status.recipient_id,
+          errors: status.errors ?? null,
+        }, null, 2));
+      }
+
       const io = getSocketServer();
       io.to(`tenant:${tenant.id}`).emit('message:status', {
         messageId: result[0].id,
