@@ -16,8 +16,26 @@
     "warning": "It will appear in Active until the customer replies",
     "activated": "Customer replied to the active attendance!"
   },
+  "tabs": {
+    "active": "In service",
+    "queue": "Queue",
+    "closed": "Closed"
+  },
+  "subTabs": {
+    "all": "All",
+    "resolved": "Resolved",
+    "closed": "Closed",
+    "outbound": "Follow-up"
+  },
+  "queue": {
+    "assume": "Take over",
+    "empty": "No attendances in queue",
+    "emptyHint": "New customer contacts will appear here"
+  },
+  "outboundBadge": "↗ Follow-up",
   "status": {
     "open": "Open",
+    "active_outbound": "Follow-up",
     "in_service": "In service",
     "pending": "Pending",
     "resolved": "Resolved",
@@ -161,8 +179,8 @@
     "channelPlaceholder": "Select channel",
     "type": "Attendance type",
     "typeInbound": "Inbound",
-    "typeInboundHelp": "Customer contacted you",
-    "typeOutbound": "Active",
+    "typeInboundHelp": "Register customer contact",
+    "typeOutbound": "Follow-up",
     "typeOutboundHelp": "You will contact the customer",
     "subject": "Subject",
     "subjectPlaceholder": "Subject of the attendance (optional)",

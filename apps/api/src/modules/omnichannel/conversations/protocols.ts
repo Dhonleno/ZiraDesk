@@ -44,6 +44,24 @@ export async function ensureConversationProtocolInfrastructure(
      ADD COLUMN IF NOT EXISTS protocol_number VARCHAR(20) UNIQUE`,
   );
 
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) DEFAULT 'inbound'`,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE ${conversationsRef}
+     SET conversation_type = 'outbound'
+     WHERE metadata->>'type' = 'outbound'
+       AND conversation_type IS DISTINCT FROM 'outbound'`,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE ${conversationsRef}
+     SET conversation_type = 'inbound'
+     WHERE conversation_type IS NULL`,
+  );
+
   await db.$executeRawUnsafe(buildGenerateProtocolSql(schemaName));
 }
 

@@ -76,6 +76,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     onSuccess: (conv) => {
       toast.success(t('form.created'));
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
       onCreated(conv.id);
       onClose();
     },
@@ -156,6 +157,75 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
 
         {/* Form */}
         <form onSubmit={onSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+
+          {/* Type */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {t('form.type')} *
+            </label>
+            <input type="hidden" {...register('type')} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setValue('type', 'inbound', { shouldValidate: true })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  textAlign: 'left',
+                  background: selectedType === 'inbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  border: `1px solid ${selectedType === 'inbound' ? 'var(--teal)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r-lg)',
+                  padding: 12,
+                  color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt-2)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font)',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }} aria-hidden>
+                  <path d="M4 10h12M10 4l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ minWidth: 0 }}>
+                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 2, color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt)' }}>
+                    {t('form.typeInbound')}
+                  </strong>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--txt-3)' }}>
+                    {t('form.typeInboundHelp')}
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue('type', 'outbound', { shouldValidate: true })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  textAlign: 'left',
+                  background: selectedType === 'outbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  border: `1px solid ${selectedType === 'outbound' ? 'var(--teal)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r-lg)',
+                  padding: 12,
+                  color: selectedType === 'outbound' ? 'var(--teal)' : 'var(--txt-2)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font)',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }} aria-hidden>
+                  <path d="M16 10H4M10 4l-6 6 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ minWidth: 0 }}>
+                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 2, color: selectedType === 'outbound' ? 'var(--teal)' : 'var(--txt)' }}>
+                    {t('form.typeOutbound')}
+                  </strong>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--txt-3)' }}>
+                    {t('form.typeOutboundHelp')}
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
 
           {/* Client search */}
           <div>
@@ -276,95 +346,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             </select>
             {errors.channel_id && (
               <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.channelRequired')}</p>
-            )}
-          </div>
-
-          {/* Type */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {t('form.type')} *
-            </label>
-            <input type="hidden" {...register('type')} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => setValue('type', 'inbound', { shouldValidate: true })}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 9,
-                  textAlign: 'left',
-                  background: selectedType === 'inbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
-                  border: `1px solid ${selectedType === 'inbound' ? 'rgba(0,201,167,.28)' : 'var(--line-2)'}`,
-                  borderRadius: 'var(--r)',
-                  padding: '10px',
-                  color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt-2)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font)',
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
-                  <path d="M20 12H5m7-7-7 7 7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt)' }}>
-                    {t('form.typeInbound')}
-                  </span>
-                  <small style={{ fontSize: 10, lineHeight: 1.35, color: 'var(--txt-3)' }}>
-                    {t('form.typeInboundHelp')}
-                  </small>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setValue('type', 'outbound', { shouldValidate: true })}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 9,
-                  textAlign: 'left',
-                  background: selectedType === 'outbound' ? 'rgba(245,158,11,.14)' : 'var(--bg-3)',
-                  border: `1px solid ${selectedType === 'outbound' ? 'rgba(245,158,11,.32)' : 'var(--line-2)'}`,
-                  borderRadius: 'var(--r)',
-                  padding: '10px',
-                  color: selectedType === 'outbound' ? '#F59E0B' : 'var(--txt-2)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font)',
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
-                  <path d="M4 12h15m-7-7 7 7-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: selectedType === 'outbound' ? '#F59E0B' : 'var(--txt)' }}>
-                    {t('form.typeOutbound')}
-                  </span>
-                  <small style={{ fontSize: 10, lineHeight: 1.35, color: 'var(--txt-3)' }}>
-                    {t('form.typeOutboundHelp')}
-                  </small>
-                </span>
-              </button>
-            </div>
-            {selectedType === 'outbound' && (
-              <div style={{
-                marginTop: 8,
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                padding: '8px 10px',
-                borderRadius: 'var(--r)',
-                background: 'rgba(245,158,11,.10)',
-                border: '1px solid rgba(245,158,11,.22)',
-                color: '#F59E0B',
-                fontSize: 11,
-                lineHeight: 1.4,
-              }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }} aria-hidden>
-                  <path d="M12 9v4m0 4h.01M10.3 3.9 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {t('outbound.warning')}
-              </div>
             )}
           </div>
 

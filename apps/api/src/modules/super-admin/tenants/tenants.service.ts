@@ -89,6 +89,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       channel_type    VARCHAR(30)  NOT NULL,
       external_id     VARCHAR(255),
       protocol_number VARCHAR(20)  UNIQUE,
+      conversation_type VARCHAR(20) NOT NULL DEFAULT 'inbound',
       status          VARCHAR(20)  NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       subject         VARCHAR(255),

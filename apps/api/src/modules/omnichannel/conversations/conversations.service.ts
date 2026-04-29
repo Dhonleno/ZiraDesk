@@ -42,6 +42,7 @@ interface ConversationRow {
   client_id: string | null;
   channel_id: string | null;
   channel_type: string;
+  conversation_type: string;
   external_id: string | null;
   status: string;
   protocol_number: string | null;
@@ -89,20 +90,62 @@ interface MessagePageResult {
   total: number;
 }
 
+interface ConversationCounts {
+  active: number;
+  mine: number;
+  queue: number;
+  closed: number;
+}
+
 export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
   await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
-  const { page, perPage, category, status, search, assigned_to_me, client_id } = query;
+  const { page, perPage, tab, sub_status, status, search, assigned_to_me, client_id } = query;
   const offset = (page - 1) * perPage;
+  const params: unknown[] = [];
+  const conditions: string[] = [];
 
-  const categoryParam = category ?? null;
-  const statusParam = status ?? null;
-  const searchParam = search ?? null;
-  const assignedToParam = assigned_to_me ? (userId ?? null) : null;
-  const clientIdParam = client_id ?? null;
+  const pushParam = (value: unknown): string => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+
+  if (tab === 'active') {
+    conditions.push('c.assigned_to IS NOT NULL');
+    conditions.push("c.status IN ('open', 'active_outbound')");
+
+    if (assigned_to_me) {
+      conditions.push(`c.assigned_to = ${pushParam(userId ?? null)}::uuid`);
+    }
+  } else if (tab === 'queue') {
+    conditions.push('c.assigned_to IS NULL');
+    conditions.push("c.status IN ('open', 'pending')");
+  } else if (tab === 'closed') {
+    conditions.push("c.status IN ('resolved', 'closed')");
+
+    if (sub_status === 'resolved') {
+      conditions.push("c.status = 'resolved'");
+    } else if (sub_status === 'closed') {
+      conditions.push("c.status = 'closed'");
+    } else if (sub_status === 'outbound') {
+      conditions.push("c.conversation_type = 'outbound'");
+    }
+  } else if (status) {
+    conditions.push(`c.status = ${pushParam(status)}::text`);
+  }
+
+  if (search) {
+    conditions.push(`cl.name ILIKE '%' || ${pushParam(search)}::text || '%'`);
+  }
+
+  if (client_id) {
+    conditions.push(`c.client_id = ${pushParam(client_id)}::uuid`);
+  }
+
+  const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.client_id, c.channel_id, c.channel_type, c.external_id,
+       c.id, c.client_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
        cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
@@ -112,70 +155,19 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
      LEFT JOIN clients cl ON cl.id = c.client_id
      LEFT JOIN users u ON u.id = c.assigned_to
      LEFT JOIN channels ch ON ch.id = c.channel_id
-     WHERE ($1::text IS NULL OR c.status = $1)
-       AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
-       AND ($5::uuid IS NULL OR c.assigned_to = $5::uuid)
-       AND ($6::uuid IS NULL OR c.client_id = $6::uuid)
-       AND (
-         $7::text IS NULL
-         OR ($7 = 'closed' AND c.status IN ('resolved', 'closed'))
-         OR (
-           $7 = 'outbound'
-           AND c.status NOT IN ('resolved', 'closed')
-           AND c.metadata->>'type' = 'outbound'
-           AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
-         )
-         OR (
-           $7 = 'inbound'
-           AND c.status NOT IN ('resolved', 'closed')
-           AND NOT (
-             c.metadata->>'type' = 'outbound'
-             AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
-           )
-         )
-       )
+     ${whereSql}
      ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
-     LIMIT $3 OFFSET $4`,
-    statusParam,
-    searchParam,
-    perPage,
-    offset,
-    assignedToParam,
-    clientIdParam,
-    categoryParam,
+     LIMIT ${pushParam(perPage)} OFFSET ${pushParam(offset)}`,
+    ...params,
   );
 
+  const countParams = params.slice(0, -2);
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count
      FROM conversations c
      LEFT JOIN clients cl ON cl.id = c.client_id
-     WHERE ($1::text IS NULL OR c.status = $1)
-       AND ($2::text IS NULL OR cl.name ILIKE '%' || $2 || '%')
-       AND ($3::uuid IS NULL OR c.assigned_to = $3::uuid)
-       AND ($4::uuid IS NULL OR c.client_id = $4::uuid)
-       AND (
-         $5::text IS NULL
-         OR ($5 = 'closed' AND c.status IN ('resolved', 'closed'))
-         OR (
-           $5 = 'outbound'
-           AND c.status NOT IN ('resolved', 'closed')
-           AND c.metadata->>'type' = 'outbound'
-           AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
-         )
-         OR (
-           $5 = 'inbound'
-           AND c.status NOT IN ('resolved', 'closed')
-           AND NOT (
-             c.metadata->>'type' = 'outbound'
-             AND NOT (c.metadata @> '{"outbound_activated": true}'::jsonb)
-           )
-         )
-       )`,
-    statusParam,
-    searchParam,
-    assignedToParam,
-    clientIdParam,
-    categoryParam,
+     ${whereSql}`,
+    ...countParams,
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -191,12 +183,50 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   };
 }
 
+export async function getConversationCounts(userId?: string, tenantId?: string): Promise<ConversationCounts> {
+  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    active: bigint;
+    mine: bigint;
+    queue: bigint;
+    closed: bigint;
+  }>>(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE assigned_to IS NOT NULL
+           AND status IN ('open', 'active_outbound')
+       ) AS active,
+       COUNT(*) FILTER (
+         WHERE assigned_to = $1::uuid
+           AND status IN ('open', 'active_outbound')
+       ) AS mine,
+       COUNT(*) FILTER (
+         WHERE assigned_to IS NULL
+           AND status IN ('open', 'pending')
+       ) AS queue,
+       COUNT(*) FILTER (
+         WHERE status IN ('resolved', 'closed')
+       ) AS closed
+     FROM conversations`,
+    userId ?? null,
+  );
+
+  const counts = rows[0];
+  return {
+    active: Number(counts?.active ?? 0),
+    mine: Number(counts?.mine ?? 0),
+    queue: Number(counts?.queue ?? 0),
+    closed: Number(counts?.closed ?? 0),
+  };
+}
+
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
   await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.client_id, c.channel_id, c.channel_type, c.external_id,
+       c.id, c.client_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
        cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
@@ -386,7 +416,10 @@ export async function sendMessage(
     `UPDATE conversations
      SET last_message = $1,
          last_message_at = NOW(),
-         status = CASE WHEN status = 'open' THEN 'pending' ELSE status END
+         status = CASE
+           WHEN status = 'open' AND assigned_to IS NULL THEN 'pending'
+           ELSE status
+         END
      WHERE id = $2::uuid`,
     lastMessagePreview,
     conversationId,
@@ -430,20 +463,20 @@ export async function createConversation(
 
   const conversationType = data.type ?? 'inbound';
   const initialMessage = data.initial_message?.trim() ?? '';
-  const initialStatus = conversationType === 'outbound' ? 'pending' : 'open';
+  const initialStatus = conversationType === 'outbound' ? 'active_outbound' : 'open';
   const metadata = {
     type: conversationType,
-    ...(conversationType === 'outbound' ? { outbound_activated: false } : {}),
   };
 
   const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (client_id, channel_id, channel_type, status, protocol_number, assigned_to, subject, metadata)
-     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7, $8::jsonb)
+    `INSERT INTO conversations (client_id, channel_id, channel_type, conversation_type, status, protocol_number, assigned_to, subject, metadata)
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8, $9::jsonb)
      RETURNING *`,
     data.client_id,
     data.channel_id,
     channelCheck[0].type,
+    conversationType,
     initialStatus,
     protocolNumber,
     userId,

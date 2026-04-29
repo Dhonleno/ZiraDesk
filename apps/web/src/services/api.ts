@@ -520,6 +520,7 @@ export interface OmnichannelConversation {
   id: string;
   status: string;
   channel_type: string;
+  conversation_type?: 'inbound' | 'outbound' | string | null;
   protocol_number?: string | null;
   subject: string | null;
   last_message: string | null;
@@ -555,7 +556,8 @@ export interface ListConversationsParams {
   page?: number;
   perPage?: number;
   per_page?: number;
-  category?: 'inbound' | 'closed' | 'outbound';
+  tab?: 'active' | 'queue' | 'closed';
+  sub_status?: 'resolved' | 'closed' | 'outbound';
   search?: string;
   status?: string;
   assigned_to_me?: boolean;
@@ -707,7 +709,7 @@ export const omnichannelApi = {
   updateConversation: async (
     conversationId: string,
     payload: {
-      status?: 'open' | 'in_service' | 'pending' | 'resolved' | 'bot' | 'closed';
+      status?: 'open' | 'active_outbound' | 'in_service' | 'pending' | 'resolved' | 'bot' | 'closed';
       assignedTo?: string | null;
       csat_score?: number;
       csat_comment?: string;

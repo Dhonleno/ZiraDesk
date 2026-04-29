@@ -5,8 +5,9 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
-    category: z.enum(['inbound', 'closed', 'outbound']).optional(),
-    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
+    tab: z.enum(['active', 'queue', 'closed']).optional(),
+    sub_status: z.enum(['resolved', 'closed', 'outbound']).optional(),
+    status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: z.coerce.boolean().optional(),
     client_id: z.string().uuid().optional(),
@@ -50,7 +51,7 @@ export const listMessagesQuerySchema = z.object({
 
 export const updateConversationBodySchema = z
   .object({
-    status: z.enum(['open', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
+    status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     assignedTo: z.string().uuid().nullable().optional(),
     csat_score: z.number().min(1).max(5).optional(),
     csat_comment: z.string().optional(),

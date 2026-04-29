@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
+import { useAuthStore } from '../../stores/auth.store';
 
 interface ConversationItem {
   id: string;
   status: string;
   channel_type: string;
+  conversation_type: string | null;
   protocol_number?: string | null;
   subject: string | null;
   last_message: string | null;
@@ -22,8 +24,15 @@ interface ConversationItem {
   unread_count?: number;
 }
 
-type ConversationCategory = 'inbound' | 'closed' | 'outbound';
-type StatusFilter = '';
+type TabKey = 'active' | 'queue' | 'closed';
+type ClosedSubStatus = null | 'resolved' | 'closed' | 'outbound';
+
+interface ConversationCounts {
+  active: number;
+  mine: number;
+  queue: number;
+  closed: number;
+}
 
 /* avatar gradient por inicial */
 const AVATAR_GRADIENTS = [
@@ -106,10 +115,11 @@ interface Props {
 export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState<ConversationCategory>('inbound');
-  const statusFilter: StatusFilter = '';
+  const [activeTab, setActiveTab] = useState<TabKey>('active');
   const [assignedToMe, setAssignedToMe] = useState(true);
+  const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
   const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -194,8 +204,13 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   }, [clearTimer, markConversationActivity]);
 
   useEffect(() => {
-    const handleMessage = (data: { conversationId?: string }) => {
+    const invalidateConversationData = () => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
+    };
+
+    const handleMessage = (data: { conversationId?: string }) => {
+      invalidateConversationData();
       const conversationId = data.conversationId;
       if (conversationId) {
         markConversationActivity(conversationId);
@@ -204,7 +219,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
     };
 
     const handleCreated = (data: { conversationId?: string; conversation?: { id: string } }) => {
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      invalidateConversationData();
       const conversationId = data.conversationId ?? data.conversation?.id;
       if (conversationId) {
         markNewConversation(conversationId);
@@ -212,27 +227,18 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       playNotificationSound();
     };
 
-    const handleActivated = () => {
-      if (activeCategory === 'outbound') {
-        void qc.invalidateQueries({ queryKey: ['conversations', 'outbound'] });
-      }
-      void qc.invalidateQueries({ queryKey: ['conversations', 'inbound'] });
-      toast.info(t('outbound.activated'), { icon: '📩' });
-      playNotificationSound();
-    };
-
     const unsubMessage = subscribeToEvent<{ conversationId?: string }>('conversation:new_message', handleMessage);
     const unsubIncoming = subscribeToEvent<{ conversationId?: string }>('conversation:message', handleMessage);
+    const unsubUpdated = subscribeToEvent('conversation:updated', invalidateConversationData);
     const unsubCreated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
       'conversation:created',
       handleCreated,
     );
-    const unsubActivated = subscribeToEvent('conversation:activated', handleActivated);
     return () => {
       unsubMessage();
       unsubIncoming();
+      unsubUpdated();
       unsubCreated();
-      unsubActivated();
 
       for (const timer of activityTimeoutsRef.current.values()) {
         window.clearTimeout(timer);
@@ -243,32 +249,66 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       activityTimeoutsRef.current.clear();
       newConversationTimeoutsRef.current.clear();
     };
-  }, [activeCategory, markConversationActivity, markNewConversation, playNotificationSound, qc, t, toast]);
+  }, [markConversationActivity, markNewConversation, playNotificationSound, qc]);
 
-  const CATEGORY_TABS: Array<{ value: ConversationCategory; labelKey: string }> = [
-    { value: 'inbound', labelKey: 'categories.inbound' },
-    { value: 'closed', labelKey: 'categories.closed' },
-    { value: 'outbound', labelKey: 'categories.outbound' },
+  const TABS: Array<{ key: TabKey; labelKey: string }> = [
+    { key: 'active', labelKey: 'tabs.active' },
+    { key: 'queue', labelKey: 'tabs.queue' },
+    { key: 'closed', labelKey: 'tabs.closed' },
   ];
 
+  const CLOSED_SUB_TABS: Array<{ key: ClosedSubStatus; labelKey: string }> = [
+    { key: null, labelKey: 'subTabs.all' },
+    { key: 'resolved', labelKey: 'subTabs.resolved' },
+    { key: 'closed', labelKey: 'subTabs.closed' },
+    { key: 'outbound', labelKey: 'subTabs.outbound' },
+  ];
+
+  const { data: counts } = useQuery({
+    queryKey: ['conversation-counts'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: ConversationCounts }>('/omnichannel/conversations/counts');
+      return res.data.data;
+    },
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', activeCategory, statusFilter, debouncedSearch, assignedToMe],
+    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
         '/omnichannel/conversations',
         {
           params: {
             perPage: 50,
-            category: activeCategory,
-            status: statusFilter || undefined,
+            tab: activeTab,
+            assigned_to_me: activeTab === 'active' ? assignedToMe : undefined,
+            sub_status: activeTab === 'closed' ? subStatus ?? undefined : undefined,
             search: debouncedSearch || undefined,
-            assigned_to_me: assignedToMe || undefined,
           },
         },
       );
       return res.data.data;
     },
     staleTime: 30_000,
+  });
+
+  const assumeMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      if (!currentUserId) throw new Error('missing-user');
+      const res = await api.post(`/omnichannel/conversations/${conversationId}/assign`, {
+        user_id: currentUserId,
+      });
+      return res.data;
+    },
+    onSuccess: (_data, conversationId) => {
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
+      onSelect(conversationId);
+      toast.success(t('chat.assumeSuccess'));
+    },
+    onError: () => toast.error(t('chat.assumeError')),
   });
 
   const count = data?.length ?? 0;
@@ -365,52 +405,69 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           )}
         </div>
 
-        {/* Meus atendimentos toggle */}
-        <button
-          onClick={() => setAssignedToMe((v) => !v)}
-          style={{
-            marginTop: 8,
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: assignedToMe ? 'var(--teal-dim)' : 'var(--bg-3)',
-            border: `1px solid ${assignedToMe ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
-            borderRadius: 'var(--r)',
-            padding: '6px 10px',
-            cursor: 'pointer',
-            color: assignedToMe ? 'var(--teal)' : 'var(--txt-3)',
-            fontSize: 11,
-            fontWeight: 500,
-            fontFamily: 'var(--font)',
-            transition: 'all .15s',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <circle cx="6" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/>
-              <path d="M1.5 10c0-2 2-3.5 4.5-3.5s4.5 1.5 4.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
-            {t('myAttendances')}
-          </span>
-          {/* Toggle pill */}
-          <div style={{
-            width: 28, height: 16, borderRadius: 8,
-            background: assignedToMe ? 'var(--teal)' : 'var(--bg-5)',
-            position: 'relative', transition: 'background .15s',
-          }}>
+        {activeTab === 'active' && (
+          <button
+            onClick={() => setAssignedToMe((v) => !v)}
+            style={{
+              marginTop: 8,
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: assignedToMe ? 'var(--teal-dim)' : 'var(--bg-3)',
+              border: `1px solid ${assignedToMe ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
+              borderRadius: 'var(--r)',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              color: assignedToMe ? 'var(--teal)' : 'var(--txt-3)',
+              fontSize: 11,
+              fontWeight: 500,
+              fontFamily: 'var(--font)',
+              transition: 'all .15s',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <circle cx="6" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M1.5 10c0-2 2-3.5 4.5-3.5s4.5 1.5 4.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              {t('myAttendances')}
+              {counts !== undefined && counts.mine > 0 && (
+                <span style={{
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  padding: '0 5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(0,201,167,.14)',
+                  color: 'var(--teal)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}>
+                  {counts.mine}
+                </span>
+              )}
+            </span>
             <div style={{
-              position: 'absolute', top: 2,
-              left: assignedToMe ? 14 : 2,
-              width: 12, height: 12, borderRadius: '50%',
-              background: assignedToMe ? '#0E1A18' : 'var(--txt-3)',
-              transition: 'left .15s',
-            }} />
-          </div>
-        </button>
+              width: 28, height: 16, borderRadius: 8,
+              background: assignedToMe ? 'var(--teal)' : 'var(--bg-5)',
+              position: 'relative', transition: 'background .15s',
+            }}>
+              <div style={{
+                position: 'absolute', top: 2,
+                left: assignedToMe ? 14 : 2,
+                width: 12, height: 12, borderRadius: '50%',
+                background: assignedToMe ? '#0E1A18' : 'var(--txt-3)',
+                transition: 'left .15s',
+              }} />
+            </div>
+          </button>
+        )}
       </div>
 
-      {/* Category tabs */}
+      {/* Main tabs */}
       <div style={{
         display: 'flex',
         padding: '8px 14px',
@@ -420,27 +477,91 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
         overflowX: 'auto',
         scrollbarWidth: 'none',
       }}>
-        {CATEGORY_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveCategory(tab.value)}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 'var(--r-pill)',
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              border: activeCategory === tab.value ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
-              background: activeCategory === tab.value ? 'var(--teal-dim)' : 'transparent',
-              color: activeCategory === tab.value ? 'var(--teal)' : 'var(--txt-3)',
-              transition: 'all .15s',
-            }}
-          >
-            {t(tab.labelKey)}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const isQueueTab = tab.key === 'queue';
+          const tabCount = isQueueTab
+            ? counts?.queue
+            : activeTab === tab.key
+              ? tab.key === 'active'
+                ? counts?.active
+                : counts?.closed
+              : undefined;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setSubStatus(null);
+              }}
+              style={{
+                padding: '4px 9px',
+                borderRadius: 'var(--r-pill)',
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                border: activeTab === tab.key ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
+                background: activeTab === tab.key ? 'var(--teal-dim)' : 'transparent',
+                color: activeTab === tab.key ? 'var(--teal)' : 'var(--txt-3)',
+                transition: 'all .15s',
+              }}
+            >
+              {t(tab.labelKey)}
+              {tabCount !== undefined && tabCount > 0 && (
+                <span style={{
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  padding: '0 5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: isQueueTab ? 'rgba(245,158,11,.18)' : 'rgba(0,201,167,.14)',
+                  color: isQueueTab ? '#F59E0B' : 'var(--teal)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}>
+                  {tabCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {activeTab === 'closed' && (
+        <div style={{
+          display: 'flex',
+          gap: 4,
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--line)',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+        }}>
+          {CLOSED_SUB_TABS.map((tab) => (
+            <button
+              key={tab.key ?? 'all'}
+              onClick={() => setSubStatus(tab.key)}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 'var(--r-pill)',
+                fontSize: 10,
+                fontWeight: 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                border: subStatus === tab.key ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
+                background: subStatus === tab.key ? 'var(--teal-dim)' : 'transparent',
+                color: subStatus === tab.key ? 'var(--teal)' : 'var(--txt-3)',
+              }}
+            >
+              {t(tab.labelKey)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* List */}
       <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin' }}>
@@ -453,8 +574,15 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
             ))
           : (data ?? []).length === 0
           ? (
-              <div style={{ padding: '48px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>
-                {t('noConversations')}
+              <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+                <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                  {activeTab === 'queue' ? t('queue.empty') : t('noConversations')}
+                </div>
+                {activeTab === 'queue' && (
+                  <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: 'var(--txt-3)' }}>
+                    {t('queue.emptyHint')}
+                  </div>
+                )}
               </div>
             )
           : (data ?? []).map((conv) => {
@@ -470,10 +598,18 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
               ].filter(Boolean).join(' ');
 
               return (
-                <button
+                <div
                   key={conv.id}
                   className={itemClassName}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect(conv.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(conv.id);
+                    }
+                  }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
@@ -486,6 +622,9 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                     background: isActive ? 'var(--bg-3)' : 'transparent',
                     boxShadow: isActive ? 'inset 3px 0 0 var(--teal)' : 'none',
                     transition: 'background .15s',
+                    borderTop: 'none',
+                    borderLeft: 'none',
+                    borderRight: 'none',
                   }}
                   onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; }}
                   onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -545,6 +684,40 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                         {isNewConversation && (
                           <span className="zd-badge-new">Novo</span>
                         )}
+                        {activeTab === 'queue' && (
+                          <button
+                            type="button"
+                            disabled={assumeMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              assumeMutation.mutate(conv.id);
+                            }}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              padding: '3px 10px',
+                              borderRadius: 'var(--r-pill)',
+                              background: 'var(--teal-dim)',
+                              border: '1px solid rgba(0,201,167,.25)',
+                              color: 'var(--teal)',
+                              cursor: assumeMutation.isPending ? 'wait' : 'pointer',
+                              transition: 'all .15s',
+                              whiteSpace: 'nowrap',
+                              opacity: assumeMutation.isPending ? 0.7 : 1,
+                            }}
+                            onMouseEnter={(e) => {
+                              if (assumeMutation.isPending) return;
+                              e.currentTarget.style.background = 'var(--teal)';
+                              e.currentTarget.style.color = '#0a1a18';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'var(--teal-dim)';
+                              e.currentTarget.style.color = 'var(--teal)';
+                            }}
+                          >
+                            {t('queue.assume')}
+                          </button>
+                        )}
                         {hasUnread && (
                           <div style={{
                             width: 8, height: 8, borderRadius: '50%',
@@ -581,7 +754,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           {chStyle.label}
                         </span>
                       )}
-                      {activeCategory === 'outbound' && (
+                      {conv.conversation_type === 'outbound' && (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 600,
@@ -591,7 +764,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           color: '#F59E0B',
                           border: '1px solid rgba(245,158,11,.28)',
                         }}>
-                          ↗ {t('outbound.badge')}
+                          {t('outboundBadge')}
                         </span>
                       )}
                       {conv.status === 'resolved' && (
@@ -606,7 +779,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                       )}
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
       </div>

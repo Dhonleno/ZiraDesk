@@ -42,6 +42,7 @@ const CH_BADGE: Record<string, { bg: string; color: string; border: string; labe
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string }> = {
   open: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
+  active_outbound: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
   in_service: { color: 'var(--teal)', bg: 'var(--teal-dim)', border: 'rgba(0,201,167,.25)' },
   pending: { color: 'var(--blue)', bg: 'var(--blue-dim)', border: 'rgba(96,165,250,.25)' },
   resolved: { color: 'var(--txt-3)', bg: 'var(--bg-4)', border: 'var(--line)' },

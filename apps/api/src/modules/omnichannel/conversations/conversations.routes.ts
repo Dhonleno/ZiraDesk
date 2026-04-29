@@ -13,6 +13,7 @@ import {
 } from './conversations.schema.js';
 import {
   listConversations,
+  getConversationCounts,
   getConversationWithMessages,
   listConversationMessages,
   sendMessage,
@@ -40,6 +41,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     }
     const result = await listConversations(parsed.data, request.user.id, request.user.tenantId);
     return reply.send({ success: true, ...result });
+  });
+
+  // GET /api/omnichannel/conversations/counts
+  app.get('/counts', { preHandler: guard }, async (request, reply) => {
+    const counts = await getConversationCounts(request.user.id, request.user.tenantId);
+    return reply.send({ success: true, data: counts });
   });
 
   // POST /api/omnichannel/conversations
