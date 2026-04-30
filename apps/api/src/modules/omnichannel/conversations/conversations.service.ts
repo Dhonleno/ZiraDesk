@@ -97,8 +97,7 @@ interface ConversationCounts {
   closed: number;
 }
 
-export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+export async function listConversations(query: ListConversationsQuery, userId?: string, _tenantId?: string) {
   const { page, perPage, tab, sub_status, status, search, assigned_to_me, client_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
@@ -183,9 +182,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   };
 }
 
-export async function getConversationCounts(userId?: string, tenantId?: string): Promise<ConversationCounts> {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
-
+export async function getConversationCounts(userId?: string, _tenantId?: string): Promise<ConversationCounts> {
   const rows = await prisma.$queryRawUnsafe<Array<{
     active: bigint;
     mine: bigint;
@@ -222,7 +219,6 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 }
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
