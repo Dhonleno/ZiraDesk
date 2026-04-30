@@ -42,31 +42,64 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".clients (
-      id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      type           VARCHAR(20)  NOT NULL DEFAULT 'person',
-      name           VARCHAR(150) NOT NULL,
-      email          VARCHAR(255),
-      phone          VARCHAR(30),
-      document       VARCHAR(20),
-      website        VARCHAR(500),
-      status         VARCHAR(30)  NOT NULL DEFAULT 'lead',
-      address_street VARCHAR(200),
-      address_city   VARCHAR(100),
-      address_state  VARCHAR(2),
-      address_zip    VARCHAR(10),
-      birth_date     DATE,
-      gender         VARCHAR(20),
-      occupation     VARCHAR(100),
-      income         DECIMAL(15,2),
-      segment        VARCHAR(100),
-      lead_source    VARCHAR(100),
-      responsible_id UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
-      tags           TEXT[]       NOT NULL DEFAULT '{}',
-      custom_fields  JSONB        NOT NULL DEFAULT '{}',
-      created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    CREATE TABLE "${schemaName}".organizations (
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      type            VARCHAR(20)  NOT NULL DEFAULT 'company',
+      name            VARCHAR(150) NOT NULL,
+      document        VARCHAR(20),
+      email           VARCHAR(255),
+      phone           VARCHAR(30),
+      website         VARCHAR(255),
+      status          VARCHAR(30)  NOT NULL DEFAULT 'lead',
+      address_street  VARCHAR(200),
+      address_city    VARCHAR(100),
+      address_state   VARCHAR(2),
+      address_zip     VARCHAR(10),
+      segment         VARCHAR(100),
+      lead_source     VARCHAR(100),
+      responsible_id  UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
+      tags            TEXT[]       NOT NULL DEFAULT '{}',
+      custom_fields   JSONB        NOT NULL DEFAULT '{}',
+      notes           TEXT,
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".contacts (
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
+      name            VARCHAR(150) NOT NULL,
+      email           VARCHAR(255),
+      phone           VARCHAR(30),
+      whatsapp        VARCHAR(30),
+      document        VARCHAR(20),
+      role            VARCHAR(100),
+      department      VARCHAR(100),
+      is_primary      BOOLEAN      NOT NULL DEFAULT false,
+      avatar_url      VARCHAR(500),
+      tags            TEXT[]       NOT NULL DEFAULT '{}',
+      custom_fields   JSONB        NOT NULL DEFAULT '{}',
+      notes           TEXT,
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_contacts_organization"
+    ON "${schemaName}".contacts(organization_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_contacts_whatsapp"
+    ON "${schemaName}".contacts(whatsapp)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_contacts_phone"
+    ON "${schemaName}".contacts(phone)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -84,7 +117,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      client_id       UUID REFERENCES "${schemaName}".clients(id) ON DELETE SET NULL,
+      contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
+      organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
       channel_id      UUID REFERENCES "${schemaName}".channels(id) ON DELETE SET NULL,
       channel_type    VARCHAR(30)  NOT NULL,
       external_id     VARCHAR(255),
@@ -155,7 +189,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".tickets (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      client_id       UUID REFERENCES "${schemaName}".clients(id) ON DELETE SET NULL,
+      contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
+      organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
       conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
       title           VARCHAR(255) NOT NULL,
       description     TEXT,
