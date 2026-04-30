@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, contactsApi } from '../../services/api';
+import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
 
 interface Conversation {
   id: string;
@@ -147,6 +148,7 @@ export function InfoPanel({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('contact');
+  const [linkOrgOpen, setLinkOrgOpen] = useState(false);
 
   const { data } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -162,10 +164,16 @@ export function InfoPanel({ conversationId }: Props) {
   const conv = data?.conversation;
   const clientId = conv?.client_id ?? null;
 
+  const { data: contactData } = useQuery({
+    queryKey: ['crm-contact', clientId],
+    queryFn: () => contactsApi.get(clientId!),
+    enabled: !!clientId,
+  });
+
   const { data: clientStats, isLoading: statsLoading } = useQuery({
     queryKey: ['crm-client-stats', clientId],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/clients/${clientId!}/stats`);
+      const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/contacts/${clientId!}/stats`);
       return res.data.data;
     },
     enabled: !!clientId,
@@ -255,25 +263,41 @@ export function InfoPanel({ conversationId }: Props) {
                   {chBadge.label}
                 </span>
               )}
-              {/* Ver perfil completo */}
+              {/* Links CRM */}
               {conv?.client_id && (
-                <button
-                  onClick={() => navigate(`/crm/clients?client=${conv.client_id}`)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '5px 12px', borderRadius: 'var(--r)',
-                    border: '1px solid var(--line-2)', background: 'var(--bg-3)',
-                    color: 'var(--teal)', fontSize: 11, fontWeight: 500,
-                    fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--teal-dim)'; e.currentTarget.style.borderColor = 'rgba(0,201,167,.3)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.borderColor = 'var(--line-2)'; }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                    <path d="M6 1h4v4M10 1L4 7M2 3H1v7h7V9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  {t('info.viewFullProfile')}
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', width: '100%' }}>
+                  <button
+                    onClick={() => navigate(`/crm/contacts?id=${conv.client_id}`)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--teal-dim)'; e.currentTarget.style.borderColor = 'rgba(0,201,167,.3)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.borderColor = 'var(--line-2)'; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M6 1h4v4M10 1L4 7M2 3H1v7h7V9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {t('info.viewFullProfile')}
+                  </button>
+
+                  {contactData?.organization_id ? (
+                    <button
+                      onClick={() => navigate(`/crm/organizations?id=${contactData.organization_id}`)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 11, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><rect x="1" y="2.5" width="9" height="6.5" rx="1.3" stroke="currentColor" strokeWidth="1.1"/><path d="M3.5 2.5V2a1 1 0 011-1h2a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                      {contactData.organization_name}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setLinkOrgOpen(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-3)', fontSize: 11, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; e.currentTarget.style.color = 'var(--txt-2)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--txt-3)'; }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      Vincular organização
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -373,10 +397,10 @@ export function InfoPanel({ conversationId }: Props) {
               )}
               {clientId && (
                 <button
-                  onClick={() => navigate(`/crm/clients?client=${clientId}`)}
+                  onClick={() => navigate(`/crm/contacts?id=${clientId}`)}
                   style={{ marginTop: 12, width: '100%', padding: '8px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer' }}
                 >
-                  Ver todos os canais
+                  Ver perfil completo
                 </button>
               )}
             </div>
@@ -425,6 +449,15 @@ export function InfoPanel({ conversationId }: Props) {
         )}
 
       </div>
+
+      {clientId && linkOrgOpen && (
+        <LinkOrganizationModal
+          open={linkOrgOpen}
+          onClose={() => setLinkOrgOpen(false)}
+          contactId={clientId}
+          contactName={name}
+        />
+      )}
     </div>
   );
 }

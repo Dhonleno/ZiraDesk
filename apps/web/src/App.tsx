@@ -12,7 +12,8 @@ import { Tenants } from './pages/super-admin/Tenants';
 import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/omnichannel/Conversations';
-import { CrmClientsPage } from './pages/crm/Clients';
+import { OrganizationsPage } from './pages/crm/Organizations';
+import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
 import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Users as AdminUsers } from './pages/admin/Users';
@@ -95,7 +96,12 @@ export function App() {
           >
             <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
-            <Route path="crm/clients" element={<CrmClientsPage />} />
+            <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
+            <Route path="crm/clients" element={<Navigate to="/crm/organizations" replace />} />
+            <Route path="crm/organizations" element={<OrganizationsPage />} />
+            <Route path="crm/organizations/:id" element={<OrganizationsPage />} />
+            <Route path="crm/contacts" element={<ContactsPage />} />
+            <Route path="crm/contacts/:id" element={<ContactsPage />} />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="tickets/:id" element={<TicketsPage />} />
             <Route path="admin" element={<AdminLayout />}>

@@ -1,132 +1,86 @@
 {
-  "clients": {
-    "title": "Clientes",
-    "newClient": "Nuevo cliente",
-    "importCsv": "Importar CSV",
-    "searchPlaceholder": "Buscar por nombre, correo, teléfono...",
-    "advancedFilters": "Filtros avanzados",
-    "columns": "Columnas",
-    "export": "Exportar",
-    "total": "{{n}} registros",
-    "noClients": "No se encontraron clientes",
+  "organizations": {
+    "title": "Organizaciones",
+    "new": "Nueva organización",
+    "search": "Buscar organización...",
+    "noResults": "No se encontraron organizaciones",
+    "noSelection": "Seleccione una organización",
+    "noSelectionSub": "Haga clic en una organización de la lista para ver los detalles",
     "loading": "Cargando...",
-    "errorLoad": "Error al cargar clientes",
-    "kpi": {
-      "totalActive": "Total activos",
-      "leadsInFunnel": "Leads en embudo",
-      "inNegotiation": "En negociación",
-      "avgLtv": "LTV promedio"
-    },
-    "filters": {
-      "status": "Estado",
-      "statusAll": "Estado: Todos",
-      "channel": "Canal",
-      "assignedTo": "Asignado a",
-      "tags": "Etiquetas",
-      "date": "Fecha",
-      "table": "Tabla",
-      "kanban": "Kanban"
+    "total": "{{n}} organizaciones",
+    "type": {
+      "company": "Empresa",
+      "person": "Persona"
     },
     "status": {
       "all": "Todos",
-      "cliente": "Clientes",
-      "lead": "Leads",
-      "prospect": "Prospectos",
-      "negociando": "Negociando",
-      "vip": "VIP",
-      "inativo": "Inactivos"
-    },
-    "statusLabel": {
-      "cliente": "Cliente",
       "lead": "Lead",
       "prospect": "Prospecto",
-      "negociando": "Negociando",
-      "vip": "VIP",
-      "inativo": "Inactivo"
-    },
-    "table": {
       "client": "Cliente",
+      "inactive": "Inactivo"
+    },
+    "fields": {
+      "name": "Nombre",
+      "document": "RFC / ID",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "website": "Sitio web",
+      "segment": "Segmento",
+      "leadSource": "Origen del lead",
+      "responsible": "Responsable",
+      "notes": "Notas",
+      "notInformed": "No informado",
+      "street": "Dirección",
+      "city": "Ciudad",
+      "state": "Estado",
+      "zip": "Código postal",
+      "type": "Tipo",
       "status": "Estado",
-      "channels": "Canales",
-      "lastContact": "Último contacto",
-      "ltv": "LTV",
-      "health": "Salud",
-      "assignedTo": "Asignado a"
+      "contacts": "contactos"
     },
-    "pagination": {
-      "showing": "Mostrando",
-      "of": "de",
-      "perPage": "por página",
-      "noOwner": "Sin asignar"
+    "tabs": {
+      "data": "Datos",
+      "contacts": "Contactos",
+      "conversations": "Conversaciones",
+      "tickets": "Tickets",
+      "notes": "Notas"
     },
-    "detail": {
-      "empty": "Ningún cliente seleccionado",
-      "emptySubtitle": "Haz clic en un cliente de la lista para ver los detalles",
-      "message": "Mensaje",
-      "call": "Llamar",
-      "schedule": "Agendar",
-      "more": "Más",
-      "metrics": "Métricas",
-      "attendances": "Conversaciones",
-      "messages": "Mensajes",
-      "nps": "NPS",
-      "info": "Información",
-      "edit": "Editar",
-      "recentActivity": "Actividad reciente",
-      "viewAll": "Ver todo",
-      "noActivity": "Sin actividad reciente",
-      "noActivitySub": "Última interacción registrada hace tiempo",
-      "fields": {
-        "email": "Correo",
-        "phone": "Teléfono",
-        "document": "RFC / ID",
-        "zip": "Código postal",
-        "company": "Empresa",
-        "occupation": "Cargo",
-        "since": "Cliente desde",
-        "assignedTo": "Asignado a",
-        "city": "Ciudad",
-        "state": "Estado",
-        "segment": "Segmento",
-        "source": "Origen"
-      }
+    "stats": {
+      "contacts": "Contactos",
+      "openConversations": "Conversaciones abiertas",
+      "openTickets": "Tickets abiertos",
+      "totalAttendances": "Interacciones"
+    },
+    "sections": {
+      "generalInfo": "Información general",
+      "address": "Dirección",
+      "commercial": "Datos comerciales"
     },
     "actions": {
-      "chat": "Mensaje",
       "edit": "Editar",
-      "moreOptions": "Más opciones"
+      "delete": "Eliminar",
+      "startConversation": "Iniciar conversación",
+      "addContact": "Agregar contacto",
+      "assume": "Asumir",
+      "more": "Más opciones",
+      "saveNotes": "Guardar notas",
+      "savingNotes": "Guardando..."
     },
     "modal": {
-      "newTitle": "Nuevo cliente",
+      "newTitle": "Nueva organización",
+      "editTitle": "Editar organización",
       "step1": "Datos básicos",
       "step2": "Datos complementarios",
       "next": "Siguiente →",
       "back": "← Volver",
-      "submit": "Crear cliente",
+      "submit": "Crear organización",
+      "submitEdit": "Guardar cambios",
       "submitting": "Creando...",
-      "tagsHint": "Escribe y presiona Enter para agregar",
+      "submittingEdit": "Guardando...",
       "zipLoading": "Buscando código postal...",
       "zipError": "Código postal no encontrado",
-      "successCreated": "Cliente creado exitosamente",
-      "fields": {
-        "type": "Tipo",
-        "name": "Nombre completo",
-        "email": "Correo",
-        "phone": "Teléfono",
-        "document": "RFC / ID",
-        "status": "Estado",
-        "zip": "Código postal",
-        "street": "Dirección",
-        "city": "Ciudad",
-        "state": "Estado",
-        "segment": "Segmento",
-        "leadSource": "Origen del lead",
-        "tags": "Etiquetas"
-      },
-      "types": {
-        "person": "Persona física",
-        "company": "Empresa"
-      },
+      "successCreated": "Organización creada exitosamente",
+      "successUpdated": "Organización actualizada exitosamente",
       "sources": {
         "site": "Sitio web",
         "indicacao": "Referido",
@@ -134,6 +88,87 @@
         "whatsapp": "WhatsApp",
         "outro": "Otro"
       }
+    },
+    "conversations": {
+      "empty": "No se encontraron conversaciones",
+      "channel": "Canal",
+      "lastMessage": "Último mensaje",
+      "status": "Estado",
+      "open": "Abierta",
+      "openIn": "Abrir en Omnicanal"
+    },
+    "tickets": {
+      "empty": "No se encontraron tickets",
+      "title": "Título",
+      "status": "Estado",
+      "priority": "Prioridad"
+    },
+    "notes": {
+      "placeholder": "Agregar notas sobre esta organización...",
+      "hint": "Las notas se guardan al hacer clic en Guardar"
+    }
+  },
+  "contacts": {
+    "title": "Contactos",
+    "standalone": "Contactos independientes",
+    "standaloneDesc": "Contactos sin organización vinculada",
+    "new": "Nuevo contacto",
+    "search": "Buscar contacto...",
+    "noResults": "No se encontraron contactos",
+    "loading": "Cargando...",
+    "total": "{{n}} contactos",
+    "primary": "Principal",
+    "standalone_badge": "Independiente",
+    "table": {
+      "name": "Nombre",
+      "whatsapp": "WhatsApp",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "createdAt": "Creado el",
+      "actions": "Acciones"
+    },
+    "fields": {
+      "name": "Nombre",
+      "whatsapp": "WhatsApp",
+      "phone": "Teléfono",
+      "email": "Correo",
+      "document": "RFC / ID",
+      "role": "Cargo",
+      "department": "Departamento",
+      "organization": "Organización",
+      "isPrimary": "Contacto principal",
+      "tags": "Etiquetas",
+      "notes": "Notas",
+      "tagsHint": "Escribe y presiona Enter para agregar"
+    },
+    "actions": {
+      "link": "Vincular organización",
+      "unlink": "Desvincular",
+      "startConversation": "Iniciar conversación",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "messages": {
+      "linked": "Contacto vinculado a la organización",
+      "unlinked": "Contacto desvinculado",
+      "created": "Contacto creado exitosamente",
+      "updated": "Contacto actualizado exitosamente"
+    },
+    "modal": {
+      "newTitle": "Nuevo contacto",
+      "editTitle": "Editar contacto",
+      "submit": "Crear contacto",
+      "submitEdit": "Guardar cambios",
+      "submitting": "Creando...",
+      "submittingEdit": "Guardando..."
+    },
+    "linkModal": {
+      "title": "Vincular a organización",
+      "search": "Buscar organización...",
+      "noResults": "No se encontraron organizaciones",
+      "loading": "Buscando...",
+      "submit": "Vincular",
+      "submitting": "Vinculando..."
     }
   }
 }

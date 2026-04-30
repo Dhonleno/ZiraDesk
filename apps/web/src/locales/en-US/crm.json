@@ -1,132 +1,86 @@
 {
-  "clients": {
-    "title": "Clients",
-    "newClient": "New client",
-    "importCsv": "Import CSV",
-    "searchPlaceholder": "Search by name, email, phone...",
-    "advancedFilters": "Advanced filters",
-    "columns": "Columns",
-    "export": "Export",
-    "total": "{{n}} records",
-    "noClients": "No clients found",
+  "organizations": {
+    "title": "Organizations",
+    "new": "New organization",
+    "search": "Search organization...",
+    "noResults": "No organizations found",
+    "noSelection": "Select an organization",
+    "noSelectionSub": "Click an organization in the list to view details",
     "loading": "Loading...",
-    "errorLoad": "Error loading clients",
-    "kpi": {
-      "totalActive": "Total active",
-      "leadsInFunnel": "Leads in funnel",
-      "inNegotiation": "In negotiation",
-      "avgLtv": "Avg LTV"
-    },
-    "filters": {
-      "status": "Status",
-      "statusAll": "Status: All",
-      "channel": "Channel",
-      "assignedTo": "Assigned to",
-      "tags": "Tags",
-      "date": "Date",
-      "table": "Table",
-      "kanban": "Kanban"
+    "total": "{{n}} organizations",
+    "type": {
+      "company": "Company",
+      "person": "Individual"
     },
     "status": {
       "all": "All",
-      "cliente": "Clients",
-      "lead": "Leads",
-      "prospect": "Prospects",
-      "negociando": "Negotiating",
-      "vip": "VIP",
-      "inativo": "Inactive"
-    },
-    "statusLabel": {
-      "cliente": "Client",
       "lead": "Lead",
       "prospect": "Prospect",
-      "negociando": "Negotiating",
-      "vip": "VIP",
-      "inativo": "Inactive"
-    },
-    "table": {
       "client": "Client",
+      "inactive": "Inactive"
+    },
+    "fields": {
+      "name": "Name",
+      "document": "Tax ID",
+      "email": "Email",
+      "phone": "Phone",
+      "website": "Website",
+      "segment": "Segment",
+      "leadSource": "Lead source",
+      "responsible": "Owner",
+      "notes": "Notes",
+      "notInformed": "Not informed",
+      "street": "Street",
+      "city": "City",
+      "state": "State",
+      "zip": "ZIP code",
+      "type": "Type",
       "status": "Status",
-      "channels": "Channels",
-      "lastContact": "Last contact",
-      "ltv": "LTV",
-      "health": "Health",
-      "assignedTo": "Assigned to"
+      "contacts": "contacts"
     },
-    "pagination": {
-      "showing": "Showing",
-      "of": "of",
-      "perPage": "per page",
-      "noOwner": "Unassigned"
+    "tabs": {
+      "data": "Data",
+      "contacts": "Contacts",
+      "conversations": "Conversations",
+      "tickets": "Tickets",
+      "notes": "Notes"
     },
-    "detail": {
-      "empty": "No client selected",
-      "emptySubtitle": "Click a client in the list to view details",
-      "message": "Message",
-      "call": "Call",
-      "schedule": "Schedule",
-      "more": "More",
-      "metrics": "Metrics",
-      "attendances": "Conversations",
-      "messages": "Messages",
-      "nps": "NPS",
-      "info": "Information",
-      "edit": "Edit",
-      "recentActivity": "Recent activity",
-      "viewAll": "View all",
-      "noActivity": "No recent activity",
-      "noActivitySub": "Last interaction recorded some time ago",
-      "fields": {
-        "email": "Email",
-        "phone": "Phone",
-        "document": "Tax ID",
-        "zip": "ZIP code",
-        "company": "Company",
-        "occupation": "Job title",
-        "since": "Client since",
-        "assignedTo": "Assigned to",
-        "city": "City",
-        "state": "State",
-        "segment": "Segment",
-        "source": "Source"
-      }
+    "stats": {
+      "contacts": "Contacts",
+      "openConversations": "Open conversations",
+      "openTickets": "Open tickets",
+      "totalAttendances": "Total interactions"
+    },
+    "sections": {
+      "generalInfo": "General information",
+      "address": "Address",
+      "commercial": "Commercial data"
     },
     "actions": {
-      "chat": "Message",
       "edit": "Edit",
-      "moreOptions": "More options"
+      "delete": "Delete",
+      "startConversation": "Start conversation",
+      "addContact": "Add contact",
+      "assume": "Take ownership",
+      "more": "More options",
+      "saveNotes": "Save notes",
+      "savingNotes": "Saving..."
     },
     "modal": {
-      "newTitle": "New client",
+      "newTitle": "New organization",
+      "editTitle": "Edit organization",
       "step1": "Basic info",
       "step2": "Additional info",
       "next": "Next →",
       "back": "← Back",
-      "submit": "Create client",
+      "submit": "Create organization",
+      "submitEdit": "Save changes",
       "submitting": "Creating...",
-      "tagsHint": "Type and press Enter to add",
+      "submittingEdit": "Saving...",
       "zipLoading": "Looking up ZIP...",
       "zipError": "ZIP code not found",
-      "successCreated": "Client created successfully",
-      "fields": {
-        "type": "Type",
-        "name": "Full name",
-        "email": "Email",
-        "phone": "Phone",
-        "document": "Tax ID",
-        "status": "Status",
-        "zip": "ZIP code",
-        "street": "Street",
-        "city": "City",
-        "state": "State",
-        "segment": "Segment",
-        "leadSource": "Lead source",
-        "tags": "Tags"
-      },
-      "types": {
-        "person": "Individual",
-        "company": "Company"
-      },
+      "successCreated": "Organization created successfully",
+      "successUpdated": "Organization updated successfully",
       "sources": {
         "site": "Website",
         "indicacao": "Referral",
@@ -134,6 +88,87 @@
         "whatsapp": "WhatsApp",
         "outro": "Other"
       }
+    },
+    "conversations": {
+      "empty": "No conversations found",
+      "channel": "Channel",
+      "lastMessage": "Last message",
+      "status": "Status",
+      "open": "Open",
+      "openIn": "Open in Omnichannel"
+    },
+    "tickets": {
+      "empty": "No tickets found",
+      "title": "Title",
+      "status": "Status",
+      "priority": "Priority"
+    },
+    "notes": {
+      "placeholder": "Add notes about this organization...",
+      "hint": "Notes are saved when you click Save"
+    }
+  },
+  "contacts": {
+    "title": "Contacts",
+    "standalone": "Standalone contacts",
+    "standaloneDesc": "Contacts without a linked organization",
+    "new": "New contact",
+    "search": "Search contacts...",
+    "noResults": "No contacts found",
+    "loading": "Loading...",
+    "total": "{{n}} contacts",
+    "primary": "Primary",
+    "standalone_badge": "Standalone",
+    "table": {
+      "name": "Name",
+      "whatsapp": "WhatsApp",
+      "phone": "Phone",
+      "email": "Email",
+      "createdAt": "Created at",
+      "actions": "Actions"
+    },
+    "fields": {
+      "name": "Name",
+      "whatsapp": "WhatsApp",
+      "phone": "Phone",
+      "email": "Email",
+      "document": "Tax ID",
+      "role": "Job title",
+      "department": "Department",
+      "organization": "Organization",
+      "isPrimary": "Primary contact",
+      "tags": "Tags",
+      "notes": "Notes",
+      "tagsHint": "Type and press Enter to add"
+    },
+    "actions": {
+      "link": "Link organization",
+      "unlink": "Unlink",
+      "startConversation": "Start conversation",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "messages": {
+      "linked": "Contact linked to organization",
+      "unlinked": "Contact unlinked",
+      "created": "Contact created successfully",
+      "updated": "Contact updated successfully"
+    },
+    "modal": {
+      "newTitle": "New contact",
+      "editTitle": "Edit contact",
+      "submit": "Create contact",
+      "submitEdit": "Save changes",
+      "submitting": "Creating...",
+      "submittingEdit": "Saving..."
+    },
+    "linkModal": {
+      "title": "Link to organization",
+      "search": "Search organization...",
+      "noResults": "No organizations found",
+      "loading": "Searching...",
+      "submit": "Link",
+      "submitting": "Linking..."
     }
   }
 }

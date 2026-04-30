@@ -1,132 +1,86 @@
 {
-  "clients": {
-    "title": "Clientes",
-    "newClient": "Novo cliente",
-    "importCsv": "Importar CSV",
-    "searchPlaceholder": "Buscar por nome, e-mail, telefone...",
-    "advancedFilters": "Filtros avançados",
-    "columns": "Colunas",
-    "export": "Exportar",
-    "total": "{{n}} cadastros",
-    "noClients": "Nenhum cliente encontrado",
+  "organizations": {
+    "title": "Organizações",
+    "new": "Nova organização",
+    "search": "Buscar organização...",
+    "noResults": "Nenhuma organização encontrada",
+    "noSelection": "Selecione uma organização",
+    "noSelectionSub": "Clique em uma organização da lista para ver os detalhes",
     "loading": "Carregando...",
-    "errorLoad": "Erro ao carregar clientes",
-    "kpi": {
-      "totalActive": "Total ativos",
-      "leadsInFunnel": "Leads no funil",
-      "inNegotiation": "Em negociação",
-      "avgLtv": "LTV médio"
-    },
-    "filters": {
-      "status": "Status",
-      "statusAll": "Status: Todos",
-      "channel": "Canal",
-      "assignedTo": "Atribuído a",
-      "tags": "Tags",
-      "date": "Data",
-      "table": "Tabela",
-      "kanban": "Kanban"
+    "total": "{{n}} organizações",
+    "type": {
+      "company": "Empresa",
+      "person": "Pessoa"
     },
     "status": {
       "all": "Todos",
-      "cliente": "Clientes",
-      "lead": "Leads",
-      "prospect": "Prospects",
-      "negociando": "Negociando",
-      "vip": "VIP",
-      "inativo": "Inativos"
-    },
-    "statusLabel": {
-      "cliente": "Cliente",
       "lead": "Lead",
       "prospect": "Prospect",
-      "negociando": "Negociando",
-      "vip": "VIP",
-      "inativo": "Inativo"
-    },
-    "table": {
       "client": "Cliente",
+      "inactive": "Inativo"
+    },
+    "fields": {
+      "name": "Nome",
+      "document": "CNPJ",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "website": "Site",
+      "segment": "Segmento",
+      "leadSource": "Origem do lead",
+      "responsible": "Responsável",
+      "notes": "Notas",
+      "notInformed": "Não informado",
+      "street": "Logradouro",
+      "city": "Cidade",
+      "state": "Estado",
+      "zip": "CEP",
+      "type": "Tipo",
       "status": "Status",
-      "channels": "Canais",
-      "lastContact": "Último contato",
-      "ltv": "LTV",
-      "health": "Saúde",
-      "assignedTo": "Atribuído"
+      "contacts": "contatos"
     },
-    "pagination": {
-      "showing": "Mostrando",
-      "of": "de",
-      "perPage": "por página",
-      "noOwner": "Sem dono"
+    "tabs": {
+      "data": "Dados",
+      "contacts": "Contatos",
+      "conversations": "Conversas",
+      "tickets": "Tickets",
+      "notes": "Notas"
     },
-    "detail": {
-      "empty": "Nenhum cliente selecionado",
-      "emptySubtitle": "Clique em um cliente da lista para ver os detalhes",
-      "message": "Mensagem",
-      "call": "Ligar",
-      "schedule": "Agendar",
-      "more": "Mais",
-      "metrics": "Métricas",
-      "attendances": "Atendimentos",
-      "messages": "Mensagens",
-      "nps": "NPS",
-      "info": "Informações",
-      "edit": "Editar",
-      "recentActivity": "Atividade recente",
-      "viewAll": "Ver tudo",
-      "noActivity": "Sem atividade recente",
-      "noActivitySub": "Última interação registrada há mais tempo",
-      "fields": {
-        "email": "E-mail",
-        "phone": "Telefone",
-        "document": "CPF / CNPJ",
-        "zip": "CEP",
-        "company": "Empresa",
-        "occupation": "Cargo / Ocupação",
-        "since": "Cliente desde",
-        "assignedTo": "Atribuído",
-        "city": "Cidade",
-        "state": "Estado",
-        "segment": "Segmento",
-        "source": "Origem"
-      }
+    "stats": {
+      "contacts": "Contatos",
+      "openConversations": "Conversas abertas",
+      "openTickets": "Tickets abertos",
+      "totalAttendances": "Atendimentos"
+    },
+    "sections": {
+      "generalInfo": "Informações gerais",
+      "address": "Endereço",
+      "commercial": "Dados comerciais"
     },
     "actions": {
-      "chat": "Conversar",
       "edit": "Editar",
-      "moreOptions": "Mais opções"
+      "delete": "Excluir",
+      "startConversation": "Iniciar atendimento",
+      "addContact": "Adicionar contato",
+      "assume": "Assumir",
+      "more": "Mais opções",
+      "saveNotes": "Salvar notas",
+      "savingNotes": "Salvando..."
     },
     "modal": {
-      "newTitle": "Novo cliente",
+      "newTitle": "Nova organização",
+      "editTitle": "Editar organização",
       "step1": "Dados básicos",
       "step2": "Dados complementares",
       "next": "Próximo →",
       "back": "← Voltar",
-      "submit": "Criar cliente",
+      "submit": "Criar organização",
+      "submitEdit": "Salvar alterações",
       "submitting": "Criando...",
-      "tagsHint": "Digite e pressione Enter para adicionar",
+      "submittingEdit": "Salvando...",
       "zipLoading": "Buscando CEP...",
       "zipError": "CEP não encontrado",
-      "successCreated": "Cliente criado com sucesso",
-      "fields": {
-        "type": "Tipo",
-        "name": "Nome completo",
-        "email": "E-mail",
-        "phone": "Telefone",
-        "document": "CPF / CNPJ",
-        "status": "Status",
-        "zip": "CEP",
-        "street": "Logradouro",
-        "city": "Cidade",
-        "state": "Estado",
-        "segment": "Segmento",
-        "leadSource": "Origem do lead",
-        "tags": "Tags"
-      },
-      "types": {
-        "person": "Pessoa Física",
-        "company": "Empresa"
-      },
+      "successCreated": "Organização criada com sucesso",
+      "successUpdated": "Organização atualizada com sucesso",
       "sources": {
         "site": "Site",
         "indicacao": "Indicação",
@@ -134,6 +88,87 @@
         "whatsapp": "WhatsApp",
         "outro": "Outro"
       }
+    },
+    "conversations": {
+      "empty": "Nenhuma conversa encontrada",
+      "channel": "Canal",
+      "lastMessage": "Última mensagem",
+      "status": "Status",
+      "open": "Aberta",
+      "openIn": "Abrir no Omnichannel"
+    },
+    "tickets": {
+      "empty": "Nenhum ticket encontrado",
+      "title": "Título",
+      "status": "Status",
+      "priority": "Prioridade"
+    },
+    "notes": {
+      "placeholder": "Adicione notas sobre esta organização...",
+      "hint": "As notas são salvas automaticamente ao clicar em Salvar"
+    }
+  },
+  "contacts": {
+    "title": "Contatos",
+    "standalone": "Contatos avulsos",
+    "standaloneDesc": "Contatos sem organização vinculada",
+    "new": "Novo contato",
+    "search": "Buscar contato...",
+    "noResults": "Nenhum contato encontrado",
+    "loading": "Carregando...",
+    "total": "{{n}} contatos",
+    "primary": "Principal",
+    "standalone_badge": "Contato avulso",
+    "table": {
+      "name": "Nome",
+      "whatsapp": "WhatsApp",
+      "phone": "Telefone",
+      "email": "E-mail",
+      "createdAt": "Criado em",
+      "actions": "Ações"
+    },
+    "fields": {
+      "name": "Nome",
+      "whatsapp": "WhatsApp",
+      "phone": "Telefone",
+      "email": "E-mail",
+      "document": "CPF",
+      "role": "Cargo",
+      "department": "Departamento",
+      "organization": "Organização",
+      "isPrimary": "Contato principal",
+      "tags": "Tags",
+      "notes": "Notas",
+      "tagsHint": "Digite e pressione Enter para adicionar"
+    },
+    "actions": {
+      "link": "Vincular organização",
+      "unlink": "Desvincular",
+      "startConversation": "Iniciar conversa",
+      "edit": "Editar",
+      "delete": "Excluir"
+    },
+    "messages": {
+      "linked": "Contato vinculado à organização",
+      "unlinked": "Contato desvinculado",
+      "created": "Contato criado com sucesso",
+      "updated": "Contato atualizado com sucesso"
+    },
+    "modal": {
+      "newTitle": "Novo contato",
+      "editTitle": "Editar contato",
+      "submit": "Criar contato",
+      "submitEdit": "Salvar alterações",
+      "submitting": "Criando...",
+      "submittingEdit": "Salvando..."
+    },
+    "linkModal": {
+      "title": "Vincular a organização",
+      "search": "Buscar organização...",
+      "noResults": "Nenhuma organização encontrada",
+      "loading": "Buscando...",
+      "submit": "Vincular",
+      "submitting": "Vinculando..."
     }
   }
 }

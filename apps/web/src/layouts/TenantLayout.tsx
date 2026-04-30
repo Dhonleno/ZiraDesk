@@ -88,17 +88,24 @@ function Breadcrumb() {
   const isTickets = pathname.startsWith('/tickets');
 
   const routeLabels: Record<string, string> = {
-    '/crm/clients':      'Clientes',
-    '/tickets':          'Tickets',
-    '/admin/dashboard':  t('tenantAdmin.nav.dashboard'),
-    '/admin/users':      t('tenantAdmin.nav.users'),
-    '/admin/channels':   t('tenantAdmin.nav.channels'),
+    '/crm/organizations': 'Organizações',
+    '/crm/contacts':      'Contatos',
+    '/tickets':           'Tickets',
+    '/admin/dashboard':   t('tenantAdmin.nav.dashboard'),
+    '/admin/users':       t('tenantAdmin.nav.users'),
+    '/admin/channels':    t('tenantAdmin.nav.channels'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
-    '/admin/settings':   t('tenantAdmin.nav.settings'),
+    '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 
-  const staticLabel = isConversations ? 'Central de Atendimento' : (routeLabels[pathname] ?? (isTickets ? 'Tickets' : ''));
-  const section = isAdmin ? 'Admin' : isCRM ? 'CRM' : isTickets ? 'Tickets' : 'Omnichannel';
+  const staticLabel = isConversations
+    ? 'Central de Atendimento'
+    : (routeLabels[pathname]
+      ?? (pathname.startsWith('/crm/organizations') ? 'Organizações'
+        : pathname.startsWith('/crm/contacts') ? 'Contatos'
+        : isTickets ? 'Tickets'
+        : ''));
+  const section = isAdmin ? 'Administração' : isCRM ? 'CRM' : isTickets ? 'Tickets' : 'Omnichannel';
   if (!staticLabel) return null;
 
   const iconEl = isCRM ? (
@@ -136,6 +143,7 @@ function NavItem({ to, end, title, children }: NavItemProps) {
       to={to}
       {...(end ? { end } : {})}
       title={title}
+      aria-label={title}
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
       {children}
@@ -145,11 +153,18 @@ function NavItem({ to, end, title, children }: NavItemProps) {
 
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
-  const { t } = useTranslation('admin');
   const { user, token, logout, isLoggingOut } = useAuth();
   const { pathname } = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
+  const roleLabel =
+    user?.role === 'owner'
+      ? 'Owner'
+      : user?.role === 'admin'
+        ? 'Admin'
+        : user?.role === 'agent'
+          ? 'Agente'
+          : 'Visualização';
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
@@ -194,7 +209,7 @@ export function TenantLayout() {
         zIndex: 10,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingRight: 16, borderRight: '1px solid var(--line)', marginRight: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingRight: 16, borderRight: '1px solid var(--line)', marginRight: 6 }}>
           <Logo />
         </div>
 
@@ -204,26 +219,25 @@ export function TenantLayout() {
         </div>
 
         {/* Right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Online indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 'var(--r-pill)', background: 'var(--green-dim)', border: '1px solid rgba(62,207,142,.25)', fontSize: 11, fontWeight: 500, color: 'var(--green)', flexShrink: 0 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
-            Online
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="topbar-chip" title={`Perfil atual: ${roleLabel}`}>
+            <span className="topbar-chip-dot" aria-hidden />
+            {roleLabel}
           </div>
 
           <ThemeToggle />
 
           <button
+            className="topbar-search-btn"
             onClick={() => setSearchOpen(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 32, minWidth: 168, padding: '0 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt-3)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12 }}
             aria-label="Abrir busca global"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
               <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5" />
               <path d="M20 20l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            Buscar
-            <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, border: '1px solid var(--line-2)', borderRadius: 4, padding: '1px 5px' }}>⌘K</span>
+            <span>Buscar...</span>
+            <span className="topbar-search-shortcut">Ctrl K</span>
           </button>
 
           <NotificationCenter />
@@ -232,18 +246,14 @@ export function TenantLayout() {
           {pathname.startsWith('/omnichannel') && (
             <>
               <button
+                className="topbar-primary-btn"
                 onClick={() => window.dispatchEvent(new CustomEvent('omnichannel:open-modal'))}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: '#0E1A18', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>
+                title="Criar novo atendimento"
+              >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 Novo atendimento
               </button>
-              <button className="tb-icon-btn" aria-label="Histórico">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3.5l2 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              </button>
-              <button className="tb-icon-btn" aria-label="Empresa">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11V4.5l5-3 5 3V11H2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M5 11V7.5h4V11" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-              </button>
-              <div style={{ width: 1, height: 20, background: 'var(--line)', margin: '0 2px' }} />
+              <div className="topbar-inline-divider" aria-hidden />
             </>
           )}
 
@@ -295,67 +305,72 @@ export function TenantLayout() {
         <nav
           aria-label="Main navigation"
           style={{
-            width: 68,
-            minWidth: 68,
+            width: 72,
+            minWidth: 72,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            padding: '10px 0',
-            gap: 4,
+            padding: '12px 0 10px',
+            gap: 6,
             background: 'var(--bg-2)',
             borderRight: '1px solid var(--line)',
+            boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
           }}
         >
           {/* Atendimentos */}
           <NavItem to="/omnichannel/conversations" title="Atendimentos">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M3 13V5.5l6-4 6 4V13H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M3 8h12" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M4 4.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H8l-3.5 2v-2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+              <path d="M6 7.5h6M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </NavItem>
 
-          {/* Clientes */}
-          <NavItem to="/crm/clients" title="Clientes">
+          {/* Organizações */}
+          <NavItem to="/crm/organizations" title="Organizações">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M2 16c0-3.5 3-6 7-6s7 2.5 7 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <rect x="2" y="5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+              <path d="M6 5V4a2 2 0 012-2h2a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M6 9h6M6 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </NavItem>
+
+          {/* Contatos */}
+          <NavItem to="/crm/contacts" title="Contatos">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <circle cx="9" cy="6.5" r="2.8" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
           </NavItem>
 
           {/* Tickets */}
           <NavItem to="/tickets" title="Tickets">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M5.5 7h7M5.5 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <path
+                d="M4 5h10a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+              <path d="M7 7.5h4M7 10.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </NavItem>
 
-          {/* Campanhas (placeholder) */}
-          <div className="nav-item" title="Campanhas" style={{ opacity: 0.5, cursor: 'default' }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M3 12l3-7 3 4 2-2 4 5H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <div style={{ width: 28, height: 1, background: 'var(--line)', margin: '10px 0 6px', opacity: 0.8 }} />
 
-          {/* Divisor */}
-          <div style={{ width: 32, height: 1, background: 'var(--line)', margin: '6px 0' }} />
-
-          {/* Relatórios (placeholder) */}
-          <div className="nav-item" title="Relatórios" style={{ opacity: 0.5, cursor: 'default' }}>
+          {/* Administração */}
+          <NavItem to="/admin" title="Administração">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <rect x="2.5" y="2.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M6 11V9M9 11V7M12 11V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </div>
-
-          {/* Configurações / Admin */}
-          <NavItem to="/admin" title={t('tenantAdmin.nav.settings')}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.4" />
+              <rect x="3" y="3" width="12" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="9" cy="9" r="2.3" stroke="currentColor" strokeWidth="1.3" />
               <path
-                d="M9 2v2M9 14v2M2 9h2M14 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4"
+                d="M9 5.2v1.1M9 11.7v1.1M5.2 9h1.1M11.7 9h1.1M6.3 6.3l.8.8M10.9 10.9l.8.8M6.3 11.7l.8-.8M10.9 7.1l.8-.8"
                 stroke="currentColor"
-                strokeWidth="1.4"
+                strokeWidth="1.2"
                 strokeLinecap="round"
               />
             </svg>
@@ -387,16 +402,18 @@ export function TenantLayout() {
             to="/settings/upgrade"
             title={`Plano atual: ${settings?.plan?.name ?? '—'}`}
             style={({ isActive }) => ({
-              width: 56,
+              width: 58,
               display: 'block',
               textAlign: 'center',
               textDecoration: 'none',
-              borderRadius: 'var(--r)',
-              border: `1px solid ${isActive ? 'rgba(0,201,167,.35)' : 'var(--line)'}`,
+              borderRadius: 12,
+              border: `1px solid ${isActive ? 'rgba(0,201,167,.35)' : 'var(--line-2)'}`,
               background: isActive ? 'var(--teal-dim)' : 'var(--bg-3)',
               color: isActive ? 'var(--teal)' : 'var(--txt-2)',
-              padding: '6px 4px',
+              padding: '7px 4px',
               marginBottom: 8,
+              boxShadow: isActive ? '0 8px 22px rgba(0, 201, 167, 0.12)' : 'none',
+              transition: 'all .16s ease',
             })}
           >
             <span style={{ display: 'block', fontSize: 9, lineHeight: 1.1, color: 'var(--txt-3)' }}>Plano atual</span>
