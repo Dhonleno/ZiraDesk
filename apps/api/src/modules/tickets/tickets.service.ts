@@ -25,7 +25,8 @@ export class ForbiddenError extends Error {
 /* ── Row interfaces ──────────────────────────────────────────────────────── */
 interface TicketRow {
   id:               string;
-  client_id:        string | null;
+  contact_id:       string | null;
+  organization_id:  string | null;
   conversation_id:  string | null;
   title:            string;
   description:      string | null;
@@ -41,8 +42,8 @@ interface TicketRow {
   updated_at:       Date;
   assignee_name:    string | null;
   assignee_avatar:  string | null;
-  client_name:      string | null;
-  client_email:     string | null;
+  contact_name:     string | null;
+  organization_name: string | null;
 }
 
 interface CommentRow {
@@ -84,52 +85,55 @@ const SORT_COLUMNS: Record<string, string> = {
 
 const BASE_SELECT = `
   SELECT
-    t.id, t.client_id, t.conversation_id, t.title, t.description,
+    t.id, t.contact_id, t.organization_id, t.conversation_id, t.title, t.description,
     t.status, t.priority, t.category, t.assigned_to, t.resolved_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
-    c.name        AS client_name,
-    c.email       AS client_email
+    ct.name       AS contact_name,
+    o.name        AS organization_name
   FROM tickets t
-  LEFT JOIN users   u ON u.id = t.assigned_to
-  LEFT JOIN clients c ON c.id = t.client_id`;
+  LEFT JOIN users         u  ON u.id  = t.assigned_to
+  LEFT JOIN contacts      ct ON ct.id = t.contact_id
+  LEFT JOIN organizations o  ON o.id  = t.organization_id`;
 
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery) {
-  const { page, per_page, search, status, priority, assigned_to, client_id, category, sort_by, sort_order } = query;
+  const { page, per_page, search, status, priority, assigned_to, contact_id, organization_id, category, sort_by, sort_order } = query;
   const offset = (page - 1) * per_page;
 
-  const searchParam     = search      ?? null;
-  const statusParam     = status      ?? null;
-  const priorityParam   = priority    ?? null;
-  const assignedParam   = assigned_to ?? null;
-  const clientParam     = client_id   ?? null;
-  const categoryParam   = category    ?? null;
+  const searchParam       = search          ?? null;
+  const statusParam       = status          ?? null;
+  const priorityParam     = priority        ?? null;
+  const assignedParam     = assigned_to     ?? null;
+  const contactParam      = contact_id      ?? null;
+  const organizationParam = organization_id ?? null;
+  const categoryParam     = category        ?? null;
 
   const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
   const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
   const where = `
     WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
-      AND ($2::text IS NULL OR t.status    = $2)
-      AND ($3::text IS NULL OR t.priority  = $3)
-      AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)
-      AND ($5::uuid IS NULL OR t.client_id   = $5::uuid)
-      AND ($6::text IS NULL OR t.category  = $6)`;
+      AND ($2::text IS NULL OR t.status         = $2)
+      AND ($3::text IS NULL OR t.priority       = $3)
+      AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
+      AND ($5::uuid IS NULL OR t.contact_id     = $5::uuid)
+      AND ($6::uuid IS NULL OR t.organization_id = $6::uuid)
+      AND ($7::text IS NULL OR t.category       = $7)`;
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `${BASE_SELECT}${where}
      ORDER BY ${sortCol} ${sortDir}
-     LIMIT $7 OFFSET $8`,
-    searchParam, statusParam, priorityParam, assignedParam, clientParam, categoryParam,
+     LIMIT $8 OFFSET $9`,
+    searchParam, statusParam, priorityParam, assignedParam, contactParam, organizationParam, categoryParam,
     per_page, offset,
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count
      FROM tickets t${where}`,
-    searchParam, statusParam, priorityParam, assignedParam, clientParam, categoryParam,
+    searchParam, statusParam, priorityParam, assignedParam, contactParam, organizationParam, categoryParam,
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -157,16 +161,17 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `INSERT INTO tickets
-       (client_id, conversation_id, title, description, status, priority, category,
+       (contact_id, organization_id, conversation_id, title, description, status, priority, category,
         assigned_to, due_date, tags)
      VALUES
-       ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::uuid, $9::timestamptz, $10::text[])
+       ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::uuid, $10::timestamptz, $11::text[])
      RETURNING
-       id, client_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS client_name,   NULL AS client_email`,
-    data.client_id       ?? null,
+       NULL AS contact_name,  NULL AS organization_name`,
+    data.contact_id      ?? null,
+    data.organization_id ?? null,
     data.conversation_id ?? null,
     data.title,
     data.description     ?? null,
@@ -218,10 +223,10 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        updated_at      = NOW()
      WHERE id = $9::uuid
      RETURNING
-       id, client_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS client_name,   NULL AS client_email`,
+       NULL AS contact_name,  NULL AS organization_name`,
     data.title          ?? null,
     data.description    ?? null,
     data.status         ?? null,
@@ -277,10 +282,10 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, client_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS client_name,   NULL AS client_email`,
+       NULL AS contact_name,  NULL AS organization_name`,
     userId, id,
   );
 

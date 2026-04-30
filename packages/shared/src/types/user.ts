@@ -22,6 +22,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   tenantId: string;
+  schemaName?: string;
   isSuperAdmin: false;
 }
 

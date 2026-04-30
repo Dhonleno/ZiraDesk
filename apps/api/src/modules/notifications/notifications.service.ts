@@ -11,7 +11,7 @@ interface NotificationRow {
   read: boolean;
   ticket_title: string | null;
   conversation_subject: string | null;
-  client_name: string | null;
+  contact_name: string | null;
 }
 
 export interface NotificationItem {
@@ -36,6 +36,21 @@ async function ensureNotificationReadsTable() {
   `);
 }
 
+async function ensureAuditLogsTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NULL,
+      action TEXT NOT NULL,
+      entity TEXT NULL,
+      entity_id UUID NULL,
+      old_data JSONB NULL,
+      new_data JSONB NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
 function toNotification(row: NotificationRow): NotificationItem {
   if (row.action === 'ticket.assigned') {
     return {
@@ -50,7 +65,7 @@ function toNotification(row: NotificationRow): NotificationItem {
   }
 
   if (row.action === 'conversation.assigned') {
-    const label = row.client_name ?? row.conversation_subject ?? 'conversa';
+    const label = row.contact_name ?? row.conversation_subject ?? 'conversa';
     return {
       id: row.id,
       type: 'conversation_assigned',
@@ -63,7 +78,7 @@ function toNotification(row: NotificationRow): NotificationItem {
   }
 
   if (row.action === 'conversation.message') {
-    const label = row.client_name ?? row.conversation_subject ?? 'Cliente';
+    const label = row.contact_name ?? row.conversation_subject ?? 'Cliente';
     const preview = String((row.new_data as Record<string, unknown>)?.['preview'] ?? 'Nova mensagem recebida');
     return {
       id: row.id,
@@ -89,6 +104,7 @@ function toNotification(row: NotificationRow): NotificationItem {
 }
 
 export async function listNotifications(userId: string) {
+  await ensureAuditLogsTable();
   await ensureNotificationReadsTable();
 
   const rows = await prisma.$queryRawUnsafe<NotificationRow[]>(
@@ -101,7 +117,7 @@ export async function listNotifications(userId: string) {
        (nr.notification_id IS NOT NULL) AS read,
        t.title AS ticket_title,
        c.subject AS conversation_subject,
-       cl.name AS client_name
+       ct.name AS contact_name
      FROM audit_logs al
      LEFT JOIN notification_reads nr
        ON nr.notification_id = al.id AND nr.user_id = $1::uuid
@@ -113,7 +129,7 @@ export async function listNotifications(userId: string) {
        END
      LEFT JOIN conversations c
        ON c.id = CASE WHEN al.action = 'conversation.assigned' THEN al.entity_id ELSE NULL END
-     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE (
        al.action = 'ticket.assigned'
        AND al.new_data->>'assigned_to' = $1
@@ -137,6 +153,7 @@ export async function listNotifications(userId: string) {
 }
 
 export async function markNotificationRead(userId: string, notificationId: string) {
+  await ensureAuditLogsTable();
   await ensureNotificationReadsTable();
   await prisma.$executeRawUnsafe(
     `INSERT INTO notification_reads (user_id, notification_id)
@@ -149,6 +166,7 @@ export async function markNotificationRead(userId: string, notificationId: strin
 }
 
 export async function markAllNotificationsRead(userId: string) {
+  await ensureAuditLogsTable();
   await ensureNotificationReadsTable();
   const notifications = await listNotifications(userId);
   if (notifications.length === 0) return { read: 0 };

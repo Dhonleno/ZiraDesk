@@ -71,7 +71,7 @@ export function Dashboard() {
     },
     {
       label: t('tenantAdmin.dashboard.stats.clients'),
-      value: data?.total_clients ?? 0,
+      value: data?.total_organizations ?? 0,
       accent: 'var(--blue)',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>

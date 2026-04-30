@@ -4,12 +4,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { omnichannelApi, adminApi, crmApi } from '../../services/api';
+import { omnichannelApi, adminApi, contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
 
 const schema = z.object({
-  client_id: z.string().min(1),
+  contact_id: z.string().min(1),
   channel_id: z.string().min(1),
   type: z.enum(['inbound', 'outbound']),
   subject: z.string().optional(),
@@ -30,10 +30,10 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const qc = useQueryClient();
-  const [clientSearch, setClientSearch] = useState('');
-  const [clientLabel, setClientLabel] = useState('');
-  const [showClientDropdown, setShowClientDropdown] = useState(false);
-  const debouncedSearch = useDebounce(clientSearch, 300);
+  const [contactSearch, setContactSearch] = useState('');
+  const [contactLabel, setContactLabel] = useState('');
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const debouncedSearch = useDebounce(contactSearch, 300);
 
   const {
     register,
@@ -46,7 +46,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     defaultValues: { type: 'inbound' },
   });
 
-  const selectedClientId = watch('client_id');
+  const selectedContactId = watch('contact_id');
   const selectedChannelId = watch('channel_id');
   const selectedType = watch('type') ?? 'inbound';
 
@@ -56,18 +56,18 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     queryFn: () => adminApi.listChannels(),
   });
 
-  // Search clients
-  const { data: clientsResult } = useQuery({
-    queryKey: ['crm-clients-search', debouncedSearch],
-    queryFn: () => crmApi.listClients({ ...(debouncedSearch ? { search: debouncedSearch } : {}), per_page: 10 }),
-    enabled: showClientDropdown,
+  // Search contacts
+  const { data: contactsResult } = useQuery({
+    queryKey: ['crm-contacts-search', debouncedSearch],
+    queryFn: () => contactsApi.list({ ...(debouncedSearch ? { search: debouncedSearch } : {}), per_page: 10 }),
+    enabled: showContactDropdown,
   });
-  const clientsList = clientsResult?.data ?? [];
+  const contactsList = contactsResult?.data ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data: FormData) =>
       omnichannelApi.createConversation({
-        client_id: data.client_id,
+        contact_id: data.contact_id,
         channel_id: data.channel_id,
         type: data.type,
         ...(data.subject ? { subject: data.subject } : {}),
@@ -85,12 +85,12 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
 
   const onSubmit = handleSubmit((data) => createMutation.mutate(data));
 
-  const handleSelectClient = useCallback(
+  const handleSelectContact = useCallback(
     (id: string, name: string) => {
-      setValue('client_id', id, { shouldValidate: true });
-      setClientLabel(name);
-      setShowClientDropdown(false);
-      setClientSearch('');
+      setValue('contact_id', id, { shouldValidate: true });
+      setContactLabel(name);
+      setShowContactDropdown(false);
+      setContactSearch('');
     },
     [setValue],
   );
@@ -227,7 +227,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             </div>
           </div>
 
-          {/* Client search */}
+          {/* Contact search */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('form.client')} *
@@ -235,19 +235,19 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             <div style={{ position: 'relative' }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                background: 'var(--bg-3)', border: `1px solid ${errors.client_id ? 'var(--red)' : selectedClientId ? 'rgba(0,201,167,.3)' : 'var(--line-2)'}`,
+                background: 'var(--bg-3)', border: `1px solid ${errors.contact_id ? 'var(--red)' : selectedContactId ? 'rgba(0,201,167,.3)' : 'var(--line-2)'}`,
                 borderRadius: 'var(--r)', padding: '9px 12px',
                 transition: 'border-color .15s',
               }}>
-                {selectedClientId ? (
+                {selectedContactId ? (
                   <>
                     <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
-                      {clientLabel.charAt(0).toUpperCase()}
+                      {contactLabel.charAt(0).toUpperCase()}
                     </div>
-                    <span style={{ flex: 1, fontSize: 13, color: 'var(--txt)' }}>{clientLabel}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: 'var(--txt)' }}>{contactLabel}</span>
                     <button
                       type="button"
-                      onClick={() => { setValue('client_id', '', { shouldValidate: true }); setClientLabel(''); setShowClientDropdown(true); }}
+                      onClick={() => { setValue('contact_id', '', { shouldValidate: true }); setContactLabel(''); setShowContactDropdown(true); }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', display: 'flex', padding: 0 }}
                     >
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -262,15 +262,15 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                     <input
                       type="text"
                       placeholder={t('form.clientPlaceholder')}
-                      value={clientSearch}
-                      onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
-                      onFocus={() => setShowClientDropdown(true)}
+                      value={contactSearch}
+                      onChange={(e) => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
+                      onFocus={() => setShowContactDropdown(true)}
                       style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
                     />
                   </>
                 )}
               </div>
-              {showClientDropdown && !selectedClientId && (
+              {showContactDropdown && !selectedContactId && (
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
                   background: 'var(--bg-3)', border: '1px solid var(--line-2)',
@@ -278,15 +278,15 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
                   maxHeight: 200, overflowY: 'auto',
                 }}>
-                  {clientsList.length === 0 ? (
+                  {contactsList.length === 0 ? (
                     <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--txt-3)', textAlign: 'center' }}>
                       {t('noConversations')}
                     </div>
-                  ) : clientsList.map((c) => (
+                  ) : contactsList.map((c) => (
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => handleSelectClient(c.id, c.name)}
+                      onClick={() => handleSelectContact(c.id, c.name)}
                       style={{
                         width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8,
                         padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
@@ -310,8 +310,8 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               )}
             </div>
             {/* Hidden input for validation */}
-            <input type="hidden" {...register('client_id')} />
-            {errors.client_id && (
+            <input type="hidden" {...register('contact_id')} />
+            {errors.contact_id && (
               <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.clientRequired')}</p>
             )}
           </div>

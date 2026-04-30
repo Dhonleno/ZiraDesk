@@ -10,7 +10,8 @@ export const listConversationsQuerySchema = z
     status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: z.coerce.boolean().optional(),
-    client_id: z.string().uuid().optional(),
+    contact_id: z.string().uuid().optional(),
+    organization_id: z.string().uuid().optional(),
   })
   .transform(({ per_page, perPage, ...query }) => ({
     ...query,
@@ -19,7 +20,8 @@ export const listConversationsQuerySchema = z
 
 export const createConversationBodySchema = z
   .object({
-    client_id: z.string().uuid(),
+    contact_id: z.string().uuid(),
+    organization_id: z.string().uuid().optional(),
     channel_id: z.string().uuid(),
     type: z.enum(['inbound', 'outbound']).default('inbound'),
     subject: z.string().max(255).optional(),

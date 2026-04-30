@@ -3,7 +3,8 @@ import { prisma } from '../../../config/database.js';
 export async function getOverview() {
   const [
     [usersRow],
-    [clientsRow],
+    [orgsRow],
+    [contactsRow],
     [totalConvRow],
     [openConvRow],
     [totalTicketsRow],
@@ -13,7 +14,8 @@ export async function getOverview() {
     prisma.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count FROM users WHERE status = 'active'`,
     ),
-    prisma.$queryRawUnsafe<[{ count: bigint }]>(`SELECT COUNT(*) AS count FROM clients`),
+    prisma.$queryRawUnsafe<[{ count: bigint }]>(`SELECT COUNT(*) AS count FROM organizations`),
+    prisma.$queryRawUnsafe<[{ count: bigint }]>(`SELECT COUNT(*) AS count FROM contacts`),
     prisma.$queryRawUnsafe<[{ count: bigint }]>(`SELECT COUNT(*) AS count FROM conversations`),
     prisma.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count FROM conversations WHERE status = 'open'`,
@@ -26,12 +28,13 @@ export async function getOverview() {
   ]);
 
   return {
-    total_users: Number(usersRow?.count ?? 0),
-    total_clients: Number(clientsRow?.count ?? 0),
+    total_users:         Number(usersRow?.count ?? 0),
+    total_organizations: Number(orgsRow?.count ?? 0),
+    total_contacts:      Number(contactsRow?.count ?? 0),
     total_conversations: Number(totalConvRow?.count ?? 0),
-    open_conversations: Number(openConvRow?.count ?? 0),
-    total_tickets: Number(totalTicketsRow?.count ?? 0),
-    open_tickets: Number(openTicketsRow?.count ?? 0),
-    total_messages: Number(messagesRow?.count ?? 0),
+    open_conversations:  Number(openConvRow?.count ?? 0),
+    total_tickets:       Number(totalTicketsRow?.count ?? 0),
+    open_tickets:        Number(openTicketsRow?.count ?? 0),
+    total_messages:      Number(messagesRow?.count ?? 0),
   };
 }

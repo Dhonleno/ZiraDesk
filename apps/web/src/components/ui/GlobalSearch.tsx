@@ -33,12 +33,12 @@ function iconPath(type: ResultType) {
 function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
   if (!data) return [];
   return [
-    ...data.clients.map((client) => ({
-      key: `client:${client.id}`,
+    ...data.contacts.map((client) => ({
+      key: `contact:${client.id}`,
       type: 'client' as const,
       title: client.name,
-      subtitle: client.email ?? client.phone ?? 'Cliente',
-      href: `/crm/clients?client=${client.id}`,
+      subtitle: client.email ?? client.phone ?? 'Contato',
+      href: `/crm/contacts?contact=${client.id}`,
     })),
     ...data.tickets.map((ticket) => ({
       key: `ticket:${ticket.id}`,
@@ -50,7 +50,7 @@ function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
     ...data.conversations.map((conversation) => ({
       key: `conversation:${conversation.id}`,
       type: 'conversation' as const,
-      title: conversation.client_name ?? 'Cliente não identificado',
+      title: conversation.contact_name ?? 'Cliente não identificado',
       subtitle: conversation.last_message ?? 'Conversa',
       href: `/omnichannel/conversations?conversation=${conversation.id}`,
     })),

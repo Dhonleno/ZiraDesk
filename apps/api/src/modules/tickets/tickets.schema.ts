@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 export const createTicketSchema = z.object({
-  client_id:       z.string().uuid().optional(),
+  contact_id:      z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
   conversation_id: z.string().uuid().optional(),
   title:           z.string().min(3).max(255),
   description:     z.string().optional(),
@@ -22,7 +23,8 @@ export const listTicketsQuerySchema = z.object({
   status:      z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
   priority:    z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   assigned_to: z.string().uuid().optional(),
-  client_id:   z.string().uuid().optional(),
+  contact_id:      z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
   category:    z.string().optional(),
   sort_by:     z.enum(['created_at', 'updated_at', 'priority', 'due_date']).default('created_at'),
   sort_order:  z.enum(['asc', 'desc']).default('desc'),

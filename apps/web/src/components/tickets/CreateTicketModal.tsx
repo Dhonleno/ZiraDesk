@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { ticketsApi, crmApi, adminApi } from '../../services/api';
+import { ticketsApi, contactsApi, adminApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -42,8 +42,8 @@ export function CreateTicketModal({ open, onClose }: Props) {
   const queryClient = useQueryClient();
 
   const [clientSearch, setClientSearch] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [selectedClientName, setSelectedClientName] = useState('');
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [selectedContactName, setSelectedContactName] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
 
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -58,9 +58,9 @@ export function CreateTicketModal({ open, onClose }: Props) {
 
   const tags = watch('tags');
 
-  const { data: clientResults } = useQuery({
-    queryKey: ['crm-clients-search', debouncedClientSearch],
-    queryFn: () => crmApi.listClients({ search: debouncedClientSearch, per_page: 8 }),
+  const { data: contactResults } = useQuery({
+    queryKey: ['crm-contacts-search', debouncedClientSearch],
+    queryFn: () => contactsApi.list({ search: debouncedClientSearch, per_page: 8 }),
     enabled: debouncedClientSearch.length > 1 && showClientDropdown,
     staleTime: 10_000,
   });
@@ -83,7 +83,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
       if (values.description)  payload.description  = values.description;
       if (values.category)     payload.category     = values.category;
       if (values.due_date)     payload.due_date     = new Date(values.due_date).toISOString();
-      if (selectedClientId)    payload.client_id    = selectedClientId;
+      if (selectedContactId)   payload.contact_id   = selectedContactId;
       if (assigneeId)          payload.assigned_to  = assigneeId;
       return ticketsApi.create(payload);
     },
@@ -92,8 +92,8 @@ export function CreateTicketModal({ open, onClose }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
       toast.success(t('tickets.form.created'));
       reset();
-      setSelectedClientId(null);
-      setSelectedClientName('');
+      setSelectedContactId(null);
+      setSelectedContactName('');
       setAssigneeId(null);
       setTagInput('');
       onClose();
@@ -157,17 +157,17 @@ export function CreateTicketModal({ open, onClose }: Props) {
             </div>
           </div>
 
-          {/* Client search */}
+          {/* Contact search */}
           <div style={{ position: 'relative' }}>
             <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
               {t('tickets.fields.client')}
             </label>
-            {selectedClientId ? (
+            {selectedContactId ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
                 borderRadius: 'var(--r)', background: 'var(--teal-dim)', border: '1px solid var(--teal)',
                 fontSize: 13, color: 'var(--txt)' }}>
-                <span style={{ flex: 1 }}>{selectedClientName}</span>
-                <button type="button" onClick={() => { setSelectedClientId(null); setSelectedClientName(''); setClientSearch(''); }}
+                <span style={{ flex: 1 }}>{selectedContactName}</span>
+                <button type="button" onClick={() => { setSelectedContactId(null); setSelectedContactName(''); setClientSearch(''); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}>
                   ×
                 </button>
@@ -183,17 +183,17 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 style={{ ...selectStyle, display: 'block' }}
               />
             )}
-            {showClientDropdown && !selectedClientId && clientResults && clientResults.data.length > 0 && (
+            {showClientDropdown && !selectedContactId && contactResults && contactResults.data.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
                 background: 'var(--bg-3)', border: '1px solid var(--line)',
                 borderRadius: 'var(--r)', boxShadow: '0 8px 24px rgba(0,0,0,.4)',
                 maxHeight: 200, overflowY: 'auto', marginTop: 2,
               }}>
-                {clientResults.data.map((c) => (
+                {contactResults.data.map((c) => (
                   <button key={c.id} type="button" onMouseDown={() => {
-                    setSelectedClientId(c.id);
-                    setSelectedClientName(c.name);
+                    setSelectedContactId(c.id);
+                    setSelectedContactName(c.name);
                     setShowClientDropdown(false);
                   }} style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',

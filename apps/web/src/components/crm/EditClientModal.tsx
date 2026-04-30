@@ -6,57 +6,29 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { crmApi } from '../../services/api';
-import type { CrmClient } from '../../services/api';
+import { contactsApi } from '../../services/api';
+import type { CrmContact } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 
-/* ── Schema ──────────────────────────────────────────────────────────────── */
 const schema = z.object({
-  name:           z.string().min(2, 'Mínimo 2 caracteres'),
-  type:           z.enum(['person', 'company']),
-  email:          z.union([z.string().email('E-mail inválido'), z.literal('')]).optional(),
-  phone:          z.string().optional(),
-  document:       z.string().optional(),
-  status:         z.enum(['lead', 'prospect', 'client', 'negotiating', 'vip', 'inactive']),
-  address_zip:    z.string().optional(),
-  address_street: z.string().optional(),
-  address_city:   z.string().optional(),
-  address_state:  z.string().optional(),
-  segment:        z.string().optional(),
-  lead_source:    z.string().optional(),
-  tags:           z.array(z.string()),
+  name:       z.string().min(2, 'Mínimo 2 caracteres'),
+  email:      z.union([z.string().email('E-mail inválido'), z.literal('')]).optional(),
+  phone:      z.string().optional(),
+  whatsapp:   z.string().optional(),
+  document:   z.string().optional(),
+  role:       z.string().optional(),
+  department: z.string().optional(),
+  notes:      z.string().optional(),
+  tags:       z.array(z.string()),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-/* ── Props ───────────────────────────────────────────────────────────────── */
 interface Props {
-  client: CrmClient | null;
+  client: CrmContact | null;
   onClose: () => void;
 }
 
-/* ── Shared select style ─────────────────────────────────────────────────── */
-const selectStyle: React.CSSProperties = {
-  background:   'var(--bg-3)',
-  border:       '1px solid var(--line)',
-  color:        'var(--txt)',
-  height:       '2.5rem',
-  borderRadius: '0.5rem',
-  padding:      '0 0.75rem',
-  fontSize:     '0.875rem',
-  width:        '100%',
-  outline:      'none',
-};
-
-/* ── Normalize API status → form enum ───────────────────────────────────── */
-function toFormStatus(s: string): FormValues['status'] {
-  const map: Record<string, FormValues['status']> = {
-    customer: 'client', client: 'client', inactive: 'inactive', negotiating: 'negotiating',
-  };
-  return (map[s] ?? s) as FormValues['status'];
-}
-
-/* ── Component ───────────────────────────────────────────────────────────── */
 export function EditClientModal({ client, onClose }: Props) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -72,60 +44,50 @@ export function EditClientModal({ client, onClose }: Props) {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { type: 'person', status: 'lead', tags: [] },
+    defaultValues: { tags: [] },
   });
 
   useEffect(() => {
     if (!client) return;
     reset({
-      name:           client.name,
-      type:           (client.type === 'company' ? 'company' : 'person'),
-      email:          client.email          ?? '',
-      phone:          client.phone          ?? '',
-      document:       client.document       ?? '',
-      status:         toFormStatus(client.status),
-      address_zip:    client.address_zip    ?? '',
-      address_street: client.address_street ?? '',
-      address_city:   client.address_city   ?? '',
-      address_state:  client.address_state  ?? '',
-      segment:        client.segment        ?? '',
-      lead_source:    client.lead_source    ?? '',
-      tags:           client.tags,
+      name:       client.name,
+      email:      client.email      ?? '',
+      phone:      client.phone      ?? '',
+      whatsapp:   client.whatsapp   ?? '',
+      document:   client.document   ?? '',
+      role:       client.role       ?? '',
+      department: client.department ?? '',
+      notes:      client.notes      ?? '',
+      tags:       client.tags,
     });
     setTagInput('');
   }, [client, reset]);
 
-  const typeValue = watch('type');
-  const tags      = watch('tags');
+  const tags = watch('tags');
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
-        const payload: Parameters<typeof crmApi.updateClient>[1] = {
-        name:   values.name,
-        type:   values.type,
-        status: values.status,
-        tags:   values.tags,
-        ...(values.email          ? { email:          values.email }          : {}),
-        ...(values.phone          ? { phone:          values.phone }          : {}),
-        ...(values.document       ? { document:       values.document }       : {}),
-        ...(values.address_zip    ? { address_zip:    values.address_zip }    : {}),
-        ...(values.address_street ? { address_street: values.address_street } : {}),
-        ...(values.address_city   ? { address_city:   values.address_city }   : {}),
-        ...(values.address_state  ? { address_state:  values.address_state }  : {}),
-        ...(values.segment        ? { segment:        values.segment }        : {}),
-        ...(values.lead_source    ? { lead_source:    values.lead_source }    : {}),
+      const payload: Partial<CrmContact> = {
+        name:       values.name,
+        email:      values.email      || null,
+        phone:      values.phone      || null,
+        whatsapp:   values.whatsapp   || null,
+        document:   values.document   || null,
+        role:       values.role       || null,
+        department: values.department || null,
+        notes:      values.notes      || null,
+        tags:       values.tags,
       };
-      return crmApi.updateClient(client!.id, payload);
+      return contactsApi.update(client!.id, payload);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['crm-clients'] });
-      void queryClient.invalidateQueries({ queryKey: ['crm-client', client?.id] });
-      void queryClient.invalidateQueries({ queryKey: ['crm-kpi'] });
-      toast.success('Cliente atualizado com sucesso');
+      void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      void queryClient.invalidateQueries({ queryKey: ['crm-contact', client?.id] });
+      toast.success('Contato atualizado com sucesso');
       onClose();
     },
     onError: () => {
-      toast.error('Erro ao atualizar cliente');
+      toast.error('Erro ao atualizar contato');
     },
   });
 
@@ -143,24 +105,9 @@ export function EditClientModal({ client, onClose }: Props) {
   }
 
   return (
-    <Modal open={!!client} onClose={onClose} title="Editar cliente" maxWidth="md">
+    <Modal open={!!client} onClose={onClose} title="Editar contato" maxWidth="md">
       <form onSubmit={handleSubmit((v) => mutation.mutate(v))}>
         <div className="space-y-4">
-
-          {/* Type toggle */}
-          <div>
-            <p className="text-sm font-medium mb-1.5" style={{ color: 'var(--txt-2)' }}>Tipo</p>
-            <div style={{ display: 'flex', background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 8, padding: 2 }}>
-              {(['person', 'company'] as const).map((tp) => (
-                <button
-                  key={tp} type="button" onClick={() => setValue('type', tp)}
-                  style={{ flex: 1, padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: typeValue === tp ? 'var(--bg-5)' : 'transparent', color: typeValue === tp ? 'var(--txt)' : 'var(--txt-3)', transition: 'all .15s', fontFamily: 'var(--font)' }}
-                >
-                  {tp === 'person' ? 'Pessoa Física' : 'Empresa'}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <Input label="Nome completo" error={errors.name?.message} autoFocus {...register('name')} />
 
@@ -170,44 +117,13 @@ export function EditClientModal({ client, onClose }: Props) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            <Input label="WhatsApp" type="tel" placeholder="+55 11 99999-9999" {...register('whatsapp')} />
             <Input label="CPF / CNPJ" {...register('document')} />
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Status</label>
-              <select style={selectStyle} {...register('status')}>
-                <option value="lead">Lead</option>
-                <option value="prospect">Prospect</option>
-                <option value="client">Cliente</option>
-                <option value="negotiating">Negociando</option>
-                <option value="vip">VIP</option>
-                <option value="inactive">Inativo</option>
-              </select>
-              {errors.status && <p className="text-xs" style={{ color: '#F87171' }}>{errors.status.message}</p>}
-            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Input label="CEP" placeholder="00000-000" {...register('address_zip')} />
-            <Input label="Cidade" {...register('address_city')} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Logradouro" {...register('address_street')} />
-            <Input label="Estado" maxLength={2} {...register('address_state')} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Segmento" {...register('segment')} />
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Origem do lead</label>
-              <select style={selectStyle} {...register('lead_source')}>
-                <option value="">—</option>
-                <option value="site">Site</option>
-                <option value="indicacao">Indicação</option>
-                <option value="redes_sociais">Redes sociais</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="outro">Outro</option>
-              </select>
-            </div>
+            <Input label="Cargo" {...register('role')} />
+            <Input label="Departamento" {...register('department')} />
           </div>
 
           {/* Tags */}

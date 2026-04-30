@@ -70,8 +70,10 @@ interface ChannelRow {
   credentials: string | object;
 }
 
-interface ClientRow {
+interface ContactRow {
   id: string;
+  name: string;
+  organization_id: string | null;
 }
 
 interface ConversationRow {
@@ -197,43 +199,48 @@ async function processIncomingMessage(
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
 
-    const clientRows = await tx.$queryRawUnsafe<ClientRow[]>(
-      `SELECT id FROM clients WHERE phone = $1 LIMIT 1`,
+    const contactRows = await tx.$queryRawUnsafe<ContactRow[]>(
+      `SELECT id, name, organization_id FROM contacts
+       WHERE whatsapp = $1 OR phone = $1
+       LIMIT 1`,
       formattedPhone,
     );
 
-    let clientId: string;
-    if (clientRows[0]) {
-      clientId = clientRows[0].id;
+    let contactId: string;
+    let organizationId: string | null = null;
+    if (contactRows[0]) {
+      contactId = contactRows[0].id;
+      organizationId = contactRows[0].organization_id;
     } else {
-      const newClient = await tx.$queryRawUnsafe<ClientRow[]>(
-        `INSERT INTO clients (name, phone, status) VALUES ($1, $2, 'lead') RETURNING id`,
+      const newContact = await tx.$queryRawUnsafe<ContactRow[]>(
+        `INSERT INTO contacts (name, whatsapp, phone) VALUES ($1, $2, $2) RETURNING id, name, organization_id`,
         senderName,
         formattedPhone,
       );
-      clientId = newClient[0]!.id;
+      contactId = newContact[0]!.id;
+      organizationId = null;
     }
 
-    console.log('[WhatsApp] clientId:', clientId, 'channelId:', channelId);
-    if (!isUuid(clientId) || !isUuid(channelId)) {
-      throw new Error(`[WhatsApp] Invalid UUID for client/channel: ${clientId}/${channelId}`);
+    console.log('[WhatsApp] contactId:', contactId, 'channelId:', channelId);
+    if (!isUuid(contactId) || !isUuid(channelId)) {
+      throw new Error(`[WhatsApp] Invalid UUID for contact/channel: ${contactId}/${channelId}`);
     }
 
     await tx.$executeRawUnsafe(
       `SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text)::bigint)`,
-      clientId,
+      contactId,
       channelId,
     );
 
-    console.log('[WhatsApp Webhook] Looking for conversation:', { clientId, channelId });
+    console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id FROM conversations
-       WHERE client_id = $1::uuid
+       WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
          AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
        ORDER BY created_at DESC LIMIT 1`,
-      clientId,
+      contactId,
       channelId,
     );
 
@@ -249,10 +256,11 @@ async function processIncomingMessage(
     } else {
       protocolNumber = await generateConversationProtocol(tx, schemaName);
       const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
-        `INSERT INTO conversations (client_id, channel_id, channel_type, conversation_type, status, protocol_number, metadata)
-         VALUES ($1::uuid, $2::uuid, 'whatsapp', 'inbound', 'open', $3, '{"type": "inbound"}'::jsonb)
+        `INSERT INTO conversations (contact_id, organization_id, channel_id, channel_type, conversation_type, status, protocol_number, metadata)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 'whatsapp', 'inbound', 'open', $4, '{"type": "inbound"}'::jsonb)
          RETURNING id`,
-        clientId,
+        contactId,
+        organizationId,
         channelId,
         protocolNumber,
       );
@@ -267,7 +275,7 @@ async function processIncomingMessage(
        VALUES ($1::uuid, 'client', $2::uuid, $3, $4, $5, $6, 'delivered', $7::jsonb)
        RETURNING id, content, created_at, sender_type`,
       conversationId,
-      clientId,
+      contactId,
       content,
       contentType,
       externalMediaId,
@@ -304,6 +312,9 @@ async function processIncomingMessage(
       protocolNumber,
       protocolMessageId,
       protocolMessageContent,
+      contactId,
+      contactName: contactRows[0]?.name ?? senderName,
+      organizationId,
     };
   });
 
@@ -311,11 +322,17 @@ async function processIncomingMessage(
   if (result.isNewConversation) {
     io.to(`tenant:${tenantId}`).emit('conversation:created', {
       conversationId: result.conversationId,
+      contactName: result.contactName,
+      organizationId: result.organizationId,
     });
   }
   io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
     conversationId: result.conversationId,
     message: result.message,
+    contact: {
+      id: result.contactId,
+      name: result.contactName,
+    },
   });
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
@@ -332,16 +349,16 @@ async function processIncomingMessage(
   }
 
   // Notify assigned agent if conversation has one
-  const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; client_name: string | null }]>(
-    `SELECT c.assigned_to, cl.name AS client_name
+  const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; contact_name: string | null }]>(
+    `SELECT c.assigned_to, ct.name AS contact_name
      FROM "${schemaName}".conversations c
-     LEFT JOIN "${schemaName}".clients cl ON cl.id = c.client_id
+     LEFT JOIN "${schemaName}".contacts ct ON ct.id = c.contact_id
      WHERE c.id = $1::uuid LIMIT 1`,
     result.conversationId,
   );
   const assignedUserId = convAssigned[0]?.assigned_to ?? null;
   if (assignedUserId) {
-    const clientName = convAssigned[0]?.client_name ?? senderName;
+    const clientName = convAssigned[0]?.contact_name ?? senderName;
     await prisma.$executeRawUnsafe(
       `INSERT INTO "${schemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
        VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,

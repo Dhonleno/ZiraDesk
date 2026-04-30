@@ -29,7 +29,7 @@ export function OnboardingChecklist() {
     { key: 'account', label: 'Conta criada', href: '/', done: true },
     { key: 'users', label: 'Convidar primeiro usuário', href: '/admin/users', done: Boolean(data?.has_users) },
     { key: 'channels', label: 'Configurar primeiro canal', href: '/admin/channels', done: Boolean(data?.has_channels) },
-    { key: 'clients', label: 'Criar primeiro cliente', href: '/crm/clients', done: Boolean(data?.has_clients) },
+    { key: 'organizations', label: 'Criar primeira organização', href: '/crm/organizations', done: Boolean(data?.has_organizations) },
     { key: 'conversations', label: 'Iniciar primeiro atendimento', href: '/omnichannel/conversations', done: Boolean(data?.has_conversations) },
   ], [data]);
 

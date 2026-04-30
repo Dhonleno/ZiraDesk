@@ -39,7 +39,8 @@ async function getSchemaPrefix(tenantId?: string): Promise<string> {
 
 interface ConversationRow {
   id: string;
-  client_id: string | null;
+  contact_id: string | null;
+  organization_id: string | null;
   channel_id: string | null;
   channel_type: string;
   conversation_type: string;
@@ -53,9 +54,9 @@ interface ConversationRow {
   resolved_at: Date | null;
   created_at: Date;
   metadata: unknown;
-  client_name: string | null;
-  client_email: string | null;
-  client_phone: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  organization_name: string | null;
   assigned_name: string | null;
   channel_name: string | null;
 }
@@ -98,7 +99,7 @@ interface ConversationCounts {
 }
 
 export async function listConversations(query: ListConversationsQuery, userId?: string, _tenantId?: string) {
-  const { page, perPage, tab, sub_status, status, search, assigned_to_me, client_id } = query;
+  const { page, perPage, tab, sub_status, status, search, assigned_to_me, contact_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
   const conditions: string[] = [];
@@ -133,25 +134,27 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   }
 
   if (search) {
-    conditions.push(`cl.name ILIKE '%' || ${pushParam(search)}::text || '%'`);
+    conditions.push(`ct.name ILIKE '%' || ${pushParam(search)}::text || '%'`);
   }
 
-  if (client_id) {
-    conditions.push(`c.client_id = ${pushParam(client_id)}::uuid`);
+  if (contact_id) {
+    conditions.push(`c.contact_id = ${pushParam(contact_id)}::uuid`);
   }
 
   const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.client_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
-       cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
+       ct.name AS contact_name, ct.phone AS contact_phone,
+       o.name AS organization_name,
        u.name AS assigned_name,
        ch.name AS channel_name
      FROM conversations c
-     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
+     LEFT JOIN organizations o ON o.id = c.organization_id
      LEFT JOIN users u ON u.id = c.assigned_to
      LEFT JOIN channels ch ON ch.id = c.channel_id
      ${whereSql}
@@ -164,7 +167,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count
      FROM conversations c
-     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
      ${whereSql}`,
     ...countParams,
   );
@@ -222,14 +225,16 @@ export async function getConversationWithMessages(conversationId: string, tenant
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.client_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
-       cl.name AS client_name, cl.email AS client_email, cl.phone AS client_phone,
+       ct.name AS contact_name, ct.phone AS contact_phone,
+       o.name AS organization_name,
        u.name AS assigned_name,
        ch.name AS channel_name
      FROM ${schemaPrefix}conversations c
-     LEFT JOIN ${schemaPrefix}clients cl ON cl.id = c.client_id
+     LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
+     LEFT JOIN ${schemaPrefix}organizations o ON o.id = c.organization_id
      LEFT JOIN ${schemaPrefix}users u ON u.id = c.assigned_to
      LEFT JOIN ${schemaPrefix}channels ch ON ch.id = c.channel_id
      WHERE c.id = $1::uuid
@@ -322,8 +327,8 @@ export interface SendMessageResult {
   message: MessageRow;
   channelType: string;
   channelId: string | null;
-  clientPhone: string | null;
-  clientEmail: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
   channelCredentials: string | null;
   mediaId: string | null;
   mediaType: 'image' | 'audio' | 'video' | 'document' | null;
@@ -336,8 +341,8 @@ export interface MessageDispatchPayload {
   content: string;
   channelType: string;
   channelCredentials: Record<string, string> | null;
-  clientPhone: string | null;
-  clientEmail: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
 }
 
 export interface CreateConversationResult {
@@ -355,17 +360,17 @@ export async function sendMessage(
       id: string;
       channel_id: string | null;
       channel_type: string;
-      client_id: string | null;
-      client_phone: string | null;
-      client_email: string | null;
+      contact_id: string | null;
+      contact_phone: string | null;
+      contact_email: string | null;
       channel_credentials: string | null;
     }]
   >(
-    `SELECT c.id, c.channel_id, c.channel_type, c.client_id,
-            cl.phone AS client_phone, cl.email AS client_email,
+    `SELECT c.id, c.channel_id, c.channel_type, c.contact_id,
+            ct.phone AS contact_phone, ct.email AS contact_email,
             ch.credentials AS channel_credentials
      FROM conversations c
-     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
      LEFT JOIN channels ch ON ch.id = c.channel_id
      WHERE c.id = $1::uuid
      LIMIT 1`,
@@ -425,8 +430,8 @@ export async function sendMessage(
     message,
     channelType: conv.channel_type,
     channelId: conv.channel_id,
-    clientPhone: conv.client_phone,
-    clientEmail: conv.client_email,
+    contactPhone: conv.contact_phone,
+    contactEmail: conv.contact_email,
     channelCredentials: conv.channel_credentials,
     mediaId,
     mediaType: mediaId ? (contentType as 'image' | 'audio' | 'video' | 'document') : null,
@@ -441,13 +446,13 @@ export async function createConversation(
 ): Promise<CreateConversationResult> {
   await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
 
-  const clientCheck = await prisma.$queryRawUnsafe<
-    [{ id: string; phone: string | null; email: string | null }]
+  const contactCheck = await prisma.$queryRawUnsafe<
+    [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
   >(
-    `SELECT id, phone, email FROM clients WHERE id = $1::uuid LIMIT 1`,
-    data.client_id,
+    `SELECT id, phone, whatsapp, email FROM contacts WHERE id = $1::uuid LIMIT 1`,
+    data.contact_id,
   );
-  if (!clientCheck[0]) throw new NotFoundError('Cliente não encontrado');
+  if (!contactCheck[0]) throw new NotFoundError('Contato não encontrado');
 
   const channelCheck = await prisma.$queryRawUnsafe<
     [{ id: string; type: string; credentials: string | object | null }]
@@ -466,10 +471,11 @@ export async function createConversation(
 
   const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (client_id, channel_id, channel_type, conversation_type, status, protocol_number, assigned_to, subject, metadata)
-     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8, $9::jsonb)
+    `INSERT INTO conversations (contact_id, organization_id, channel_id, channel_type, conversation_type, status, protocol_number, assigned_to, subject, metadata)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10::jsonb)
      RETURNING *`,
-    data.client_id,
+    data.contact_id,
+    data.organization_id ?? null,
     data.channel_id,
     channelCheck[0].type,
     conversationType,
@@ -518,8 +524,8 @@ export async function createConversation(
       content: protocolMessage,
       channelType: channelCheck[0].type,
       channelCredentials,
-      clientPhone: clientCheck[0].phone,
-      clientEmail: clientCheck[0].email,
+      contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+      contactEmail: contactCheck[0].email,
     });
 
     if (initialMessageRows[0]) {
@@ -528,8 +534,8 @@ export async function createConversation(
         content: initialMessage,
         channelType: channelCheck[0].type,
         channelCredentials,
-        clientPhone: clientCheck[0].phone,
-        clientEmail: clientCheck[0].email,
+        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+        contactEmail: contactCheck[0].email,
       });
     }
   }

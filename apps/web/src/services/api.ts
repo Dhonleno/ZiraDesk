@@ -35,7 +35,8 @@ interface Channel {
 
 interface AdminStats {
   total_users: number;
-  total_clients: number;
+  total_organizations: number;
+  total_contacts: number;
   total_conversations: number;
   open_conversations: number;
   total_tickets: number;
@@ -187,45 +188,59 @@ api.interceptors.response.use(
 
 // ── CRM Types ─────────────────────────────────────────────────────────────────
 
-export type CrmStatus = 'lead' | 'prospect' | 'cliente' | 'vip' | 'inativo' | 'negociando';
-
-export interface CrmClient {
+export interface CrmOrganization {
   id: string;
-  type: string;
+  type: 'company' | 'person';
   name: string;
+  document: string | null;
   email: string | null;
   phone: string | null;
-  document: string | null;
   website: string | null;
-  status: CrmStatus;
+  status: 'lead' | 'prospect' | 'client' | 'inactive';
   address_street: string | null;
   address_city: string | null;
   address_state: string | null;
   address_zip: string | null;
-  birth_date: string | null;
-  gender: string | null;
-  occupation: string | null;
-  income: number | null;
   segment: string | null;
   lead_source: string | null;
   responsible_id: string | null;
   responsible_name: string | null;
-  responsible_email: string | null;
   tags: string[];
   custom_fields: Record<string, unknown>;
-  ltv: number;
-  health_score: number;
-  last_contact_at: string | null;
+  notes: string | null;
+  contacts_count: number;
+  conversations_count: number;
+  tickets_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface CrmClientStats {
+export interface CrmContact {
+  id: string;
+  organization_id: string | null;
+  organization_name: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  document: string | null;
+  role: string | null;
+  department: string | null;
+  is_primary: boolean;
+  avatar_url: string | null;
+  tags: string[];
+  custom_fields: Record<string, unknown>;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CrmOrganizationStats {
+  total_contacts: number;
   total_conversations: number;
   open_conversations: number;
   total_tickets: number;
   open_tickets: number;
-  total_messages: number;
   last_contact_at: string | null;
 }
 
@@ -245,89 +260,83 @@ interface CrmListMeta {
   total_pages: number;
 }
 
-interface ListClientsParams {
+interface ListOrganizationsParams {
   page?: number;
   per_page?: number;
   search?: string;
   status?: string;
-  type?: string;
+  segment?: string;
   responsible_id?: string;
   tag?: string;
-  segment?: string;
-  sort_by?: 'name' | 'created_at' | 'updated_at' | 'last_contact';
+  sort_by?: 'name' | 'created_at' | 'updated_at';
   sort_order?: 'asc' | 'desc';
 }
 
-interface CreateCrmClientPayload {
-  name: string;
-  type?: 'person' | 'company';
-  email?: string;
-  phone?: string;
-  document?: string;
-  website?: string;
-  status?: string;
-  address_street?: string;
-  address_city?: string;
-  address_state?: string;
-  address_zip?: string;
-  birth_date?: string;
-  gender?: string;
-  occupation?: string;
-  income?: number;
-  segment?: string;
-  lead_source?: string;
-  responsible_id?: string;
-  tags?: string[];
-  custom_fields?: Record<string, unknown>;
+interface ListContactsParams {
+  page?: number;
+  per_page?: number;
+  organization_id?: string;
+  search?: string;
 }
 
 // ── CRM API ───────────────────────────────────────────────────────────────────
 
-export const crmApi = {
-  listClients: async (params?: ListClientsParams): Promise<{ data: CrmClient[]; meta: CrmListMeta }> => {
-    const res = await api.get<{ success: boolean; data: CrmClient[]; meta: CrmListMeta }>('/crm/clients', { params });
+export const organizationsApi = {
+  list: async (params?: ListOrganizationsParams): Promise<{ data: CrmOrganization[]; meta: CrmListMeta }> => {
+    const res = await api.get<{ success: boolean; data: CrmOrganization[]; meta: CrmListMeta }>('/crm/organizations', { params });
     return { data: res.data.data, meta: res.data.meta };
   },
-
-  getClient: async (id: string): Promise<CrmClient> => {
-    const res = await api.get<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`);
+  get: async (id: string): Promise<CrmOrganization> => {
+    const res = await api.get<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}`);
     return res.data.data;
   },
-
-  createClient: async (payload: CreateCrmClientPayload): Promise<CrmClient> => {
-    const res = await api.post<{ success: boolean; data: CrmClient }>('/crm/clients', payload);
+  create: async (payload: Partial<CrmOrganization>): Promise<CrmOrganization> => {
+    const res = await api.post<{ success: boolean; data: CrmOrganization }>('/crm/organizations', payload);
     return res.data.data;
   },
-
-  updateClient: async (id: string, payload: Partial<CreateCrmClientPayload>): Promise<CrmClient> => {
-    const res = await api.patch<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`, payload);
+  update: async (id: string, payload: Partial<CrmOrganization>): Promise<CrmOrganization> => {
+    const res = await api.patch<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}`, payload);
     return res.data.data;
   },
-
-  deleteClient: async (id: string) => {
-    const res = await api.delete<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}`);
+  delete: async (id: string) => api.delete(`/crm/organizations/${id}`),
+  getStats: async (id: string): Promise<CrmOrganizationStats> => {
+    const res = await api.get<{ success: boolean; data: CrmOrganizationStats }>(`/crm/organizations/${id}/stats`);
+    return res.data.data;
+  },
+  getContacts: async (id: string): Promise<CrmContact[]> => {
+    const res = await api.get<{ success: boolean; data: CrmContact[] }>(`/crm/organizations/${id}/contacts`);
+    return res.data.data;
+  },
+  getConversations: async (id: string) => {
+    const res = await api.get(`/crm/organizations/${id}/conversations`);
     return res.data;
   },
+  getTickets: async (id: string) => {
+    const res = await api.get(`/crm/organizations/${id}/tickets`);
+    return res.data;
+  },
+};
 
-  getClientStats: async (id: string): Promise<CrmClientStats> => {
-    const res = await api.get<{ success: boolean; data: CrmClientStats }>(`/crm/clients/${id}/stats`);
+export const contactsApi = {
+  list: async (params?: ListContactsParams): Promise<{ data: CrmContact[]; meta: CrmListMeta }> => {
+    const res = await api.get<{ success: boolean; data: CrmContact[]; meta: CrmListMeta }>('/crm/contacts', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+  get: async (id: string): Promise<CrmContact> => {
+    const res = await api.get<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`);
     return res.data.data;
   },
-
-  getClientTimeline: async (id: string): Promise<CrmTimelineEvent[]> => {
-    const res = await api.get<{ success: boolean; data: CrmTimelineEvent[] }>(`/crm/clients/${id}/timeline`);
+  create: async (payload: Partial<CrmContact>): Promise<CrmContact> => {
+    const res = await api.post<{ success: boolean; data: CrmContact }>('/crm/contacts', payload);
     return res.data.data;
   },
-
-  addTag: async (id: string, tag: string): Promise<CrmClient> => {
-    const res = await api.post<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}/tags`, { tag });
+  update: async (id: string, payload: Partial<CrmContact>): Promise<CrmContact> => {
+    const res = await api.patch<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`, payload);
     return res.data.data;
   },
-
-  removeTag: async (id: string, tag: string): Promise<CrmClient> => {
-    const res = await api.delete<{ success: boolean; data: CrmClient }>(`/crm/clients/${id}/tags/${encodeURIComponent(tag)}`);
-    return res.data.data;
-  },
+  delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
+  linkOrganization: async (id: string, organization_id: string) =>
+    api.post(`/crm/contacts/${id}/link-organization`, { organization_id }),
 };
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
@@ -501,7 +510,7 @@ export interface CreateTicketPayload {
   priority?:       TicketPriority;
   category?:       string;
   assigned_to?:    string;
-  client_id?:      string;
+  contact_id?:     string;
   conversation_id?: string;
   due_date?:       string;
   tags?:           string[];
@@ -565,7 +574,7 @@ export interface ListConversationsParams {
 }
 
 export interface CreateConversationPayload {
-  client_id: string;
+  contact_id: string;
   channel_id: string;
   type?: 'inbound' | 'outbound';
   subject?: string;
@@ -611,15 +620,15 @@ export interface NotificationItem {
 }
 
 export interface GlobalSearchResult {
-  clients: Array<{ id: string; name: string; email: string | null; phone: string | null }>;
+  contacts: Array<{ id: string; name: string; email: string | null; phone: string | null }>;
   tickets: Array<{ id: string; title: string; status: string }>;
-  conversations: Array<{ id: string; last_message: string | null; client_name: string | null }>;
+  conversations: Array<{ id: string; last_message: string | null; contact_name: string | null }>;
 }
 
 export interface OnboardingStatus {
   has_users: boolean;
   has_channels: boolean;
-  has_clients: boolean;
+  has_organizations: boolean;
   has_conversations: boolean;
   tenant_created_at?: string;
   completion?: number;

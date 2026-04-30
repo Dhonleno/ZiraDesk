@@ -66,7 +66,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation: result.conversation });
 
       for (const dispatch of result.protocolDispatches) {
-        if (!dispatch.channelCredentials || !dispatch.clientPhone) continue;
+        if (!dispatch.channelCredentials || !dispatch.contactPhone) continue;
         await messageQueue.add('send', {
           messageId: dispatch.messageId,
           conversationId: result.conversation.id,
@@ -75,7 +75,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           channelType: dispatch.channelType,
           channelCredentials: dispatch.channelCredentials,
           content: dispatch.content,
-          to: dispatch.clientPhone,
+          to: dispatch.contactPhone,
         });
       }
 
@@ -152,7 +152,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
             channelType: result.channelType,
             channelCredentials: creds,
             content: parsed.data.content ?? '',
-            to: result.clientPhone ?? result.clientEmail ?? '',
+            to: result.contactPhone ?? result.contactEmail ?? '',
             mediaId: result.mediaId,
             mediaType: result.mediaType,
             mediaFilename: result.mediaFilename,
