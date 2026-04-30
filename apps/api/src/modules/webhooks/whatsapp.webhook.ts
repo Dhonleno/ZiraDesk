@@ -186,7 +186,7 @@ async function sendAwayMessageIfNeeded({
   channelCredentials: Record<string, string>;
 }): Promise<boolean> {
   const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
-    'SELECT settings FROM tenants WHERE id = $1::uuid LIMIT 1',
+    'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
     tenantId,
   );
   const tenantSettings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
@@ -613,7 +613,11 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
 
         if (value.statuses?.length) {
           for (const status of value.statuses) {
-            await processStatusUpdate(app, status);
+            try {
+              await processStatusUpdate(app, status);
+            } catch (err) {
+              request.log.error({ err }, '[WhatsApp] Failed to process status update');
+            }
           }
           continue;
         }
@@ -626,13 +630,17 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
           const senderPhone = message.from;
           const phoneNumberId = value.metadata.phone_number_id;
 
-          await processIncomingMessage(app, {
-            phoneNumberId,
-            senderPhone,
-            senderName,
-            message,
-            wabaId: entry.id,
-          });
+          try {
+            await processIncomingMessage(app, {
+              phoneNumberId,
+              senderPhone,
+              senderName,
+              message,
+              wabaId: entry.id,
+            });
+          } catch (err) {
+            request.log.error({ err }, '[WhatsApp] Failed to process incoming message');
+          }
         }
       }
     }
