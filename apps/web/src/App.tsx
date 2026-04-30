@@ -20,6 +20,7 @@ import { Users as AdminUsers } from './pages/admin/Users';
 import { Channels as AdminChannels } from './pages/admin/Channels';
 import { QuickReplies as AdminQuickReplies } from './pages/admin/QuickReplies';
 import { Settings as AdminSettings } from './pages/admin/Settings';
+import { BusinessHours as AdminBusinessHours } from './pages/admin/BusinessHours';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -109,6 +110,7 @@ export function App() {
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="channels" element={<AdminChannels />} />
+              <Route path="business-hours" element={<AdminBusinessHours />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

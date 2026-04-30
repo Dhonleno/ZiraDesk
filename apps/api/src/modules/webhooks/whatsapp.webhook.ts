@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
+import { isWithinBusinessHours } from '../admin/business-hours/business-hours.service.js';
 import {
   buildProtocolMessage,
-  generateConversationProtocol,
+  callGenerateProtocol,
+  ensureConversationProtocolInfrastructure,
 } from '../omnichannel/conversations/protocols.js';
 
 interface MetaMessage {
@@ -65,6 +68,10 @@ interface TenantRow {
   schema_name: string;
 }
 
+interface TenantSettingsRow {
+  settings: unknown;
+}
+
 interface ChannelRow {
   id: string;
   credentials: string | object;
@@ -85,21 +92,42 @@ interface MessageRow {
   conversation_id: string;
 }
 
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-async function findChannelByPhoneNumberId(
-  phoneNumberId: string,
-): Promise<{
+interface ChannelMatch {
   tenantId: string;
   schemaName: string;
   channelId: string;
   channelCredentials: Record<string, string>;
-} | null> {
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getCredentialValue(credentials: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = credentials[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function withWhatsappEnvFallback(credentials: Record<string, string>): Record<string, string> {
+  return {
+    ...credentials,
+    phoneNumberId: getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id') ?? env.WHATSAPP_PHONE_NUMBER_ID,
+    wabaId: getCredentialValue(credentials, 'wabaId', 'waba_id') ?? env.WHATSAPP_WABA_ID,
+    accessToken: getCredentialValue(credentials, 'accessToken', 'access_token') ?? env.WHATSAPP_ACCESS_TOKEN,
+    verifyToken: getCredentialValue(credentials, 'verifyToken', 'verify_token') ?? env.WHATSAPP_VERIFY_TOKEN,
+  };
+}
+
+async function findChannelByPhoneNumberId(
+  phoneNumberId: string,
+): Promise<ChannelMatch | null> {
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
   );
+  const envFallbackMatches: ChannelMatch[] = [];
 
   for (const tenant of tenants) {
     const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
@@ -110,18 +138,114 @@ async function findChannelByPhoneNumberId(
 
     for (const channel of channels) {
       const credentials = decryptCredentials(channel.credentials);
-      if (credentials['phoneNumberId'] === phoneNumberId) {
+      const channelPhoneNumberId = getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id');
+      console.log(`[WhatsApp] Channel ${channel.id} decrypted keys: [${Object.keys(credentials).join(', ')}] | phoneNumberId="${channelPhoneNumberId ?? 'undefined'}" (seeking: "${phoneNumberId}")`);
+      if (channelPhoneNumberId === phoneNumberId) {
         return {
           tenantId: tenant.id,
           schemaName: tenant.schema_name,
           channelId: channel.id,
-          channelCredentials: credentials as Record<string, string>,
+          channelCredentials: withWhatsappEnvFallback(credentials as Record<string, string>),
         };
+      }
+
+      if (!channelPhoneNumberId && env.WHATSAPP_PHONE_NUMBER_ID === phoneNumberId) {
+        envFallbackMatches.push({
+          tenantId: tenant.id,
+          schemaName: tenant.schema_name,
+          channelId: channel.id,
+          channelCredentials: withWhatsappEnvFallback(credentials as Record<string, string>),
+        });
       }
     }
   }
 
+  if (envFallbackMatches.length === 1) {
+    console.warn(`[WhatsApp] Using .env fallback for phoneNumberId ${phoneNumberId}; channel credentials are missing phoneNumberId`);
+    return envFallbackMatches[0]!;
+  }
+
+  if (envFallbackMatches.length > 1) {
+    console.warn(`[WhatsApp] Ambiguous .env fallback for phoneNumberId ${phoneNumberId}; ${envFallbackMatches.length} channels without phoneNumberId`);
+  }
+
   return null;
+}
+
+async function sendAwayMessageIfNeeded({
+  tenantId,
+  schemaName,
+  phoneNumberId,
+  senderPhone,
+  channelCredentials,
+}: {
+  tenantId: string;
+  schemaName: string;
+  phoneNumberId: string;
+  senderPhone: string;
+  channelCredentials: Record<string, string>;
+}): Promise<boolean> {
+  const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
+    'SELECT settings FROM tenants WHERE id = $1::uuid LIMIT 1',
+    tenantId,
+  );
+  const tenantSettings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
+  const timezone = (tenantSettings.timezone as string | undefined) ?? 'America/Sao_Paulo';
+  const awayMessage =
+    (tenantSettings.away_message as string | undefined) ??
+    'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐';
+  const awayMessageEnabled = tenantSettings.away_message_enabled !== false;
+
+  const isOpen = await isWithinBusinessHours(prisma, timezone, schemaName);
+  if (isOpen) return false;
+  if (!awayMessageEnabled) return true;
+
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const redisKey = `away_msg:${tenantId}:${senderPhone}:${todayKey}`;
+  const alreadySent = await redis.get(redisKey);
+  if (alreadySent) return true;
+
+  const accessToken = channelCredentials.accessToken;
+  if (!accessToken) {
+    console.warn('[WhatsApp] Away message skipped: missing access token');
+    return true;
+  }
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: senderPhone.replace(/^\+/, ''),
+        type: 'text',
+        text: { body: awayMessage },
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => '');
+      console.warn('[WhatsApp] Away message failed', {
+        status: response.status,
+        details: details.substring(0, 500),
+      });
+      return true;
+    }
+
+    await redis.setex(redisKey, 86400, '1');
+  } catch (err) {
+    console.warn('[WhatsApp] Away message error', err);
+  }
+
+  return true;
 }
 
 async function processIncomingMessage(
@@ -196,6 +320,16 @@ async function processIncomingMessage(
     mediaMetadata.media_id = externalMediaId;
   }
 
+  // Ensure schema/function exists outside the transaction to avoid concurrent DDL errors
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  const outsideBusinessHours = await sendAwayMessageIfNeeded({
+    tenantId,
+    schemaName,
+    phoneNumberId,
+    senderPhone,
+    channelCredentials,
+  });
+
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
 
@@ -254,15 +388,19 @@ async function processIncomingMessage(
     if (convRows[0]) {
       conversationId = convRows[0].id;
     } else {
-      protocolNumber = await generateConversationProtocol(tx, schemaName);
+      protocolNumber = await callGenerateProtocol(tx, schemaName);
       const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
         `INSERT INTO conversations (contact_id, organization_id, channel_id, channel_type, conversation_type, status, protocol_number, metadata)
-         VALUES ($1::uuid, $2::uuid, $3::uuid, 'whatsapp', 'inbound', 'open', $4, '{"type": "inbound"}'::jsonb)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 'whatsapp', 'inbound', 'open', $4, $5::jsonb)
          RETURNING id`,
         contactId,
         organizationId,
         channelId,
         protocolNumber,
+        JSON.stringify({
+          type: 'inbound',
+          outside_business_hours: outsideBusinessHours,
+        }),
       );
       conversationId = newConv[0]!.id;
       isNewConversation = true;
@@ -287,10 +425,15 @@ async function processIncomingMessage(
     await tx.$executeRawUnsafe(
       `UPDATE conversations
        SET last_message = $1,
-           last_message_at = NOW()
+           last_message_at = NOW(),
+           metadata = CASE
+             WHEN $3::boolean THEN COALESCE(metadata, '{}'::jsonb) || '{"outside_business_hours": true}'::jsonb
+             ELSE metadata
+           END
        WHERE id = $2::uuid`,
       content.slice(0, 255),
       conversationId,
+      outsideBusinessHours,
     );
 
     if (isNewConversation && protocolNumber) {
@@ -315,6 +458,7 @@ async function processIncomingMessage(
       contactId,
       contactName: contactRows[0]?.name ?? senderName,
       organizationId,
+      outsideBusinessHours,
     };
   });
 
@@ -324,6 +468,7 @@ async function processIncomingMessage(
       conversationId: result.conversationId,
       contactName: result.contactName,
       organizationId: result.organizationId,
+      outsideBusinessHours: result.outsideBusinessHours,
     });
   }
   io.to(`tenant:${tenantId}`).emit('conversation:new_message', {

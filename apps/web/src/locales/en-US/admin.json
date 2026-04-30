@@ -24,6 +24,7 @@
       "dashboard": "Dashboard",
       "users": "Users",
       "channels": "Channels",
+      "businessHours": "Business hours",
       "quickReplies": "Quick Replies",
       "settings": "Settings"
     },
@@ -40,6 +41,33 @@
       "messages": {
         "saved": "Settings saved successfully"
       }
+    },
+    "businessHours": {
+      "title": "Business Hours",
+      "subtitle": "Configure when your team is available",
+      "timezone": "Timezone",
+      "days": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "closed": "Closed",
+      "until": "to",
+      "awayMessage": "Away message",
+      "awayMessageLabel": "Send automatic message outside business hours",
+      "awayMessagePlaceholder": "Message sent to customers outside business hours...",
+      "status": {
+        "open": "Open",
+        "closed": "Closed",
+        "opensAt": "Opens {{day}} at {{time}}",
+        "closesAt": "Closes at {{time}}"
+      },
+      "save": "Save settings",
+      "saved": "Business hours saved"
     },
     "users": {
       "title": "Users",

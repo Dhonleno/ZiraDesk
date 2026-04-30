@@ -65,18 +65,33 @@ export async function ensureConversationProtocolInfrastructure(
   await db.$executeRawUnsafe(buildGenerateProtocolSql(schemaName));
 }
 
+/**
+ * Calls generate_protocol() assuming the function already exists.
+ * Use this inside a transaction (after calling ensureConversationProtocolInfrastructure
+ * outside the transaction).
+ */
+export async function callGenerateProtocol(
+  db: ProtocolDbClient,
+  schemaName?: string | null,
+): Promise<string> {
+  const functionRef = schemaName ? `${quoteIdent(schemaName)}.generate_protocol` : 'generate_protocol';
+  const rows = await db.$queryRawUnsafe<Array<{ protocol: string }>>(
+    `SELECT ${functionRef}() AS protocol`,
+  );
+  return rows[0]!.protocol;
+}
+
+/**
+ * Ensures infrastructure exists and generates a protocol number.
+ * Do NOT call this inside a transaction — the ALTER TABLE/CREATE FUNCTION
+ * statements cause "tuple concurrently updated" errors under concurrent requests.
+ */
 export async function generateConversationProtocol(
   db: ProtocolDbClient,
   schemaName?: string | null,
 ): Promise<string> {
   await ensureConversationProtocolInfrastructure(db, schemaName);
-
-  const functionRef = schemaName ? `${quoteIdent(schemaName)}.generate_protocol` : 'generate_protocol';
-  const rows = await db.$queryRawUnsafe<Array<{ protocol: string }>>(
-    `SELECT ${functionRef}() AS protocol`,
-  );
-
-  return rows[0]!.protocol;
+  return callGenerateProtocol(db, schemaName);
 }
 
 export function buildProtocolMessage(protocolNumber: string): string {

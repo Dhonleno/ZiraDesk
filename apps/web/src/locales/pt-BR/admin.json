@@ -24,6 +24,7 @@
       "dashboard": "Dashboard",
       "users": "Usuários",
       "channels": "Canais",
+      "businessHours": "Horário de atendimento",
       "quickReplies": "Respostas Rápidas",
       "settings": "Configurações"
     },
@@ -40,6 +41,33 @@
       "messages": {
         "saved": "Configurações salvas com sucesso"
       }
+    },
+    "businessHours": {
+      "title": "Horário de Atendimento",
+      "subtitle": "Configure quando sua equipe está disponível",
+      "timezone": "Fuso horário",
+      "days": {
+        "0": "Domingo",
+        "1": "Segunda-feira",
+        "2": "Terça-feira",
+        "3": "Quarta-feira",
+        "4": "Quinta-feira",
+        "5": "Sexta-feira",
+        "6": "Sábado"
+      },
+      "closed": "Fechado",
+      "until": "até",
+      "awayMessage": "Mensagem de ausência",
+      "awayMessageLabel": "Enviar mensagem automática fora do horário",
+      "awayMessagePlaceholder": "Mensagem enviada ao cliente fora do horário...",
+      "status": {
+        "open": "Aberto",
+        "closed": "Fechado",
+        "opensAt": "Abre {{day}} às {{time}}",
+        "closesAt": "Fecha às {{time}}"
+      },
+      "save": "Salvar configurações",
+      "saved": "Horário de atendimento salvo"
     },
     "users": {
       "title": "Usuários",

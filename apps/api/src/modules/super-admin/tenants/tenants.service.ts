@@ -115,6 +115,32 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".business_hours (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      day_of_week INTEGER NOT NULL,
+      is_active   BOOLEAN DEFAULT true,
+      open_time   TIME NOT NULL DEFAULT '08:00',
+      close_time  TIME NOT NULL DEFAULT '18:00',
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(day_of_week)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".business_hours (day_of_week, is_active, open_time, close_time)
+    VALUES
+      (0, false, '08:00', '18:00'),
+      (1, true,  '08:00', '18:00'),
+      (2, true,  '08:00', '18:00'),
+      (3, true,  '08:00', '18:00'),
+      (4, true,  '08:00', '18:00'),
+      (5, true,  '08:00', '18:00'),
+      (6, false, '08:00', '18:00')
+    ON CONFLICT (day_of_week) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,

@@ -24,6 +24,7 @@
       "dashboard": "Panel",
       "users": "Usuarios",
       "channels": "Canales",
+      "businessHours": "Horario de atención",
       "quickReplies": "Respuestas Rápidas",
       "settings": "Configuración"
     },
@@ -40,6 +41,33 @@
       "messages": {
         "saved": "Configuración guardada con éxito"
       }
+    },
+    "businessHours": {
+      "title": "Horario de Atención",
+      "subtitle": "Configura cuándo tu equipo está disponible",
+      "timezone": "Zona horaria",
+      "days": {
+        "0": "Domingo",
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado"
+      },
+      "closed": "Cerrado",
+      "until": "hasta",
+      "awayMessage": "Mensaje de ausencia",
+      "awayMessageLabel": "Enviar mensaje automático fuera del horario",
+      "awayMessagePlaceholder": "Mensaje enviado al cliente fuera del horario...",
+      "status": {
+        "open": "Abierto",
+        "closed": "Cerrado",
+        "opensAt": "Abre {{day}} a las {{time}}",
+        "closesAt": "Cierra a las {{time}}"
+      },
+      "save": "Guardar configuración",
+      "saved": "Horario de atención guardado"
     },
     "users": {
       "title": "Usuarios",

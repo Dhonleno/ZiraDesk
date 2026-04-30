@@ -77,6 +77,13 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        <AdminNavItem to="/admin/business-hours" label={t('tenantAdmin.nav.businessHours')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M7.5 4.2v3.4l2.4 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </AdminNavItem>
+
         <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

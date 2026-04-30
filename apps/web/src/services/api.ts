@@ -10,6 +10,8 @@ interface TenantSettings {
   primary_color: string | null;
   timezone: string;
   language: string;
+  away_message?: string;
+  away_message_enabled?: boolean;
   created_at?: string;
   plan?: { id: string; name: string; slug: string; priceMonth: string };
 }
@@ -105,6 +107,24 @@ interface UpdateChannelPayload {
   credentials?: Record<string, unknown>;
   settings?: Record<string, unknown>;
   status?: 'active' | 'inactive';
+}
+
+export interface BusinessHour {
+  id: string;
+  day_of_week: number;
+  is_active: boolean;
+  open_time: string;
+  close_time: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BusinessHoursStatus {
+  is_open: boolean;
+  next_open: string | null;
+  next_open_day: number | null;
+  next_open_time: string | null;
+  closes_at: string | null;
 }
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
@@ -352,7 +372,7 @@ export const adminApi = {
     return res.data.data;
   },
 
-  updateSettings: async (data: Partial<TenantSettings> & { name: string }): Promise<TenantSettings> => {
+  updateSettings: async (data: Partial<TenantSettings>): Promise<TenantSettings> => {
     const res = await api.patch<{ success: boolean; data: TenantSettings }>('/admin/settings', data);
     return res.data.data;
   },
@@ -410,6 +430,33 @@ export const adminApi = {
       `/admin/channels/${id}/test`,
     );
     return res.data;
+  },
+
+  businessHours: {
+    list: async (): Promise<BusinessHour[]> => {
+      const res = await api.get<{ success: boolean; data: BusinessHour[] }>('/admin/business-hours');
+      return res.data.data;
+    },
+
+    update: async (day: number, data: Partial<BusinessHour>): Promise<BusinessHour> => {
+      const res = await api.patch<{ success: boolean; data: BusinessHour }>(
+        `/admin/business-hours/${day}`,
+        data,
+      );
+      return res.data.data;
+    },
+
+    getStatus: async (): Promise<BusinessHoursStatus> => {
+      const res = await api.get<{ success: boolean; data: BusinessHoursStatus }>(
+        '/admin/business-hours/status',
+      );
+      return res.data.data;
+    },
+
+    updateSettings: async (data: Partial<TenantSettings>): Promise<TenantSettings> => {
+      const res = await api.patch<{ success: boolean; data: TenantSettings }>('/admin/settings', data);
+      return res.data.data;
+    },
   },
 
   quickReplies: {
@@ -537,9 +584,17 @@ export interface OmnichannelConversation {
   created_at: string;
   resolved_at: string | null;
   client_id: string | null;
+  contact_id?: string | null;
+  organization_id?: string | null;
   client_name: string | null;
   client_email: string | null;
   client_phone: string | null;
+  client_whatsapp?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_whatsapp?: string | null;
+  organization_name?: string | null;
   assigned_to: string | null;
   assigned_name: string | null;
   channel_id: string | null;
@@ -571,6 +626,8 @@ export interface ListConversationsParams {
   status?: string;
   assigned_to_me?: boolean;
   client_id?: string;
+  contact_id?: string;
+  organization_id?: string;
 }
 
 export interface CreateConversationPayload {

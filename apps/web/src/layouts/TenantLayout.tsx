@@ -94,6 +94,7 @@ function Breadcrumb() {
     '/admin/dashboard':   t('tenantAdmin.nav.dashboard'),
     '/admin/users':       t('tenantAdmin.nav.users'),
     '/admin/channels':    t('tenantAdmin.nav.channels'),
+    '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
