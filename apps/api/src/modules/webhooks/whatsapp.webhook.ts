@@ -6,7 +6,6 @@ import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import {
   buildProtocolMessage,
-  ensureConversationProtocolInfrastructure,
   generateConversationProtocol,
 } from '../omnichannel/conversations/protocols.js';
 
@@ -197,7 +196,6 @@ async function processIncomingMessage(
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
-    await ensureConversationProtocolInfrastructure(tx, schemaName);
 
     const clientRows = await tx.$queryRawUnsafe<ClientRow[]>(
       `SELECT id FROM clients WHERE phone = $1 LIMIT 1`,
