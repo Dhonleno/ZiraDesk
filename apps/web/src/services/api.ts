@@ -127,6 +127,36 @@ export interface BusinessHoursStatus {
   closes_at: string | null;
 }
 
+export interface BotOption {
+  id: string;
+  bot_menu_id: string;
+  number: number;
+  label: string;
+  tag: string | null;
+  response: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface BotMenu {
+  id: string;
+  is_active: boolean;
+  greeting: string;
+  footer: string | null;
+  invalid_msg: string | null;
+  created_at: string;
+  updated_at: string;
+  options: BotOption[];
+}
+
+export interface BotOptionPayload {
+  number: number;
+  label: string;
+  tag?: string | null;
+  response: string;
+  sort_order?: number;
+}
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 export const api = axios.create({
@@ -459,6 +489,35 @@ export const adminApi = {
     },
   },
 
+  bot: {
+    getMenu: async (): Promise<BotMenu> => {
+      const res = await api.get<{ success: boolean; data: BotMenu }>('/admin/bot');
+      return res.data.data;
+    },
+
+    updateMenu: async (data: Partial<Pick<BotMenu, 'is_active' | 'greeting' | 'footer' | 'invalid_msg'>>): Promise<BotMenu> => {
+      const res = await api.patch<{ success: boolean; data: BotMenu }>('/admin/bot', data);
+      return res.data.data;
+    },
+
+    addOption: async (data: BotOptionPayload): Promise<BotOption> => {
+      const res = await api.post<{ success: boolean; data: BotOption }>('/admin/bot/options', data);
+      return res.data.data;
+    },
+
+    updateOption: async (id: string, data: Partial<BotOptionPayload>): Promise<BotOption> => {
+      const res = await api.patch<{ success: boolean; data: BotOption }>(`/admin/bot/options/${id}`, data);
+      return res.data.data;
+    },
+
+    deleteOption: async (id: string): Promise<BotOption> => {
+      const res = await api.delete<{ success: boolean; data: BotOption }>(`/admin/bot/options/${id}`, {
+        data: {},
+      });
+      return res.data.data;
+    },
+  },
+
   quickReplies: {
     list: async (params?: QuickRepliesListParams): Promise<QuickReply[]> => {
       const res = await api.get<{ success: boolean; data: QuickReply[] }>('/admin/quick-replies', { params });
@@ -599,6 +658,7 @@ export interface OmnichannelConversation {
   assigned_name: string | null;
   channel_id: string | null;
   channel_name: string | null;
+  metadata?: Record<string, unknown> | null;
   unread_count?: number;
 }
 

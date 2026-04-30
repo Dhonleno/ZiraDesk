@@ -25,6 +25,7 @@
       "users": "Usuários",
       "channels": "Canais",
       "businessHours": "Horário de atendimento",
+      "bot": "Bot de Atendimento",
       "quickReplies": "Respostas Rápidas",
       "settings": "Configurações"
     },
@@ -68,6 +69,35 @@
       },
       "save": "Salvar configurações",
       "saved": "Horário de atendimento salvo"
+    },
+    "bot": {
+      "title": "Bot de Atendimento",
+      "subtitle": "Configure o menu automático de opções",
+      "active": "Bot ativo",
+      "activeHint": "Clientes receberão o menu automaticamente",
+      "greeting": "Mensagem de boas-vindas",
+      "footer": "Rodapé do menu",
+      "invalidMsg": "Mensagem para opção inválida",
+      "options": "Opções do menu",
+      "addOption": "Adicionar opção",
+      "editOption": "Editar opção",
+      "preview": "Pré-visualização",
+      "noOptions": "Nenhuma opção cadastrada",
+      "noTag": "sem tag",
+      "emptyPreview": "Configure a mensagem e as opções para ver o preview",
+      "option": {
+        "number": "Número",
+        "label": "Label",
+        "tag": "Tag (filtro)",
+        "tagHint": "Usado para filtrar conversas por departamento",
+        "response": "Resposta ao selecionar"
+      },
+      "messages": {
+        "saved": "Bot configurado com sucesso",
+        "optionAdded": "Opção adicionada",
+        "optionUpdated": "Opção atualizada",
+        "optionDeleted": "Opção removida"
+      }
     },
     "users": {
       "title": "Usuários",

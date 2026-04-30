@@ -21,6 +21,7 @@ import { Channels as AdminChannels } from './pages/admin/Channels';
 import { QuickReplies as AdminQuickReplies } from './pages/admin/QuickReplies';
 import { Settings as AdminSettings } from './pages/admin/Settings';
 import { BusinessHours as AdminBusinessHours } from './pages/admin/BusinessHours';
+import { BotMenu as AdminBotMenu } from './pages/admin/BotMenu';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -111,6 +112,7 @@ export function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="business-hours" element={<AdminBusinessHours />} />
+              <Route path="bot" element={<AdminBotMenu />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

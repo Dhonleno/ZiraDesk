@@ -25,6 +25,7 @@
       "users": "Users",
       "channels": "Channels",
       "businessHours": "Business hours",
+      "bot": "Support bot",
       "quickReplies": "Quick Replies",
       "settings": "Settings"
     },
@@ -68,6 +69,35 @@
       },
       "save": "Save settings",
       "saved": "Business hours saved"
+    },
+    "bot": {
+      "title": "Support Bot",
+      "subtitle": "Configure the automatic options menu",
+      "active": "Bot active",
+      "activeHint": "Customers will receive the menu automatically",
+      "greeting": "Welcome message",
+      "footer": "Menu footer",
+      "invalidMsg": "Invalid option message",
+      "options": "Menu options",
+      "addOption": "Add option",
+      "editOption": "Edit option",
+      "preview": "Preview",
+      "noOptions": "No options yet",
+      "noTag": "no tag",
+      "emptyPreview": "Configure the message and options to see the preview",
+      "option": {
+        "number": "Number",
+        "label": "Label",
+        "tag": "Tag (filter)",
+        "tagHint": "Used to filter conversations by department",
+        "response": "Response when selected"
+      },
+      "messages": {
+        "saved": "Bot configured successfully",
+        "optionAdded": "Option added",
+        "optionUpdated": "Option updated",
+        "optionDeleted": "Option removed"
+      }
     },
     "users": {
       "title": "Users",

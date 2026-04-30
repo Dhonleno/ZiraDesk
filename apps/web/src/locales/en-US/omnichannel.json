@@ -33,6 +33,7 @@
     "emptyHint": "New customer contacts will appear here"
   },
   "outboundBadge": "↗ Follow-up",
+  "botBadge": "🤖 Bot",
   "status": {
     "open": "Open",
     "active_outbound": "Follow-up",

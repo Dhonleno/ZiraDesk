@@ -6,12 +6,14 @@ import { quickRepliesRoutes } from './quick-replies/quick-replies.routes.js';
 import { statsRoutes } from './stats/stats.routes.js';
 import { onboardingRoutes } from './onboarding/onboarding.routes.js';
 import { businessHoursRoutes } from './business-hours/business-hours.routes.js';
+import { botRoutes } from './bot/bot.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
   await app.register(usersRoutes, { prefix: '/users' });
   await app.register(channelsRoutes, { prefix: '/channels' });
   await app.register(businessHoursRoutes, { prefix: '/business-hours' });
+  await app.register(botRoutes, { prefix: '/bot' });
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);

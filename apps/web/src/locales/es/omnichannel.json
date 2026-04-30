@@ -33,6 +33,7 @@
     "emptyHint": "Cuando los clientes entren en contacto aparecerán aquí"
   },
   "outboundBadge": "↗ Retorno",
+  "botBadge": "🤖 Bot",
   "status": {
     "open": "Abierto",
     "active_outbound": "Retorno",

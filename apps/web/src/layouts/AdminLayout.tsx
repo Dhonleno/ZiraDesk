@@ -84,6 +84,13 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        <AdminNavItem to="/admin/bot" label={t('tenantAdmin.nav.bot')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <rect x="2.5" y="4" width="10" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M5 7h.01M10 7h.01M5.5 9.5h4M7.5 2v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </AdminNavItem>
+
         <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

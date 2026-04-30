@@ -118,7 +118,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     }
   } else if (tab === 'queue') {
     conditions.push('c.assigned_to IS NULL');
-    conditions.push("c.status IN ('open', 'pending')");
+    conditions.push("c.status IN ('open', 'pending', 'bot')");
   } else if (tab === 'closed') {
     conditions.push("c.status IN ('resolved', 'closed')");
 
@@ -203,7 +203,7 @@ export async function getConversationCounts(userId?: string, _tenantId?: string)
        ) AS mine,
        COUNT(*) FILTER (
          WHERE assigned_to IS NULL
-           AND status IN ('open', 'pending')
+           AND status IN ('open', 'pending', 'bot')
        ) AS queue,
        COUNT(*) FILTER (
          WHERE status IN ('resolved', 'closed')

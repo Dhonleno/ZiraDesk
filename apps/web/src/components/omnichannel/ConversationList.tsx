@@ -21,6 +21,7 @@ interface ConversationItem {
   client_email: string | null;
   assigned_name: string | null;
   channel_name: string | null;
+  metadata?: Record<string, unknown> | null;
   unread_count?: number;
 }
 
@@ -592,6 +593,10 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
               const hasUnread = (conv.unread_count ?? 0) > 0;
               const hasNewActivity = newActivity.has(conv.id);
               const isNewConversation = newConversations.has(conv.id);
+              const botDepartment =
+                typeof conv.metadata?.bot_department === 'string'
+                  ? conv.metadata.bot_department
+                  : null;
               const itemClassName = [
                 hasNewActivity ? 'zd-flash' : '',
                 isNewConversation ? 'zd-slide-down' : '',
@@ -765,6 +770,32 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           border: '1px solid rgba(245,158,11,.28)',
                         }}>
                           {t('outboundBadge')}
+                        </span>
+                      )}
+                      {conv.status === 'bot' && (
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 500,
+                          padding: '1px 7px',
+                          borderRadius: 'var(--r-pill)',
+                          background: 'var(--purple-dim)',
+                          color: 'var(--purple)',
+                          border: '1px solid rgba(167,139,250,.2)',
+                        }}>
+                          {t('botBadge')}
+                        </span>
+                      )}
+                      {botDepartment && (
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 500,
+                          padding: '1px 7px',
+                          borderRadius: 'var(--r-pill)',
+                          background: 'var(--blue-dim)',
+                          color: 'var(--blue)',
+                          border: '1px solid rgba(96,165,250,.2)',
+                        }}>
+                          {botDepartment}
                         </span>
                       )}
                       {conv.status === 'resolved' && (

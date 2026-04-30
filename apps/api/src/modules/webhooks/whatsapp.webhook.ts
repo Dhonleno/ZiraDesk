@@ -5,6 +5,11 @@ import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
+import {
+  ensureBotInfrastructure,
+  processBotMessage,
+  updateConversationBotStage,
+} from '../admin/bot/bot.service.js';
 import { isWithinBusinessHours } from '../admin/business-hours/business-hours.service.js';
 import {
   buildProtocolMessage,
@@ -322,6 +327,7 @@ async function processIncomingMessage(
 
   // Ensure schema/function exists outside the transaction to avoid concurrent DDL errors
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  await ensureBotInfrastructure(prisma, schemaName);
   const outsideBusinessHours = await sendAwayMessageIfNeeded({
     tenantId,
     schemaName,
@@ -385,6 +391,9 @@ async function processIncomingMessage(
     let protocolNumber: string | null = null;
     let protocolMessageId: string | null = null;
     let protocolMessageContent: string | null = null;
+    let botMessageId: string | null = null;
+    let botMessageContent: string | null = null;
+    let botSavedMessage: { id: string; content: string; created_at: Date; sender_type: string } | null = null;
     if (convRows[0]) {
       conversationId = convRows[0].id;
     } else {
@@ -405,6 +414,8 @@ async function processIncomingMessage(
       conversationId = newConv[0]!.id;
       isNewConversation = true;
     }
+
+    const botResponse = await processBotMessage(content, conversationId, isNewConversation, tx, false);
 
     const msgRows = await tx.$queryRawUnsafe<
       [{ id: string; content: string; created_at: Date; sender_type: string }]
@@ -436,6 +447,62 @@ async function processIncomingMessage(
       outsideBusinessHours,
     );
 
+    if (botResponse) {
+      const botRows = await tx.$queryRawUnsafe<
+        [{ id: string; content: string; created_at: Date; sender_type: string }]
+      >(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal, status)
+         VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
+         RETURNING id, content, created_at, sender_type`,
+        conversationId,
+        botResponse.text,
+      );
+      botSavedMessage = botRows[0]!;
+      botMessageId = botSavedMessage.id;
+      botMessageContent = botResponse.text;
+
+      if (botResponse.type === 'menu') {
+        await updateConversationBotStage(conversationId, 'waiting_choice', null, tx);
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET status = 'bot',
+               last_message = $1,
+               last_message_at = NOW()
+           WHERE id = $2::uuid`,
+          botResponse.text.slice(0, 255),
+          conversationId,
+        );
+      } else if (botResponse.type === 'choice') {
+        await updateConversationBotStage(conversationId, 'done', botResponse.option.tag, tx);
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET status = 'open',
+               last_message = $1,
+               last_message_at = NOW(),
+               metadata = COALESCE(metadata, '{}'::jsonb)
+                 || jsonb_build_object(
+                   'bot_department', $2::text,
+                   'bot_tag', $3::text
+                 )
+           WHERE id = $4::uuid`,
+          botResponse.text.slice(0, 255),
+          botResponse.option.label,
+          botResponse.option.tag ?? '',
+          conversationId,
+        );
+      } else {
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET status = 'bot',
+               last_message = $1,
+               last_message_at = NOW()
+           WHERE id = $2::uuid`,
+          botResponse.text.slice(0, 255),
+          conversationId,
+        );
+      }
+    }
+
     if (isNewConversation && protocolNumber) {
       protocolMessageContent = buildProtocolMessage(protocolNumber);
       const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -455,6 +522,9 @@ async function processIncomingMessage(
       protocolNumber,
       protocolMessageId,
       protocolMessageContent,
+      botMessageId,
+      botMessageContent,
+      botMessage: botSavedMessage,
       contactId,
       contactName: contactRows[0]?.name ?? senderName,
       organizationId,
@@ -479,6 +549,16 @@ async function processIncomingMessage(
       name: result.contactName,
     },
   });
+  if (result.botMessage) {
+    io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+      conversationId: result.conversationId,
+      message: result.botMessage,
+      contact: {
+        id: result.contactId,
+        name: result.contactName,
+      },
+    });
+  }
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
     await messageQueue.add('send', {
@@ -489,6 +569,19 @@ async function processIncomingMessage(
       channelType: 'whatsapp',
       channelCredentials,
       content: result.protocolMessageContent,
+      to: formattedPhone,
+    });
+  }
+
+  if (result.botMessageId && result.botMessageContent) {
+    await messageQueue.add('send', {
+      messageId: result.botMessageId,
+      conversationId: result.conversationId,
+      tenantId,
+      tenantSchema: schemaName,
+      channelType: 'whatsapp',
+      channelCredentials,
+      content: result.botMessageContent,
       to: formattedPhone,
     });
   }

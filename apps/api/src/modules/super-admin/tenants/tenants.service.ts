@@ -141,6 +141,40 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".bot_menus (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      is_active     BOOLEAN DEFAULT false,
+      greeting      TEXT NOT NULL DEFAULT 'Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo?',
+      footer        TEXT DEFAULT 'Digite o número da opção desejada.',
+      invalid_msg   TEXT DEFAULT 'Opção inválida. Por favor, escolha uma das opções abaixo:',
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".bot_options (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bot_menu_id UUID REFERENCES "${schemaName}".bot_menus(id) ON DELETE CASCADE,
+      number      INTEGER NOT NULL,
+      label       VARCHAR(100) NOT NULL,
+      tag         VARCHAR(50),
+      response    TEXT NOT NULL,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(bot_menu_id, number)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".bot_menus (is_active, greeting, footer)
+    SELECT false,
+           'Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo?',
+           'Digite o número da opção desejada.'
+    WHERE NOT EXISTS (SELECT 1 FROM "${schemaName}".bot_menus)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
