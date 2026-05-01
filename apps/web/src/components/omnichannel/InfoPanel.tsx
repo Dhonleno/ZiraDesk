@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { api, contactsApi, conversationTags } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
 import { TagDropdown } from './TagDropdown';
+import { subscribeToEvent } from '../../services/socket';
 
 interface Conversation {
   id: string;
@@ -29,6 +30,11 @@ interface Conversation {
   last_message_at: string | null;
   created_at: string;
   resolved_at: string | null;
+  csat_score?: number | null;
+  csat_comment?: string | null;
+  csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
+  csat_sent_at?: string | null;
+  csat_responded_at?: string | null;
 }
 
 interface ClientStats {
@@ -99,6 +105,17 @@ function relativeTime(dateStr: string | null | undefined): string {
   return `${Math.floor(hrs / 24)}d`;
 }
 
+function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function channelIcon(type: string | undefined) {
   const color = CH_BADGE[type ?? '']?.color ?? 'var(--txt-3)';
   if (type === 'whatsapp') {
@@ -160,6 +177,19 @@ export function InfoPanel({ conversationId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToEvent<{
+      conversationId: string;
+      csat_score?: number | null;
+      csat_comment?: string | null;
+    }>('conversation:csat_updated', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    });
+    return () => unsubscribe();
+  }, [conversationId, qc]);
 
   const { data } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -433,6 +463,86 @@ export function InfoPanel({ conversationId }: Props) {
                 />
               )}
             </div>
+
+            {(conv?.csat_score || conv?.csat_stage === 'sent' || conv?.csat_stage === 'waiting_comment') ? (
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+                <SectionTitle>{t('csat.title', { defaultValue: 'Avaliação (CSAT)' })}</SectionTitle>
+
+                {conv.csat_stage === 'sent' && !conv.csat_score ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                    color: 'var(--txt-3)',
+                    fontStyle: 'italic',
+                  }}>
+                    <span className="zd-pulse-dot" />
+                    {t('csat.pending', { defaultValue: 'Aguardando avaliação do cliente...' })}
+                  </div>
+                ) : null}
+
+                {conv.csat_stage === 'waiting_comment' ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                    color: 'var(--txt-3)',
+                    fontStyle: 'italic',
+                  }}>
+                    <span className="zd-pulse-dot" />
+                    {t('csat.waitingComment', { defaultValue: 'Aguardando comentário...' })}
+                  </div>
+                ) : null}
+
+                {conv.csat_score ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6 }}>
+                      {[1, 2, 3, 4, 5].map((item) => (
+                        <span
+                          key={item}
+                          style={{
+                            fontSize: 20,
+                            color: item <= conv.csat_score! ? '#F59E0B' : 'var(--line-2)',
+                            transition: 'color .15s',
+                          }}
+                        >
+                          ★
+                        </span>
+                      ))}
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginLeft: 6 }}>
+                        {t('csat.score', { score: conv.csat_score, defaultValue: `${conv.csat_score}/5` })}
+                      </span>
+                    </div>
+
+                    {conv.csat_comment ? (
+                      <div style={{
+                        fontSize: 12,
+                        color: 'var(--txt-2)',
+                        fontStyle: 'italic',
+                        background: 'var(--bg-3)',
+                        borderRadius: 'var(--r)',
+                        padding: '8px 10px',
+                        marginTop: 4,
+                        borderLeft: '3px solid #F59E0B',
+                      }}>
+                        "{conv.csat_comment}"
+                      </div>
+                    ) : null}
+
+                    {conv.csat_responded_at ? (
+                      <div style={{ fontSize: 11, color: 'var(--txt-3)', marginTop: 6 }}>
+                        {t('csat.respondedAt', {
+                          date: formatDateTime(conv.csat_responded_at),
+                          defaultValue: `Avaliado em ${formatDateTime(conv.csat_responded_at)}`,
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Quick actions */}
             <div style={{ padding: '14px 16px' }}>

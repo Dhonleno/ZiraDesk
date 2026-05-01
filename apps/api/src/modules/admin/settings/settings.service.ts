@@ -25,6 +25,8 @@ export async function getSettings(tenantId: string) {
       (s.away_message as string | undefined) ??
       'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
+    csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
+    csat_message: (s.csat_message as string | undefined) ?? null,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -48,6 +50,8 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.away_message_enabled !== undefined
       ? { away_message_enabled: data.away_message_enabled }
       : {}),
+    ...(data.csat_enabled !== undefined ? { csat_enabled: data.csat_enabled } : {}),
+    ...(data.csat_message !== undefined ? { csat_message: data.csat_message } : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -71,5 +75,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       (s.away_message as string | undefined) ??
       'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
+    csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
+    csat_message: (s.csat_message as string | undefined) ?? null,
   };
 }

@@ -16,6 +16,13 @@ import {
   ensureConversationProtocolInfrastructure,
 } from '../omnichannel/conversations/protocols.js';
 import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
+import { ensureConversationCsatInfrastructure } from '../omnichannel/conversations/csat.infrastructure.js';
+import {
+  buildCsatCommentRequestMessage,
+  buildCsatInvalidScoreMessage,
+  buildCsatThankYouMessage,
+  sendWhatsAppTextMessage,
+} from '../omnichannel/conversations/csat.service.js';
 
 interface MetaMessage {
   from: string;
@@ -90,6 +97,9 @@ interface ContactRow {
 
 interface ConversationRow {
   id: string;
+  status?: string;
+  csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
+  csat_score?: number | null;
 }
 
 interface MessageRow {
@@ -327,6 +337,7 @@ async function processIncomingMessage(
 
   // Ensure schema/function exists outside the transaction to avoid concurrent DDL errors
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  await ensureConversationCsatInfrastructure(prisma, schemaName);
   await ensureBotInfrastructure(prisma, schemaName);
   const outsideBusinessHours = await sendAwayMessageIfNeeded({
     tenantId,
@@ -375,11 +386,19 @@ async function processIncomingMessage(
     console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-      `SELECT id FROM conversations
+      `SELECT id, status, csat_stage, csat_score
+       FROM conversations
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
-         AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
-       ORDER BY created_at DESC LIMIT 1`,
+         AND (
+           status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+           OR (
+             status = 'resolved'
+             AND csat_stage IN ('sent', 'waiting_comment')
+           )
+         )
+       ORDER BY created_at DESC
+       LIMIT 1`,
       contactId,
       channelId,
     );
@@ -413,6 +432,125 @@ async function processIncomingMessage(
       );
       conversationId = newConv[0]!.id;
       isNewConversation = true;
+    }
+
+    const currentConversation = convRows[0] ?? null;
+    const currentCsatStage = currentConversation?.csat_stage ?? null;
+    const currentCsatScore = currentConversation?.csat_score ?? null;
+
+    if (currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment') {
+      const msgRows = await tx.$queryRawUnsafe<
+        [{ id: string; content: string; created_at: Date; sender_type: string }]
+      >(
+        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, media_url, external_id, status, metadata)
+         VALUES ($1::uuid, 'client', $2::uuid, $3, $4, $5, $6, 'delivered', $7::jsonb)
+         RETURNING id, content, created_at, sender_type`,
+        conversationId,
+        contactId,
+        content,
+        contentType,
+        externalMediaId,
+        message.id,
+        JSON.stringify(mediaMetadata),
+      );
+      const savedMessage = msgRows[0]!;
+
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET last_message = $1,
+             last_message_at = NOW()
+         WHERE id = $2::uuid`,
+        content.slice(0, 255),
+        conversationId,
+      );
+
+      let replyText: string;
+      let csatPayload: { csat_score: number | null; csat_comment?: string | null } | null = null;
+      if (currentCsatStage === 'sent') {
+        const normalized = content.trim();
+        const score = Number.parseInt(normalized, 10);
+        if (score >= 1 && score <= 5) {
+          await tx.$executeRawUnsafe(
+            `UPDATE conversations
+             SET csat_score = $1,
+                 csat_stage = 'waiting_comment',
+                 csat_responded_at = NOW()
+             WHERE id = $2::uuid`,
+            score,
+            conversationId,
+          );
+          replyText = buildCsatCommentRequestMessage(score);
+          csatPayload = { csat_score: score };
+        } else {
+          replyText = buildCsatInvalidScoreMessage();
+        }
+      } else {
+        const rawComment = content.trim();
+        const csatComment = rawComment === '0' ? null : rawComment || null;
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET csat_comment = $1,
+               csat_stage = 'done'
+           WHERE id = $2::uuid`,
+          csatComment,
+          conversationId,
+        );
+        replyText = buildCsatThankYouMessage();
+        csatPayload = { csat_score: currentCsatScore ?? null, csat_comment: csatComment };
+      }
+
+      const replyRows = await tx.$queryRawUnsafe<
+        [{ id: string; content: string; created_at: Date; sender_type: string }]
+      >(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal, status)
+         VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
+         RETURNING id, content, created_at, sender_type`,
+        conversationId,
+        replyText,
+      );
+      const botSavedReply = replyRows[0]!;
+
+      const csatPhoneNumberId =
+        getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id') ?? phoneNumberId;
+      const csatAccessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
+      if (csatPhoneNumberId && csatAccessToken) {
+        await sendWhatsAppTextMessage({
+          text: replyText,
+          to: formattedPhone,
+          phoneNumberId: csatPhoneNumberId,
+          accessToken: csatAccessToken,
+        });
+      }
+
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET last_message = $1,
+             last_message_at = NOW()
+         WHERE id = $2::uuid`,
+        replyText.slice(0, 255),
+        conversationId,
+      );
+
+      return {
+        conversationId,
+        isNewConversation: false,
+        shouldAutoAssign: false,
+        botTag: undefined,
+        botOptionId: undefined,
+        message: savedMessage,
+        protocolNumber: null,
+        protocolMessageId: null,
+        protocolMessageContent: null,
+        botMessageId: null,
+        botMessageContent: null,
+        botMessage: botSavedReply,
+        contactId,
+        contactName: contactRows[0]?.name ?? senderName,
+        organizationId,
+        outsideBusinessHours,
+        csatHandled: true,
+        csatPayload,
+      };
     }
 
     const botResponse = await processBotMessage(content, conversationId, isNewConversation, tx, false);
@@ -513,6 +651,8 @@ async function processIncomingMessage(
       contactName: contactRows[0]?.name ?? senderName,
       organizationId,
       outsideBusinessHours,
+      csatHandled: false,
+      csatPayload: null,
     };
   });
 
@@ -541,6 +681,12 @@ async function processIncomingMessage(
         id: result.contactId,
         name: result.contactName,
       },
+    });
+  }
+  if (result.csatHandled && result.csatPayload) {
+    io.to(`tenant:${tenantId}`).emit('conversation:csat_updated', {
+      conversationId: result.conversationId,
+      ...result.csatPayload,
     });
   }
 

@@ -12,6 +12,8 @@ interface TenantSettings {
   language: string;
   away_message?: string;
   away_message_enabled?: boolean;
+  csat_enabled?: boolean;
+  csat_message?: string | null;
   created_at?: string;
   plan?: { id: string; name: string; slug: string; priceMonth: string };
 }
@@ -934,6 +936,11 @@ export interface OmnichannelConversation {
   last_message_at: string | null;
   created_at: string;
   resolved_at: string | null;
+  csat_score?: number | null;
+  csat_comment?: string | null;
+  csat_sent_at?: string | null;
+  csat_responded_at?: string | null;
+  csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   client_id: string | null;
   contact_id?: string | null;
   organization_id?: string | null;

@@ -286,6 +286,11 @@ async function createTenantTables(schemaName: string): Promise<void> {
       last_message    TEXT,
       last_message_at TIMESTAMPTZ,
       resolved_at     TIMESTAMPTZ,
+      csat_score      INTEGER CHECK (csat_score BETWEEN 1 AND 5),
+      csat_comment    TEXT,
+      csat_sent_at    TIMESTAMPTZ,
+      csat_responded_at TIMESTAMPTZ,
+      csat_stage      VARCHAR(20),
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )

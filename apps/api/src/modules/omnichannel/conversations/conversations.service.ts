@@ -15,6 +15,7 @@ import {
   quoteIdent,
 } from './protocols.js';
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
+import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -89,6 +90,11 @@ interface ConversationRow {
   last_message: string | null;
   last_message_at: Date | null;
   resolved_at: Date | null;
+  csat_score: number | null;
+  csat_comment: string | null;
+  csat_sent_at: Date | null;
+  csat_responded_at: Date | null;
+  csat_stage: 'sent' | 'waiting_comment' | 'done' | null;
   created_at: Date;
   metadata: unknown;
   contact_name: string | null;
@@ -270,6 +276,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
 
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  await ensureConversationCsatInfrastructure(prisma, schemaName);
   if (schemaName) {
     await ensureConversationTagsInfrastructure(schemaName);
   }
@@ -288,7 +295,8 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
       `SELECT
          c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
          c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
-         c.resolved_at, c.created_at, c.metadata,
+         c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+         c.created_at, c.metadata,
          ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
          o.name AS organization_name,
          u.name AS assigned_name,
@@ -369,6 +377,11 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
          c.last_message,
          c.last_message_at,
          c.resolved_at,
+         c.csat_score,
+         c.csat_comment,
+         c.csat_sent_at,
+         c.csat_responded_at,
+         c.csat_stage,
          c.created_at,
          c.metadata,
          cl.name AS contact_name,
@@ -470,6 +483,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
   const schemaName = await getSchemaName(tenantId);
   const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  await ensureConversationCsatInfrastructure(prisma, schemaName);
   if (schemaName) {
     await ensureConversationTagsInfrastructure(schemaName);
   }
@@ -479,7 +493,8 @@ export async function getConversationWithMessages(conversationId: string, tenant
     `SELECT
        c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.created_at, c.metadata,
+       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        o.name AS organization_name,
        u.name AS assigned_name,
@@ -880,34 +895,26 @@ export async function updateConversation(
   body: UpdateConversationBody,
   actorUserId: string,
 ) {
-  const convCheck = await prisma.$queryRawUnsafe<[{ id: string; metadata: unknown }]>(
-    `SELECT id, metadata FROM conversations WHERE id = $1::uuid LIMIT 1`,
+  await ensureConversationCsatInfrastructure(prisma);
+
+  const convCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
+    `SELECT id FROM conversations WHERE id = $1::uuid LIMIT 1`,
     conversationId,
   );
   if (!convCheck[0]) throw new NotFoundError('Conversa não encontrada');
 
   const hasAssignedTo = 'assignedTo' in body;
   const assignedToValue = body.assignedTo ?? null;
-  const shouldPersistCsat =
-    body.status === 'resolved' && (body.csat_score !== undefined || body.csat_comment !== undefined);
-  const metadataBase =
-    typeof convCheck[0].metadata === 'object' && convCheck[0].metadata !== null
-      ? (convCheck[0].metadata as Record<string, unknown>)
-      : {};
-  const metadataPatch = shouldPersistCsat
-    ? {
-        ...metadataBase,
-        csat_score: body.csat_score ?? null,
-        csat_comment: body.csat_comment ?? null,
-      }
-    : null;
+  const hasCsatScore = 'csat_score' in body;
+  const hasCsatComment = 'csat_comment' in body;
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET
        status = COALESCE($1::text, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
-       metadata = COALESCE($5::jsonb, metadata),
+       csat_score = CASE WHEN $5::boolean THEN $6::integer ELSE csat_score END,
+       csat_comment = CASE WHEN $7::boolean THEN $8::text ELSE csat_comment END,
        resolved_at = CASE
          WHEN $1 = 'resolved' THEN NOW()
          WHEN $1 IS NOT NULL AND $1 != 'resolved' THEN NULL
@@ -919,7 +926,10 @@ export async function updateConversation(
     hasAssignedTo,
     assignedToValue,
     conversationId,
-    metadataPatch ? JSON.stringify(metadataPatch) : null,
+    hasCsatScore,
+    body.csat_score ?? null,
+    hasCsatComment,
+    body.csat_comment ?? null,
   );
 
   if (body.status === 'resolved') {

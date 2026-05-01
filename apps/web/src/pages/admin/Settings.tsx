@@ -13,6 +13,8 @@ const settingsSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   language: z.enum(['pt-BR', 'en-US', 'es']),
   timezone: z.string().min(1),
+  csat_enabled: z.boolean().default(true),
+  csat_message: z.string().max(2000).optional(),
 });
 
 type SettingsForm = z.infer<typeof settingsSchema>;
@@ -57,7 +59,13 @@ export function Settings() {
     formState: { errors },
   } = useForm<SettingsForm>({
     resolver: zodResolver(settingsSchema),
-    defaultValues: { name: '', language: 'pt-BR', timezone: 'America/Sao_Paulo' },
+    defaultValues: {
+      name: '',
+      language: 'pt-BR',
+      timezone: 'America/Sao_Paulo',
+      csat_enabled: true,
+      csat_message: '',
+    },
   });
 
   useEffect(() => {
@@ -66,12 +74,18 @@ export function Settings() {
         name: data.name,
         language: (data.language as SettingsForm['language']) ?? 'pt-BR',
         timezone: data.timezone ?? 'America/Sao_Paulo',
+        csat_enabled: data.csat_enabled ?? true,
+        csat_message: data.csat_message ?? '',
       });
     }
   }, [data, reset]);
 
   const mutation = useMutation({
-    mutationFn: (values: SettingsForm) => adminApi.updateSettings(values),
+    mutationFn: (values: SettingsForm) =>
+      adminApi.updateSettings({
+        ...values,
+        csat_message: values.csat_message ?? null,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
       toast.success(t('tenantAdmin.settings.messages.saved'));
@@ -146,6 +160,56 @@ export function Settings() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: '0.75rem',
+                padding: '0.85rem 0.9rem',
+                background: 'var(--bg-3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
+                  {t('tenantAdmin.settings.csat.enabled')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--txt-3)', marginTop: 2 }}>
+                  {t('tenantAdmin.settings.csat.enabledHint')}
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                {...register('csat_enabled')}
+                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                {t('tenantAdmin.settings.csat.message')}
+              </label>
+              <textarea
+                rows={6}
+                {...register('csat_message')}
+                placeholder={t('tenantAdmin.settings.csat.messagePlaceholder')}
+                style={{
+                  width: '100%',
+                  background: 'var(--bg-3)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--txt)',
+                  borderRadius: '0.5rem',
+                  padding: '0.75rem',
+                  fontSize: '0.875rem',
+                  fontFamily: 'var(--font)',
+                  resize: 'vertical',
+                  outline: 'none',
+                }}
+              />
             </div>
 
             <div className="flex justify-end pt-2">

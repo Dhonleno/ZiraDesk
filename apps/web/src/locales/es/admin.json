@@ -105,6 +105,12 @@
         "timezone": "Zona horaria",
         "primaryColor": "Color primario"
       },
+      "csat": {
+        "enabled": "Enviar CSAT automáticamente",
+        "enabledHint": "Envía una encuesta al cliente al resolver conversaciones",
+        "message": "Mensaje inicial del CSAT",
+        "messagePlaceholder": "¡Tu atención fue finalizada!..."
+      },
       "messages": {
         "saved": "Configuración guardada con éxito"
       }

@@ -572,6 +572,11 @@ export function ChatArea({ conversationId }: Props) {
       if (event.conversationId !== conversationId) return;
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     });
+    const unsubCsatUpdated = subscribeToEvent<{ conversationId: string }>('conversation:csat_updated', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    });
 
     const unsubHelpRequested = subscribeToEvent<{ conversationId: string }>('help:requested', (event) => {
       if (event.conversationId !== conversationId) return;
@@ -594,6 +599,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubResolved();
       unsubTransferred();
       unsubUpdated();
+      unsubCsatUpdated();
       unsubHelpRequested();
       unsubHelpAccepted();
       unsubHelpDeclined();
@@ -620,8 +626,7 @@ export function ChatArea({ conversationId }: Props) {
   });
 
   const resolveMutation = useMutation({
-    mutationFn: (payload: { csat_score?: number; csat_comment?: string }) =>
-      omnichannelApi.resolve(conversationId, payload),
+    mutationFn: () => omnichannelApi.resolve(conversationId),
     onSuccess: () => {
       setShowResolveModal(false);
       toast.success(t('resolve.resolved'));
@@ -1270,31 +1275,52 @@ export function ChatArea({ conversationId }: Props) {
               </div>
 
               {msgs.map((msg) => {
-	                const isOut = msg.sender_type === 'agent';
-	                const isSystem = msg.sender_type === 'system';
-	                const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
-	                const showMessageContent = Boolean(msg.content) && !hideAudioLabel;
-	                if (isSystem) {
-	                  return (
-	                    <div
-                        key={msg.id}
-                        style={{
-                          textAlign: 'center',
-                          margin: '8px auto',
-                          maxWidth: 400,
-                          background: 'var(--bg-3)',
-                          border: '1px solid var(--line)',
-                          borderRadius: 'var(--r-pill)',
-                          padding: '6px 16px',
-                          fontSize: 12,
-                          color: 'var(--txt-3)',
-                          fontStyle: 'italic',
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {msg.content}
-                      </div>
+                const isAgent = msg.sender_type === 'agent';
+                const isBot = msg.sender_type === 'bot';
+                const isSystem = msg.sender_type === 'system';
+                const isCompanySide = isAgent || isBot;
+                const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
+                const showMessageContent = Boolean(msg.content) && !hideAudioLabel;
+                const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
+                const contactDisplayName = displayName;
+                const organizationDisplayName = (
+                  conv?.organization_name
+                  ?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+                )?.trim();
+                const clientLabel = organizationDisplayName
+                  ? `${contactDisplayName} - ${organizationDisplayName}`
+                  : contactDisplayName;
+                const senderLabel = isBot
+                  ? '🤖 Bot'
+                  : isAgent
+                    ? agentDisplayName
+                    : clientLabel;
+                const senderLabelColor = isBot
+                  ? 'var(--purple)'
+                  : isAgent
+                    ? 'var(--teal)'
+                    : 'var(--txt-3)';
+
+                if (isSystem) {
+                  return (
+                    <div
+                      key={msg.id}
+                      style={{
+                        textAlign: 'center',
+                        fontStyle: 'italic',
+                        fontSize: 12,
+                        color: 'var(--txt-3)',
+                        padding: '4px 16px',
+                        background: 'var(--bg-3)',
+                        borderRadius: 'var(--r-pill)',
+                        margin: '8px auto',
+                        maxWidth: 360,
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {msg.content}
+                    </div>
                   );
                 }
 
@@ -1306,75 +1332,118 @@ export function ChatArea({ conversationId }: Props) {
                       gap: 8,
                       alignItems: 'flex-end',
                       marginBottom: 4,
-                      flexDirection: isOut ? 'row-reverse' : 'row',
+                      justifyContent: 'flex-start',
+                      flexDirection: isCompanySide ? 'row-reverse' : 'row',
                     }}
                   >
                     <div
                       style={{
-                        width: 26,
-                        height: 26,
+                        width: 28,
+                        height: 28,
                         borderRadius: '50%',
-                        background: isOut
-                          ? 'linear-gradient(135deg,var(--teal),#00A88C)'
-                          : avatarGradient(avatarName),
+                        background: isBot
+                          ? 'var(--purple-dim)'
+                          : isAgent
+                            ? 'linear-gradient(135deg,var(--teal),#00A88C)'
+                            : avatarGradient(avatarName),
+                        border: isBot ? '1px solid rgba(167,139,250,.3)' : 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 10,
                         fontWeight: 600,
-                        color: '#fff',
+                        color: isBot ? 'var(--purple)' : '#fff',
                         flexShrink: 0,
                         marginBottom: 2,
                       }}
                     >
-                      {isOut ? (conv?.assigned_name ?? 'A').charAt(0).toUpperCase() : displayName.charAt(0).toUpperCase()}
+                      {isBot ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                          <rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                          <rect x="6" y="2" width="4" height="3" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                          <circle cx="6" cy="9" r="1" fill="currentColor" />
+                          <circle cx="10" cy="9" r="1" fill="currentColor" />
+                          <path d="M6 11.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          <path d="M1 8h2M13 8h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        </svg>
+                      ) : isAgent ? (
+                        (conv?.assigned_name ?? 'A').charAt(0).toUpperCase()
+                      ) : (
+                        displayName.charAt(0).toUpperCase()
+                      )}
                     </div>
 
-                    <div style={{ maxWidth: '62%' }}>
+                    <div style={{ maxWidth: '65%', display: 'flex', flexDirection: 'column', alignItems: isCompanySide ? 'flex-end' : 'flex-start' }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          marginBottom: 2,
+                          letterSpacing: '0.02em',
+                          color: senderLabelColor,
+                          alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
+                          maxWidth: '100%',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={senderLabel}
+                      >
+                        {senderLabel}
+                      </span>
                       <div
                         style={{
                           padding: '9px 13px',
-                          borderRadius: 16,
-                          borderBottomLeftRadius: isOut ? 16 : 4,
-                          borderBottomRightRadius: isOut ? 4 : 16,
+                          borderRadius: 12,
+                          borderTopLeftRadius: isCompanySide ? 12 : 0,
+                          borderTopRightRadius: isCompanySide ? 0 : 12,
                           fontSize: 13,
                           lineHeight: 1.55,
                           wordBreak: 'break-word',
-                          background: msg.is_internal ? 'var(--amber-dim)' : isOut ? 'var(--teal)' : 'var(--bg-3)',
-                          color: msg.is_internal ? 'var(--amber)' : isOut ? '#0a1a18' : 'var(--txt)',
+                          background: msg.is_internal
+                            ? 'var(--amber-dim)'
+                            : isAgent
+                              ? 'linear-gradient(135deg,#0f5a50,#0b4740)'
+                              : isBot
+                                ? 'rgba(139, 92, 246, 0.12)'
+                                : 'var(--bg-3)',
+                          color: msg.is_internal ? 'var(--amber)' : isAgent ? '#eafff9' : 'var(--txt)',
                           border: msg.is_internal
                             ? '1px solid rgba(245,158,11,.3)'
-                            : isOut
-                              ? 'none'
-                              : '1px solid var(--line)',
+                            : isAgent
+                              ? '1px solid rgba(0,201,167,.28)'
+                              : isBot
+                                ? '1px solid rgba(139, 92, 246, 0.2)'
+                                : '1px solid var(--line-2)',
                         }}
                       >
                         {msg.is_internal && (
                           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             {t('chat.internalNote')}
                           </div>
-	                        )}
-	                        {msg.content_type !== 'text' && (
-	                          <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
-	                            <MessageMedia
-	                              message={msg}
-	                              conversationId={conversationId}
-	                              localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
-	                            />
-	                          </div>
-	                        )}
-	                        {showMessageContent ? msg.content : null}
-	                      </div>
+                        )}
+                        {msg.content_type !== 'text' && (
+                          <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
+                            <MessageMedia
+                              message={msg}
+                              conversationId={conversationId}
+                              localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
+                            />
+                          </div>
+                        )}
+                        {showMessageContent
+                          ? msg.content_type === 'text'
+                            ? <span style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</span>
+                            : msg.content
+                          : null}
+                      </div>
                       <div
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginTop: 4,
+                          marginTop: 2,
                           fontSize: 10,
                           fontFamily: 'var(--mono)',
                           color: 'var(--txt-3)',
-                          justifyContent: isOut ? 'flex-end' : 'flex-start',
+                          textAlign: isCompanySide ? 'right' : 'left',
                         }}
                       >
                         {formatTime(msg.created_at)}
@@ -2060,8 +2129,8 @@ export function ChatArea({ conversationId }: Props) {
         open={showResolveModal}
         onClose={() => setShowResolveModal(false)}
         isSubmitting={resolveMutation.isPending}
-        onConfirm={async (payload) => {
-          await resolveMutation.mutateAsync(payload);
+        onConfirm={async () => {
+          await resolveMutation.mutateAsync();
         }}
       />
 

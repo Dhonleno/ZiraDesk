@@ -8,6 +8,8 @@ export const updateSettingsSchema = z.object({
   language: z.enum(['pt-BR', 'en-US', 'es']).optional(),
   away_message: z.string().max(1000).optional(),
   away_message_enabled: z.boolean().optional(),
+  csat_enabled: z.boolean().optional(),
+  csat_message: z.string().max(2000).optional(),
 });
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;

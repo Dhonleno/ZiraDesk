@@ -17,6 +17,9 @@ interface ConversationItem {
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;
+  csat_score?: number | null;
+  csat_comment?: string | null;
+  csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   contact_name?: string | null;
   contact_email?: string | null;
   client_name: string | null;
@@ -261,6 +264,9 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       invalidateConversationData();
       void qc.invalidateQueries({ queryKey: ['conversation-tags', conversationId] });
     });
+    const unsubCsatUpdated = subscribeToEvent<{ conversationId: string }>('conversation:csat_updated', () => {
+      invalidateConversationData();
+    });
     return () => {
       unsubMessage();
       unsubIncoming();
@@ -268,6 +274,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       unsubCreated();
       unsubTagAdded();
       unsubTagRemoved();
+      unsubCsatUpdated();
 
       for (const timer of activityTimeoutsRef.current.values()) {
         window.clearTimeout(timer);
@@ -931,6 +938,15 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           {t('status.resolved')}
                         </span>
                       )}
+                      {activeTab === 'closed' && conv.csat_score ? (
+                        <span style={{
+                          fontSize: 10,
+                          color: '#F59E0B',
+                          fontWeight: 600,
+                        }}>
+                          {'⭐'.repeat(conv.csat_score)} {conv.csat_score}/5
+                        </span>
+                      ) : null}
                     </div>
 
                     {conv.tags && conv.tags.length > 0 && (

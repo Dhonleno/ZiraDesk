@@ -105,6 +105,12 @@
         "timezone": "Timezone",
         "primaryColor": "Primary color"
       },
+      "csat": {
+        "enabled": "Send CSAT automatically",
+        "enabledHint": "Sends a customer survey when conversations are resolved",
+        "message": "CSAT opening message",
+        "messagePlaceholder": "Your service was closed!..."
+      },
       "messages": {
         "saved": "Settings saved successfully"
       }

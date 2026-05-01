@@ -117,7 +117,12 @@ async function main() {
   await exec(`
     ALTER TABLE conversations
     ADD COLUMN IF NOT EXISTS contact_id      UUID REFERENCES contacts(id)      ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL
+    ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS csat_score INTEGER,
+    ADD COLUMN IF NOT EXISTS csat_comment TEXT,
+    ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_stage VARCHAR(20)
   `);
 
   // Atualizar tickets: remover client_id, adicionar contact_id + organization_id

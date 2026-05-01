@@ -115,6 +115,14 @@
       "5": "Excelente"
     }
   },
+  "csat": {
+    "title": "Satisfacción (CSAT)",
+    "pending": "Esperando evaluación del cliente...",
+    "waitingComment": "Esperando comentario del cliente...",
+    "score": "{{score}}/5",
+    "respondedAt": "Evaluado el {{date}}",
+    "noRating": "Sin evaluación"
+  },
   "transfer": {
     "title": "Transferir atención",
     "searchAgent": "Buscar agente...",

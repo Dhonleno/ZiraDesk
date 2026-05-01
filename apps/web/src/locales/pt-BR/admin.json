@@ -105,6 +105,12 @@
         "timezone": "Fuso horário",
         "primaryColor": "Cor primária"
       },
+      "csat": {
+        "enabled": "Enviar CSAT automaticamente",
+        "enabledHint": "Envia avaliação ao cliente ao resolver atendimentos",
+        "message": "Mensagem inicial do CSAT",
+        "messagePlaceholder": "Seu atendimento foi encerrado!..."
+      },
       "messages": {
         "saved": "Configurações salvas com sucesso"
       }

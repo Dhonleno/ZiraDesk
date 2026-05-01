@@ -34,6 +34,8 @@ import {
 import { getSocketServer } from '../../../socket/index.js';
 import { messageQueue } from '../../../jobs/queue.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
+import { prisma } from '../../../config/database.js';
+import { sendCsatMessage } from './csat.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
@@ -293,6 +295,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
 
       const io = getSocketServer();
       if (parsed.data.status === 'resolved') {
+        const schemaName = tenantUser.schemaName;
+        if (schemaName) {
+          sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
+            request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
+          });
+        }
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
           conversationId: request.params.id,
         });
