@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { api, contactsApi } from '../../services/api';
+import { api, contactsApi, conversationTags } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
+import { TagDropdown } from './TagDropdown';
 
 interface Conversation {
   id: string;
@@ -155,8 +156,10 @@ interface Props {
 export function InfoPanel({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
 
   const { data } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -200,6 +203,12 @@ export function InfoPanel({ conversationId }: Props) {
     enabled: !!contactId,
   });
 
+  const { data: convTags = [], refetch: refetchConvTags } = useQuery({
+    queryKey: ['conversation-tags', conversationId],
+    queryFn: () => conversationTags.getForConversation(conversationId),
+    enabled: Boolean(conversationId),
+  });
+
   const contactPhone =
     contactData?.whatsapp?.trim()
     || contactData?.phone?.trim()
@@ -218,6 +227,13 @@ export function InfoPanel({ conversationId }: Props) {
       : conv?.channel_type === 'whatsapp'
         ? contactPhone
         : conv?.channel_name;
+
+  async function handleRemoveTag(tagId: string) {
+    await conversationTags.removeFromConversation(conversationId, tagId);
+    await refetchConvTags();
+    await qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    await qc.invalidateQueries({ queryKey: ['conversations'] });
+  }
 
   return (
     <div style={{
@@ -365,6 +381,57 @@ export function InfoPanel({ conversationId }: Props) {
                   </svg>
                 }
               />
+            </div>
+
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+              <SectionTitle
+                action={(
+                  <button
+                    type="button"
+                    onClick={() => setShowTagDropdown((value) => !value)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--teal)',
+                      cursor: 'pointer',
+                      fontSize: 10,
+                    }}
+                  >
+                    + {t('info.addTag', { defaultValue: 'Adicionar' })}
+                  </button>
+                )}
+              >
+                {t('info.tags', { defaultValue: 'Etiquetas' })}
+              </SectionTitle>
+
+              <div>
+                {convTags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="applied-tag"
+                    style={{
+                      background: `${tag.color}22`,
+                      color: tag.color,
+                      borderColor: `${tag.color}44`,
+                    }}
+                  >
+                    {tag.name}
+                    <button type="button" onClick={() => void handleRemoveTag(tag.id)}>×</button>
+                  </span>
+                ))}
+                {convTags.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                    {t('info.noTags', { defaultValue: 'Nenhuma etiqueta aplicada' })}
+                  </span>
+                )}
+              </div>
+
+              {showTagDropdown && (
+                <TagDropdown
+                  conversationId={conversationId}
+                  onClose={() => setShowTagDropdown(false)}
+                />
+              )}
             </div>
 
             {/* Quick actions */}

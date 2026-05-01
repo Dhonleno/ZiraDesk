@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { api } from '../../services/api';
+import { api, conversationTags, type ConversationTag } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
@@ -25,6 +25,7 @@ interface ConversationItem {
   channel_name: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
+  tags?: ConversationTag[];
 }
 
 type TabKey = 'active' | 'queue' | 'closed';
@@ -123,10 +124,13 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>('active');
   const [assignedToMe, setAssignedToMe] = useState(true);
   const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
+  const [filterTagId, setFilterTagId] = useState<string | null>(null);
+  const [showTagFilterDropdown, setShowTagFilterDropdown] = useState(false);
   const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
   const newConversationTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
 
@@ -207,6 +211,18 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   }, [clearTimer, markConversationActivity]);
 
   useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!tagFilterRef.current) return;
+      if (!tagFilterRef.current.contains(event.target as Node)) {
+        setShowTagFilterDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, []);
+
+  useEffect(() => {
     const invalidateConversationData = () => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
@@ -237,11 +253,21 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
       'conversation:created',
       handleCreated,
     );
+    const unsubTagAdded = subscribeToEvent<{ conversationId: string }>('conversation:tag_added', ({ conversationId }) => {
+      invalidateConversationData();
+      void qc.invalidateQueries({ queryKey: ['conversation-tags', conversationId] });
+    });
+    const unsubTagRemoved = subscribeToEvent<{ conversationId: string }>('conversation:tag_removed', ({ conversationId }) => {
+      invalidateConversationData();
+      void qc.invalidateQueries({ queryKey: ['conversation-tags', conversationId] });
+    });
     return () => {
       unsubMessage();
       unsubIncoming();
       unsubUpdated();
       unsubCreated();
+      unsubTagAdded();
+      unsubTagRemoved();
 
       for (const timer of activityTimeoutsRef.current.values()) {
         window.clearTimeout(timer);
@@ -277,8 +303,16 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
     staleTime: 30_000,
   });
 
+  const { data: allTags = [] } = useQuery({
+    queryKey: ['conversation-tags'],
+    queryFn: () => conversationTags.listAvailable(),
+    staleTime: 60_000,
+  });
+
+  const selectedTag = allTags.find((tag) => tag.id === filterTagId) ?? null;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch],
+    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch, filterTagId],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
         '/omnichannel/conversations',
@@ -286,9 +320,10 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           params: {
             perPage: 50,
             tab: activeTab,
-            assigned_to_me: activeTab === 'active' ? assignedToMe : undefined,
+            assigned_to_me: activeTab === 'active' ? (assignedToMe ? true : undefined) : undefined,
             sub_status: activeTab === 'closed' ? subStatus ?? undefined : undefined,
             search: debouncedSearch || undefined,
+            tag_id: filterTagId ?? undefined,
           },
         },
       );
@@ -405,6 +440,91 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                 <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </button>
+          )}
+        </div>
+
+        <div ref={tagFilterRef} style={{ marginTop: 8, position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setShowTagFilterDropdown((value) => !value)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: showTagFilterDropdown ? 'var(--bg-4)' : 'var(--bg-3)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r)',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              color: 'var(--txt-2)',
+              fontSize: 11,
+              fontWeight: 500,
+              fontFamily: 'var(--font)',
+            }}
+          >
+            <span>{t('tags.filter', { defaultValue: 'Filtrar por etiqueta' })}</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M2 3h8L7 6.5v2L5 9V6.5L2 3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {filterTagId && selectedTag && (
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span
+                style={{
+                  background: `${selectedTag.color}22`,
+                  color: selectedTag.color,
+                  border: `1px solid ${selectedTag.color}44`,
+                  borderRadius: 'var(--r-pill)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                }}
+              >
+                {selectedTag.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFilterTagId(null)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: 'var(--txt-3)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  lineHeight: 1,
+                }}
+                title={t('tags.clearFilter', { defaultValue: 'Limpar filtro' })}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {showTagFilterDropdown && (
+            <div className="tag-dropdown" style={{ top: 'calc(100% + 6px)', left: 0, right: 0, minWidth: 0 }}>
+              <div className="tag-dropdown-header">
+                <span>{t('tags.title', { defaultValue: 'Etiquetas' })}</span>
+                <button type="button" onClick={() => setShowTagFilterDropdown(false)}>×</button>
+              </div>
+              <div className="tag-dropdown-list">
+                {allTags.map((tag) => (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    className={`tag-option ${filterTagId === tag.id ? 'applied' : ''}`}
+                    onClick={() => {
+                      setFilterTagId((current) => (current === tag.id ? null : tag.id));
+                      setShowTagFilterDropdown(false);
+                    }}
+                  >
+                    <span className="tag-dot" style={{ background: tag.color }} />
+                    <span className="tag-name">{tag.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
@@ -812,6 +932,27 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                         </span>
                       )}
                     </div>
+
+                    {conv.tags && conv.tags.length > 0 && (
+                      <div className="conv-tags">
+                        {conv.tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag.id}
+                            className="conv-tag-chip"
+                            style={{
+                              background: `${tag.color}22`,
+                              color: tag.color,
+                              borderColor: `${tag.color}44`,
+                            }}
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                        {conv.tags.length > 3 && (
+                          <span className="conv-tag-more">+{conv.tags.length - 3}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

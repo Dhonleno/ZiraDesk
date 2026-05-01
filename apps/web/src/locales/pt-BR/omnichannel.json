@@ -171,6 +171,12 @@
     "viewConversations": "Ver atendimentos",
     "noAgents": "Nenhum agente online"
   },
+  "tags": {
+    "title": "Etiquetas",
+    "manage": "Gerenciar etiquetas",
+    "filter": "Filtrar por etiqueta",
+    "clearFilter": "Limpar filtro"
+  },
   "help": {
     "request": "Pedir ajuda",
     "requestTitle": "Solicitar ajuda",

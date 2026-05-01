@@ -52,10 +52,28 @@ export function ConversationsPage() {
       },
     );
 
+    const unsubTagAdded = subscribeToEvent<{ conversationId: string }>(
+      'conversation:tag_added',
+      ({ conversationId }) => {
+        void qc.invalidateQueries({ queryKey: ['conversations'] });
+        void qc.invalidateQueries({ queryKey: ['conversation-tags', conversationId] });
+      },
+    );
+
+    const unsubTagRemoved = subscribeToEvent<{ conversationId: string }>(
+      'conversation:tag_removed',
+      ({ conversationId }) => {
+        void qc.invalidateQueries({ queryKey: ['conversations'] });
+        void qc.invalidateQueries({ queryKey: ['conversation-tags', conversationId] });
+      },
+    );
+
     return () => {
       unsubNew();
       unsubUpdated();
       unsubCreated();
+      unsubTagAdded();
+      unsubTagRemoved();
     };
   }, [qc]);
 

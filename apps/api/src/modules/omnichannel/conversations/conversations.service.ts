@@ -14,6 +14,7 @@ import {
   generateConversationProtocol,
   quoteIdent,
 } from './protocols.js';
+import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -97,6 +98,25 @@ interface ConversationRow {
   organization_name: string | null;
   assigned_name: string | null;
   channel_name: string | null;
+  tags?: ConversationTagChip[];
+}
+
+interface ConversationTagChip {
+  id: string;
+  name: string;
+  color: string;
+}
+
+function normalizeProtocolNumber(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const compact = value.replace(/\s+/g, '').trim();
+  if (!compact) return null;
+
+  const upper = compact.toUpperCase();
+  if (/^ZD-\d{6}-\d{6}$/.test(upper)) return upper;
+  if (/^\d{6}-\d{6}$/.test(compact)) return `ZD-${compact}`;
+  return compact;
 }
 
 interface MessageRow {
@@ -159,8 +179,9 @@ function buildListConversationSqlContext(
   searchColumn: string,
   contactColumn: string,
   outboundCondition: string,
+  tagAssignmentsRef: string,
 ): ListConversationSqlContext {
-  const { page, perPage, tab, sub_status, status, search, assigned_to_me, contact_id } = query;
+  const { page, perPage, tab, sub_status, status, search, assigned_to_me, contact_id, tag_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
   const conditions: string[] = [];
@@ -202,6 +223,15 @@ function buildListConversationSqlContext(
     conditions.push(`${contactColumn} = ${pushParam(contact_id)}::uuid`);
   }
 
+  if (tag_id) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM ${tagAssignmentsRef} cta2
+      WHERE cta2.conversation_id = c.id
+        AND cta2.tag_id = ${pushParam(tag_id)}::uuid
+    )`);
+  }
+
   const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const limitPlaceholder = pushParam(perPage);
   const offsetPlaceholder = pushParam(offset);
@@ -228,7 +258,21 @@ interface ConversationCounts {
 }
 
 export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+  const schemaName = await getSchemaName(tenantId);
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const conversationsRef = `${schemaPrefix}conversations`;
+  const contactsRef = `${schemaPrefix}contacts`;
+  const organizationsRef = `${schemaPrefix}organizations`;
+  const usersRef = `${schemaPrefix}users`;
+  const channelsRef = `${schemaPrefix}channels`;
+  const clientsRef = `${schemaPrefix}clients`;
+  const conversationTagsRef = `${schemaPrefix}conversation_tags`;
+  const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
+
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  if (schemaName) {
+    await ensureConversationTagsInfrastructure(schemaName);
+  }
 
   const modernContext = buildListConversationSqlContext(
     query,
@@ -236,6 +280,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     'ct.name',
     'c.contact_id',
     "c.conversation_type = 'outbound'",
+    conversationTagAssignmentsRef,
   );
 
   try {
@@ -247,12 +292,29 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
          ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
          o.name AS organization_name,
          u.name AS assigned_name,
-         ch.name AS channel_name
-       FROM conversations c
-       LEFT JOIN contacts ct ON ct.id = c.contact_id
-       LEFT JOIN organizations o ON o.id = c.organization_id
-       LEFT JOIN users u ON u.id = c.assigned_to
-       LEFT JOIN channels ch ON ch.id = c.channel_id
+         ch.name AS channel_name,
+         COALESCE(
+           (
+             SELECT json_agg(
+               json_build_object(
+                 'id', ctag.id,
+                 'name', ctag.name,
+                 'color', ctag.color
+               )
+               ORDER BY ctag.sort_order ASC, ctag.name ASC
+             )
+             FROM ${conversationTagAssignmentsRef} cta
+             JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
+             WHERE cta.conversation_id = c.id
+               AND ctag.is_active = true
+           ),
+           '[]'::json
+         ) AS tags
+       FROM ${conversationsRef} c
+       LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+       LEFT JOIN ${organizationsRef} o ON o.id = c.organization_id
+       LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+       LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
        ${modernContext.whereSql}
        ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
        LIMIT ${modernContext.limitPlaceholder} OFFSET ${modernContext.offsetPlaceholder}`,
@@ -262,8 +324,8 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     const countParams = modernContext.params.slice(0, -2);
     const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count
-       FROM conversations c
-       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       FROM ${conversationsRef} c
+       LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
        ${modernContext.whereSql}`,
       ...countParams,
     );
@@ -283,12 +345,13 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     if (!isLegacySchemaError(error)) throw error;
 
     const legacyContext = buildListConversationSqlContext(
-      query,
-      userId,
-      'cl.name',
-      'c.client_id',
-      "COALESCE(c.metadata->>'type', 'inbound') = 'outbound'",
-    );
+    query,
+    userId,
+    'cl.name',
+    'c.client_id',
+    "COALESCE(c.metadata->>'type', 'inbound') = 'outbound'",
+    conversationTagAssignmentsRef,
+  );
 
     const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
       `SELECT
@@ -314,11 +377,28 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
          cl.phone AS contact_whatsapp,
          NULL::text AS organization_name,
          u.name AS assigned_name,
-         ch.name AS channel_name
-       FROM conversations c
-       LEFT JOIN clients cl ON cl.id = c.client_id
-       LEFT JOIN users u ON u.id = c.assigned_to
-       LEFT JOIN channels ch ON ch.id = c.channel_id
+         ch.name AS channel_name,
+         COALESCE(
+           (
+             SELECT json_agg(
+               json_build_object(
+                 'id', ctag.id,
+                 'name', ctag.name,
+                 'color', ctag.color
+               )
+               ORDER BY ctag.sort_order ASC, ctag.name ASC
+             )
+             FROM ${conversationTagAssignmentsRef} cta
+             JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
+             WHERE cta.conversation_id = c.id
+               AND ctag.is_active = true
+           ),
+           '[]'::json
+         ) AS tags
+       FROM ${conversationsRef} c
+       LEFT JOIN ${clientsRef} cl ON cl.id = c.client_id
+       LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+       LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
        ${legacyContext.whereSql}
        ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
        LIMIT ${legacyContext.limitPlaceholder} OFFSET ${legacyContext.offsetPlaceholder}`,
@@ -328,8 +408,8 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     const countParams = legacyContext.params.slice(0, -2);
     const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count
-       FROM conversations c
-       LEFT JOIN clients cl ON cl.id = c.client_id
+       FROM ${conversationsRef} c
+       LEFT JOIN ${clientsRef} cl ON cl.id = c.client_id
        ${legacyContext.whereSql}`,
       ...countParams,
     );
@@ -388,7 +468,13 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 }
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
-  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const schemaName = await getSchemaName(tenantId);
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  if (schemaName) {
+    await ensureConversationTagsInfrastructure(schemaName);
+  }
+  const conversationTagsRef = `${schemaPrefix}conversation_tags`;
+  const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
        c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
@@ -397,7 +483,24 @@ export async function getConversationWithMessages(conversationId: string, tenant
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        o.name AS organization_name,
        u.name AS assigned_name,
-       ch.name AS channel_name
+       ch.name AS channel_name,
+       COALESCE(
+         (
+           SELECT json_agg(
+             json_build_object(
+               'id', ctag.id,
+               'name', ctag.name,
+               'color', ctag.color
+             )
+             ORDER BY ctag.sort_order ASC, ctag.name ASC
+           )
+           FROM ${conversationTagAssignmentsRef} cta
+           JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
+           WHERE cta.conversation_id = c.id
+             AND ctag.is_active = true
+         ),
+         '[]'::json
+       ) AS tags
      FROM ${schemaPrefix}conversations c
      LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
      LEFT JOIN ${schemaPrefix}organizations o ON o.id = c.organization_id
@@ -922,7 +1025,7 @@ export async function requestHelp(
       id: requesterId,
       name: requester?.name ?? 'Agente',
     },
-    protocol: conversation.protocol_number,
+    protocol: normalizeProtocolNumber(conversation.protocol_number),
   });
 
   io.to(`agent:${helperUserId}`).emit('notification:new', {

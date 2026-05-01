@@ -17,6 +17,7 @@ import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './Me
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
 import { MessageMedia } from './MessageMedia';
 import { RequestHelpModal } from './RequestHelpModal';
+import { TagDropdown } from './TagDropdown';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
@@ -191,6 +192,7 @@ export function ChatArea({ conversationId }: Props) {
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
@@ -425,6 +427,7 @@ export function ChatArea({ conversationId }: Props) {
     setIsInternal(false);
     setShowEmojiPicker(false);
     setShowQuickReplies(false);
+    setShowTagDropdown(false);
     setShowShortcutSuggestions(false);
     setShortcutSuggestions([]);
     setSelectedShortcutIndex(0);
@@ -1042,6 +1045,32 @@ export function ChatArea({ conversationId }: Props) {
             </button>
           ) : (
             <>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="tb-icon-btn"
+                  onClick={() => setShowTagDropdown((value) => !value)}
+                  title={t('tags.manage', { defaultValue: 'Gerenciar etiquetas' })}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path
+                      d="M1.5 1.5h5l6 6-5 5-6-6v-5z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="4.5" cy="4.5" r="1" fill="currentColor" />
+                  </svg>
+                </button>
+
+                {showTagDropdown && (
+                  <TagDropdown
+                    conversationId={conversationId}
+                    onClose={() => setShowTagDropdown(false)}
+                  />
+                )}
+              </div>
+
               {isHelper && !isAssignedToMe && (
                 <span className="helper-indicator">{t('help.helping')}</span>
               )}

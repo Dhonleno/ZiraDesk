@@ -47,8 +47,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       user_id UUID NOT NULL UNIQUE REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
       last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       active_conversations INTEGER NOT NULL DEFAULT 0,
-      is_available BOOLEAN NOT NULL DEFAULT true,
-      status VARCHAR(20) NOT NULL DEFAULT 'online',
+      is_available BOOLEAN NOT NULL DEFAULT false,
+      status VARCHAR(20) NOT NULL DEFAULT 'offline',
       pause_reason VARCHAR(100),
       pause_started_at TIMESTAMPTZ,
       pause_notes TEXT,
@@ -354,6 +354,46 @@ async function createTenantTables(schemaName: string): Promise<void> {
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".conversation_tags (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name       VARCHAR(50) NOT NULL,
+      color      VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
+      is_active  BOOLEAN NOT NULL DEFAULT true,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(name)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".conversation_tag_assignments (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      tag_id          UUID REFERENCES "${schemaName}".conversation_tags(id) ON DELETE CASCADE,
+      assigned_by     UUID REFERENCES "${schemaName}".users(id),
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(conversation_id, tag_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_tag_assignments_conv"
+    ON "${schemaName}".conversation_tag_assignments(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".conversation_tags (name, color, sort_order)
+    VALUES
+      ('Urgente', '#EF4444', 1),
+      ('VIP', '#F59E0B', 2),
+      ('Aguardando cliente', '#3B82F6', 3),
+      ('Proposta enviada', '#8B5CF6', 4),
+      ('Bug', '#EC4899', 5),
+      ('Resolvido', '#10B981', 6)
+    ON CONFLICT (name) DO NOTHING
   `);
 
   await prisma.$executeRawUnsafe(`

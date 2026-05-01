@@ -30,6 +30,7 @@
       "skills": "Skills",
       "pauseReasons": "Pause Reasons",
       "quickReplies": "Quick Replies",
+      "conversationTags": "Tags",
       "settings": "Settings"
     },
     "autoAssign": {
@@ -275,6 +276,27 @@
         "title": "Quick replies",
         "search": "Search or type /shortcut",
         "hint": "Type / in chat to search shortcuts"
+      }
+    },
+    "tags": {
+      "title": "Tags",
+      "subtitle": "Organize conversations with colored tags",
+      "new": "New tag",
+      "manage": "Manage tags",
+      "filter": "Filter by tag",
+      "clearFilter": "Clear filter",
+      "noTags": "No tags applied",
+      "addTag": "Add tag",
+      "fields": {
+        "name": "Name",
+        "color": "Color"
+      },
+      "messages": {
+        "created": "Tag created",
+        "updated": "Tag updated",
+        "deleted": "Tag removed",
+        "added": "Tag applied",
+        "removed": "Tag removed from conversation"
       }
     },
     "dashboard": {

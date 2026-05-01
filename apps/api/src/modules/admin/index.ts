@@ -10,6 +10,7 @@ import { botRoutes } from './bot/bot.routes.js';
 import { adminAutoAssignRoutes } from './auto-assign/index.js';
 import { adminPauseReasonsRoutes } from './pause-reasons/index.js';
 import { adminSkillsRoutes } from './skills/index.js';
+import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -20,6 +21,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(adminAutoAssignRoutes);
   await app.register(adminSkillsRoutes);
   await app.register(adminPauseReasonsRoutes);
+  await app.register(conversationTagsAdminRoutes, { prefix: '/conversation-tags' });
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);

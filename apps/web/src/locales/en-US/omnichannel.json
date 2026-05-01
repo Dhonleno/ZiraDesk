@@ -171,6 +171,12 @@
     "viewConversations": "View conversations",
     "noAgents": "No agents online"
   },
+  "tags": {
+    "title": "Tags",
+    "manage": "Manage tags",
+    "filter": "Filter by tag",
+    "clearFilter": "Clear filter"
+  },
   "help": {
     "request": "Request help",
     "requestTitle": "Request help",

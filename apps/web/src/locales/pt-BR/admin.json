@@ -30,6 +30,7 @@
       "skills": "Habilidades",
       "pauseReasons": "Motivos de Pausa",
       "quickReplies": "Respostas Rápidas",
+      "conversationTags": "Etiquetas",
       "settings": "Configurações"
     },
     "autoAssign": {
@@ -292,6 +293,27 @@
         "title": "Respostas rápidas",
         "search": "Buscar ou digite /atalho",
         "hint": "Digite / no chat para buscar atalhos"
+      }
+    },
+    "tags": {
+      "title": "Etiquetas",
+      "subtitle": "Organize as conversas com etiquetas coloridas",
+      "new": "Nova etiqueta",
+      "manage": "Gerenciar etiquetas",
+      "filter": "Filtrar por etiqueta",
+      "clearFilter": "Limpar filtro",
+      "noTags": "Nenhuma etiqueta aplicada",
+      "addTag": "Adicionar etiqueta",
+      "fields": {
+        "name": "Nome",
+        "color": "Cor"
+      },
+      "messages": {
+        "created": "Etiqueta criada",
+        "updated": "Etiqueta atualizada",
+        "deleted": "Etiqueta removida",
+        "added": "Etiqueta aplicada",
+        "removed": "Etiqueta removida da conversa"
       }
     },
     "dashboard": {

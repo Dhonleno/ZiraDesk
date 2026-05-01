@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+const booleanQueryParamSchema = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0') return false;
+  }
+
+  return value;
+}, z.boolean());
+
 export const listConversationsQuerySchema = z
   .object({
     page: z.coerce.number().int().positive().default(1),
@@ -9,9 +19,10 @@ export const listConversationsQuerySchema = z
     sub_status: z.enum(['resolved', 'closed', 'outbound']).optional(),
     status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
-    assigned_to_me: z.coerce.boolean().optional(),
+    assigned_to_me: booleanQueryParamSchema.optional(),
     contact_id: z.string().uuid().optional(),
     organization_id: z.string().uuid().optional(),
+    tag_id: z.string().uuid().optional(),
   })
   .transform(({ per_page, perPage, ...query }) => ({
     ...query,

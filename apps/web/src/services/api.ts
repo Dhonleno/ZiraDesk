@@ -269,6 +269,20 @@ export interface ConversationHelper {
   ended_at: string | null;
 }
 
+export interface ConversationTag {
+  id: string;
+  name: string;
+  color: string;
+  is_active?: boolean;
+  sort_order?: number;
+  created_at?: string;
+}
+
+export interface ConversationTagAssignment extends ConversationTag {
+  assigned_by?: string | null;
+  assigned_at?: string;
+}
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 export const api = axios.create({
@@ -767,6 +781,58 @@ export const adminApi = {
   },
 };
 
+export const conversationTags = {
+  list: async (): Promise<ConversationTag[]> => {
+    const res = await api.get<{ success: boolean; data: ConversationTag[] }>('/admin/conversation-tags');
+    return res.data.data;
+  },
+
+  listAvailable: async (): Promise<ConversationTag[]> => {
+    const res = await api.get<{ success: boolean; data: ConversationTag[] }>('/omnichannel/conversations/tags');
+    return res.data.data;
+  },
+
+  create: async (data: { name: string; color: string; sort_order?: number }): Promise<ConversationTag> => {
+    const res = await api.post<{ success: boolean; data: ConversationTag }>('/admin/conversation-tags', data);
+    return res.data.data;
+  },
+
+  update: async (
+    id: string,
+    data: Partial<{ name: string; color: string; sort_order: number; is_active: boolean }>,
+  ): Promise<ConversationTag> => {
+    const res = await api.patch<{ success: boolean; data: ConversationTag }>(`/admin/conversation-tags/${id}`, data);
+    return res.data.data;
+  },
+
+  delete: async (id: string): Promise<ConversationTag> => {
+    const res = await api.delete<{ success: boolean; data: ConversationTag }>(`/admin/conversation-tags/${id}`);
+    return res.data.data;
+  },
+
+  getForConversation: async (convId: string): Promise<ConversationTagAssignment[]> => {
+    const res = await api.get<{ success: boolean; data: ConversationTagAssignment[] }>(
+      `/omnichannel/conversations/${convId}/tags`,
+    );
+    return res.data.data;
+  },
+
+  addToConversation: async (convId: string, tagId: string) => {
+    const res = await api.post<{ success: boolean; data: { conversationId: string; tagId: string } }>(
+      `/omnichannel/conversations/${convId}/tags`,
+      { tag_id: tagId },
+    );
+    return res.data.data;
+  },
+
+  removeFromConversation: async (convId: string, tagId: string) => {
+    const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+      `/omnichannel/conversations/${convId}/tags/${tagId}`,
+    );
+    return res.data.data;
+  },
+};
+
 // ── Tickets Types ─────────────────────────────────────────────────────────────
 
 export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
@@ -886,6 +952,7 @@ export interface OmnichannelConversation {
   channel_name: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
+  tags?: ConversationTag[];
 }
 
 export interface OmnichannelMessage {
@@ -914,6 +981,7 @@ export interface ListConversationsParams {
   client_id?: string;
   contact_id?: string;
   organization_id?: string;
+  tag_id?: string;
 }
 
 export interface CreateConversationPayload {

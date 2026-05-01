@@ -144,3 +144,130 @@
   background: var(--teal-dim);
   border-color: rgba(0,201,167,.3);
 }
+
+.conv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.conv-tag-chip {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.conv-tag-more {
+  font-size: 10px;
+  color: var(--txt-3);
+  padding: 1px 4px;
+}
+
+.tag-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+  min-width: 220px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.tag-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-2);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.tag-dropdown-header button {
+  border: none;
+  background: none;
+  color: var(--txt-3);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tag-dropdown-list {
+  padding: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: none;
+  border: none;
+  color: var(--txt);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s;
+  font-family: var(--font);
+  text-align: left;
+}
+
+.tag-option:hover {
+  background: var(--bg-3);
+}
+
+.tag-option.applied {
+  background: var(--bg-3);
+  color: var(--txt);
+}
+
+.tag-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-name {
+  flex: 1;
+}
+
+.applied-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  font-size: 12px;
+  font-weight: 500;
+  margin: 2px;
+}
+
+.applied-tag button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: .7;
+  padding: 0;
+}
+
+.applied-tag button:hover {
+  opacity: 1;
+}

@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { adminApi, omnichannelApi } from '../services/api';
@@ -103,6 +103,7 @@ function Breadcrumb() {
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
+    '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 
@@ -205,6 +206,7 @@ export function TenantLayout() {
   const { user, token, logout, isLoggingOut } = useAuth();
   const toast = useToast();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -289,9 +291,12 @@ export function TenantLayout() {
         protocol: data.protocol ?? null,
         agentName: data.requestedBy.name,
         onAccept: () => {
+          navigate(`/omnichannel/conversations?conversation=${encodeURIComponent(data.conversationId)}`);
           void omnichannelApi.acceptHelp(data.conversationId).then(() => {
             toast.success(t('help.accept', { ns: 'omnichannel' }));
             void queryClient.invalidateQueries({ queryKey: ['conversation', data.conversationId, 'helpers'] });
+            void queryClient.invalidateQueries({ queryKey: ['conversation', data.conversationId] });
+            void queryClient.invalidateQueries({ queryKey: ['conversations'] });
             void queryClient.invalidateQueries({ queryKey: ['monitor'] });
           }).catch(() => {
             toast.error('Erro ao aceitar ajuda');
@@ -311,7 +316,7 @@ export function TenantLayout() {
     return () => {
       unsubHelpRequested();
     };
-  }, [queryClient, t, toast, user?.id]);
+  }, [navigate, queryClient, t, toast, user?.id]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

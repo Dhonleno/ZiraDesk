@@ -127,6 +127,13 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        <AdminNavItem to="/admin/conversation-tags" label={t('tenantAdmin.nav.conversationTags')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <path d="M1.8 2h5l6.2 6.2-4.8 4.8L2 6.8V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <circle cx="4.8" cy="4.8" r="1" fill="currentColor" />
+          </svg>
+        </AdminNavItem>
+
         <AdminNavItem to="/admin/settings" label={t('tenantAdmin.nav.settings')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
