@@ -7,7 +7,6 @@ interface OrganizationCardProps {
   org: CrmOrganization;
   selected: boolean;
   onClick: () => void;
-  onAssume?: () => void;
 }
 
 function relativeTime(dateStr: string | null | undefined): string {
@@ -23,7 +22,7 @@ function relativeTime(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-export function OrganizationCard({ org, selected, onClick, onAssume }: OrganizationCardProps) {
+export function OrganizationCard({ org, selected, onClick }: OrganizationCardProps) {
   const { t } = useTranslation('crm');
   const statusLabels: Record<string, string> = {
     lead:     t('organizations.status.lead'),
@@ -83,16 +82,7 @@ export function OrganizationCard({ org, selected, onClick, onAssume }: Organizat
           {/* Responsible + last contact */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
             <span style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {org.responsible_name ? (
-                org.responsible_name
-              ) : (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onAssume?.(); }}
-                  style={{ color: 'var(--teal)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font)', padding: 0 }}
-                >
-                  {t('organizations.actions.assume')}
-                </button>
-              )}
+              {org.responsible_name ?? t('organizations.fields.notInformed')}
             </span>
             <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0, marginLeft: 8 }}>
               {relativeTime(org.updated_at)}

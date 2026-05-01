@@ -115,19 +115,141 @@
   justify-content: center;
   width: 44px;
   height: 44px;
+  position: relative;
   border-radius: var(--r-lg);
+  border: 1px solid transparent;
   color: var(--txt-3);
-  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+  transform: translateY(0);
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.16s ease, height 0.16s ease;
 }
 
 .nav-item:hover {
   background: var(--bg-4);
-  color: var(--txt-2);
+  color: var(--txt);
+  border-color: var(--line-2);
+  transform: translateY(-1px);
 }
 
 .nav-item.active {
   background: var(--teal-dim);
   color: var(--teal);
+  border-color: rgba(0, 201, 167, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 201, 167, 0.12);
+}
+
+.nav-item.active::before {
+  height: 24px;
+  background: var(--teal);
+}
+
+.topbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  color: var(--txt-2);
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.topbar-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-dim);
+  flex-shrink: 0;
+}
+
+.topbar-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 188px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-3);
+  color: var(--txt-3);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.topbar-search-btn:hover {
+  background: var(--bg-4);
+  border-color: var(--line-2);
+  color: var(--txt);
+}
+
+.topbar-search-shortcut {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--txt-3);
+}
+
+.topbar-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--teal);
+  background: var(--teal);
+  color: #0E1A18;
+  white-space: nowrap;
+  font-family: var(--font);
+  box-shadow: 0 8px 20px rgba(0, 201, 167, 0.16);
+  transition: filter 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.topbar-primary-btn:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 201, 167, 0.2);
+}
+
+.topbar-inline-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 2px 0 0;
 }
 
 /* ── Topbar icon buttons ──────────────────────────────────────────────────── */

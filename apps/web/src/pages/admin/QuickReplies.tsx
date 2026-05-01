@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, type QuickReplyCategory } from '../../services/api';
@@ -23,6 +23,15 @@ const EMPTY_FORM: QuickReplyFormState = {
   category: 'other',
 };
 
+const QUICK_REPLY_VARIABLES = [
+  '{{nome}}',
+  '{{empresa}}',
+  '{{protocolo}}',
+  '{{agente}}',
+  '{{data}}',
+  '{{hora}}',
+] as const;
+
 interface QuickReplyFormState {
   title: string;
   shortcut: string;
@@ -45,6 +54,7 @@ export function QuickReplies() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<QuickReplyFormState>(EMPTY_FORM);
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const debouncedSearch = useDebounce(search, 250);
 
   const { data, isLoading } = useQuery({
@@ -113,6 +123,30 @@ export function QuickReplies() {
   function startNewReply() {
     setSelectedId(null);
     setForm(EMPTY_FORM);
+  }
+
+  function insertVariable(variable: string) {
+    const textarea = contentTextareaRef.current;
+    if (!textarea) {
+      setForm((prev) => ({ ...prev, content: `${prev.content}${variable}` }));
+      return;
+    }
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? start;
+
+    setForm((prev) => ({
+      ...prev,
+      content: `${prev.content.slice(0, start)}${variable}${prev.content.slice(end)}`,
+    }));
+
+    window.requestAnimationFrame(() => {
+      const node = contentTextareaRef.current;
+      if (!node) return;
+      const nextCursor = start + variable.length;
+      node.focus();
+      node.setSelectionRange(nextCursor, nextCursor);
+    });
   }
 
   function handleSubmit() {
@@ -318,6 +352,7 @@ export function QuickReplies() {
                   {t('tenantAdmin.quickReplies.content')}
                 </span>
                 <textarea
+                  ref={contentTextareaRef}
                   rows={10}
                   value={form.content}
                   placeholder={t('tenantAdmin.quickReplies.contentPlaceholder')}
@@ -336,6 +371,19 @@ export function QuickReplies() {
                     outline: 'none',
                   }}
                 />
+                <div className="variables-hint">
+                  <span>Variáveis disponíveis:</span>
+                  {QUICK_REPLY_VARIABLES.map((variable) => (
+                    <button
+                      key={variable}
+                      type="button"
+                      onClick={() => insertVariable(variable)}
+                      className="var-chip"
+                    >
+                      {variable}
+                    </button>
+                  ))}
+                </div>
               </label>
 
               <div className="flex flex-wrap items-center gap-3">

@@ -117,3 +117,30 @@
     background: var(--txt-3);
   }
 }
+
+.variables-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--txt-3);
+}
+
+.var-chip {
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  color: var(--teal);
+  font-size: 11px;
+  font-family: var(--mono);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.var-chip:hover {
+  background: var(--teal-dim);
+  border-color: rgba(0,201,167,.3);
+}

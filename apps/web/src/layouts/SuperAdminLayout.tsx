@@ -99,6 +99,7 @@ function NavItem({ to, end, title, children }: NavItemProps) {
       to={to}
       {...(end ? { end } : {})}
       title={title}
+      aria-label={title}
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
       {children}
@@ -126,7 +127,7 @@ export function SuperAdminLayout() {
         borderBottom: '1px solid var(--line)',
         zIndex: 10,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingRight: 16, borderRight: '1px solid var(--line)', marginRight: 6 }}>
           <Logo />
         </div>
 
@@ -135,15 +136,8 @@ export function SuperAdminLayout() {
         </div>
 
         {/* Super Admin badge */}
-        <span style={{
-          padding: '2px 8px',
-          borderRadius: 'var(--r)',
-          fontSize: 11,
-          fontWeight: 600,
-          background: 'var(--teal-dim)',
-          color: 'var(--teal)',
-          border: '1px solid var(--teal-glow)',
-        }}>
+        <span className="topbar-chip" title="Área global da plataforma">
+          <span className="topbar-chip-dot" aria-hidden />
           Super Admin
         </span>
 
@@ -190,15 +184,16 @@ export function SuperAdminLayout() {
         <nav
           aria-label="Navegação Super Admin"
           style={{
-            width: 68,
-            minWidth: 68,
+            width: 72,
+            minWidth: 72,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            padding: '10px 0',
-            gap: 4,
+            padding: '12px 0 10px',
+            gap: 6,
             background: 'var(--bg-2)',
             borderRight: '1px solid var(--line)',
+            boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
           }}
         >
           {/* Dashboard */}
@@ -237,6 +232,8 @@ export function SuperAdminLayout() {
               />
             </svg>
           </NavItem>
+
+          <div style={{ width: 28, height: 1, background: 'var(--line)', margin: '10px 0 6px', opacity: 0.8 }} />
 
           <div style={{ flex: 1 }} />
 

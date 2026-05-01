@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { InviteUserModal } from '../../components/admin/InviteUserModal';
 import { EditUserModal } from '../../components/admin/EditUserModal';
+import { ResetPasswordModal } from '../../components/admin/ResetPasswordModal';
 
 interface TenantUser {
   id: string;
@@ -69,7 +70,41 @@ function formatDate(iso: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(iso));
 }
 
-const ROLE_TABS = ['all', 'admin', 'agent', 'viewer'] as const;
+const ROLE_TABS = ['all', 'owner', 'admin', 'agent', 'viewer'] as const;
+const STATUS_TABS = ['all', 'active', 'inactive'] as const;
+
+type RoleFilter = (typeof ROLE_TABS)[number];
+type StatusFilter = (typeof STATUS_TABS)[number];
+
+function FilterTabs<T extends string>({
+  tabs,
+  active,
+  onChange,
+  labelFn,
+}: {
+  tabs: readonly T[];
+  active: T;
+  onChange: (v: T) => void;
+  labelFn: (v: T) => string;
+}) {
+  return (
+    <div className="flex gap-1" style={{ background: 'var(--bg-2)', borderRadius: '0.5rem', padding: '3px' }}>
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          onClick={() => onChange(tab)}
+          className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+          style={{
+            background: active === tab ? 'var(--bg-4)' : 'transparent',
+            color: active === tab ? 'var(--txt)' : 'var(--txt-2)',
+          }}
+        >
+          {labelFn(tab)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function Users() {
   const { t } = useTranslation('admin');
@@ -77,21 +112,32 @@ export function Users() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [page, setPage] = useState(1);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<TenantUser | null>(null);
+  const [resetUser, setResetUser] = useState<TenantUser | null>(null);
 
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'users', debouncedSearch, roleFilter],
+    queryKey: ['admin', 'users', debouncedSearch, roleFilter, statusFilter, page],
     queryFn: () => {
-      const params: Parameters<typeof adminApi.listUsers>[0] = {};
+      const params: Record<string, string | number> = { page, per_page: 20 };
       if (debouncedSearch) params.search = debouncedSearch;
       if (roleFilter !== 'all') params.role = roleFilter;
-      return adminApi.listUsers(params);
+      if (statusFilter !== 'all') params.status = statusFilter;
+      return adminApi.listUsers(params as Parameters<typeof adminApi.listUsers>[0]);
     },
   });
+
+  function resetFilters(changes: Partial<{ role: RoleFilter; status: StatusFilter; search: string }>) {
+    setPage(1);
+    if ('role' in changes) setRoleFilter(changes.role!);
+    if ('status' in changes) setStatusFilter(changes.status!);
+    if ('search' in changes) setSearch(changes.search!);
+  }
 
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => adminApi.deleteUser(id),
@@ -104,21 +150,39 @@ export function Users() {
     },
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => adminApi.updateUser(id, { status: 'active' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success(t('tenantAdmin.users.messages.reactivated'));
+    },
+    onError: () => {
+      toast.error(t('tenantAdmin.common.errorSave'));
+    },
+  });
+
   const roleLabel = (role: string) => {
     const map: Record<string, string> = {
-      owner: t('tenantAdmin.users.roles.owner'),
-      admin: t('tenantAdmin.users.roles.admin'),
-      agent: t('tenantAdmin.users.roles.agent'),
+      all:    t('tenantAdmin.common.all'),
+      owner:  t('tenantAdmin.users.roles.owner'),
+      admin:  t('tenantAdmin.users.roles.admin'),
+      agent:  t('tenantAdmin.users.roles.agent'),
       viewer: t('tenantAdmin.users.roles.viewer'),
     };
     return map[role] ?? role;
   };
 
   const statusLabel = (status: string) => {
-    return status === 'active'
-      ? t('tenantAdmin.users.status.active')
-      : t('tenantAdmin.users.status.inactive');
+    const map: Record<string, string> = {
+      all:      t('tenantAdmin.common.all'),
+      active:   t('tenantAdmin.users.status.active'),
+      inactive: t('tenantAdmin.users.status.inactive'),
+    };
+    return map[status] ?? status;
   };
+
+  const meta = data?.meta;
+  const users: TenantUser[] = data?.data ?? [];
 
   const TABLE_HEADERS = [
     t('tenantAdmin.users.fields.name'),
@@ -130,14 +194,15 @@ export function Users() {
   ];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-5 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
             {t('tenantAdmin.users.title')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-            {t('tenantAdmin.users.subtitle')}
+            {meta ? `${meta.total} ${meta.total === 1 ? 'membro' : 'membros'} no total` : t('tenantAdmin.users.subtitle')}
           </p>
         </div>
         <Button onClick={() => setInviteOpen(true)}>
@@ -149,36 +214,32 @@ export function Users() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="w-full sm:w-72">
-          <Input
-            placeholder={t('tenantAdmin.users.search')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="w-full sm:w-72">
+            <Input
+              placeholder={t('tenantAdmin.users.search')}
+              value={search}
+              onChange={(e) => resetFilters({ search: e.target.value })}
+            />
+          </div>
+          <FilterTabs
+            tabs={ROLE_TABS}
+            active={roleFilter}
+            onChange={(v) => resetFilters({ role: v })}
+            labelFn={roleLabel}
           />
-        </div>
-        <div className="flex gap-1" style={{ background: 'var(--bg-2)', borderRadius: '0.5rem', padding: '3px' }}>
-          {ROLE_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setRoleFilter(tab)}
-              className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                background: roleFilter === tab ? 'var(--bg-4)' : 'transparent',
-                color: roleFilter === tab ? 'var(--txt)' : 'var(--txt-2)',
-              }}
-            >
-              {tab === 'all' ? t('tenantAdmin.common.all') : roleLabel(tab)}
-            </button>
-          ))}
+          <FilterTabs
+            tabs={STATUS_TABS}
+            active={statusFilter}
+            onChange={(v) => resetFilters({ status: v })}
+            labelFn={statusLabel}
+          />
         </div>
       </div>
 
       {/* Table */}
-      <div
-        className="overflow-hidden rounded-xl"
-        style={{ border: '1px solid var(--line)' }}
-      >
+      <div className="overflow-hidden rounded-xl" style={{ border: '1px solid var(--line)' }}>
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--line)' }}>
@@ -204,10 +265,14 @@ export function Users() {
                     ))}
                   </tr>
                 ))
-              : (data?.data ?? []).map((user: TenantUser) => (
+              : users.map((user) => (
                   <tr
                     key={user.id}
-                    style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg)' }}
+                    style={{
+                      borderBottom: '1px solid var(--line)',
+                      background: 'var(--bg)',
+                      opacity: user.status === 'inactive' ? 0.65 : 1,
+                    }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg)')}
                   >
@@ -238,57 +303,121 @@ export function Users() {
                       {formatDate(user.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        {user.role !== 'owner' && (
-                          <>
-                            <button
-                              onClick={() => setEditUser(user)}
-                              className="rounded px-2 py-1 text-xs transition-colors"
-                              style={{ color: 'var(--txt-2)', background: 'transparent' }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'var(--bg-4)';
-                                e.currentTarget.style.color = 'var(--txt)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                                e.currentTarget.style.color = 'var(--txt-2)';
-                              }}
-                            >
-                              {t('tenantAdmin.common.edit')}
-                            </button>
-                            {user.status === 'active' && (
-                              <button
+                      {user.role !== 'owner' && (
+                        <div className="flex items-center justify-end gap-1">
+                          {user.status === 'active' ? (
+                            <>
+                              <ActionButton onClick={() => setEditUser(user)}>
+                                {t('tenantAdmin.common.edit')}
+                              </ActionButton>
+                              <ActionButton onClick={() => setResetUser(user)} color="var(--txt-2)">
+                                {t('tenantAdmin.users.resetPassword')}
+                              </ActionButton>
+                              <ActionButton
                                 onClick={() => deactivateMutation.mutate(user.id)}
-                                className="rounded px-2 py-1 text-xs transition-colors"
-                                style={{ color: 'var(--red)', background: 'transparent' }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'var(--red-dim)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'transparent';
-                                }}
+                                color="var(--red)"
+                                hoverBg="var(--red-dim)"
                               >
                                 {t('tenantAdmin.common.deactivate')}
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                              </ActionButton>
+                            </>
+                          ) : (
+                            <ActionButton
+                              onClick={() => reactivateMutation.mutate(user.id)}
+                              color="var(--green)"
+                              hoverBg="var(--green-dim)"
+                            >
+                              {t('tenantAdmin.common.reactivate')}
+                            </ActionButton>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
           </tbody>
         </table>
 
-        {!isLoading && (data?.data ?? []).length === 0 && (
+        {!isLoading && users.length === 0 && (
           <div className="py-12 text-center text-sm" style={{ color: 'var(--txt-3)' }}>
             {t('tenantAdmin.users.noUsers')}
           </div>
         )}
       </div>
 
+      {/* Pagination */}
+      {meta && meta.total_pages > 1 && (
+        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--txt-2)' }}>
+          <span>
+            {((page - 1) * 20) + 1}–{Math.min(page * 20, meta.total)} de {meta.total}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 1}
+              className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--line)',
+                color: page === 1 ? 'var(--txt-3)' : 'var(--txt)',
+                cursor: page === 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              ← Anterior
+            </button>
+            <span className="flex items-center px-2 text-xs">
+              Página {page} de {meta.total_pages}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page === meta.total_pages}
+              className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--line)',
+                color: page === meta.total_pages ? 'var(--txt-3)' : 'var(--txt)',
+                cursor: page === meta.total_pages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Próxima →
+            </button>
+          </div>
+        </div>
+      )}
+
       <InviteUserModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
       <EditUserModal open={!!editUser} onClose={() => setEditUser(null)} user={editUser} />
+      <ResetPasswordModal open={!!resetUser} onClose={() => setResetUser(null)} user={resetUser} />
     </div>
+  );
+}
+
+function ActionButton({
+  onClick,
+  color = 'var(--txt-2)',
+  hoverBg = 'var(--bg-4)',
+  children,
+}: {
+  onClick: () => void;
+  color?: string;
+  hoverBg?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="rounded px-2 py-1 text-xs transition-colors"
+      style={{ color, background: 'transparent' }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = hoverBg;
+        if (color === 'var(--txt-2)') e.currentTarget.style.color = 'var(--txt)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        if (color === 'var(--txt-2)') e.currentTarget.style.color = 'var(--txt-2)';
+      }}
+    >
+      {children}
+    </button>
   );
 }
