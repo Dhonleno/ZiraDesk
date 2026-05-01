@@ -8,6 +8,7 @@ import { onboardingRoutes } from './onboarding/onboarding.routes.js';
 import { businessHoursRoutes } from './business-hours/business-hours.routes.js';
 import { botRoutes } from './bot/bot.routes.js';
 import { adminAutoAssignRoutes } from './auto-assign/index.js';
+import { adminPauseReasonsRoutes } from './pause-reasons/index.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -16,6 +17,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(businessHoursRoutes, { prefix: '/business-hours' });
   await app.register(botRoutes, { prefix: '/bot' });
   await app.register(adminAutoAssignRoutes);
+  await app.register(adminPauseReasonsRoutes);
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);

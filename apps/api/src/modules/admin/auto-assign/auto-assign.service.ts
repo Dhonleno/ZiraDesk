@@ -8,6 +8,10 @@ interface AgentRow {
   last_assigned_at: Date;
   active_conversations: number;
   is_available: boolean;
+  status: string;
+  pause_reason: string | null;
+  pause_started_at: Date | null;
+  pause_notes: string | null;
   created_at: Date;
   name: string;
   email: string;
@@ -97,6 +101,10 @@ export async function getAgents(tenantId: string, schemaName?: string): Promise<
        aa.last_assigned_at,
        aa.active_conversations,
        aa.is_available,
+       aa.status,
+       aa.pause_reason,
+       aa.pause_started_at,
+       aa.pause_notes,
        aa.created_at,
        u.name,
        u.email,
@@ -192,13 +200,33 @@ export async function toggleAgentAvailability(
   if (!userRows[0]) throw new NotFoundError('Agente nao encontrado ou inativo');
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO ${assignmentsRef} (user_id, is_available)
-     VALUES ($1::uuid, $2::boolean)
+    `INSERT INTO ${assignmentsRef} (user_id, is_available, status)
+     VALUES ($1::uuid, $2::boolean, $3::text)
      ON CONFLICT (user_id)
      DO UPDATE SET is_available = EXCLUDED.is_available`,
     userId,
     data.is_available,
+    data.is_available ? 'online' : 'offline',
   );
+
+  if (data.is_available) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${assignmentsRef}
+       SET status = 'online',
+           pause_reason = NULL,
+           pause_started_at = NULL,
+           pause_notes = NULL
+       WHERE user_id = $1::uuid`,
+      userId,
+    );
+  } else {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${assignmentsRef}
+       SET status = CASE WHEN status = 'paused' THEN 'paused' ELSE 'offline' END
+       WHERE user_id = $1::uuid`,
+      userId,
+    );
+  }
 
   await syncActiveConversations(resolvedSchemaName);
 
@@ -208,6 +236,10 @@ export async function toggleAgentAvailability(
        aa.last_assigned_at,
        aa.active_conversations,
        aa.is_available,
+       aa.status,
+       aa.pause_reason,
+       aa.pause_started_at,
+       aa.pause_notes,
        aa.created_at,
        u.name,
        u.email,

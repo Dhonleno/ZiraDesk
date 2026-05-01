@@ -8,7 +8,6 @@ import { decryptCredentials } from '../../utils/crypto.js';
 import {
   ensureBotInfrastructure,
   processBotMessage,
-  updateConversationBotStage,
 } from '../admin/bot/bot.service.js';
 import { isWithinBusinessHours } from '../admin/business-hours/business-hours.service.js';
 import {
@@ -462,33 +461,14 @@ async function processIncomingMessage(
       botMessageId = botSavedMessage.id;
       botMessageContent = botResponse.text;
 
-      if (botResponse.type === 'menu') {
-        await updateConversationBotStage(conversationId, 'waiting_choice', null, tx);
-        await tx.$executeRawUnsafe(
-          `UPDATE conversations
-           SET status = 'bot',
-               last_message = $1,
-               last_message_at = NOW()
-           WHERE id = $2::uuid`,
-          botResponse.text.slice(0, 255),
-          conversationId,
-        );
-      } else if (botResponse.type === 'choice') {
-        await updateConversationBotStage(conversationId, 'done', botResponse.option.tag, tx);
+      if (botResponse.type === 'choice') {
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET status = 'open',
                last_message = $1,
-               last_message_at = NOW(),
-               metadata = COALESCE(metadata, '{}'::jsonb)
-                 || jsonb_build_object(
-                   'bot_department', $2::text,
-                   'bot_tag', $3::text
-                 )
-           WHERE id = $4::uuid`,
+               last_message_at = NOW()
+           WHERE id = $2::uuid`,
           botResponse.text.slice(0, 255),
-          botResponse.option.label,
-          botResponse.option.tag ?? '',
           conversationId,
         );
       } else {

@@ -27,6 +27,7 @@
       "businessHours": "Horario de atención",
       "bot": "Bot de atención",
       "autoAssign": "Distribución Automática",
+      "pauseReasons": "Motivos de Pausa",
       "quickReplies": "Respuestas Rápidas",
       "settings": "Configuración"
     },
@@ -51,6 +52,45 @@
         "saved": "Configuración guardada",
         "reset": "Cola reiniciada",
         "autoAssigned": "Conversación asignada automáticamente a {{name}}"
+      }
+    },
+    "pause": {
+      "title": "Iniciar pausa",
+      "selectReason": "Selecciona el motivo de la pausa",
+      "notes": "Observación (opcional)",
+      "start": "Iniciar pausa",
+      "end": "Volver a Online",
+      "status": {
+        "online": "Online",
+        "paused": "En pausa",
+        "offline": "Offline"
+      },
+      "reasons": {
+        "other": "Otro"
+      },
+      "supervisor": {
+        "pausedAgents": "Agentes en pausa",
+        "noPauses": "Ningún agente en pausa"
+      },
+      "messages": {
+        "started": "Pausa iniciada"
+      }
+    },
+    "pauseReasons": {
+      "title": "Motivos de Pausa",
+      "subtitle": "Configura los motivos mostrados en el modal de pausa",
+      "new": "Nuevo motivo",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "fields": {
+        "label": "Etiqueta",
+        "icon": "Icono",
+        "sort": "Orden"
+      },
+      "messages": {
+        "created": "Motivo creado",
+        "updated": "Motivo actualizado",
+        "deactivated": "Motivo desactivado"
       }
     },
     "settings": {
@@ -109,6 +149,16 @@
       "noOptions": "No hay opciones registradas",
       "noTag": "sin tag",
       "emptyPreview": "Configura el mensaje y las opciones para ver la vista previa",
+      "submenu": "Tiene submenú",
+      "submenuGreeting": "Mensaje de introducción del submenú",
+      "addSubOption": "Agregar subopción",
+      "enableSubmenu": "Activar submenú",
+      "expand": "Ver submenú",
+      "collapse": "Ocultar submenú",
+      "leaf": "Opción final",
+      "depth": "Nivel {{n}}",
+      "parentOption": "Opción padre",
+      "noSubmenuGreeting": "Sin mensaje de introducción",
       "option": {
         "number": "Número",
         "label": "Label",

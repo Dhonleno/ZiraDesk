@@ -224,6 +224,15 @@
 .status-dot.busy,
 .dot.busy { background: var(--amber); }
 
+.status-dot.paused,
+.dot.paused {
+  background: var(--amber);
+  animation: zd-pulse-dot 2s infinite;
+}
+
+.status-dot.offline,
+.dot.offline { background: var(--txt-3); }
+
 .status-menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -253,6 +262,66 @@
 }
 
 .status-menu button:hover { background: var(--bg-3); }
+
+.pause-reasons-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pause-reason-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  background: var(--bg-3);
+  color: var(--txt-2);
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.pause-reason-btn:hover {
+  border-color: var(--amber);
+  color: var(--txt);
+}
+
+.pause-reason-btn.active {
+  border-color: var(--amber);
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.pause-icon { font-size: 22px; }
+
+.pause-notes {
+  width: 100%;
+  height: 70px;
+  resize: none;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.pause-notes:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-dim);
+}
+
+@keyframes zd-pulse-dot {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
 
 .topbar-search-btn {
   display: inline-flex;

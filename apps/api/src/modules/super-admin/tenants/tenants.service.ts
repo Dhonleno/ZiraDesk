@@ -48,6 +48,10 @@ async function createTenantTables(schemaName: string): Promise<void> {
       last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       active_conversations INTEGER NOT NULL DEFAULT 0,
       is_available BOOLEAN NOT NULL DEFAULT true,
+      status VARCHAR(20) NOT NULL DEFAULT 'online',
+      pause_reason VARCHAR(100),
+      pause_started_at TIMESTAMPTZ,
+      pause_notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
@@ -59,6 +63,41 @@ async function createTenantTables(schemaName: string): Promise<void> {
     WHERE status = 'active'
       AND role IN ('owner', 'admin', 'agent')
     ON CONFLICT (user_id) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".pause_reasons (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      label VARCHAR(100) NOT NULL UNIQUE,
+      icon VARCHAR(10) NOT NULL DEFAULT '⏸️',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".pause_reasons (label, icon, sort_order)
+    VALUES
+      ('Almoço', '🍽️', 1),
+      ('Banheiro', '🚻', 2),
+      ('Reunião', '📋', 3),
+      ('Intervalo', '☕', 4),
+      ('Treinamento', '📚', 5),
+      ('Outro', '⏸️', 99)
+    ON CONFLICT (label) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_pause_history (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
+      pause_reason VARCHAR(100),
+      started_at TIMESTAMPTZ NOT NULL,
+      ended_at TIMESTAMPTZ,
+      duration_seconds INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -179,10 +218,26 @@ async function createTenantTables(schemaName: string): Promise<void> {
       number      INTEGER NOT NULL,
       label       VARCHAR(100) NOT NULL,
       tag         VARCHAR(50),
-      response    TEXT NOT NULL,
+      response    TEXT,
+      has_submenu BOOLEAN NOT NULL DEFAULT false,
+      submenu_greeting TEXT,
+      parent_option_id UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
       sort_order  INTEGER DEFAULT 0,
-      created_at  TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(bot_menu_id, number)
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_bot_options_parent"
+    ON "${schemaName}".bot_options(parent_option_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX "${schemaName}_idx_bot_options_unique_parent_number"
+    ON "${schemaName}".bot_options(
+      bot_menu_id,
+      COALESCE(parent_option_id, '00000000-0000-0000-0000-000000000000'::uuid),
+      number
     )
   `);
 

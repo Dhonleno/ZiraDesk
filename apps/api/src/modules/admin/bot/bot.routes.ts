@@ -4,6 +4,7 @@ import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   createBotOptionSchema,
+  createBotSubOptionSchema,
   reorderBotOptionsSchema,
   updateBotMenuSchema,
   updateBotOptionSchema,
@@ -12,8 +13,10 @@ import {
   ConflictError,
   NotFoundError,
   addOption,
+  addSubOption,
   deleteOption,
   getMenu,
+  getOptionWithChildren,
   reorderOptions,
   updateMenu,
   updateOption,
@@ -55,6 +58,41 @@ export async function botRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof ConflictError) {
         return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { parentId: string } }>('/options/:parentId/sub', { preHandler: guard }, async (request, reply) => {
+    const parsed = createBotSubOptionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const data = await addSubOption(request.params.parentId, parsed.data);
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/options/:id', { preHandler: guard }, async (request, reply) => {
+    try {
+      const data = await getOptionWithChildren(request.params.id);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }

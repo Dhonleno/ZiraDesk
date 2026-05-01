@@ -37,6 +37,8 @@ export async function ensureAgentAssignmentsInfrastructure(
 ): Promise<void> {
   const usersRef = tableRef(schemaName, 'users');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
+  const pauseReasonsRef = tableRef(schemaName, 'pause_reasons');
+  const pauseHistoryRef = tableRef(schemaName, 'agent_pause_history');
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${assignmentsRef} (
@@ -45,8 +47,20 @@ export async function ensureAgentAssignmentsInfrastructure(
       last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       active_conversations INTEGER NOT NULL DEFAULT 0,
       is_available BOOLEAN NOT NULL DEFAULT true,
+      status VARCHAR(20) NOT NULL DEFAULT 'online',
+      pause_reason VARCHAR(100),
+      pause_started_at TIMESTAMPTZ,
+      pause_notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${assignmentsRef}
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'online',
+    ADD COLUMN IF NOT EXISTS pause_reason VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS pause_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS pause_notes TEXT
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -56,6 +70,47 @@ export async function ensureAgentAssignmentsInfrastructure(
     WHERE status = 'active'
       AND role IN ('owner', 'admin', 'agent')
     ON CONFLICT (user_id) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${assignmentsRef}
+    SET status = CASE WHEN COALESCE(is_available, false) THEN 'online' ELSE 'offline' END
+    WHERE status IS NULL OR status = ''
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${pauseReasonsRef} (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      label VARCHAR(100) NOT NULL UNIQUE,
+      icon VARCHAR(10) NOT NULL DEFAULT '⏸️',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${pauseReasonsRef} (label, icon, sort_order)
+    VALUES
+      ('Almoço', '🍽️', 1),
+      ('Banheiro', '🚻', 2),
+      ('Reunião', '📋', 3),
+      ('Intervalo', '☕', 4),
+      ('Treinamento', '📚', 5),
+      ('Outro', '⏸️', 99)
+    ON CONFLICT (label) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${pauseHistoryRef} (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES ${usersRef}(id) ON DELETE SET NULL,
+      pause_reason VARCHAR(100),
+      started_at TIMESTAMPTZ NOT NULL,
+      ended_at TIMESTAMPTZ,
+      duration_seconds INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `);
 }
 
@@ -74,6 +129,7 @@ async function resolveAgentForAssignment(
        JOIN ${usersRef} u ON u.id = aa.user_id
        WHERE aa.user_id = $1::uuid
          AND aa.is_available = true
+         AND aa.status = 'online'
          AND u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
        LIMIT 1`,
@@ -88,6 +144,7 @@ async function resolveAgentForAssignment(
      FROM ${assignmentsRef} aa
      JOIN ${usersRef} u ON u.id = aa.user_id
      WHERE aa.is_available = true
+       AND aa.status = 'online'
        AND u.status = 'active'
        AND u.role IN ('owner', 'admin', 'agent')
      ORDER BY aa.last_assigned_at ASC

@@ -8,6 +8,9 @@ import { connectSocket, disconnectSocket } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
+import { useAgentStatus } from '../hooks/useAgentStatus';
+import { PauseModal } from '../components/omnichannel/PauseModal';
+import { useToast } from '../stores/toast.store';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -97,6 +100,7 @@ function Breadcrumb() {
     '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
     '/admin/bot': t('tenantAdmin.nav.bot'),
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
+    '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
@@ -154,15 +158,51 @@ function NavItem({ to, end, title, children }: NavItemProps) {
   );
 }
 
+function formatPauseDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function usePauseDuration(startedAt: string | null): string {
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    if (!startedAt) {
+      setDuration(0);
+      return;
+    }
+
+    const update = () => {
+      const diff = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+      setDuration(Math.max(0, diff));
+    };
+
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [startedAt]);
+
+  return formatPauseDuration(duration);
+}
+
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { user, token, logout, isLoggingOut } = useAuth();
+  const toast = useToast();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(true);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
   const canToggleAvailability =
@@ -175,6 +215,16 @@ export function TenantLayout() {
         : user?.role === 'agent'
           ? 'Agente'
           : 'Visualização';
+  const {
+    status: agentStatus,
+    pauseReason,
+    pauseStartedAt,
+    startPause,
+    endPause,
+    isStartingPause,
+    isEndingPause,
+  } = useAgentStatus(canToggleAvailability);
+  const pauseDuration = usePauseDuration(pauseStartedAt);
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
@@ -183,18 +233,16 @@ export function TenantLayout() {
     enabled: canAccessAdminData,
   });
 
-  const availabilityMutation = useMutation({
+  const setAvailabilityMutation = useMutation({
     mutationFn: (nextAvailability: boolean) =>
       adminApi.autoAssign.setAvailability({ is_available: nextAvailability }),
-    onSuccess: async (availability) => {
-      setIsAvailable(availability.is_available);
-      try {
-        localStorage.setItem('zd-availability', availability.is_available ? '1' : '0');
-      } catch {
-        // ignore storage errors
-      }
+    onSuccess: async () => {
       setShowStatusMenu(false);
+      await queryClient.invalidateQueries({ queryKey: ['agent-status'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'auto-assign'] });
+    },
+    onError: () => {
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -228,17 +276,37 @@ export function TenantLayout() {
     return () => window.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem('zd-availability');
-      if (cached === '1') setIsAvailable(true);
-      if (cached === '0') setIsAvailable(false);
-    } catch {
-      // ignore storage errors
-    }
-  }, []);
-
   const initial = user?.name.charAt(0).toUpperCase() ?? '?';
+  const isStatusBusy = setAvailabilityMutation.isPending || isStartingPause || isEndingPause;
+  const statusLabel =
+    agentStatus === 'paused'
+      ? `${t('tenantAdmin.pause.status.paused')} - ${pauseReason ?? t('tenantAdmin.pause.reasons.other')}${pauseStartedAt ? ` - ${pauseDuration}` : ''}`
+      : agentStatus === 'offline'
+        ? t('tenantAdmin.pause.status.offline')
+        : t('tenantAdmin.pause.status.online');
+
+  const handleResumeOnline = async () => {
+    try {
+      if (agentStatus === 'paused') {
+        await endPause();
+      } else {
+        await setAvailabilityMutation.mutateAsync(true);
+      }
+      setShowStatusMenu(false);
+    } catch {
+      toast.error(t('tenantAdmin.common.errorSave'));
+    }
+  };
+
+  const handleStartPause = async (payload: { reason: string; notes?: string }) => {
+    try {
+      await startPause(payload);
+      setShowPauseModal(false);
+      toast.success(t('tenantAdmin.pause.messages.started'));
+    } catch {
+      toast.error(t('tenantAdmin.common.errorSave'));
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)' }}>
@@ -274,12 +342,10 @@ export function TenantLayout() {
                 className="status-dropdown"
                 onClick={() => setShowStatusMenu((current) => !current)}
                 title={`Perfil atual: ${roleLabel}`}
-                disabled={availabilityMutation.isPending}
+                disabled={isStatusBusy}
               >
-                <span className={`status-dot ${isAvailable ? 'online' : 'busy'}`} />
-                {isAvailable
-                  ? t('tenantAdmin.autoAssign.availability.online')
-                  : t('tenantAdmin.autoAssign.availability.busy')}
+                <span className={`status-dot ${agentStatus}`} />
+                {statusLabel}
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                   <path d="M3.5 5.5L7 9l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -287,20 +353,25 @@ export function TenantLayout() {
 
               {showStatusMenu && (
                 <div className="status-menu">
-                  <button
-                    type="button"
-                    onClick={() => availabilityMutation.mutate(true)}
-                    disabled={availabilityMutation.isPending}
-                  >
-                    <span className="dot online" /> {t('tenantAdmin.autoAssign.availability.online')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => availabilityMutation.mutate(false)}
-                    disabled={availabilityMutation.isPending}
-                  >
-                    <span className="dot busy" /> {t('tenantAdmin.autoAssign.availability.busy')}
-                  </button>
+                  {agentStatus !== 'online' && (
+                    <button type="button" onClick={() => void handleResumeOnline()} disabled={isStatusBusy}>
+                      <span className="dot online" />
+                      {t('tenantAdmin.pause.end')}
+                    </button>
+                  )}
+                  {agentStatus === 'online' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowStatusMenu(false);
+                        setShowPauseModal(true);
+                      }}
+                      disabled={isStatusBusy}
+                    >
+                      <span className="dot paused" />
+                      {t('tenantAdmin.pause.start')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -513,6 +584,12 @@ export function TenantLayout() {
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <PauseModal
+        open={showPauseModal}
+        onClose={() => setShowPauseModal(false)}
+        onConfirm={handleStartPause}
+        isSubmitting={isStartingPause}
+      />
       {canAccessAdminData ? <OnboardingChecklist /> : null}
     </div>
   );

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { adminApi, type AutoAssignAgent } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
+import { subscribeToEvent } from '../../services/socket';
 
 function formatRelative(dateIso: string, locale: string): string {
   const date = new Date(dateIso);
@@ -32,6 +33,18 @@ function roleLabel(role: string, t: (key: string) => string): string {
   return role;
 }
 
+function formatPauseAgo(startedAt: string, locale: string): string {
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+  const minutes = Math.floor(diffSeconds / 60);
+  if (minutes < 1) return '1min';
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  return formatter.format(-days, 'day');
+}
+
 export function AutoAssign() {
   const { t, i18n } = useTranslation('admin');
   const toast = useToast();
@@ -50,6 +63,20 @@ export function AutoAssign() {
     setAutoAssignEnabled(data.auto_assign);
     setAlgorithm(data.auto_assign_algorithm);
   }, [data]);
+
+  useEffect(() => {
+    const offPaused = subscribeToEvent<{ userId: string }>('agent:paused', () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auto-assign'] });
+    });
+    const offResumed = subscribeToEvent<{ userId: string }>('agent:resumed', () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'auto-assign'] });
+    });
+
+    return () => {
+      offPaused();
+      offResumed();
+    };
+  }, [queryClient]);
 
   const saveMutation = useMutation({
     mutationFn: () => adminApi.autoAssign.updateConfig({
@@ -88,6 +115,10 @@ export function AutoAssign() {
   });
 
   const agents = useMemo(() => data?.agents ?? [], [data]);
+  const pausedAgents = useMemo(
+    () => agents.filter((agent) => agent.status === 'paused' && agent.pause_started_at),
+    [agents],
+  );
 
   return (
     <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
@@ -156,8 +187,34 @@ export function AutoAssign() {
                     style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
+                      <p className="text-sm font-medium" style={{ color: 'var(--txt)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {agent.name} - {roleLabel(agent.role, t)}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            border: '1px solid var(--line-2)',
+                            background:
+                              agent.status === 'paused'
+                                ? 'var(--amber-dim)'
+                                : agent.status === 'offline'
+                                  ? 'var(--bg-4)'
+                                  : 'var(--green-dim)',
+                            color:
+                              agent.status === 'paused'
+                                ? 'var(--amber)'
+                                : agent.status === 'offline'
+                                  ? 'var(--txt-3)'
+                                  : 'var(--green)',
+                          }}
+                        >
+                          {agent.status === 'paused'
+                            ? t('tenantAdmin.pause.status.paused')
+                            : agent.status === 'offline'
+                              ? t('tenantAdmin.pause.status.offline')
+                              : t('tenantAdmin.pause.status.online')}
+                        </span>
                       </p>
                       <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
                         {t('tenantAdmin.autoAssign.activeConversations', { count: agent.active_conversations })}
@@ -166,6 +223,11 @@ export function AutoAssign() {
                           time: formatRelative(agent.last_assigned_at, i18n.language),
                         })}
                       </p>
+                      {agent.status === 'paused' && agent.pause_started_at && (
+                        <p className="text-xs" style={{ color: 'var(--amber)', marginTop: 2 }}>
+                          {(agent.pause_reason ?? t('tenantAdmin.pause.reasons.other'))} - {formatPauseAgo(agent.pause_started_at, i18n.language)}
+                        </p>
+                      )}
                     </div>
                     <input
                       type="checkbox"
@@ -182,6 +244,34 @@ export function AutoAssign() {
                   <p className="px-3 py-4 text-sm" style={{ color: 'var(--txt-3)' }}>
                     {t('tenantAdmin.common.noResults')}
                   </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
+                {t('tenantAdmin.pause.supervisor.pausedAgents')}
+              </p>
+              <div className="space-y-2 rounded-lg p-2" style={{ border: '1px solid var(--line)', background: 'var(--bg-3)' }}>
+                {pausedAgents.length === 0 ? (
+                  <p className="px-3 py-3 text-sm" style={{ color: 'var(--txt-3)' }}>
+                    {t('tenantAdmin.pause.supervisor.noPauses')}
+                  </p>
+                ) : (
+                  pausedAgents.map((agent) => (
+                    <div
+                      key={`paused-${agent.user_id}`}
+                      className="flex items-center justify-between rounded-md px-3 py-2"
+                      style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+                    >
+                      <span style={{ color: 'var(--txt)', fontSize: 13 }}>
+                        {agent.name}
+                      </span>
+                      <span style={{ color: 'var(--amber)', fontSize: 12 }}>
+                        {agent.pause_reason ?? t('tenantAdmin.pause.reasons.other')} - {agent.pause_started_at ? formatPauseAgo(agent.pause_started_at, i18n.language) : ''}
+                      </span>
+                    </div>
+                  ))
                 )}
               </div>
             </div>

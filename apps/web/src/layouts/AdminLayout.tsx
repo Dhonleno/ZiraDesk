@@ -101,6 +101,16 @@ export function AdminLayout() {
           </AdminNavItem>
         )}
 
+        {canManageUsers && (
+          <AdminNavItem to="/admin/pause-reasons" label={t('tenantAdmin.nav.pauseReasons')}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <rect x="4.2" y="3.2" width="2.1" height="8.6" rx="1" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="8.7" y="3.2" width="2.1" height="8.6" rx="1" stroke="currentColor" strokeWidth="1.3" />
+              <circle cx="7.5" cy="7.5" r="5.9" stroke="currentColor" strokeWidth="1.1" />
+            </svg>
+          </AdminNavItem>
+        )}
+
         <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

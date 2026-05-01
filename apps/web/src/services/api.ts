@@ -133,9 +133,13 @@ export interface BotOption {
   number: number;
   label: string;
   tag: string | null;
-  response: string;
+  response: string | null;
+  has_submenu: boolean;
+  submenu_greeting: string | null;
+  parent_option_id: string | null;
   sort_order: number;
   created_at: string;
+  children?: BotOption[];
 }
 
 export interface BotMenu {
@@ -153,7 +157,10 @@ export interface BotOptionPayload {
   number: number;
   label: string;
   tag?: string | null;
-  response: string;
+  response?: string | null;
+  has_submenu?: boolean;
+  submenu_greeting?: string | null;
+  parent_option_id?: string | null;
   sort_order?: number;
 }
 
@@ -162,6 +169,10 @@ export interface AutoAssignAgent {
   last_assigned_at: string;
   active_conversations: number;
   is_available: boolean;
+  status: 'online' | 'paused' | 'offline' | string;
+  pause_reason: string | null;
+  pause_started_at: string | null;
+  pause_notes: string | null;
   created_at: string;
   name: string;
   email: string;
@@ -173,6 +184,24 @@ export interface AutoAssignConfig {
   auto_assign: boolean;
   auto_assign_algorithm: 'round_robin';
   agents: AutoAssignAgent[];
+}
+
+export interface AgentPauseStatus {
+  status: 'online' | 'paused' | 'offline' | string;
+  pause_reason: string | null;
+  pause_started_at: string | null;
+  pause_notes: string | null;
+  duration_seconds: number;
+  is_available: boolean;
+}
+
+export interface PauseReason {
+  id: string;
+  label: string;
+  icon: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
 }
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
@@ -564,6 +593,19 @@ export const adminApi = {
       return res.data.data;
     },
 
+    addSubOption: async (parentId: string, data: BotOptionPayload): Promise<BotOption> => {
+      const res = await api.post<{ success: boolean; data: BotOption }>(
+        `/admin/bot/options/${parentId}/sub`,
+        data,
+      );
+      return res.data.data;
+    },
+
+    getOptionWithChildren: async (id: string): Promise<BotOption> => {
+      const res = await api.get<{ success: boolean; data: BotOption }>(`/admin/bot/options/${id}`);
+      return res.data.data;
+    },
+
     updateOption: async (id: string, data: Partial<BotOptionPayload>): Promise<BotOption> => {
       const res = await api.patch<{ success: boolean; data: BotOption }>(`/admin/bot/options/${id}`, data);
       return res.data.data;
@@ -573,6 +615,31 @@ export const adminApi = {
       const res = await api.delete<{ success: boolean; data: BotOption }>(`/admin/bot/options/${id}`, {
         data: {},
       });
+      return res.data.data;
+    },
+  },
+
+  pauseReasons: {
+    list: async (): Promise<PauseReason[]> => {
+      const res = await api.get<{ success: boolean; data: PauseReason[] }>('/admin/pause-reasons');
+      return res.data.data;
+    },
+
+    create: async (data: { label: string; icon?: string; sort_order?: number }): Promise<PauseReason> => {
+      const res = await api.post<{ success: boolean; data: PauseReason }>('/admin/pause-reasons', data);
+      return res.data.data;
+    },
+
+    update: async (
+      id: string,
+      data: Partial<{ label: string; icon: string; sort_order: number; is_active: boolean }>,
+    ): Promise<PauseReason> => {
+      const res = await api.patch<{ success: boolean; data: PauseReason }>(`/admin/pause-reasons/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<PauseReason> => {
+      const res = await api.delete<{ success: boolean; data: PauseReason }>(`/admin/pause-reasons/${id}`);
       return res.data.data;
     },
   },
@@ -949,6 +1016,23 @@ export const omnichannelApi = {
 
   setAvailability: async (data: { is_available: boolean }): Promise<AutoAssignAgent> => {
     const res = await api.put<{ success: boolean; data: AutoAssignAgent }>('/omnichannel/availability', data);
+    return res.data.data;
+  },
+};
+
+export const agentStatusApi = {
+  getStatus: async (): Promise<AgentPauseStatus> => {
+    const res = await api.get<{ success: boolean; data: AgentPauseStatus }>('/omnichannel/pause/status');
+    return res.data.data;
+  },
+
+  startPause: async (data: { reason: string; notes?: string }): Promise<AgentPauseStatus> => {
+    const res = await api.post<{ success: boolean; data: AgentPauseStatus }>('/omnichannel/pause', data);
+    return res.data.data;
+  },
+
+  endPause: async (): Promise<AgentPauseStatus> => {
+    const res = await api.delete<{ success: boolean; data: AgentPauseStatus }>('/omnichannel/pause');
     return res.data.data;
   },
 };

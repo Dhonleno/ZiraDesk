@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,11 +8,13 @@ import {
   type BotOptionPayload,
 } from '../../services/api';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../stores/toast.store';
 
 interface OptionModalProps {
   open: boolean;
   option?: BotOption | null;
+  parentOption?: BotOption | null;
   defaultSortOrder: number;
   onClose: () => void;
   onSubmit: (payload: BotOptionPayload) => void;
@@ -22,70 +24,87 @@ interface OptionModalProps {
 function buildPreview(menu: Pick<BotMenuData, 'greeting' | 'footer' | 'options'>) {
   const optionLines = menu.options
     .slice()
-    .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
+    .sort((a, b) => a.number - b.number)
     .map((option) => `${option.number}. ${option.label}`);
+
   return [menu.greeting, '', ...optionLines, '', menu.footer ?? ''].join('\n').trim();
 }
 
-function OptionModal({ open, option, defaultSortOrder, onClose, onSubmit, isSaving }: OptionModalProps) {
+function flattenOptions(options: BotOption[]): BotOption[] {
+  const list: BotOption[] = [];
+
+  const visit = (nodes: BotOption[]) => {
+    nodes
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
+      .forEach((node) => {
+        list.push(node);
+        if (node.children?.length) visit(node.children);
+      });
+  };
+
+  visit(options);
+  return list;
+}
+
+function OptionModal({
+  open,
+  option,
+  parentOption,
+  defaultSortOrder,
+  onClose,
+  onSubmit,
+  isSaving,
+}: OptionModalProps) {
   const { t } = useTranslation('admin');
   const [number, setNumber] = useState(1);
   const [label, setLabel] = useState('');
   const [tag, setTag] = useState('');
   const [response, setResponse] = useState('');
+  const [hasSubmenu, setHasSubmenu] = useState(false);
+  const [submenuGreeting, setSubmenuGreeting] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setNumber(option?.number ?? 1);
     setLabel(option?.label ?? '');
     setTag(option?.tag ?? '');
-    setResponse(option?.response ?? '');
+    setResponse(option?.response ?? 'Transferindo para um atendente. Aguarde...');
+    setHasSubmenu(option?.has_submenu ?? false);
+    setSubmenuGreeting(option?.submenu_greeting ?? '');
   }, [open, option]);
 
   if (!open) return null;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,.46)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 120,
-        padding: 16,
-      }}
-      onClick={onClose}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={option ? t('tenantAdmin.bot.editOption') : t('tenantAdmin.bot.addOption')}
+      maxWidth="md"
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit({
+          const payload: BotOptionPayload = {
             number,
             label,
             tag: tag.trim() || null,
-            response,
+            has_submenu: hasSubmenu,
+            submenu_greeting: hasSubmenu ? submenuGreeting : null,
+            response: hasSubmenu ? response || null : response,
             sort_order: option?.sort_order ?? defaultSortOrder,
-          });
+          };
+
+          onSubmit(payload);
         }}
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: 'min(520px, 100%)',
-          background: 'var(--bg-2)',
-          border: '1px solid var(--line-2)',
-          borderRadius: 'var(--r-lg)',
-          boxShadow: 'var(--shadow-pop)',
-          padding: 20,
-          display: 'grid',
-          gap: 14,
-        }}
+        style={{ display: 'grid', gap: 14 }}
       >
-        <div>
-          <h2 style={{ color: 'var(--txt)', fontSize: 18, fontWeight: 700, margin: 0 }}>
-            {option ? t('tenantAdmin.bot.editOption') : t('tenantAdmin.bot.addOption')}
-          </h2>
-        </div>
+        {parentOption ? (
+          <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 12 }}>
+            {t('tenantAdmin.bot.parentOption')}: <strong style={{ color: 'var(--txt)' }}>{parentOption.label}</strong>
+          </p>
+        ) : null}
 
         <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>
@@ -117,16 +136,47 @@ function OptionModal({ open, option, defaultSortOrder, onClose, onSubmit, isSavi
           <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{t('tenantAdmin.bot.option.tagHint')}</span>
         </label>
 
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={labelStyle}>{t('tenantAdmin.bot.option.response')}</span>
-          <textarea
-            value={response}
-            onChange={(event) => setResponse(event.target.value)}
-            rows={4}
-            style={textareaStyle}
-            required
+        <label
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            color: 'var(--txt)',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={hasSubmenu}
+            onChange={(event) => setHasSubmenu(event.target.checked)}
           />
+          {t('tenantAdmin.bot.submenu')}
         </label>
+
+        {hasSubmenu ? (
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={labelStyle}>{t('tenantAdmin.bot.submenuGreeting')}</span>
+            <textarea
+              value={submenuGreeting}
+              onChange={(event) => setSubmenuGreeting(event.target.value)}
+              rows={3}
+              style={textareaStyle}
+              required
+            />
+          </label>
+        ) : (
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={labelStyle}>{t('tenantAdmin.bot.option.response')}</span>
+            <textarea
+              value={response}
+              onChange={(event) => setResponse(event.target.value)}
+              rows={4}
+              style={textareaStyle}
+              required
+            />
+          </label>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -137,36 +187,164 @@ function OptionModal({ open, option, defaultSortOrder, onClose, onSubmit, isSavi
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
-const labelStyle: React.CSSProperties = {
-  color: 'var(--txt-2)',
-  fontSize: 13,
-  fontWeight: 600,
-};
+interface OptionNodeProps {
+  option: BotOption;
+  level: number;
+  expandedIds: Set<string>;
+  onToggleExpanded: (id: string) => void;
+  onAddSub: (option: BotOption) => void;
+  onEdit: (option: BotOption) => void;
+  onDelete: (option: BotOption) => void;
+  onEnableSubmenu: (option: BotOption) => void;
+}
 
-const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-3)',
-  border: '1px solid var(--line-2)',
-  color: 'var(--txt)',
-  height: 40,
-  borderRadius: 'var(--r)',
-  padding: '0 12px',
-  fontSize: 13,
-  width: '100%',
-  outline: 'none',
-};
+function OptionNode({
+  option,
+  level,
+  expandedIds,
+  onToggleExpanded,
+  onAddSub,
+  onEdit,
+  onDelete,
+  onEnableSubmenu,
+}: OptionNodeProps) {
+  const { t } = useTranslation('admin');
+  const hasChildren = (option.children?.length ?? 0) > 0;
+  const isExpanded = expandedIds.has(option.id);
+  const indent = level * 18;
 
-const textareaStyle: React.CSSProperties = {
-  ...inputStyle,
-  height: 'auto',
-  minHeight: 96,
-  padding: 12,
-  resize: 'vertical',
-  lineHeight: 1.5,
-};
+  return (
+    <div style={{ marginLeft: indent }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 12px',
+          borderBottom: '1px solid var(--line)',
+          background: 'var(--bg-2)',
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ color: 'var(--txt)', fontSize: 13 }}>
+              {option.number}. {option.label}
+            </strong>
+
+            <span
+              style={{
+                fontSize: 10,
+                color: option.has_submenu ? 'var(--amber)' : 'var(--txt-3)',
+                background: option.has_submenu ? 'var(--amber-dim)' : 'var(--bg-4)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--r-pill)',
+                padding: '1px 7px',
+              }}
+            >
+              {option.has_submenu
+                ? `${t('tenantAdmin.bot.submenu')} (${option.children?.length ?? 0})`
+                : t('tenantAdmin.bot.leaf')}
+            </span>
+
+            <span
+              style={{
+                fontSize: 10,
+                color: 'var(--txt-3)',
+                background: 'var(--bg-4)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--r-pill)',
+                padding: '1px 7px',
+              }}
+            >
+              {t('tenantAdmin.bot.depth', { n: level + 1 })}
+            </span>
+
+            {option.tag ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: 'var(--blue)',
+                  background: 'var(--blue-dim)',
+                  border: '1px solid rgba(96,165,250,.2)',
+                  borderRadius: 'var(--r-pill)',
+                  padding: '1px 7px',
+                }}
+              >
+                tag: {option.tag}
+              </span>
+            ) : null}
+          </div>
+
+          {option.has_submenu ? (
+            <p style={{ color: 'var(--txt-3)', fontSize: 12, margin: '5px 0 0' }}>
+              {option.submenu_greeting || t('tenantAdmin.bot.noSubmenuGreeting')}
+            </p>
+          ) : (
+            <p
+              style={{
+                color: 'var(--txt-3)',
+                fontSize: 12,
+                margin: '5px 0 0',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {option.response || '-'}
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {option.has_submenu || hasChildren ? (
+            <button type="button" onClick={() => onToggleExpanded(option.id)} style={iconButtonStyle}>
+              {isExpanded ? t('tenantAdmin.bot.collapse') : t('tenantAdmin.bot.expand')}
+            </button>
+          ) : (
+            <button type="button" onClick={() => onEnableSubmenu(option)} style={iconButtonStyle}>
+              {t('tenantAdmin.bot.enableSubmenu')}
+            </button>
+          )}
+          <button type="button" onClick={() => onAddSub(option)} style={iconButtonStyle}>
+            {t('tenantAdmin.bot.addSubOption')}
+          </button>
+          <button type="button" onClick={() => onEdit(option)} style={iconButtonStyle}>
+            {t('tenantAdmin.common.edit')}
+          </button>
+          <button type="button" onClick={() => onDelete(option)} style={{ ...iconButtonStyle, color: 'var(--red)' }}>
+            {t('tenantAdmin.common.remove')}
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && hasChildren ? (
+        <div style={{ borderLeft: '1px dashed var(--line-2)' }}>
+          {option.children!
+            .slice()
+            .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
+            .map((child) => (
+              <OptionNode
+                key={child.id}
+                option={child}
+                level={level + 1}
+                expandedIds={expandedIds}
+                onToggleExpanded={onToggleExpanded}
+                onAddSub={onAddSub}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onEnableSubmenu={onEnableSubmenu}
+              />
+            ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function BotMenu() {
   const { t } = useTranslation('admin');
@@ -177,7 +355,9 @@ export function BotMenu() {
   const [footer, setFooter] = useState('');
   const [invalidMsg, setInvalidMsg] = useState('');
   const [editingOption, setEditingOption] = useState<BotOption | null>(null);
+  const [parentForNewOption, setParentForNewOption] = useState<BotOption | null>(null);
   const [isOptionModalOpen, setIsOptionModalOpen] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const { data: menu, isLoading } = useQuery({
     queryKey: ['admin', 'bot'],
@@ -191,6 +371,13 @@ export function BotMenu() {
     setFooter(menu.footer ?? '');
     setInvalidMsg(menu.invalid_msg ?? '');
   }, [menu]);
+
+  const options = menu?.options ?? [];
+  const flattened = useMemo(() => flattenOptions(options), [options]);
+  const preview = useMemo(
+    () => buildPreview({ greeting, footer, options }),
+    [footer, greeting, options],
+  );
 
   const invalidateBot = () => {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'bot'] });
@@ -211,6 +398,24 @@ export function BotMenu() {
     onSuccess: () => {
       invalidateBot();
       setIsOptionModalOpen(false);
+      setParentForNewOption(null);
+      toast.success(t('tenantAdmin.bot.messages.optionAdded'));
+    },
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+  });
+
+  const addSubOptionMutation = useMutation({
+    mutationFn: ({ parentId, payload }: { parentId: string; payload: BotOptionPayload }) =>
+      adminApi.bot.addSubOption(parentId, payload),
+    onSuccess: (_, vars) => {
+      invalidateBot();
+      setIsOptionModalOpen(false);
+      setExpandedIds((current) => {
+        const next = new Set(current);
+        next.add(vars.parentId);
+        return next;
+      });
+      setParentForNewOption(null);
       toast.success(t('tenantAdmin.bot.messages.optionAdded'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
@@ -237,16 +442,6 @@ export function BotMenu() {
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
-  const options = menu?.options ?? [];
-  const preview = useMemo(
-    () => buildPreview({
-      greeting,
-      footer,
-      options,
-    }),
-    [footer, greeting, options],
-  );
-
   const saveMenu = () => {
     updateMenuMutation.mutate({
       is_active: isActive,
@@ -256,8 +451,39 @@ export function BotMenu() {
     });
   };
 
+  const handleOpenNewRoot = () => {
+    setEditingOption(null);
+    setParentForNewOption(null);
+    setIsOptionModalOpen(true);
+  };
+
+  const handleOpenNewSub = (parent: BotOption) => {
+    setEditingOption(null);
+    setParentForNewOption(parent);
+    setIsOptionModalOpen(true);
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      next.add(parent.id);
+      return next;
+    });
+  };
+
+  const handleEnableSubmenu = (option: BotOption) => {
+    updateOptionMutation.mutate({
+      id: option.id,
+      payload: {
+        has_submenu: true,
+        submenu_greeting:
+          option.submenu_greeting || `Voce selecionou *${option.label}*. Escolha uma opcao:`,
+      },
+    });
+  };
+
+  const isSavingOption =
+    addOptionMutation.isPending || addSubOptionMutation.isPending || updateOptionMutation.isPending;
+
   return (
-    <div style={{ padding: 24, maxWidth: 880, overflow: 'auto' }}>
+    <div style={{ padding: 24, maxWidth: 980, overflow: 'auto' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ color: 'var(--txt)', fontSize: 24, fontWeight: 700, margin: 0 }}>
           {t('tenantAdmin.bot.title')}
@@ -355,15 +581,7 @@ export function BotMenu() {
                 <h2 style={{ color: 'var(--txt)', fontSize: 15, fontWeight: 700, margin: 0 }}>
                   {t('tenantAdmin.bot.options')}
                 </h2>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setEditingOption(null);
-                    setIsOptionModalOpen(true);
-                  }}
-                >
+                <Button type="button" size="sm" variant="secondary" onClick={handleOpenNewRoot}>
                   {t('tenantAdmin.bot.addOption')}
                 </Button>
               </div>
@@ -377,63 +595,28 @@ export function BotMenu() {
                   .slice()
                   .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
                   .map((option) => (
-                    <div
+                    <OptionNode
                       key={option.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '12px 14px',
-                        borderBottom: '1px solid var(--line)',
+                      option={option}
+                      level={0}
+                      expandedIds={expandedIds}
+                      onToggleExpanded={(id) =>
+                        setExpandedIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(id)) next.delete(id);
+                          else next.add(id);
+                          return next;
+                        })
+                      }
+                      onAddSub={handleOpenNewSub}
+                      onEdit={(target) => {
+                        setEditingOption(target);
+                        setParentForNewOption(null);
+                        setIsOptionModalOpen(true);
                       }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <strong style={{ color: 'var(--txt)', fontSize: 13 }}>
-                            {option.number}. {option.label}
-                          </strong>
-                          {option.tag ? (
-                            <span style={{ fontSize: 10, color: 'var(--blue)', background: 'var(--blue-dim)', border: '1px solid rgba(96,165,250,.2)', borderRadius: 'var(--r-pill)', padding: '1px 7px' }}>
-                              tag: {option.tag}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 10, color: 'var(--txt-3)', background: 'var(--bg-4)', border: '1px solid var(--line)', borderRadius: 'var(--r-pill)', padding: '1px 7px' }}>
-                              {t('tenantAdmin.bot.noTag')}
-                            </span>
-                          )}
-                        </div>
-                        <p style={{ color: 'var(--txt-3)', fontSize: 12, margin: '5px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {option.response}
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button
-                          type="button"
-                          title={t('tenantAdmin.common.edit')}
-                          onClick={() => {
-                            setEditingOption(option);
-                            setIsOptionModalOpen(true);
-                          }}
-                          style={iconButtonStyle}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                            <path d="M8.5 2.5l3 3L5 12H2v-3l6.5-6.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                            <path d="M7.6 3.4l3 3" stroke="currentColor" strokeWidth="1.3" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          title={t('tenantAdmin.common.remove')}
-                          onClick={() => deleteOptionMutation.mutate(option.id)}
-                          style={{ ...iconButtonStyle, color: 'var(--red)' }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                            <path d="M2.5 4h9M5.5 2.2h3L9.2 4H4.8l.7-1.8zM4 4.8l.5 7h5l.5-7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
+                      onDelete={(target) => deleteOptionMutation.mutate(target.id)}
+                      onEnableSubmenu={handleEnableSubmenu}
+                    />
                   ))
               )}
             </div>
@@ -482,26 +665,79 @@ export function BotMenu() {
       <OptionModal
         open={isOptionModalOpen}
         option={editingOption}
-        defaultSortOrder={options.length}
-        isSaving={addOptionMutation.isPending || updateOptionMutation.isPending}
+        parentOption={parentForNewOption}
+        defaultSortOrder={flattened.length}
+        isSaving={isSavingOption}
         onClose={() => {
           setIsOptionModalOpen(false);
           setEditingOption(null);
+          setParentForNewOption(null);
         }}
         onSubmit={(payload) => {
           if (editingOption) {
             updateOptionMutation.mutate({ id: editingOption.id, payload });
-          } else {
-            addOptionMutation.mutate(payload);
+            return;
           }
+
+          if (parentForNewOption) {
+            const applyCreate = () =>
+              addSubOptionMutation.mutate({ parentId: parentForNewOption.id, payload });
+
+            if (!parentForNewOption.has_submenu) {
+              updateOptionMutation.mutate(
+                {
+                  id: parentForNewOption.id,
+                  payload: {
+                    has_submenu: true,
+                    submenu_greeting:
+                      parentForNewOption.submenu_greeting ||
+                      `Voce selecionou *${parentForNewOption.label}*. Escolha uma opcao:`,
+                  },
+                },
+                { onSuccess: applyCreate },
+              );
+              return;
+            }
+
+            applyCreate();
+            return;
+          }
+
+          addOptionMutation.mutate(payload);
         }}
       />
     </div>
   );
 }
 
-const iconButtonStyle: React.CSSProperties = {
-  width: 28,
+const labelStyle: CSSProperties = {
+  color: 'var(--txt-2)',
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const inputStyle: CSSProperties = {
+  background: 'var(--bg-3)',
+  border: '1px solid var(--line-2)',
+  color: 'var(--txt)',
+  height: 40,
+  borderRadius: 'var(--r)',
+  padding: '0 12px',
+  fontSize: 13,
+  width: '100%',
+  outline: 'none',
+};
+
+const textareaStyle: CSSProperties = {
+  ...inputStyle,
+  height: 'auto',
+  minHeight: 96,
+  padding: 12,
+  resize: 'vertical',
+  lineHeight: 1.5,
+};
+
+const iconButtonStyle: CSSProperties = {
   height: 28,
   display: 'inline-flex',
   alignItems: 'center',
@@ -511,4 +747,8 @@ const iconButtonStyle: React.CSSProperties = {
   background: 'var(--bg-3)',
   color: 'var(--txt-2)',
   cursor: 'pointer',
+  padding: '0 8px',
+  fontSize: 12,
+  fontFamily: 'var(--font)',
 };
+

@@ -27,6 +27,7 @@
       "businessHours": "Business hours",
       "bot": "Support bot",
       "autoAssign": "Automatic Distribution",
+      "pauseReasons": "Pause Reasons",
       "quickReplies": "Quick Replies",
       "settings": "Settings"
     },
@@ -51,6 +52,45 @@
         "saved": "Settings saved",
         "reset": "Queue reset",
         "autoAssigned": "Conversation automatically assigned to {{name}}"
+      }
+    },
+    "pause": {
+      "title": "Start break",
+      "selectReason": "Select a break reason",
+      "notes": "Notes (optional)",
+      "start": "Start break",
+      "end": "Back Online",
+      "status": {
+        "online": "Online",
+        "paused": "On break",
+        "offline": "Offline"
+      },
+      "reasons": {
+        "other": "Other"
+      },
+      "supervisor": {
+        "pausedAgents": "Paused agents",
+        "noPauses": "No paused agents"
+      },
+      "messages": {
+        "started": "Break started"
+      }
+    },
+    "pauseReasons": {
+      "title": "Pause Reasons",
+      "subtitle": "Configure reasons displayed in the break modal",
+      "new": "New reason",
+      "active": "Active",
+      "inactive": "Inactive",
+      "fields": {
+        "label": "Label",
+        "icon": "Icon",
+        "sort": "Order"
+      },
+      "messages": {
+        "created": "Reason created",
+        "updated": "Reason updated",
+        "deactivated": "Reason deactivated"
       }
     },
     "settings": {
@@ -109,6 +149,16 @@
       "noOptions": "No options yet",
       "noTag": "no tag",
       "emptyPreview": "Configure the message and options to see the preview",
+      "submenu": "Has submenu",
+      "submenuGreeting": "Submenu intro message",
+      "addSubOption": "Add sub-option",
+      "enableSubmenu": "Enable submenu",
+      "expand": "View submenu",
+      "collapse": "Hide submenu",
+      "leaf": "Final option",
+      "depth": "Level {{n}}",
+      "parentOption": "Parent option",
+      "noSubmenuGreeting": "No intro message",
       "option": {
         "number": "Number",
         "label": "Label",
