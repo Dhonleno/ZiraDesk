@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { omnichannelApi, type OmnichannelMessage } from '../../services/api';
@@ -10,6 +10,12 @@ interface MessageMediaProps {
   localMediaUrl?: string | undefined;
 }
 
+function revokeBlobUrlLater(url: string, delayMs = 1500) {
+  if (!url.startsWith('blob:')) return;
+  if (import.meta.env.DEV) return;
+  window.setTimeout(() => URL.revokeObjectURL(url), delayMs);
+}
+
 function getMetadataMediaId(metadata: OmnichannelMessage['metadata']): string | null {
   if (!metadata || typeof metadata !== 'object') return null;
   const mediaId = (metadata as Record<string, unknown>).media_id;
@@ -19,28 +25,49 @@ function getMetadataMediaId(metadata: OmnichannelMessage['metadata']): string | 
 export function MessageMedia({ message, conversationId, localMediaUrl }: MessageMediaProps) {
   const { t } = useTranslation('omnichannel');
   const [openLightbox, setOpenLightbox] = useState(false);
-  const mediaId = message.media_url ?? getMetadataMediaId(message.metadata);
+  const [ignoreLocalMediaUrl, setIgnoreLocalMediaUrl] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const messageMediaUrl = message.media_url?.trim() || null;
+  const metadataMediaId = getMetadataMediaId(message.metadata);
+  const mediaId = messageMediaUrl ?? metadataMediaId;
+  const effectiveLocalMediaUrl = ignoreLocalMediaUrl ? undefined : localMediaUrl;
+
+  useEffect(() => {
+    setIgnoreLocalMediaUrl(false);
+  }, [localMediaUrl, message.id]);
+
+  const handleMediaError = useCallback(() => {
+    if (!effectiveLocalMediaUrl) return;
+    setIgnoreLocalMediaUrl(true);
+  }, [effectiveLocalMediaUrl]);
 
   const { data: mediaBlob, isLoading, isError } = useQuery({
     queryKey: ['omnichannel-media', conversationId, mediaId],
-    queryFn: () => omnichannelApi.downloadMediaById(mediaId!),
-    enabled: Boolean(mediaId) && !localMediaUrl,
+    queryFn: () => omnichannelApi.downloadMedia(mediaId!, conversationId),
+    enabled: Boolean(mediaId) && !effectiveLocalMediaUrl,
     staleTime: 60 * 60 * 1000,
   });
 
-  const mediaUrl = useMemo(() => {
-    if (localMediaUrl) return localMediaUrl;
-    if (!mediaBlob) return null;
-    return URL.createObjectURL(mediaBlob);
-  }, [localMediaUrl, mediaBlob]);
+  useEffect(() => {
+    setMediaUrl((prev) => {
+      if (prev && prev.startsWith('blob:')) {
+        revokeBlobUrlLater(prev);
+      }
+      if (effectiveLocalMediaUrl) return effectiveLocalMediaUrl;
+      if (!mediaBlob) return null;
+      return URL.createObjectURL(mediaBlob);
+    });
+  }, [effectiveLocalMediaUrl, mediaBlob]);
 
   useEffect(() => {
     return () => {
-      if (mediaUrl && !localMediaUrl) URL.revokeObjectURL(mediaUrl);
+      if (mediaUrl && mediaUrl.startsWith('blob:')) {
+        revokeBlobUrlLater(mediaUrl);
+      }
     };
-  }, [localMediaUrl, mediaUrl]);
+  }, [mediaUrl]);
 
-  if (!mediaId && !localMediaUrl) return null;
+  if (!mediaId && !effectiveLocalMediaUrl) return null;
 
   if (isLoading && !mediaUrl) {
     return <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('history.loading')}</div>;
@@ -62,6 +89,7 @@ export function MessageMedia({ message, conversationId, localMediaUrl }: Message
         <img
           src={mediaUrl}
           alt="image"
+          onError={handleMediaError}
           onClick={() => setOpenLightbox(true)}
           style={{ maxWidth: 240, borderRadius: 8, cursor: 'pointer', display: 'block' }}
         />
@@ -72,17 +100,13 @@ export function MessageMedia({ message, conversationId, localMediaUrl }: Message
 
   if (message.content_type === 'audio') {
     return (
-      <audio controls style={{ maxWidth: 240 }}>
-        <source src={mediaUrl} />
-      </audio>
+      <audio controls src={mediaUrl} onError={handleMediaError} style={{ maxWidth: 240 }} />
     );
   }
 
   if (message.content_type === 'video') {
     return (
-      <video controls style={{ maxWidth: 240, borderRadius: 8 }}>
-        <source src={mediaUrl} />
-      </video>
+      <video controls src={mediaUrl} onError={handleMediaError} style={{ maxWidth: 240, borderRadius: 8 }} />
     );
   }
 

@@ -35,11 +35,13 @@ export function ConversationsPage() {
       },
     );
 
-    const unsubUpdated = subscribeToEvent<{ conversation: { id: string } }>(
+    const unsubUpdated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
       'conversation:updated',
-      ({ conversation }) => {
+      ({ conversationId, conversation }) => {
+        const id = conversationId ?? conversation?.id;
+        if (!id) return;
         void qc.invalidateQueries({ queryKey: ['conversations'] });
-        void qc.invalidateQueries({ queryKey: ['conversation', conversation.id] });
+        void qc.invalidateQueries({ queryKey: ['conversation', id] });
       },
     );
 

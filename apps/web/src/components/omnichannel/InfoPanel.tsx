@@ -10,9 +10,17 @@ interface Conversation {
   status: string;
   channel_type: string;
   client_id: string | null;
+  contact_id?: string | null;
+  organization_id?: string | null;
   client_name: string | null;
   client_email: string | null;
   client_phone: string | null;
+  client_whatsapp?: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_whatsapp?: string | null;
+  organization_name?: string | null;
   assigned_name: string | null;
   channel_name: string | null;
   subject: string | null;
@@ -162,43 +170,53 @@ export function InfoPanel({ conversationId }: Props) {
   });
 
   const conv = data?.conversation;
-  const clientId = conv?.client_id ?? null;
+  const contactId = conv?.contact_id ?? conv?.client_id ?? null;
 
   const { data: contactData } = useQuery({
-    queryKey: ['crm-contact', clientId],
-    queryFn: () => contactsApi.get(clientId!),
-    enabled: !!clientId,
+    queryKey: ['crm-contact', contactId],
+    queryFn: () => contactsApi.get(contactId!),
+    enabled: !!contactId,
   });
 
   const { data: clientStats, isLoading: statsLoading } = useQuery({
-    queryKey: ['crm-client-stats', clientId],
+    queryKey: ['crm-client-stats', contactId],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/contacts/${clientId!}/stats`);
+      const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/contacts/${contactId!}/stats`);
       return res.data.data;
     },
-    enabled: !!clientId,
+    enabled: !!contactId,
+    retry: false,
   });
 
   const { data: history = [], isLoading: historyLoading } = useQuery({
-    queryKey: ['omnichannel-client-history', clientId, conversationId],
+    queryKey: ['omnichannel-client-history', contactId, conversationId],
     queryFn: async () => {
-      const params = new URLSearchParams({ client_id: clientId!, per_page: '5' });
+      const params = new URLSearchParams({ contact_id: contactId!, per_page: '5' });
       const res = await api.get<{ success: boolean; data: Conversation[] }>(
         `/omnichannel/conversations?${params}`,
       );
       return res.data.data.filter((item) => item.id !== conversationId);
     },
-    enabled: !!clientId,
+    enabled: !!contactId,
   });
 
-  const clientName = conv?.client_name?.trim();
-  const name = clientName || 'Cliente não identificado';
+  const contactPhone =
+    contactData?.whatsapp?.trim()
+    || contactData?.phone?.trim()
+    || conv?.contact_whatsapp?.trim()
+    || conv?.client_whatsapp?.trim()
+    || conv?.contact_phone?.trim()
+    || conv?.client_phone?.trim()
+    || null;
+  const contactEmail = contactData?.email ?? conv?.contact_email ?? conv?.client_email ?? null;
+  const contactName = (contactData?.name ?? conv?.contact_name ?? conv?.client_name ?? null)?.trim();
+  const name = contactName || 'Cliente não identificado';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const currentChannelSub =
     conv?.channel_type === 'email'
-      ? conv.client_email
+      ? contactEmail
       : conv?.channel_type === 'whatsapp'
-        ? conv.client_phone
+        ? contactPhone
         : conv?.channel_name;
 
   return (
@@ -247,7 +265,7 @@ export function InfoPanel({ conversationId }: Props) {
             }}>
               <div style={{
                 width: 60, height: 60, borderRadius: '50%',
-                background: avatarGradient(conv?.client_name ?? null),
+                background: avatarGradient(contactName ?? null),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 22, fontWeight: 700, color: '#fff',
                 border: '3px solid var(--bg-4)',
@@ -264,10 +282,10 @@ export function InfoPanel({ conversationId }: Props) {
                 </span>
               )}
               {/* Links CRM */}
-              {conv?.client_id && (
+              {contactId && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', width: '100%' }}>
                   <button
-                    onClick={() => navigate(`/crm/contacts?id=${conv.client_id}`)}
+                    onClick={() => navigate(`/crm/contacts?id=${contactId}`)}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--teal-dim)'; e.currentTarget.style.borderColor = 'rgba(0,201,167,.3)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.borderColor = 'var(--line-2)'; }}
@@ -311,9 +329,9 @@ export function InfoPanel({ conversationId }: Props) {
                 </>
               ) : (
                 ([
-                  { val: clientId ? String(clientStats?.total_messages ?? 0) : '—', lbl: t('info.messages') },
-                  { val: clientId ? String(clientStats?.total_conversations ?? 0) : '—', lbl: t('info.attendances') },
-                  { val: clientId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: 'Tickets abertos' },
+                  { val: contactId ? String(clientStats?.total_messages ?? 0) : '—', lbl: t('info.messages') },
+                  { val: contactId ? String(clientStats?.total_conversations ?? 0) : '—', lbl: t('info.attendances') },
+                  { val: contactId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: 'Tickets abertos' },
                 ] as { val: string; lbl: string }[]).map(({ val, lbl }) => (
                   <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
                     <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.5px', fontFamily: 'var(--mono)' }}>{val}</div>
@@ -328,7 +346,7 @@ export function InfoPanel({ conversationId }: Props) {
               <SectionTitle action={<span style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}>Editar</span>}>{t('info.information')}</SectionTitle>
               <InfoField
                 label={t('info.email')}
-                value={conv?.client_email}
+                value={contactEmail}
                 empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -339,7 +357,7 @@ export function InfoPanel({ conversationId }: Props) {
               />
               <InfoField
                 label={t('info.phone')}
-                value={conv?.client_phone}
+                value={contactPhone}
                 empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -395,9 +413,9 @@ export function InfoPanel({ conversationId }: Props) {
               ) : (
                 <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>—</div>
               )}
-              {clientId && (
+              {contactId && (
                 <button
-                  onClick={() => navigate(`/crm/contacts?id=${clientId}`)}
+                  onClick={() => navigate(`/crm/contacts?id=${contactId}`)}
                   style={{ marginTop: 12, width: '100%', padding: '8px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer' }}
                 >
                   Ver perfil completo
@@ -416,7 +434,7 @@ export function InfoPanel({ conversationId }: Props) {
                 <Skeleton height={52} />
                 <Skeleton height={52} />
               </div>
-            ) : !clientId || history.length === 0 ? (
+            ) : !contactId || history.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>Nenhum atendimento anterior</div>
             ) : (
               <div>
@@ -450,11 +468,11 @@ export function InfoPanel({ conversationId }: Props) {
 
       </div>
 
-      {clientId && linkOrgOpen && (
+      {contactId && linkOrgOpen && (
         <LinkOrganizationModal
           open={linkOrgOpen}
           onClose={() => setLinkOrgOpen(false)}
-          contactId={clientId}
+          contactId={contactId}
           contactName={name}
         />
       )}

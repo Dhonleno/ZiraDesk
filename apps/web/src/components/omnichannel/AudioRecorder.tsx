@@ -146,6 +146,15 @@ function formatTime(seconds: number) {
   return `${mm}:${ss}`;
 }
 
+function fileToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function setupCanvas(canvas: HTMLCanvasElement) {
   const dpr = window.devicePixelRatio || 1;
   const width = Math.max(120, Math.floor(canvas.clientWidth || 300));
@@ -172,7 +181,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
   ({ conversationId, disabled, onSent, onActiveChange }, ref) => {
     const { t } = useTranslation('omnichannel');
     const toast = useToast();
-    const { load, convertToMp3, isLoading: ffmpegLoading, progress } = useFFmpeg();
+    const { load, convertToMp3, progress } = useFFmpeg();
 
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -196,6 +205,25 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
     const staticCanvasRef = useRef<HTMLCanvasElement>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const liveAudioCtxRef = useRef<AudioContext | null>(null);
+    const previewUrlRequestIdRef = useRef(0);
+    const audioUrlRef = useRef<string | null>(null);
+
+    const releasePreviewUrl = useCallback((url: string | null) => {
+      if (!url) return;
+      const previewAudio = previewAudioRef.current;
+      if (previewAudio) {
+        const currentSrc = previewAudio.currentSrc || previewAudio.src || previewAudio.getAttribute('src') || '';
+        if (currentSrc.startsWith('blob:')) {
+          previewAudio.pause();
+          previewAudio.removeAttribute('src');
+          previewAudio.load();
+          setIsPlayingPreview(false);
+        }
+      }
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    }, []);
 
     const stopTimer = useCallback(() => {
       if (timerRef.current !== null) {
@@ -241,14 +269,15 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       setSeconds(0);
       setNativeBlob(null);
       setNativeMime('');
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      previewUrlRequestIdRef.current += 1;
+      releasePreviewUrl(audioUrlRef.current);
       setAudioUrl(null);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       if (notifyInactive) {
         onActiveChange?.(false);
       }
-    }, [audioUrl, onActiveChange, stopLiveAudioContext, stopTimer]);
+    }, [onActiveChange, releasePreviewUrl, stopLiveAudioContext, stopTimer]);
 
     const startWaveAnimation = useCallback((stream: MediaStream) => {
       const canvas = liveCanvasRef.current;
@@ -340,11 +369,18 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
     }, []);
 
     useEffect(() => {
+      audioUrlRef.current = audioUrl;
+    }, [audioUrl]);
+
+    useEffect(() => {
       void load().catch((err) => {
         console.error('[AudioRecorder] preload failed:', err);
       });
+    }, [load]);
+
+    useEffect(() => {
       return () => resetRecorderState(false);
-    }, [load, resetRecorderState]);
+    }, [resetRecorderState]);
 
     useEffect(() => {
       if (!nativeBlob || !isPreview) return;
@@ -367,7 +403,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
     }, [audioUrl]);
 
     const startRecording = async () => {
-      if (disabled || isRecording || isConverting || isSending || ffmpegLoading) return;
+      if (disabled || isRecording || isConverting || isSending) return;
       const mimeType = getSupportedMimeType();
       if (!mimeType) {
         toast.error(t('media.browserNotSupported', {
@@ -397,6 +433,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
 
         recorder.onstop = () => {
           const mode = stopModeRef.current;
+          const requestId = ++previewUrlRequestIdRef.current;
           stopModeRef.current = null;
           stopTimer();
           void stopLiveAudioContext();
@@ -415,10 +452,19 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           chunksRef.current = [];
           if (!blob.size) return;
 
-          if (audioUrl) URL.revokeObjectURL(audioUrl);
+          releasePreviewUrl(audioUrl);
           setNativeBlob(blob);
           setNativeMime(baseMime);
-          setAudioUrl(URL.createObjectURL(blob));
+          void (async () => {
+            try {
+              const previewDataUrl = await fileToDataUrl(blob);
+              if (previewUrlRequestIdRef.current !== requestId) return;
+              setAudioUrl(previewDataUrl);
+            } catch {
+              if (previewUrlRequestIdRef.current !== requestId) return;
+              setAudioUrl(URL.createObjectURL(blob));
+            }
+          })();
           setIsPreview(true);
           onActiveChange?.(true);
         };
@@ -431,7 +477,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
         setSeconds(0);
         setNativeBlob(null);
         setNativeMime('');
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        previewUrlRequestIdRef.current += 1;
+        releasePreviewUrl(audioUrl);
         setAudioUrl(null);
         onActiveChange?.(true);
         startTimer();
@@ -486,7 +533,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
         setSeconds(0);
         setNativeBlob(null);
         setNativeMime('');
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        previewUrlRequestIdRef.current += 1;
+        releasePreviewUrl(audioUrl);
         setAudioUrl(null);
         onActiveChange?.(false);
         return;
@@ -543,7 +591,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           contentType: 'audio',
         });
 
-        localPreviewUrl = URL.createObjectURL(fileToUpload);
+        localPreviewUrl = await fileToDataUrl(fileToUpload);
         await onSent({
           mediaId: upload.media_id,
           localPreviewUrl,
@@ -555,7 +603,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
         const rawMessage = extractErrorMessage(error);
         toast.error(rawMessage ?? t('media.uploadError'));
       } finally {
-        if (localPreviewUrl && !handedOffToParent) {
+        if (localPreviewUrl && !handedOffToParent && localPreviewUrl.startsWith('blob:')) {
           URL.revokeObjectURL(localPreviewUrl);
         }
         setIsConverting(false);
@@ -568,7 +616,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       cancel: cancelRecording,
     }));
 
-    const showConverting = isConverting || ffmpegLoading || isSending;
+    const showConverting = isConverting || isSending;
     const isActive = isRecording || isPaused || isPreview || showConverting;
     if (!isActive) return null;
 

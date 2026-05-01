@@ -20,6 +20,59 @@ import { MessageMedia } from './MessageMedia';
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
 
+const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
+
+function resolveVariables(text: string, context: {
+  contactName?: string | null;
+  organizationName?: string | null;
+  protocolNumber?: string | null;
+  agentName?: string | null;
+}) {
+  const now = new Date();
+  return text
+    .replace(/\{\{nome\}\}/g, context.contactName ?? '')
+    .replace(/\{\{empresa\}\}/g, context.organizationName ?? '')
+    .replace(/\{\{protocolo\}\}/g, context.protocolNumber ?? '')
+    .replace(/\{\{agente\}\}/g, context.agentName ?? '')
+    .replace(/\{\{data\}\}/g, now.toLocaleDateString('pt-BR'))
+    .replace(/\{\{hora\}\}/g, now.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }));
+}
+
+function highlightQuickReplyVariables(text: string) {
+  const matches = Array.from(text.matchAll(QUICK_REPLY_VARIABLE_PATTERN));
+  if (matches.length === 0) return text;
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of matches) {
+    const fullMatch = match[0];
+    const index = match.index ?? 0;
+
+    if (index > cursor) {
+      parts.push(text.slice(cursor, index));
+    }
+
+    const variableName = fullMatch.slice(2, -2);
+    parts.push(
+      <span key={`${variableName}-${index}`} style={{ color: 'var(--teal)', fontWeight: 600 }}>
+        [{variableName}]
+      </span>,
+    );
+
+    cursor = index + fullMatch.length;
+  }
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts;
+}
+
 const AVATAR_GRADIENTS = [
   'linear-gradient(135deg,#667eea,#764ba2)',
   'linear-gradient(135deg,#f093fb,#f5576c)',
@@ -126,6 +179,9 @@ interface Props {
 export function ChatArea({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const { t: tAdmin } = useTranslation('admin');
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentAuthToken = useAuthStore((state) => state.token);
+  const currentUserName = useAuthStore((state) => state.user?.name);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const currentUserRole = useAuthStore((state) => state.user?.role);
   const [content, setContent] = useState('');
@@ -167,6 +223,13 @@ export function ChatArea({ conversationId }: Props) {
   const pendingIncomingNoticeRef = useRef(false);
   const [isMediaActive, setIsMediaActive] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
+  const hasValidSession = Boolean(conversationId) && isAuthenticated && Boolean(currentAuthToken);
+
+  const shouldRetryQuery = useCallback((failureCount: number, error: unknown) => {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    if (status === 401) return false;
+    return failureCount < 1;
+  }, []);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     const apply = () => {
@@ -278,15 +341,19 @@ export function ChatArea({ conversationId }: Props) {
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [showEmojiPicker, showQuickReplies, showShortcutSuggestions]);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: isConversationError } = useQuery({
     queryKey: ['conversation', conversationId],
     queryFn: () => omnichannelApi.getConversation(conversationId),
+    enabled: hasValidSession,
+    retry: shouldRetryQuery,
   });
 
   const { data: quickReplies = [] } = useQuery({
     queryKey: ['admin', 'quick-replies', 'chat'],
     queryFn: () => adminApi.quickReplies.list(),
     staleTime: 5 * 60 * 1000,
+    enabled: hasValidSession,
+    retry: shouldRetryQuery,
   });
 
   const notifyMessagesLoadError = useCallback(() => {
@@ -297,6 +364,12 @@ export function ChatArea({ conversationId }: Props) {
   }, [t, toast]);
 
   const loadLatestMessages = useCallback(async (preserveOlder: boolean) => {
+    if (!hasValidSession) {
+      if (!preserveOlder) {
+        setIsMessagesLoading(false);
+      }
+      return;
+    }
     if (isLoadingLatestRef.current) return;
     isLoadingLatestRef.current = true;
     if (!preserveOlder) {
@@ -336,7 +409,7 @@ export function ChatArea({ conversationId }: Props) {
         setIsMessagesLoading(false);
       }
     }
-  }, [conversationId, notifyMessagesLoadError]);
+  }, [conversationId, hasValidSession, notifyMessagesLoadError]);
 
   useEffect(() => {
     setContent('');
@@ -353,8 +426,28 @@ export function ChatArea({ conversationId }: Props) {
     shouldAutoScrollNextRef.current = true;
     nextScrollBehaviorRef.current = 'auto';
     setUnseenMessageCount(0);
+
+    if (!hasValidSession) {
+      setMessages([]);
+      setHasMore(false);
+      setTotalMessages(0);
+      setIsMessagesLoading(false);
+      return;
+    }
+
+    setIsMessagesLoading(true);
+  }, [clearLocalMediaPreviews, conversationId, hasValidSession]);
+
+  useEffect(() => {
+    if (!hasValidSession) return;
+    if (!data?.conversation) return;
     void loadLatestMessages(false);
-  }, [clearLocalMediaPreviews, conversationId, loadLatestMessages]);
+  }, [data?.conversation?.id, hasValidSession, loadLatestMessages]);
+
+  useEffect(() => {
+    if (!isConversationError) return;
+    setIsMessagesLoading(false);
+  }, [isConversationError]);
 
   useEffect(() => {
     if (!pendingInitialScrollRef.current) return;
@@ -422,6 +515,8 @@ export function ChatArea({ conversationId }: Props) {
   }, [conversationId, scrollToBottom]);
 
   useEffect(() => {
+    if (!hasValidSession) return;
+
     const handleIncomingConversationUpdate = () => {
       const nearBottom = isNearBottom();
       shouldAutoScrollNextRef.current = nearBottom;
@@ -473,7 +568,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubTransferred();
       unsubUpdated();
     };
-  }, [conversationId, isNearBottom, loadLatestMessages, qc]);
+  }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
   const sendMutation = useMutation({
     mutationFn: (payload: { text: string; isInternalMessage: boolean }) =>
@@ -612,7 +707,14 @@ export function ChatArea({ conversationId }: Props) {
   }, [content, quickReplies, updateShortcutSuggestions]);
 
   function applyQuickReply(reply: QuickReply) {
-    applyComposerText(reply.content);
+    const resolved = resolveVariables(reply.content, {
+      contactName: data?.conversation?.contact_name ?? data?.conversation?.client_name ?? '',
+      organizationName: data?.conversation?.organization_name ?? '',
+      protocolNumber: data?.conversation?.protocol_number ?? '',
+      agentName: currentUserName ?? '',
+    });
+
+    applyComposerText(resolved);
     setShowQuickReplies(false);
     setShowShortcutSuggestions(false);
     setShortcutSuggestions([]);
@@ -720,7 +822,8 @@ export function ChatArea({ conversationId }: Props) {
   const canAssume = isUnassigned && !isResolved;
   const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isResolved;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
-  const name = conv?.client_name ?? 'Visitante';
+  const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
+  const avatarName = conv?.contact_name ?? conv?.client_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
@@ -760,7 +863,7 @@ export function ChatArea({ conversationId }: Props) {
               width: 36,
               height: 36,
               borderRadius: '50%',
-              background: avatarGradient(conv?.client_name ?? null),
+              background: avatarGradient(avatarName),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -770,10 +873,10 @@ export function ChatArea({ conversationId }: Props) {
               flexShrink: 0,
             }}
           >
-            {name.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{name}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{displayName}</div>
             <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
               {chBadge && (
                 <span
@@ -1099,7 +1202,7 @@ export function ChatArea({ conversationId }: Props) {
                         borderRadius: '50%',
                         background: isOut
                           ? 'linear-gradient(135deg,var(--teal),#00A88C)'
-                          : avatarGradient(conv?.client_name ?? null),
+                          : avatarGradient(avatarName),
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1110,7 +1213,7 @@ export function ChatArea({ conversationId }: Props) {
                         marginBottom: 2,
                       }}
                     >
-                      {isOut ? (conv?.assigned_name ?? 'A').charAt(0).toUpperCase() : name.charAt(0).toUpperCase()}
+                      {isOut ? (conv?.assigned_name ?? 'A').charAt(0).toUpperCase() : displayName.charAt(0).toUpperCase()}
                     </div>
 
                     <div style={{ maxWidth: '62%' }}>
@@ -1174,8 +1277,8 @@ export function ChatArea({ conversationId }: Props) {
 
         {isTyping && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-            <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarGradient(conv?.client_name ?? null), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
-              {name.charAt(0).toUpperCase()}
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarGradient(avatarName), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+              {displayName.charAt(0).toUpperCase()}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 12, borderBottomLeftRadius: 4, padding: '8px 12px' }}>
               {[0, 1, 2].map((i) => (
@@ -1316,7 +1419,7 @@ export function ChatArea({ conversationId }: Props) {
                     <span style={{ fontWeight: 500 }}>{reply.title}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {reply.content}
+                    {highlightQuickReplyVariables(reply.content)}
                   </div>
                 </button>
               )) : (
@@ -1553,7 +1656,7 @@ export function ChatArea({ conversationId }: Props) {
                               flex: 1,
                             }}
                           >
-                            {reply.content}
+                            {highlightQuickReplyVariables(reply.content)}
                           </span>
                         </button>
                       );

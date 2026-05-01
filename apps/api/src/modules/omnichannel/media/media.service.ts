@@ -233,25 +233,17 @@ export async function downloadMetaMedia(params: {
     };
   }
 
-  const unauthorizedExpired =
-    first.status === 401 ||
-    first.status === 403 ||
-    first.text.includes('Unauthorized request') ||
-    first.text.includes('Failed in checking if the request is signed');
-
-  if (unauthorizedExpired) {
-    const second = await tryDownload(true);
-    if (second.ok) {
-      return {
-        buffer: second.buffer,
-        mimeType: second.mimeType,
-        contentLength: second.contentLength,
-      };
-    }
-    throw new Error(`Meta media download error: ${second.text}`);
+  // Force a fresh signed URL from Meta on any first failure.
+  const second = await tryDownload(true);
+  if (second.ok) {
+    return {
+      buffer: second.buffer,
+      mimeType: second.mimeType,
+      contentLength: second.contentLength,
+    };
   }
 
-  throw new Error(`Meta media download error: ${first.text}`);
+  throw new Error(`Meta media download error: ${second.text || first.text}`);
 }
 
 async function findConversationIdByMediaId(params: {

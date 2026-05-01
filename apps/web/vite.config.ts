@@ -11,16 +11,23 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:3333',
+        target: 'http://127.0.0.1:3333',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:3333',
+        target: 'http://127.0.0.1:3333',
         ws: true,
       },
     },
+  },
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },
   build: {
     rollupOptions: {

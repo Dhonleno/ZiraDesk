@@ -184,10 +184,18 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
 
-function drainQueue(token: string) {
-  refreshQueue.forEach((resolve) => resolve(token));
+function resolveQueue(token: string) {
+  refreshQueue.forEach(({ resolve }) => resolve(token));
+  refreshQueue = [];
+}
+
+function rejectQueue(error: unknown) {
+  refreshQueue.forEach(({ reject }) => reject(error));
   refreshQueue = [];
 }
 
@@ -207,8 +215,8 @@ api.interceptors.response.use(
     }
 
     if (isRefreshing) {
-      return new Promise<string>((resolve) => {
-        refreshQueue.push(resolve);
+      return new Promise<string>((resolve, reject) => {
+        refreshQueue.push({ resolve, reject });
       }).then((token) => {
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);
@@ -223,11 +231,12 @@ api.interceptors.response.use(
       const newToken = data.accessToken;
 
       useAuthStore.getState().setAuth({ token: newToken });
-      drainQueue(newToken);
+      resolveQueue(newToken);
 
       original.headers.Authorization = `Bearer ${newToken}`;
       return api(original);
-    } catch {
+    } catch (refreshError) {
+      rejectQueue(refreshError);
       useAuthStore.getState().logout();
       return Promise.reject(error);
     } finally {

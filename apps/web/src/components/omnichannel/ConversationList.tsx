@@ -17,6 +17,8 @@ interface ConversationItem {
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;
+  contact_name?: string | null;
+  contact_email?: string | null;
   client_name: string | null;
   client_email: string | null;
   assigned_name: string | null;
@@ -588,7 +590,8 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
             )
           : (data ?? []).map((conv) => {
               const isActive = selectedId === conv.id;
-              const name = conv.client_name ?? 'Visitante';
+              const displayName = conv.contact_name ?? conv.client_name ?? 'Visitante';
+              const avatarName = conv.contact_name ?? conv.client_name;
               const chStyle = CH_STYLE[conv.channel_type];
               const hasUnread = (conv.unread_count ?? 0) > 0;
               const hasNewActivity = newActivity.has(conv.id);
@@ -640,7 +643,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                       width: 38,
                       height: 38,
                       borderRadius: '50%',
-                      background: avatarGradient(conv.client_name),
+                      background: avatarGradient(avatarName),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -648,7 +651,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                       fontWeight: 600,
                       color: '#fff',
                     }}>
-                      {name.charAt(0).toUpperCase()}
+                      {displayName.charAt(0).toUpperCase()}
                     </div>
                     <ChannelDot type={conv.channel_type} />
                     {(hasNewActivity || isNewConversation) && (
@@ -669,7 +672,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           color: 'var(--txt)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
-                          {name}
+                          {displayName}
                         </span>
                         {conv.protocol_number && (
                           <span

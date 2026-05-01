@@ -1,10 +1,13 @@
 import { Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import { env } from '../config/env.js';
+import { prisma } from '../config/database.js';
 
 interface SendMessageJob {
   messageId: string;
   conversationId: string;
+  tenantId?: string | null;
+  tenantSchema?: string | null;
   channelType: 'whatsapp' | 'instagram' | 'email';
   channelCredentials: Record<string, string>;
   content: string;
@@ -12,6 +15,42 @@ interface SendMessageJob {
   mediaId?: string | null;
   mediaType?: string | null;
   mediaFilename?: string | null;
+}
+
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+async function resolveSchemaName(job: SendMessageJob): Promise<string | null> {
+  if (job.tenantSchema) return job.tenantSchema;
+  if (!job.tenantId) return null;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: job.tenantId },
+    select: { schemaName: true },
+  });
+
+  return tenant?.schemaName ?? null;
+}
+
+async function persistExternalId(job: SendMessageJob, externalId: string): Promise<void> {
+  const schemaName = await resolveSchemaName(job);
+  if (!schemaName) {
+    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist external_id', {
+      tenantId: job.tenantId,
+      messageId: job.messageId,
+      externalId,
+    });
+    return;
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${quoteIdent(schemaName)}.messages
+     SET external_id = $1, status = 'sent'
+     WHERE id = $2::uuid`,
+    externalId,
+    job.messageId,
+  );
 }
 
 function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
@@ -94,7 +133,9 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
 const worker = new Worker<SendMessageJob>(
   'ziradesk-messages',
   async (job) => {
-    const { channelType, channelCredentials, to } = job.data;
+    const { channelType, channelCredentials } = job.data;
+    console.log('[WhatsApp Worker] Executing job:', job.id);
+    console.log('[WhatsApp Worker] Job data:', JSON.stringify(job.data));
 
     switch (channelType) {
       case 'whatsapp': {
@@ -111,7 +152,7 @@ const worker = new Worker<SendMessageJob>(
           throw new Error('WhatsApp credentials not configured for sender channel');
         }
         // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
-        const sanitizedPhone = to.replace(/\D/g, '');
+        const sanitizedPhone = (job.data.to ?? '').replace(/\D/g, '');
         const body = buildWhatsAppBody(job.data, sanitizedPhone);
 
         console.log('[WhatsApp Send] Job data:', JSON.stringify(job.data, null, 2));
@@ -138,7 +179,16 @@ const worker = new Worker<SendMessageJob>(
         }
 
         try {
-          return JSON.parse(responseText);
+          const result = JSON.parse(responseText) as { messages?: Array<{ id?: string }> };
+          const wamid = result.messages?.[0]?.id;
+          if (wamid) {
+            await persistExternalId(job.data, wamid);
+            console.log('[WhatsApp Worker] external_id persisted:', {
+              messageId: job.data.messageId,
+              externalId: wamid,
+            });
+          }
+          return result;
         } catch {
           return { ok: true, raw: responseText };
         }
@@ -157,7 +207,16 @@ const worker = new Worker<SendMessageJob>(
 );
 
 worker.on('failed', (job, err) => {
-  console.error(`[MessageQueue] Job ${job?.id} failed:`, err.message);
+  console.error(`[WhatsApp Worker] Job ${job?.id} FAILED:`, err);
+  console.error('[WhatsApp Worker] Job data was:', job?.data);
+});
+
+worker.on('active', (job) => {
+  console.log(`[WhatsApp Worker] Processing job ${job.id}:`, job.data);
+});
+
+worker.on('completed', (job) => {
+  console.log(`[WhatsApp Worker] Job ${job.id} completed successfully`);
 });
 
 export { worker };
