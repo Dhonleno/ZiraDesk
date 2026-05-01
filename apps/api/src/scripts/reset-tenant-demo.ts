@@ -43,6 +43,22 @@ async function main() {
 
   // Dropar tabelas antigas do modelo B2C
   await exec(`DROP TABLE IF EXISTS clients CASCADE`);
+  await exec(`DROP TABLE IF EXISTS agent_skills CASCADE`);
+  await exec(`DROP TABLE IF EXISTS skills CASCADE`);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS agent_bot_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      bot_option_id UUID REFERENCES bot_options(id) ON DELETE CASCADE,
+      level VARCHAR(20) DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, bot_option_id)
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_user ON agent_bot_skills(user_id)`);
+  await exec(`CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_option ON agent_bot_skills(bot_option_id)`);
 
   // Criar tabela organizations
   await exec(`
@@ -123,7 +139,8 @@ async function main() {
   console.log(`${SCHEMA} resetado com sucesso!`);
   console.log('Tabelas criadas: organizations, contacts');
   console.log('Tabelas atualizadas: conversations (contact_id, organization_id), tickets (contact_id, organization_id)');
-  console.log('Tabela removida: clients');
+  console.log('Tabela removida: clients, skills, agent_skills');
+  console.log('Tabela criada: agent_bot_skills');
 
   await prisma.$disconnect();
 }

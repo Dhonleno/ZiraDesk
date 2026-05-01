@@ -57,40 +57,6 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".skills (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name VARCHAR(100) NOT NULL,
-      description TEXT,
-      tag VARCHAR(50),
-      color VARCHAR(7) DEFAULT '#00C9A7',
-      is_active BOOLEAN DEFAULT true,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(name)
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".agent_skills (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
-      skill_id UUID REFERENCES "${schemaName}".skills(id) ON DELETE CASCADE,
-      level VARCHAR(20) DEFAULT 'intermediate',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, skill_id)
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_agent_skills_user"
-    ON "${schemaName}".agent_skills(user_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_agent_skills_skill"
-    ON "${schemaName}".agent_skills(skill_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
     INSERT INTO "${schemaName}".agent_assignments (user_id)
     SELECT id
     FROM "${schemaName}".users
@@ -273,6 +239,27 @@ async function createTenantTables(schemaName: string): Promise<void> {
       COALESCE(parent_option_id, '00000000-0000-0000-0000-000000000000'::uuid),
       number
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_bot_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      bot_option_id UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
+      level VARCHAR(20) DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, bot_option_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_agent_bot_skills_user"
+    ON "${schemaName}".agent_bot_skills(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_agent_bot_skills_option"
+    ON "${schemaName}".agent_bot_skills(bot_option_id)
   `);
 
   await prisma.$executeRawUnsafe(`

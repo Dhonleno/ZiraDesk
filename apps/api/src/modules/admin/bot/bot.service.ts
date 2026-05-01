@@ -571,6 +571,7 @@ async function handleTransferToAgent(
     conversationId,
     {
       bot_stage: 'done',
+      bot_option_id: option?.id ?? null,
       bot_department: option?.label ?? null,
       bot_tag: option?.tag ?? null,
       bot_path: [],
@@ -585,10 +586,12 @@ async function handleTransferToAgent(
      SET status = 'open',
          metadata = COALESCE(metadata, '{}'::jsonb)
            || jsonb_build_object(
-             'bot_department', $1::text,
-             'bot_tag', $2::text
+             'bot_option_id', $1::uuid,
+             'bot_department', $2::text,
+             'bot_tag', $3::text
            )
-     WHERE id = $3::uuid`,
+     WHERE id = $4::uuid`,
+    option?.id ?? null,
     option?.label ?? '',
     option?.tag ?? '',
     conversationId,

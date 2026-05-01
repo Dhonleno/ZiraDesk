@@ -50,16 +50,9 @@ function AgentMonitorCard({
       {agent.skills?.length > 0 && (
         <div className="agent-skills">
           {agent.skills.map((skill) => (
-            <span
-              key={skill.id}
-              className="skill-chip"
-              style={{
-                background: `${skill.color}22`,
-                color: skill.color,
-                borderColor: `${skill.color}44`,
-              }}
-            >
-              {skill.name}
+            <span key={skill.bot_option_id ?? skill.id} className="skill-chip">
+              {skill.parent_label ? `${skill.parent_label} > ` : ''}
+              {skill.label ?? skill.name}
             </span>
           ))}
         </div>
@@ -103,6 +96,12 @@ export function MonitorPage() {
         void qc.invalidateQueries({ queryKey: ['monitor'] });
       }),
       subscribeToEvent('agent:resumed', () => {
+        void qc.invalidateQueries({ queryKey: ['monitor'] });
+      }),
+      subscribeToEvent('agent:online', () => {
+        void qc.invalidateQueries({ queryKey: ['monitor'] });
+      }),
+      subscribeToEvent('agent:offline', () => {
         void qc.invalidateQueries({ queryKey: ['monitor'] });
       }),
       subscribeToEvent('conversation:created', () => {

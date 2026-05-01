@@ -206,15 +206,23 @@ export interface PauseReason {
 
 export interface Skill {
   id: string;
-  name: string;
-  description: string | null;
+  number: number;
+  label: string;
   tag: string | null;
-  color: string;
-  is_active: boolean;
-  created_at: string;
+  has_submenu: boolean;
+  parent_option_id: string | null;
+  sort_order: number;
+  agents_count: number;
+  children?: Skill[];
 }
 
-export interface AgentSkill extends Skill {
+export interface AgentSkill {
+  bot_option_id: string;
+  id: string;
+  label: string;
+  name: string;
+  tag: string | null;
+  parent_label: string | null;
   level: 'junior' | 'intermediate' | 'senior';
 }
 
@@ -707,35 +715,6 @@ export const adminApi = {
       return res.data.data;
     },
 
-    create: async (data: {
-      name: string;
-      description?: string | null;
-      tag?: string | null;
-      color?: string;
-    }): Promise<Skill> => {
-      const res = await api.post<{ success: boolean; data: Skill }>('/admin/skills', data);
-      return res.data.data;
-    },
-
-    update: async (
-      id: string,
-      data: Partial<{
-        name: string;
-        description: string | null;
-        tag: string | null;
-        color: string;
-        is_active: boolean;
-      }>,
-    ): Promise<Skill> => {
-      const res = await api.patch<{ success: boolean; data: Skill }>(`/admin/skills/${id}`, data);
-      return res.data.data;
-    },
-
-    delete: async (id: string): Promise<Skill> => {
-      const res = await api.delete<{ success: boolean; data: Skill }>(`/admin/skills/${id}`);
-      return res.data.data;
-    },
-
     listAgents: async (): Promise<AgentWithSkills[]> => {
       const res = await api.get<{ success: boolean; data: AgentWithSkills[] }>('/admin/skills/agents');
       return res.data.data;
@@ -748,18 +727,18 @@ export const adminApi = {
 
     assignSkill: async (
       userId: string,
-      payload: { skill_id: string; level: 'junior' | 'intermediate' | 'senior' },
+      payload: { bot_option_id: string; level: 'junior' | 'intermediate' | 'senior' },
     ) => {
-      const res = await api.post<{ success: boolean; data: { user_id: string; skill_id: string; level: string } }>(
+      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string; level: string } }>(
         `/admin/skills/agents/${userId}`,
         payload,
       );
       return res.data.data;
     },
 
-    removeSkill: async (userId: string, skillId: string): Promise<{ removed: boolean }> => {
+    removeSkill: async (userId: string, botOptionId: string): Promise<{ removed: boolean }> => {
       const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
-        `/admin/skills/agents/${userId}/${skillId}`,
+        `/admin/skills/agents/${userId}/${botOptionId}`,
       );
       return res.data.data;
     },

@@ -1,22 +1,29 @@
 import { prisma } from '../../../config/database.js';
 import {
   ensureAgentAssignmentsInfrastructure,
-  ensureSkillsInfrastructure,
+  ensureAgentBotSkillsInfrastructure,
 } from '../../omnichannel/conversations/auto-assign.service.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
-import type { AssignSkillInput, CreateSkillInput, UpdateSkillInput } from './skills.schema.js';
+import type { AssignSkillInput } from './skills.schema.js';
 
-interface SkillRow {
+interface BotOptionSkillRow {
   id: string;
-  name: string;
-  description: string | null;
+  number: number;
+  label: string;
   tag: string | null;
-  color: string;
-  is_active: boolean;
-  created_at: Date;
+  has_submenu: boolean;
+  parent_option_id: string | null;
+  sort_order: number;
+  agents_count: number;
 }
 
-interface AgentSkillRow extends SkillRow {
+interface AgentSkillRow {
+  bot_option_id: string;
+  id: string;
+  label: string;
+  name: string;
+  tag: string | null;
+  parent_label: string | null;
   level: 'junior' | 'intermediate' | 'senior';
 }
 
@@ -30,13 +37,7 @@ interface AgentWithSkillsRow {
   active_conversations: number;
   pause_reason: string | null;
   pause_started_at: Date | null;
-  skills: Array<{
-    id: string;
-    name: string;
-    tag: string | null;
-    color: string;
-    level: 'junior' | 'intermediate' | 'senior';
-  }>;
+  skills: AgentSkillRow[];
 }
 
 export class NotFoundError extends Error {
@@ -65,79 +66,37 @@ async function resolveSchemaName(tenantId: string, schemaName?: string): Promise
 async function ensureInfra(tenantId: string, schemaName?: string): Promise<string> {
   const resolvedSchemaName = await resolveSchemaName(tenantId, schemaName);
   await ensureAgentAssignmentsInfrastructure(prisma, resolvedSchemaName);
-  await ensureSkillsInfrastructure(prisma, resolvedSchemaName);
+  await ensureAgentBotSkillsInfrastructure(prisma, resolvedSchemaName);
   return resolvedSchemaName;
 }
 
-export async function listSkills(tenantId: string, schemaName?: string): Promise<SkillRow[]> {
+export async function getBotOptionsTree(tenantId: string, schemaName?: string): Promise<BotOptionSkillRow[]> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
+  const botOptionsRef = tableRef(resolvedSchemaName, 'bot_options');
+  const agentBotSkillsRef = tableRef(resolvedSchemaName, 'agent_bot_skills');
 
-  return prisma.$queryRawUnsafe<SkillRow[]>(
-    `SELECT id, name, description, tag, color, is_active, created_at
-     FROM ${skillsRef}
-     WHERE is_active = true
-     ORDER BY name ASC`,
+  return prisma.$queryRawUnsafe<BotOptionSkillRow[]>(
+    `SELECT
+       bo.id,
+       bo.number,
+       bo.label,
+       bo.tag,
+       bo.has_submenu,
+       bo.parent_option_id,
+       bo.sort_order,
+       COUNT(abs.user_id)::integer AS agents_count
+     FROM ${botOptionsRef} bo
+     LEFT JOIN ${agentBotSkillsRef} abs ON abs.bot_option_id = bo.id
+     GROUP BY
+       bo.id,
+       bo.number,
+       bo.label,
+       bo.tag,
+       bo.has_submenu,
+       bo.parent_option_id,
+       bo.sort_order
+     ORDER BY bo.sort_order ASC, bo.number ASC`,
   );
-}
-
-export async function createSkill(
-  tenantId: string,
-  data: CreateSkillInput,
-  schemaName?: string,
-): Promise<SkillRow> {
-  const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
-
-  const rows = await prisma.$queryRawUnsafe<SkillRow[]>(
-    `INSERT INTO ${skillsRef} (name, description, tag, color)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, name, description, tag, color, is_active, created_at`,
-    data.name.trim(),
-    data.description?.trim() ?? null,
-    data.tag?.trim() ?? null,
-    data.color ?? '#00C9A7',
-  );
-
-  return rows[0]!;
-}
-
-export async function updateSkill(
-  tenantId: string,
-  skillId: string,
-  data: UpdateSkillInput,
-  schemaName?: string,
-): Promise<SkillRow> {
-  const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
-
-  const rows = await prisma.$queryRawUnsafe<SkillRow[]>(
-    `UPDATE ${skillsRef}
-     SET name = COALESCE($1::text, name),
-         description = COALESCE($2::text, description),
-         tag = COALESCE($3::text, tag),
-         color = COALESCE($4::text, color),
-         is_active = COALESCE($5::boolean, is_active)
-     WHERE id = $6::uuid
-     RETURNING id, name, description, tag, color, is_active, created_at`,
-    data.name?.trim() ?? null,
-    data.description?.trim() ?? null,
-    data.tag?.trim() ?? null,
-    data.color ?? null,
-    data.is_active ?? null,
-    skillId,
-  );
-
-  if (!rows[0]) throw new NotFoundError('Skill nao encontrada');
-  return rows[0];
-}
-
-export async function deleteSkill(
-  tenantId: string,
-  skillId: string,
-  schemaName?: string,
-): Promise<SkillRow> {
-  return updateSkill(tenantId, skillId, { is_active: false }, schemaName);
 }
 
 export async function getAgentSkills(
@@ -146,72 +105,85 @@ export async function getAgentSkills(
   schemaName?: string,
 ): Promise<AgentSkillRow[]> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
-  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+  const botOptionsRef = tableRef(resolvedSchemaName, 'bot_options');
+  const agentBotSkillsRef = tableRef(resolvedSchemaName, 'agent_bot_skills');
 
   return prisma.$queryRawUnsafe<AgentSkillRow[]>(
-    `SELECT s.id, s.name, s.description, s.tag, s.color, s.is_active, s.created_at, ask.level
-     FROM ${skillsRef} s
-     JOIN ${agentSkillsRef} ask ON ask.skill_id = s.id
-     WHERE ask.user_id = $1::uuid
-     ORDER BY s.name ASC`,
+    `SELECT
+       bo.id AS bot_option_id,
+       bo.id AS id,
+       bo.label,
+       bo.label AS name,
+       bo.tag,
+       parent.label AS parent_label,
+       abs.level
+     FROM ${botOptionsRef} bo
+     JOIN ${agentBotSkillsRef} abs ON abs.bot_option_id = bo.id
+     LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
+     WHERE abs.user_id = $1::uuid
+     ORDER BY bo.sort_order ASC, bo.number ASC`,
     userId,
   );
 }
 
-export async function assignSkill(
+export async function assignBotSkill(
   tenantId: string,
   userId: string,
   data: AssignSkillInput,
   schemaName?: string,
-): Promise<{ user_id: string; skill_id: string; level: string }> {
+): Promise<{ user_id: string; bot_option_id: string; level: string }> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
   const usersRef = tableRef(resolvedSchemaName, 'users');
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
-  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+  const botOptionsRef = tableRef(resolvedSchemaName, 'bot_options');
+  const agentBotSkillsRef = tableRef(resolvedSchemaName, 'agent_bot_skills');
 
   const userRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id FROM ${usersRef} WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+    `SELECT id
+     FROM ${usersRef}
+     WHERE id = $1::uuid
+       AND status = 'active'
+       AND role IN ('owner', 'admin', 'agent')
+     LIMIT 1`,
     userId,
   );
   if (!userRows[0]) throw new NotFoundError('Usuario nao encontrado');
 
-  const skillRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id FROM ${skillsRef} WHERE id = $1::uuid AND is_active = true LIMIT 1`,
-    data.skill_id,
+  const optionRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id FROM ${botOptionsRef} WHERE id = $1::uuid LIMIT 1`,
+    data.bot_option_id,
   );
-  if (!skillRows[0]) throw new NotFoundError('Skill nao encontrada');
+  if (!optionRows[0]) throw new NotFoundError('Opcao do bot nao encontrada');
 
-  const rows = await prisma.$queryRawUnsafe<Array<{ user_id: string; skill_id: string; level: string }>>(
-    `INSERT INTO ${agentSkillsRef} (user_id, skill_id, level)
+  const rows = await prisma.$queryRawUnsafe<Array<{ user_id: string; bot_option_id: string; level: string }>>(
+    `INSERT INTO ${agentBotSkillsRef} (user_id, bot_option_id, level)
      VALUES ($1::uuid, $2::uuid, $3)
-     ON CONFLICT (user_id, skill_id)
+     ON CONFLICT (user_id, bot_option_id)
      DO UPDATE SET level = EXCLUDED.level
-     RETURNING user_id, skill_id, level`,
+     RETURNING user_id, bot_option_id, level`,
     userId,
-    data.skill_id,
+    data.bot_option_id,
     data.level,
   );
 
   return rows[0]!;
 }
 
-export async function removeSkill(
+export async function removeBotSkill(
   tenantId: string,
   userId: string,
-  skillId: string,
+  botOptionId: string,
   schemaName?: string,
 ): Promise<{ removed: boolean }> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
-  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+  const agentBotSkillsRef = tableRef(resolvedSchemaName, 'agent_bot_skills');
 
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `DELETE FROM ${agentSkillsRef}
+    `DELETE FROM ${agentBotSkillsRef}
      WHERE user_id = $1::uuid
-       AND skill_id = $2::uuid
+       AND bot_option_id = $2::uuid
      RETURNING id`,
     userId,
-    skillId,
+    botOptionId,
   );
 
   return { removed: !!rows[0] };
@@ -224,8 +196,8 @@ export async function getAgentsWithSkills(
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
   const usersRef = tableRef(resolvedSchemaName, 'users');
   const assignmentsRef = tableRef(resolvedSchemaName, 'agent_assignments');
-  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
-  const skillsRef = tableRef(resolvedSchemaName, 'skills');
+  const agentBotSkillsRef = tableRef(resolvedSchemaName, 'agent_bot_skills');
+  const botOptionsRef = tableRef(resolvedSchemaName, 'bot_options');
 
   return prisma.$queryRawUnsafe<AgentWithSkillsRow[]>(
     `SELECT
@@ -241,19 +213,22 @@ export async function getAgentsWithSkills(
        COALESCE(
          json_agg(
            json_build_object(
-             'id', s.id,
-             'name', s.name,
-             'tag', s.tag,
-             'color', s.color,
-             'level', ask.level
+             'bot_option_id', bo.id,
+             'id', bo.id,
+             'label', bo.label,
+             'name', bo.label,
+             'tag', bo.tag,
+             'level', abs.level,
+             'parent_label', parent.label
            )
-         ) FILTER (WHERE s.id IS NOT NULL),
+         ) FILTER (WHERE bo.id IS NOT NULL),
          '[]'::json
        ) AS skills
      FROM ${usersRef} u
      LEFT JOIN ${assignmentsRef} aa ON aa.user_id = u.id
-     LEFT JOIN ${agentSkillsRef} ask ON ask.user_id = u.id
-     LEFT JOIN ${skillsRef} s ON s.id = ask.skill_id AND s.is_active = true
+     LEFT JOIN ${agentBotSkillsRef} abs ON abs.user_id = u.id
+     LEFT JOIN ${botOptionsRef} bo ON bo.id = abs.bot_option_id
+     LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
      WHERE u.status = 'active'
        AND u.role IN ('owner', 'admin', 'agent')
      GROUP BY

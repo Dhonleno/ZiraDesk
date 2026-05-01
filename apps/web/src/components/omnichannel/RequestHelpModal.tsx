@@ -67,8 +67,8 @@ export function RequestHelpModal({
                 <div className="agent-meta">{agent.role} - {agent.active_conversations} atend.</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                   {agent.skills?.map((skill) => (
-                    <span key={skill.id} className="skill-chip" style={{ fontSize: 10 }}>
-                      {skill.name}
+                    <span key={skill.bot_option_id ?? skill.id} className="skill-chip" style={{ fontSize: 10 }}>
+                      {skill.label ?? skill.name}
                     </span>
                   ))}
                 </div>

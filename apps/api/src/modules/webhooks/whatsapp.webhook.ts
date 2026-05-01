@@ -501,6 +501,7 @@ async function processIncomingMessage(
       isNewConversation,
       shouldAutoAssign: (isNewConversation && !botResponse) || botResponse?.type === 'choice',
       botTag: botResponse?.type === 'choice' ? (botResponse.option?.tag ?? undefined) : undefined,
+      botOptionId: botResponse?.type === 'choice' ? (botResponse.option?.id ?? undefined) : undefined,
       message: savedMessage,
       protocolNumber,
       protocolMessageId,
@@ -577,7 +578,7 @@ async function processIncomingMessage(
       prisma,
       io,
       undefined,
-      result.botTag,
+      result.botOptionId,
     );
   }
 

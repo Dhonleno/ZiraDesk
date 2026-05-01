@@ -174,6 +174,23 @@
         "optionDeleted": "Opção removida"
       }
     },
+    "skills": {
+      "title": "Habilidades",
+      "subtitle": "Defina quais opções do bot cada agente pode atender",
+      "noBotOptions": "Nenhuma opção de bot cadastrada",
+      "noBotOptionsHint": "Configure o bot primeiro para definir as habilidades",
+      "goToBot": "Configurar Bot",
+      "agentNoSkills": "Sem habilidades definidas",
+      "assign": "Atribuir habilidades",
+      "assignTitle": "Habilidades — {{name}}",
+      "assignHint": "Selecione quais opções do bot este agente pode atender",
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermediário",
+        "senior": "Sênior"
+      },
+      "agentsCount": "{{count}} agente(s)"
+    },
     "users": {
       "title": "Usuários",
       "subtitle": "Gerencie os membros da sua equipe",

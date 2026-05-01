@@ -1,7 +1,7 @@
 import { prisma } from '../../config/database.js';
 import {
   ensureAgentAssignmentsInfrastructure,
-  ensureSkillsInfrastructure,
+  ensureAgentBotSkillsInfrastructure,
 } from './conversations/auto-assign.service.js';
 
 interface MonitorAgent {
@@ -15,9 +15,11 @@ interface MonitorAgent {
   active_conversations: number;
   skills: Array<{
     id: string;
+    bot_option_id: string;
+    label: string;
     name: string;
     tag: string | null;
-    color: string;
+    parent_label: string | null;
     level: 'junior' | 'intermediate' | 'senior';
   }>;
 }
@@ -41,7 +43,7 @@ interface MonitorResponse {
 
 export async function getMonitorSnapshot(schemaName: string): Promise<MonitorResponse> {
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
-  await ensureSkillsInfrastructure(prisma, schemaName);
+  await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
 
   const [agents, queueRows, activeRows, statsRows] = await Promise.all([
     prisma.$queryRawUnsafe<Array<{
@@ -67,19 +69,22 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          COALESCE(
            json_agg(
              json_build_object(
-               'id', s.id,
-               'name', s.name,
-               'tag', s.tag,
-               'color', s.color,
-               'level', ask.level
+               'id', bo.id,
+               'bot_option_id', bo.id,
+               'label', bo.label,
+               'name', bo.label,
+               'tag', bo.tag,
+               'parent_label', parent.label,
+               'level', abs.level
              )
-           ) FILTER (WHERE s.id IS NOT NULL),
+           ) FILTER (WHERE bo.id IS NOT NULL),
            '[]'::json
          ) AS skills
        FROM users u
        LEFT JOIN agent_assignments aa ON aa.user_id = u.id
-       LEFT JOIN agent_skills ask ON ask.user_id = u.id
-       LEFT JOIN skills s ON s.id = ask.skill_id AND s.is_active = true
+       LEFT JOIN agent_bot_skills abs ON abs.user_id = u.id
+       LEFT JOIN bot_options bo ON bo.id = abs.bot_option_id
+       LEFT JOIN bot_options parent ON parent.id = bo.parent_option_id
        WHERE u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
        GROUP BY
