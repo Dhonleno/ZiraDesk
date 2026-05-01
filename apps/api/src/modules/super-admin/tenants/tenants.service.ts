@@ -42,6 +42,26 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_assignments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL UNIQUE REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      active_conversations INTEGER NOT NULL DEFAULT 0,
+      is_available BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".agent_assignments (user_id)
+    SELECT id
+    FROM "${schemaName}".users
+    WHERE status = 'active'
+      AND role IN ('owner', 'admin', 'agent')
+    ON CONFLICT (user_id) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".organizations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       type            VARCHAR(20)  NOT NULL DEFAULT 'company',

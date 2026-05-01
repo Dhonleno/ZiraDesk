@@ -91,6 +91,16 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        {canManageUsers && (
+          <AdminNavItem to="/admin/auto-assign" label={t('tenantAdmin.nav.autoAssign')}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <path d="M3 11.5h9M4 9l2-2 1.5 1.5L10.5 5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="4" cy="5" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <circle cx="11" cy="10" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </AdminNavItem>
+        )}
+
         <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

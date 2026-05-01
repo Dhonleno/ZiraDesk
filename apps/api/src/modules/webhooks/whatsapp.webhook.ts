@@ -16,6 +16,7 @@ import {
   callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
 } from '../omnichannel/conversations/protocols.js';
+import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
 
 interface MetaMessage {
   from: string;
@@ -518,6 +519,7 @@ async function processIncomingMessage(
     return {
       conversationId,
       isNewConversation,
+      shouldAutoAssign: (isNewConversation && !botResponse) || botResponse?.type === 'choice',
       message: savedMessage,
       protocolNumber,
       protocolMessageId,
@@ -584,6 +586,16 @@ async function processIncomingMessage(
       content: result.botMessageContent,
       to: formattedPhone,
     });
+  }
+
+  if (result.shouldAutoAssign) {
+    await autoAssignConversation(
+      result.conversationId,
+      tenantId,
+      schemaName,
+      prisma,
+      io,
+    );
   }
 
   // Notify assigned agent if conversation has one

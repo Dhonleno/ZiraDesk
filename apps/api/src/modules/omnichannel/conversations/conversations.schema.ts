@@ -71,6 +71,10 @@ export const transferConversationBodySchema = z.object({
   reason: z.string().optional(),
 });
 
+export const availabilityBodySchema = z.object({
+  is_available: z.boolean(),
+});
+
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type CreateConversationBody = z.infer<typeof createConversationBodySchema>;
 export type SendMessageBody = z.infer<typeof sendMessageBodySchema>;
@@ -78,3 +82,4 @@ export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export type UpdateConversationBody = z.infer<typeof updateConversationBodySchema>;
 export type AssignConversationBody = z.infer<typeof assignConversationBodySchema>;
 export type TransferConversationBody = z.infer<typeof transferConversationBodySchema>;
+export type AvailabilityBody = z.infer<typeof availabilityBodySchema>;

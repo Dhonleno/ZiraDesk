@@ -1,5 +1,5 @@
-import { useEffect, useCallback, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useCallback, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
@@ -96,6 +96,7 @@ function Breadcrumb() {
     '/admin/channels':    t('tenantAdmin.nav.channels'),
     '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
     '/admin/bot': t('tenantAdmin.nav.bot'),
+    '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
@@ -155,10 +156,17 @@ function NavItem({ to, end, title, children }: NavItemProps) {
 
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
+  const { t } = useTranslation('admin');
   const { user, token, logout, isLoggingOut } = useAuth();
   const { pathname } = useLocation();
+  const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
+  const canToggleAvailability =
+    user?.role === 'owner' || user?.role === 'admin' || user?.role === 'agent';
   const roleLabel =
     user?.role === 'owner'
       ? 'Owner'
@@ -173,6 +181,21 @@ export function TenantLayout() {
     queryFn: adminApi.getSettings,
     staleTime: 5 * 60_000,
     enabled: canAccessAdminData,
+  });
+
+  const availabilityMutation = useMutation({
+    mutationFn: (nextAvailability: boolean) =>
+      adminApi.autoAssign.setAvailability({ is_available: nextAvailability }),
+    onSuccess: async (availability) => {
+      setIsAvailable(availability.is_available);
+      try {
+        localStorage.setItem('zd-availability', availability.is_available ? '1' : '0');
+      } catch {
+        // ignore storage errors
+      }
+      setShowStatusMenu(false);
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'auto-assign'] });
+    },
   });
 
   useEffect(() => {
@@ -191,6 +214,28 @@ export function TenantLayout() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (event: MouseEvent) => {
+      if (!statusMenuRef.current) return;
+      if (!statusMenuRef.current.contains(event.target as Node)) {
+        setShowStatusMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', onClickOutside);
+    return () => window.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('zd-availability');
+      if (cached === '1') setIsAvailable(true);
+      if (cached === '0') setIsAvailable(false);
+    } catch {
+      // ignore storage errors
+    }
   }, []);
 
   const initial = user?.name.charAt(0).toUpperCase() ?? '?';
@@ -222,10 +267,49 @@ export function TenantLayout() {
 
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="topbar-chip" title={`Perfil atual: ${roleLabel}`}>
-            <span className="topbar-chip-dot" aria-hidden />
-            {roleLabel}
-          </div>
+          {canToggleAvailability ? (
+            <div className="status-dropdown-wrap" ref={statusMenuRef}>
+              <button
+                type="button"
+                className="status-dropdown"
+                onClick={() => setShowStatusMenu((current) => !current)}
+                title={`Perfil atual: ${roleLabel}`}
+                disabled={availabilityMutation.isPending}
+              >
+                <span className={`status-dot ${isAvailable ? 'online' : 'busy'}`} />
+                {isAvailable
+                  ? t('tenantAdmin.autoAssign.availability.online')
+                  : t('tenantAdmin.autoAssign.availability.busy')}
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M3.5 5.5L7 9l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {showStatusMenu && (
+                <div className="status-menu">
+                  <button
+                    type="button"
+                    onClick={() => availabilityMutation.mutate(true)}
+                    disabled={availabilityMutation.isPending}
+                  >
+                    <span className="dot online" /> {t('tenantAdmin.autoAssign.availability.online')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => availabilityMutation.mutate(false)}
+                    disabled={availabilityMutation.isPending}
+                  >
+                    <span className="dot busy" /> {t('tenantAdmin.autoAssign.availability.busy')}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="topbar-chip" title={`Perfil atual: ${roleLabel}`}>
+              <span className="topbar-chip-dot" aria-hidden />
+              {roleLabel}
+            </div>
+          )}
 
           <ThemeToggle />
 

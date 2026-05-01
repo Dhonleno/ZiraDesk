@@ -26,8 +26,32 @@
       "channels": "Canales",
       "businessHours": "Horario de atención",
       "bot": "Bot de atención",
+      "autoAssign": "Distribución Automática",
       "quickReplies": "Respuestas Rápidas",
       "settings": "Configuración"
+    },
+    "autoAssign": {
+      "title": "Distribución Automática",
+      "subtitle": "Configura cómo se distribuyen las conversaciones",
+      "active": "Distribución automática activa",
+      "algorithm": "Algoritmo",
+      "roundRobin": "Round-robin",
+      "agents": "Agentes disponibles",
+      "reset": "Reiniciar cola round-robin",
+      "resetConfirm": "Esto reiniciará los contadores. ¿Confirmar?",
+      "activeConversations": "{{count}} conversación(es) activa(s)",
+      "lastAssigned": "Último: {{time}}",
+      "availability": {
+        "online": "Online",
+        "busy": "Ocupado",
+        "setOnline": "Marcar como disponible",
+        "setBusy": "Marcar como ocupado"
+      },
+      "messages": {
+        "saved": "Configuración guardada",
+        "reset": "Cola reiniciada",
+        "autoAssigned": "Conversación asignada automáticamente a {{name}}"
+      }
     },
     "settings": {
       "title": "Configuración",

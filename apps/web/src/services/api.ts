@@ -157,6 +157,24 @@ export interface BotOptionPayload {
   sort_order?: number;
 }
 
+export interface AutoAssignAgent {
+  user_id: string;
+  last_assigned_at: string;
+  active_conversations: number;
+  is_available: boolean;
+  created_at: string;
+  name: string;
+  email: string;
+  avatar_url: string | null;
+  role: 'owner' | 'admin' | 'agent' | string;
+}
+
+export interface AutoAssignConfig {
+  auto_assign: boolean;
+  auto_assign_algorithm: 'round_robin';
+  agents: AutoAssignAgent[];
+}
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 export const api = axios.create({
@@ -414,6 +432,38 @@ export const adminApi = {
   updateSettings: async (data: Partial<TenantSettings>): Promise<TenantSettings> => {
     const res = await api.patch<{ success: boolean; data: TenantSettings }>('/admin/settings', data);
     return res.data.data;
+  },
+
+  autoAssign: {
+    getConfig: async (): Promise<AutoAssignConfig> => {
+      const res = await api.get<{ success: boolean; data: AutoAssignConfig }>('/admin/auto-assign');
+      return res.data.data;
+    },
+
+    updateConfig: async (data: { auto_assign?: boolean; auto_assign_algorithm?: 'round_robin' }) => {
+      const res = await api.patch<{
+        success: boolean;
+        data: { auto_assign: boolean; auto_assign_algorithm: 'round_robin' };
+      }>('/admin/auto-assign', data);
+      return res.data.data;
+    },
+
+    toggleAgent: async (userId: string, data: { is_available: boolean }) => {
+      const res = await api.patch<{ success: boolean; data: AutoAssignAgent }>(
+        `/admin/auto-assign/agents/${userId}`,
+        data,
+      );
+      return res.data.data;
+    },
+
+    reset: async () => {
+      await api.post('/admin/auto-assign/reset');
+    },
+
+    setAvailability: async (data: { is_available: boolean }) => {
+      const res = await api.put<{ success: boolean; data: AutoAssignAgent }>('/omnichannel/availability', data);
+      return res.data.data;
+    },
   },
 
   listUsers: async (params?: ListUsersParams): Promise<PaginatedUsers> => {
@@ -894,6 +944,11 @@ export const omnichannelApi = {
       `/omnichannel/conversations/${conversationId}/transfer`,
       { user_id: userId, reason },
     );
+    return res.data.data;
+  },
+
+  setAvailability: async (data: { is_available: boolean }): Promise<AutoAssignAgent> => {
+    const res = await api.put<{ success: boolean; data: AutoAssignAgent }>('/omnichannel/availability', data);
     return res.data.data;
   },
 };

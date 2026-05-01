@@ -26,8 +26,32 @@
       "channels": "Channels",
       "businessHours": "Business hours",
       "bot": "Support bot",
+      "autoAssign": "Automatic Distribution",
       "quickReplies": "Quick Replies",
       "settings": "Settings"
+    },
+    "autoAssign": {
+      "title": "Automatic Distribution",
+      "subtitle": "Configure how conversations are distributed",
+      "active": "Automatic distribution enabled",
+      "algorithm": "Algorithm",
+      "roundRobin": "Round-robin",
+      "agents": "Available agents",
+      "reset": "Reset round-robin queue",
+      "resetConfirm": "This will reset counters. Confirm?",
+      "activeConversations": "{{count}} active conversation(s)",
+      "lastAssigned": "Last: {{time}}",
+      "availability": {
+        "online": "Online",
+        "busy": "Busy",
+        "setOnline": "Set as available",
+        "setBusy": "Set as busy"
+      },
+      "messages": {
+        "saved": "Settings saved",
+        "reset": "Queue reset",
+        "autoAssigned": "Conversation automatically assigned to {{name}}"
+      }
     },
     "settings": {
       "title": "Settings",
