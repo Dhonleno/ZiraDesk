@@ -3,10 +3,12 @@ import { omnichannelRoutes as conversationsModule } from './conversations/index.
 import { omnichannelMediaRoutes as mediaModule } from './media/index.js';
 import { omnichannelAvailabilityRoutes } from './availability.routes.js';
 import { omnichannelPauseRoutes } from './pause.routes.js';
+import { omnichannelMonitorRoutes } from './monitor.routes.js';
 
 export async function omnichannelModuleRoutes(app: FastifyInstance): Promise<void> {
   await app.register(omnichannelAvailabilityRoutes);
   await app.register(omnichannelPauseRoutes);
+  await app.register(omnichannelMonitorRoutes);
   await app.register(conversationsModule);
   await app.register(mediaModule);
 }

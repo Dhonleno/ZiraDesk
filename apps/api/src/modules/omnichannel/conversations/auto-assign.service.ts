@@ -114,13 +114,59 @@ export async function ensureAgentAssignmentsInfrastructure(
   `);
 }
 
+export async function ensureSkillsInfrastructure(
+  prisma: PrismaClient,
+  schemaName: string,
+): Promise<void> {
+  const usersRef = tableRef(schemaName, 'users');
+  const skillsRef = tableRef(schemaName, 'skills');
+  const agentSkillsRef = tableRef(schemaName, 'agent_skills');
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${skillsRef} (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      tag VARCHAR(50),
+      color VARCHAR(7) DEFAULT '#00C9A7',
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(name)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${agentSkillsRef} (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES ${usersRef}(id) ON DELETE CASCADE,
+      skill_id UUID REFERENCES ${skillsRef}(id) ON DELETE CASCADE,
+      level VARCHAR(20) DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, skill_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_agent_skills_user
+    ON ${agentSkillsRef}(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_agent_skills_skill
+    ON ${agentSkillsRef}(skill_id)
+  `);
+}
+
 async function resolveAgentForAssignment(
   prisma: PrismaClient,
   schemaName: string,
   preferredAgentId?: string,
+  requiredTag?: string,
 ): Promise<AgentCandidateRow | null> {
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
+  const skillsRef = tableRef(schemaName, 'skills');
+  const agentSkillsRef = tableRef(schemaName, 'agent_skills');
 
   if (preferredAgentId) {
     const preferredRows = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
@@ -137,6 +183,27 @@ async function resolveAgentForAssignment(
     );
 
     if (preferredRows[0]) return preferredRows[0];
+  }
+
+  if (requiredTag?.trim()) {
+    const rowsBySkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM ${assignmentsRef} aa
+       JOIN ${usersRef} u ON u.id = aa.user_id
+       JOIN ${agentSkillsRef} ask ON ask.user_id = aa.user_id
+       JOIN ${skillsRef} s ON s.id = ask.skill_id
+       WHERE aa.is_available = true
+         AND aa.status = 'online'
+         AND u.status = 'active'
+         AND u.role IN ('owner', 'admin', 'agent')
+         AND s.tag = $1
+         AND s.is_active = true
+       ORDER BY aa.last_assigned_at ASC
+       LIMIT 1`,
+      requiredTag.trim(),
+    );
+
+    if (rowsBySkill[0]) return rowsBySkill[0];
   }
 
   const rows = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
@@ -236,6 +303,7 @@ export async function autoAssignConversation(
   prisma: PrismaClient,
   io: Server,
   preferredAgentId?: string,
+  requiredTag?: string,
 ): Promise<string | null> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -246,8 +314,14 @@ export async function autoAssignConversation(
   if (!settings.auto_assign || settings.auto_assign_algorithm !== 'round_robin') return null;
 
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
+  await ensureSkillsInfrastructure(prisma, schemaName);
 
-  const nextAgent = await resolveAgentForAssignment(prisma, schemaName, preferredAgentId);
+  const nextAgent = await resolveAgentForAssignment(
+    prisma,
+    schemaName,
+    preferredAgentId,
+    requiredTag,
+  );
   if (!nextAgent) return null;
 
   const assigned = await persistAutoAssignment(

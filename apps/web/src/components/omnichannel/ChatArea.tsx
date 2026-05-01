@@ -16,6 +16,7 @@ import { TransferModal } from './TransferModal';
 import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
 import { MessageMedia } from './MessageMedia';
+import { RequestHelpModal } from './RequestHelpModal';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
@@ -189,6 +190,7 @@ export function ChatArea({ conversationId }: Props) {
   const [isTyping, _setIsTyping] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
@@ -352,6 +354,13 @@ export function ChatArea({ conversationId }: Props) {
     queryKey: ['admin', 'quick-replies', 'chat'],
     queryFn: () => adminApi.quickReplies.list(),
     staleTime: 5 * 60 * 1000,
+    enabled: hasValidSession,
+    retry: shouldRetryQuery,
+  });
+
+  const { data: helpers = [] } = useQuery({
+    queryKey: ['conversation', conversationId, 'helpers'],
+    queryFn: () => omnichannelApi.getHelpers(conversationId),
     enabled: hasValidSession,
     retry: shouldRetryQuery,
   });
@@ -561,12 +570,30 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     });
 
+    const unsubHelpRequested = subscribeToEvent<{ conversationId: string }>('help:requested', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
+    });
+
+    const unsubHelpAccepted = subscribeToEvent<{ conversationId: string }>('help:accepted', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
+    });
+
+    const unsubHelpDeclined = subscribeToEvent<{ conversationId: string }>('help:declined', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
+    });
+
     return () => {
       unsubNew();
       unsubIncoming();
       unsubResolved();
       unsubTransferred();
       unsubUpdated();
+      unsubHelpRequested();
+      unsubHelpAccepted();
+      unsubHelpDeclined();
     };
   }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
@@ -633,6 +660,15 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
+  });
+
+  const endHelpMutation = useMutation({
+    mutationFn: () => omnichannelApi.endHelp(conversationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
+      toast.success(t('help.endHelp'));
+    },
+    onError: () => toast.error('Erro ao encerrar ajuda'),
   });
 
   async function handleLoadOlder() {
@@ -817,8 +853,11 @@ export function ChatArea({ conversationId }: Props) {
   const isUnassigned = !conv?.assigned_to;
   const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
   const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
+  const acceptedHelpers = helpers.filter((helper) => helper.status === 'accepted');
+  const isHelper = acceptedHelpers.some((helper) => helper.helper_user_id === currentUserId);
+  const helperIndicator = acceptedHelpers[0] ?? null;
   const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole ?? '');
-  const canSendMessage = isAssignedToMe && !isResolved;
+  const canSendMessage = (isAssignedToMe || isHelper) && !isResolved;
   const canAssume = isUnassigned && !isResolved;
   const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isResolved;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
@@ -947,6 +986,28 @@ export function ChatArea({ conversationId }: Props) {
               <span style={{ color: 'var(--txt-3)' }}>
                 {t('history.total', { count: totalMessages, defaultValue: `${totalMessages} mensagens` })}
               </span>
+              {helperIndicator && (
+                <div className="helper-indicator">
+                  <span>{helperIndicator.helper_name ?? t('help.helping')}</span>
+                  <span>{t('help.helping')}</span>
+                  <button
+                    type="button"
+                    onClick={() => endHelpMutation.mutate()}
+                    disabled={endHelpMutation.isPending}
+                    style={{
+                      border: '1px solid rgba(167,139,250,.3)',
+                      background: 'transparent',
+                      color: 'inherit',
+                      borderRadius: 'var(--r-pill)',
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      cursor: endHelpMutation.isPending ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {t('help.endHelp')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -981,6 +1042,10 @@ export function ChatArea({ conversationId }: Props) {
             </button>
           ) : (
             <>
+              {isHelper && !isAssignedToMe && (
+                <span className="helper-indicator">{t('help.helping')}</span>
+              )}
+
               {canTransfer && (
                 <button
                   title={t('chat.transfer')}
@@ -1000,6 +1065,26 @@ export function ChatArea({ conversationId }: Props) {
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+
+              {isAssignedToMe && !isResolved && (
+                <button
+                  type="button"
+                  className="tb-icon-btn"
+                  onClick={() => setShowHelpModal(true)}
+                  title={t('help.request')}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+                    <path
+                      d="M5.5 5.5C5.5 4.7 6.1 4 7 4s1.5.6 1.5 1.5c0 .7-.4 1.2-1 1.5C7 7.3 7 7.7 7 8"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="7" cy="10" r=".6" fill="currentColor" />
                   </svg>
                 </button>
               )}
@@ -1827,7 +1912,7 @@ export function ChatArea({ conversationId }: Props) {
                   {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
                 </button>
               </div>
-            ) : isAssignedToOther && !isResolved ? (
+            ) : isAssignedToOther && !isResolved && !isHelper ? (
               <div
                 style={{
                   display: 'flex',
@@ -1959,6 +2044,17 @@ export function ChatArea({ conversationId }: Props) {
           await transferSystemMessage.mutateAsync(agentName);
         }}
       />
+
+      {showHelpModal && (
+        <RequestHelpModal
+          conversationId={conversationId}
+          {...(currentUserId ? { currentUserId } : {})}
+          onClose={() => setShowHelpModal(false)}
+          onRequested={async () => {
+            await qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
+          }}
+        />
+      )}
     </div>
   );
 }

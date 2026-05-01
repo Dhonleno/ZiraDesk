@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import type { Server } from 'socket.io';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import type {
   ListConversationsQuery,
@@ -21,6 +22,20 @@ export class NotFoundError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 async function getSchemaName(tenantId?: string): Promise<string | null> {
   if (!tenantId) return null;
   const tenant = await prisma.tenant.findUnique({
@@ -35,6 +50,27 @@ async function getSchemaPrefix(tenantId?: string): Promise<string> {
   const schemaName = await getSchemaName(tenantId);
   if (!schemaName) return '';
   return `${quoteIdent(schemaName)}.`;
+}
+
+async function ensureConversationHelpersInfrastructure(tenantId?: string): Promise<void> {
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const conversationRef = `${schemaPrefix}conversations`;
+  const usersRef = `${schemaPrefix}users`;
+  const helpersRef = `${schemaPrefix}conversation_helpers`;
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${helpersRef} (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID REFERENCES ${conversationRef}(id) ON DELETE CASCADE,
+      helper_user_id UUID REFERENCES ${usersRef}(id),
+      requested_by UUID REFERENCES ${usersRef}(id),
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      accepted_at TIMESTAMPTZ,
+      ended_at TIMESTAMPTZ,
+      UNIQUE(conversation_id, helper_user_id)
+    )
+  `);
 }
 
 interface ConversationRow {
@@ -85,6 +121,19 @@ interface MessageCursorRow {
 
 interface MessageCountRow {
   count: bigint;
+}
+
+interface ConversationHelperRow {
+  id: string;
+  conversation_id: string;
+  helper_user_id: string;
+  helper_name: string | null;
+  requested_by: string;
+  requester_name: string | null;
+  status: 'pending' | 'accepted' | 'declined' | 'ended';
+  created_at: Date;
+  accepted_at: Date | null;
+  ended_at: Date | null;
 }
 
 function isLegacySchemaError(error: unknown): boolean {
@@ -785,4 +834,248 @@ export async function updateConversation(
   }
 
   return rows[0]!;
+}
+
+export async function requestHelp(
+  conversationId: string,
+  helperUserId: string,
+  requesterId: string,
+  tenantId: string | undefined,
+  io: Server,
+): Promise<ConversationHelperRow> {
+  await ensureConversationHelpersInfrastructure(tenantId);
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    assigned_to: string | null;
+    protocol_number: string | null;
+  }>>(
+    `SELECT id, assigned_to, protocol_number
+     FROM ${schemaPrefix}conversations
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    conversationId,
+  );
+
+  const conversation = conversationRows[0];
+  if (!conversation) throw new NotFoundError('Conversa nao encontrada');
+  if (!conversation.assigned_to || conversation.assigned_to !== requesterId) {
+    throw new ForbiddenError('Apenas o agente responsavel pode solicitar ajuda');
+  }
+
+  if (helperUserId === requesterId) {
+    throw new ConflictError('Nao e possivel solicitar ajuda para si mesmo');
+  }
+
+  const helperRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    name: string;
+  }>>(
+    `SELECT u.id, u.name
+     FROM ${schemaPrefix}users u
+     JOIN ${schemaPrefix}agent_assignments aa ON aa.user_id = u.id
+     WHERE u.id = $1::uuid
+       AND u.status = 'active'
+       AND u.role IN ('owner', 'admin', 'agent')
+       AND aa.status = 'online'
+       AND aa.is_available = true
+     LIMIT 1`,
+    helperUserId,
+  );
+
+  const helper = helperRows[0];
+  if (!helper) throw new ConflictError('Agente de apoio indisponivel');
+
+  const requesterRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+    `SELECT id, name
+     FROM ${schemaPrefix}users
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    requesterId,
+  );
+  const requester = requesterRows[0];
+
+  const rows = await prisma.$queryRawUnsafe<ConversationHelperRow[]>(
+    `INSERT INTO ${schemaPrefix}conversation_helpers (
+       conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at
+     )
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'pending', NOW(), NULL, NULL)
+     ON CONFLICT (conversation_id, helper_user_id)
+     DO UPDATE SET
+       requested_by = EXCLUDED.requested_by,
+       status = 'pending',
+       created_at = NOW(),
+       accepted_at = NULL,
+       ended_at = NULL
+     RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
+       NULL::text AS helper_name,
+       NULL::text AS requester_name`,
+    conversationId,
+    helperUserId,
+    requesterId,
+  );
+
+  io.to(`agent:${helperUserId}`).emit('help:requested', {
+    conversationId,
+    requestedBy: {
+      id: requesterId,
+      name: requester?.name ?? 'Agente',
+    },
+    protocol: conversation.protocol_number,
+  });
+
+  io.to(`agent:${helperUserId}`).emit('notification:new', {
+    type: 'help.requested',
+    title: 'Pedido de ajuda',
+    message: `${requester?.name ?? 'Um agente'} precisa de ajuda`,
+    conversationId,
+    createdAt: new Date().toISOString(),
+  });
+
+  return rows[0]!;
+}
+
+export async function acceptHelp(
+  conversationId: string,
+  helperUserId: string,
+  tenantId: string | undefined,
+  io: Server,
+): Promise<ConversationHelperRow> {
+  await ensureConversationHelpersInfrastructure(tenantId);
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+
+  const rows = await prisma.$queryRawUnsafe<ConversationHelperRow[]>(
+    `UPDATE ${schemaPrefix}conversation_helpers
+     SET status = 'accepted',
+         accepted_at = NOW(),
+         ended_at = NULL
+     WHERE conversation_id = $1::uuid
+       AND helper_user_id = $2::uuid
+       AND status IN ('pending', 'accepted')
+     RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
+       NULL::text AS helper_name,
+       NULL::text AS requester_name`,
+    conversationId,
+    helperUserId,
+  );
+
+  const accepted = rows[0];
+  if (!accepted) throw new NotFoundError('Pedido de ajuda nao encontrado');
+
+  const detailsRows = await prisma.$queryRawUnsafe<Array<{
+    helper_name: string | null;
+    requester_name: string | null;
+    requested_by: string;
+  }>>(
+    `SELECT h.requested_by, helper.name AS helper_name, requester.name AS requester_name
+     FROM ${schemaPrefix}conversation_helpers h
+     LEFT JOIN ${schemaPrefix}users helper ON helper.id = h.helper_user_id
+     LEFT JOIN ${schemaPrefix}users requester ON requester.id = h.requested_by
+     WHERE h.conversation_id = $1::uuid
+       AND h.helper_user_id = $2::uuid
+     LIMIT 1`,
+    conversationId,
+    helperUserId,
+  );
+
+  const details = detailsRows[0];
+  io.to(`agent:${details?.requested_by ?? accepted.requested_by}`).emit('help:accepted', {
+    conversationId,
+    helper: {
+      id: helperUserId,
+      name: details?.helper_name ?? 'Agente',
+    },
+  });
+
+  return {
+    ...accepted,
+    helper_name: details?.helper_name ?? null,
+    requester_name: details?.requester_name ?? null,
+  };
+}
+
+export async function declineHelp(
+  conversationId: string,
+  helperUserId: string,
+  tenantId: string | undefined,
+  io: Server,
+): Promise<ConversationHelperRow> {
+  await ensureConversationHelpersInfrastructure(tenantId);
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+
+  const rows = await prisma.$queryRawUnsafe<ConversationHelperRow[]>(
+    `UPDATE ${schemaPrefix}conversation_helpers
+     SET status = 'declined',
+         ended_at = NOW()
+     WHERE conversation_id = $1::uuid
+       AND helper_user_id = $2::uuid
+       AND status IN ('pending', 'accepted')
+     RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
+       NULL::text AS helper_name,
+       NULL::text AS requester_name`,
+    conversationId,
+    helperUserId,
+  );
+
+  const declined = rows[0];
+  if (!declined) throw new NotFoundError('Pedido de ajuda nao encontrado');
+
+  io.to(`agent:${declined.requested_by}`).emit('help:declined', {
+    conversationId,
+    helperId: helperUserId,
+  });
+
+  return declined;
+}
+
+export async function endHelp(
+  conversationId: string,
+  userId: string,
+  tenantId: string | undefined,
+): Promise<{ updated: number }> {
+  await ensureConversationHelpersInfrastructure(tenantId);
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `UPDATE ${schemaPrefix}conversation_helpers
+     SET status = 'ended',
+         ended_at = NOW()
+     WHERE conversation_id = $1::uuid
+       AND status IN ('pending', 'accepted')
+       AND (helper_user_id = $2::uuid OR requested_by = $2::uuid)
+     RETURNING id`,
+    conversationId,
+    userId,
+  );
+
+  return { updated: rows.length };
+}
+
+export async function getConversationHelpers(
+  conversationId: string,
+  tenantId?: string,
+): Promise<ConversationHelperRow[]> {
+  await ensureConversationHelpersInfrastructure(tenantId);
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+
+  return prisma.$queryRawUnsafe<ConversationHelperRow[]>(
+    `SELECT
+       h.id,
+       h.conversation_id,
+       h.helper_user_id,
+       helper.name AS helper_name,
+       h.requested_by,
+       requester.name AS requester_name,
+       h.status,
+       h.created_at,
+       h.accepted_at,
+       h.ended_at
+     FROM ${schemaPrefix}conversation_helpers h
+     LEFT JOIN ${schemaPrefix}users helper ON helper.id = h.helper_user_id
+     LEFT JOIN ${schemaPrefix}users requester ON requester.id = h.requested_by
+     WHERE h.conversation_id = $1::uuid
+     ORDER BY h.created_at DESC`,
+    conversationId,
+  );
 }

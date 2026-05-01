@@ -57,6 +57,40 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      tag VARCHAR(50),
+      color VARCHAR(7) DEFAULT '#00C9A7',
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(name)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      skill_id UUID REFERENCES "${schemaName}".skills(id) ON DELETE CASCADE,
+      level VARCHAR(20) DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, skill_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_agent_skills_user"
+    ON "${schemaName}".agent_skills(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_agent_skills_skill"
+    ON "${schemaName}".agent_skills(skill_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     INSERT INTO "${schemaName}".agent_assignments (user_id)
     SELECT id
     FROM "${schemaName}".users
@@ -306,6 +340,20 @@ async function createTenantTables(schemaName: string): Promise<void> {
       is_internal     BOOLEAN      NOT NULL DEFAULT FALSE,
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".conversation_helpers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      helper_user_id UUID REFERENCES "${schemaName}".users(id),
+      requested_by UUID REFERENCES "${schemaName}".users(id),
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      accepted_at TIMESTAMPTZ,
+      ended_at TIMESTAMPTZ,
+      UNIQUE(conversation_id, helper_user_id)
     )
   `);
 

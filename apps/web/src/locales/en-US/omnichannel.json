@@ -146,6 +146,45 @@
     "uploadError": "Error uploading file",
     "downloadFile": "Download file"
   },
+  "skills": {
+    "title": "Skills",
+    "subtitle": "Configure agent skills for smart routing",
+    "new": "New skill",
+    "assign": "Assign skills",
+    "levels": {
+      "junior": "Junior",
+      "intermediate": "Intermediate",
+      "senior": "Senior"
+    },
+    "noSkills": "No skills created",
+    "agentNoSkills": "No skills assigned"
+  },
+  "monitor": {
+    "title": "Monitor",
+    "subtitle": "Track live support activity in real time",
+    "agents": "Agents",
+    "queue": "In queue",
+    "active": "Active",
+    "today": "Today",
+    "resolved": "Resolved",
+    "avgTime": "AHT",
+    "viewConversations": "View conversations",
+    "noAgents": "No agents online"
+  },
+  "help": {
+    "request": "Request help",
+    "requestTitle": "Request help",
+    "requestHint": "The helper can send internal notes or real messages",
+    "selectAgent": "Select an available agent",
+    "send": "Request help",
+    "accept": "Help",
+    "decline": "Decline",
+    "requested": "{{name}} needs help",
+    "accepted": "{{name}} is helping you",
+    "helping": "Helping",
+    "endHelp": "End help",
+    "noAgentsAvailable": "No available agents to help"
+  },
   "info": {
     "contact": "Contact",
     "channels": "Channels",

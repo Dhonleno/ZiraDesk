@@ -146,6 +146,45 @@
     "uploadError": "Error al enviar archivo",
     "downloadFile": "Descargar archivo"
   },
+  "skills": {
+    "title": "Habilidades",
+    "subtitle": "Configura las habilidades de los agentes para enrutamiento inteligente",
+    "new": "Nueva habilidad",
+    "assign": "Asignar habilidades",
+    "levels": {
+      "junior": "Junior",
+      "intermediate": "Intermedio",
+      "senior": "Senior"
+    },
+    "noSkills": "No hay habilidades registradas",
+    "agentNoSkills": "Sin habilidades definidas"
+  },
+  "monitor": {
+    "title": "Monitor",
+    "subtitle": "Sigue la atención en tiempo real",
+    "agents": "Agentes",
+    "queue": "En cola",
+    "active": "En atención",
+    "today": "Hoy",
+    "resolved": "Resueltos",
+    "avgTime": "TME",
+    "viewConversations": "Ver atenciones",
+    "noAgents": "Ningún agente en línea"
+  },
+  "help": {
+    "request": "Pedir ayuda",
+    "requestTitle": "Solicitar ayuda",
+    "requestHint": "El agente podrá enviar notas internas o mensajes reales",
+    "selectAgent": "Selecciona un agente disponible",
+    "send": "Solicitar ayuda",
+    "accept": "Ayudar",
+    "decline": "Rechazar",
+    "requested": "{{name}} necesita ayuda",
+    "accepted": "{{name}} te está ayudando",
+    "helping": "Ayudando",
+    "endHelp": "Finalizar ayuda",
+    "noAgentsAvailable": "No hay agentes disponibles para ayudar"
+  },
   "info": {
     "contact": "Contacto",
     "channels": "Canales",

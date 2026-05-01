@@ -1,6 +1,6 @@
 import { useToastStore, type ToastType } from '../../stores/toast.store';
 
-const typeStyles: Record<ToastType, { wrapper: string; icon: string }> = {
+const typeStyles: Record<Exclude<ToastType, 'help_request'>, { wrapper: string; icon: string }> = {
   success: {
     wrapper: 'border-[rgba(62,207,142,.25)] bg-bg-2 text-[#3ECF8E]',
     icon: '✓',
@@ -21,6 +21,59 @@ export function Toaster() {
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-80">
       {toasts.map((toast) => {
+        if (toast.type === 'help_request') {
+          return (
+            <div key={toast.id} className="help-toast">
+              <div className="help-toast-icon">🆘</div>
+              <div className="help-toast-content">
+                <strong>{toast.message}</strong>
+                {toast.protocol ? <span>Protocolo {toast.protocol}</span> : null}
+              </div>
+              <div className="help-toast-actions">
+                <button
+                  className="tb-icon-btn"
+                  style={{
+                    width: 'auto',
+                    height: 28,
+                    border: '1px solid var(--teal)',
+                    background: 'var(--teal)',
+                    color: '#0E1A18',
+                    borderRadius: 'var(--r)',
+                    padding: '0 8px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                  onClick={() => {
+                    toast.onAccept?.();
+                    removeToast(toast.id);
+                  }}
+                >
+                  Ajudar
+                </button>
+                <button
+                  className="tb-icon-btn"
+                  style={{
+                    width: 'auto',
+                    height: 28,
+                    border: '1px solid var(--line-2)',
+                    background: 'var(--bg-4)',
+                    color: 'var(--txt-2)',
+                    borderRadius: 'var(--r)',
+                    padding: '0 8px',
+                    fontSize: 11,
+                  }}
+                  onClick={() => {
+                    toast.onDecline?.();
+                    removeToast(toast.id);
+                  }}
+                >
+                  Recusar
+                </button>
+              </div>
+            </div>
+          );
+        }
+
         const { wrapper, icon } = typeStyles[toast.type];
         return (
           <div

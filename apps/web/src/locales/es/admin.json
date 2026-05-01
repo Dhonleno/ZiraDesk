@@ -27,6 +27,7 @@
       "businessHours": "Horario de atención",
       "bot": "Bot de atención",
       "autoAssign": "Distribución Automática",
+      "skills": "Habilidades",
       "pauseReasons": "Motivos de Pausa",
       "quickReplies": "Respuestas Rápidas",
       "settings": "Configuración"
@@ -356,3 +357,6 @@
     }
   }
 }
+
+
+

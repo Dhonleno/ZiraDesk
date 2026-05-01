@@ -204,6 +204,63 @@ export interface PauseReason {
   created_at: string;
 }
 
+export interface Skill {
+  id: string;
+  name: string;
+  description: string | null;
+  tag: string | null;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AgentSkill extends Skill {
+  level: 'junior' | 'intermediate' | 'senior';
+}
+
+export interface AgentWithSkills {
+  id: string;
+  name: string;
+  role: string;
+  avatar_url: string | null;
+  status: 'online' | 'paused' | 'offline' | string;
+  is_available: boolean;
+  active_conversations: number;
+  pause_reason: string | null;
+  pause_started_at: string | null;
+  skills: AgentSkill[];
+}
+
+export interface MonitorData {
+  agents: AgentWithSkills[];
+  queue: {
+    total: number;
+    by_department: Record<string, number>;
+  };
+  active: {
+    total: number;
+    by_agent: Record<string, number>;
+  };
+  stats_today: {
+    total_resolved: number;
+    avg_resolution_minutes: number;
+    total_messages: number;
+  };
+}
+
+export interface ConversationHelper {
+  id: string;
+  conversation_id: string;
+  helper_user_id: string;
+  helper_name: string | null;
+  requested_by: string;
+  requester_name: string | null;
+  status: 'pending' | 'accepted' | 'declined' | 'ended';
+  created_at: string;
+  accepted_at: string | null;
+  ended_at: string | null;
+}
+
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 export const api = axios.create({
@@ -644,6 +701,70 @@ export const adminApi = {
     },
   },
 
+  skills: {
+    list: async (): Promise<Skill[]> => {
+      const res = await api.get<{ success: boolean; data: Skill[] }>('/admin/skills');
+      return res.data.data;
+    },
+
+    create: async (data: {
+      name: string;
+      description?: string | null;
+      tag?: string | null;
+      color?: string;
+    }): Promise<Skill> => {
+      const res = await api.post<{ success: boolean; data: Skill }>('/admin/skills', data);
+      return res.data.data;
+    },
+
+    update: async (
+      id: string,
+      data: Partial<{
+        name: string;
+        description: string | null;
+        tag: string | null;
+        color: string;
+        is_active: boolean;
+      }>,
+    ): Promise<Skill> => {
+      const res = await api.patch<{ success: boolean; data: Skill }>(`/admin/skills/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<Skill> => {
+      const res = await api.delete<{ success: boolean; data: Skill }>(`/admin/skills/${id}`);
+      return res.data.data;
+    },
+
+    listAgents: async (): Promise<AgentWithSkills[]> => {
+      const res = await api.get<{ success: boolean; data: AgentWithSkills[] }>('/admin/skills/agents');
+      return res.data.data;
+    },
+
+    getAgentSkills: async (userId: string): Promise<AgentSkill[]> => {
+      const res = await api.get<{ success: boolean; data: AgentSkill[] }>(`/admin/skills/agents/${userId}`);
+      return res.data.data;
+    },
+
+    assignSkill: async (
+      userId: string,
+      payload: { skill_id: string; level: 'junior' | 'intermediate' | 'senior' },
+    ) => {
+      const res = await api.post<{ success: boolean; data: { user_id: string; skill_id: string; level: string } }>(
+        `/admin/skills/agents/${userId}`,
+        payload,
+      );
+      return res.data.data;
+    },
+
+    removeSkill: async (userId: string, skillId: string): Promise<{ removed: boolean }> => {
+      const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+        `/admin/skills/agents/${userId}/${skillId}`,
+      );
+      return res.data.data;
+    },
+  },
+
   quickReplies: {
     list: async (params?: QuickRepliesListParams): Promise<QuickReply[]> => {
       const res = await api.get<{ success: boolean; data: QuickReply[] }>('/admin/quick-replies', { params });
@@ -881,6 +1002,11 @@ export interface OnboardingStatus {
 // ── Omnichannel API ───────────────────────────────────────────────────────────
 
 export const omnichannelApi = {
+  monitor: async (): Promise<MonitorData> => {
+    const res = await api.get<{ success: boolean; data: MonitorData }>('/omnichannel/monitor');
+    return res.data.data;
+  },
+
   listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {
     const res = await api.get<{ success: boolean; data: OmnichannelConversation[] }>(
       '/omnichannel/conversations',
@@ -1016,6 +1142,42 @@ export const omnichannelApi = {
 
   setAvailability: async (data: { is_available: boolean }): Promise<AutoAssignAgent> => {
     const res = await api.put<{ success: boolean; data: AutoAssignAgent }>('/omnichannel/availability', data);
+    return res.data.data;
+  },
+
+  requestHelp: async (conversationId: string, helperUserId: string) => {
+    const res = await api.post<{ success: boolean; data: ConversationHelper }>(
+      `/omnichannel/conversations/${conversationId}/request-help`,
+      { helper_user_id: helperUserId },
+    );
+    return res.data.data;
+  },
+
+  acceptHelp: async (conversationId: string) => {
+    const res = await api.post<{ success: boolean; data: ConversationHelper }>(
+      `/omnichannel/conversations/${conversationId}/accept-help`,
+    );
+    return res.data.data;
+  },
+
+  declineHelp: async (conversationId: string) => {
+    const res = await api.post<{ success: boolean; data: ConversationHelper }>(
+      `/omnichannel/conversations/${conversationId}/decline-help`,
+    );
+    return res.data.data;
+  },
+
+  endHelp: async (conversationId: string): Promise<{ updated: number }> => {
+    const res = await api.delete<{ success: boolean; data: { updated: number } }>(
+      `/omnichannel/conversations/${conversationId}/help`,
+    );
+    return res.data.data;
+  },
+
+  getHelpers: async (conversationId: string): Promise<ConversationHelper[]> => {
+    const res = await api.get<{ success: boolean; data: ConversationHelper[] }>(
+      `/omnichannel/conversations/${conversationId}/helpers`,
+    );
     return res.data.data;
   },
 };

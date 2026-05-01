@@ -27,6 +27,7 @@
       "businessHours": "Business hours",
       "bot": "Support bot",
       "autoAssign": "Automatic Distribution",
+      "skills": "Skills",
       "pauseReasons": "Pause Reasons",
       "quickReplies": "Quick Replies",
       "settings": "Settings"
@@ -356,3 +357,6 @@
     }
   }
 }
+
+
+

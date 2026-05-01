@@ -10,6 +10,7 @@ import {
   updateConversationBodySchema,
   assignConversationBodySchema,
   transferConversationBodySchema,
+  requestHelpBodySchema,
 } from './conversations.schema.js';
 import {
   listConversations,
@@ -21,7 +22,14 @@ import {
   createConversation,
   assignConversation,
   transferConversation,
+  requestHelp,
+  acceptHelp,
+  declineHelp,
+  endHelp,
+  getConversationHelpers,
   NotFoundError,
+  ConflictError,
+  ForbiddenError,
 } from './conversations.service.js';
 import { getSocketServer } from '../../../socket/index.js';
 import { messageQueue } from '../../../jobs/queue.js';
@@ -298,5 +306,79 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // GET /api/omnichannel/conversations/:id/helpers
+  app.get<{ Params: { id: string } }>('/:id/helpers', { preHandler: guard }, async (request, reply) => {
+    const data = await getConversationHelpers(request.params.id, request.user.tenantId);
+    return reply.send({ success: true, data });
+  });
+
+  // POST /api/omnichannel/conversations/:id/request-help
+  app.post<{ Params: { id: string } }>('/:id/request-help', { preHandler: guard }, async (request, reply) => {
+    const parsed = requestHelpBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const io = getSocketServer();
+      const data = await requestHelp(
+        request.params.id,
+        parsed.data.helper_user_id,
+        request.user.id,
+        request.user.tenantId,
+        io,
+      );
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/omnichannel/conversations/:id/accept-help
+  app.post<{ Params: { id: string } }>('/:id/accept-help', { preHandler: guard }, async (request, reply) => {
+    try {
+      const io = getSocketServer();
+      const data = await acceptHelp(request.params.id, request.user.id, request.user.tenantId, io);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/omnichannel/conversations/:id/decline-help
+  app.post<{ Params: { id: string } }>('/:id/decline-help', { preHandler: guard }, async (request, reply) => {
+    try {
+      const io = getSocketServer();
+      const data = await declineHelp(request.params.id, request.user.id, request.user.tenantId, io);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // DELETE /api/omnichannel/conversations/:id/help
+  app.delete<{ Params: { id: string } }>('/:id/help', { preHandler: guard }, async (request, reply) => {
+    const data = await endHelp(request.params.id, request.user.id, request.user.tenantId);
+    return reply.send({ success: true, data });
   });
 }

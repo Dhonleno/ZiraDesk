@@ -12,6 +12,7 @@ import { Tenants } from './pages/super-admin/Tenants';
 import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/omnichannel/Conversations';
+import { MonitorPage } from './pages/omnichannel/Monitor';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
@@ -24,6 +25,7 @@ import { BusinessHours as AdminBusinessHours } from './pages/admin/BusinessHours
 import { BotMenu as AdminBotMenu } from './pages/admin/BotMenu';
 import { AutoAssign as AdminAutoAssign } from './pages/admin/AutoAssign';
 import { PauseReasons as AdminPauseReasons } from './pages/admin/PauseReasons';
+import { Skills as AdminSkills } from './pages/admin/Skills';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -100,6 +102,7 @@ export function App() {
           >
             <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
+            <Route path="omnichannel/monitor" element={<MonitorPage />} />
             <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/clients" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/organizations" element={<OrganizationsPage />} />
@@ -117,6 +120,7 @@ export function App() {
               <Route path="bot" element={<AdminBotMenu />} />
               <Route path="auto-assign" element={<AdminAutoAssign />} />
               <Route path="pause-reasons" element={<AdminPauseReasons />} />
+              <Route path="skills" element={<AdminSkills />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

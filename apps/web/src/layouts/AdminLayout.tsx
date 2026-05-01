@@ -102,6 +102,16 @@ export function AdminLayout() {
         )}
 
         {canManageUsers && (
+          <AdminNavItem to="/admin/skills" label={t('tenantAdmin.nav.skills')}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <path d="M2 11.5h11M3.5 9l2-2 1.8 1.2 3-3 1.2 1.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="3.5" cy="4.2" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <circle cx="11.5" cy="8.8" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </AdminNavItem>
+        )}
+
+        {canManageUsers && (
           <AdminNavItem to="/admin/pause-reasons" label={t('tenantAdmin.nav.pauseReasons')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <rect x="4.2" y="3.2" width="2.1" height="8.6" rx="1" stroke="currentColor" strokeWidth="1.3" />

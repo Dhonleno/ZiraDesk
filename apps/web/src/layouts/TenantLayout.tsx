@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
-import { adminApi } from '../services/api';
-import { connectSocket, disconnectSocket } from '../services/socket';
+import { adminApi, omnichannelApi } from '../services/api';
+import { connectSocket, disconnectSocket, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
@@ -91,6 +91,7 @@ function Breadcrumb() {
   const isTickets = pathname.startsWith('/tickets');
 
   const routeLabels: Record<string, string> = {
+    '/omnichannel/monitor': 'Monitor',
     '/crm/organizations': 'Organizações',
     '/crm/contacts':      'Contatos',
     '/tickets':           'Tickets',
@@ -105,13 +106,18 @@ function Breadcrumb() {
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 
-  const staticLabel = isConversations
-    ? 'Central de Atendimento'
-    : (routeLabels[pathname]
-      ?? (pathname.startsWith('/crm/organizations') ? 'Organizações'
-        : pathname.startsWith('/crm/contacts') ? 'Contatos'
-        : isTickets ? 'Tickets'
-        : ''));
+  const staticLabel = routeLabels[pathname]
+    ?? (pathname.startsWith('/omnichannel/monitor')
+      ? 'Monitor'
+      : isConversations
+        ? 'Central de Atendimento'
+        : pathname.startsWith('/crm/organizations')
+          ? 'Organizações'
+          : pathname.startsWith('/crm/contacts')
+            ? 'Contatos'
+            : isTickets
+              ? 'Tickets'
+              : '');
   const section = isAdmin ? 'Administração' : isCRM ? 'CRM' : isTickets ? 'Tickets' : 'Omnichannel';
   if (!staticLabel) return null;
 
@@ -252,6 +258,60 @@ export function TenantLayout() {
     }
     return () => { disconnectSocket(); };
   }, [token, user?.tenantId]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const playNotificationSound = () => {
+      try {
+        const ctx = new AudioContext();
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.06;
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + 0.12);
+      } catch {
+        // sem suporte de audio no navegador
+      }
+    };
+
+    const unsubHelpRequested = subscribeToEvent<{
+      conversationId: string;
+      requestedBy: { id: string; name: string };
+      protocol?: string | null;
+    }>('help:requested', (data) => {
+      toast.helpRequest({
+        message: t('help.requested', { ns: 'omnichannel', name: data.requestedBy.name }),
+        protocol: data.protocol ?? null,
+        agentName: data.requestedBy.name,
+        onAccept: () => {
+          void omnichannelApi.acceptHelp(data.conversationId).then(() => {
+            toast.success(t('help.accept', { ns: 'omnichannel' }));
+            void queryClient.invalidateQueries({ queryKey: ['conversation', data.conversationId, 'helpers'] });
+            void queryClient.invalidateQueries({ queryKey: ['monitor'] });
+          }).catch(() => {
+            toast.error('Erro ao aceitar ajuda');
+          });
+        },
+        onDecline: () => {
+          void omnichannelApi.declineHelp(data.conversationId).then(() => {
+            toast.info(t('help.decline', { ns: 'omnichannel' }));
+          }).catch(() => {
+            toast.error('Erro ao recusar ajuda');
+          });
+        },
+      });
+      playNotificationSound();
+    });
+
+    return () => {
+      unsubHelpRequested();
+    };
+  }, [queryClient, t, toast, user?.id]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -484,6 +544,14 @@ export function TenantLayout() {
                 strokeLinejoin="round"
               />
               <path d="M6 7.5h6M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </NavItem>
+
+          {/* Monitor */}
+          <NavItem to="/omnichannel/monitor" title="Monitor">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </NavItem>
 
