@@ -1,5 +1,41 @@
 {
   "title": "Atenciones",
+  "metrics": {
+    "title": "Métricas y Reportes",
+    "export": "Exportar CSV",
+    "filters": {
+      "period": "Período",
+      "agent": "Agente",
+      "channel": "Canal",
+      "department": "Departamento",
+      "allAgents": "Todos los agentes",
+      "allChannels": "Todos los canales",
+      "allDepartments": "Todos los departamentos",
+      "today": "Hoy",
+      "7days": "7 días",
+      "30days": "30 días",
+      "90days": "90 días",
+      "custom": "Personalizado"
+    },
+    "cards": {
+      "total": "Atenciones",
+      "tma": "TMA",
+      "csat": "CSAT Promedio",
+      "resolved": "Resueltos",
+      "firstResponse": "1ª Respuesta"
+    },
+    "charts": {
+      "volume": "Volumen de atenciones",
+      "byAgent": "Por agente",
+      "byChannel": "Por canal",
+      "byDepartment": "Por departamento",
+      "peakHours": "Horarios pico",
+      "csatDistribution": "Distribución del CSAT",
+      "agentPerformance": "Rendimiento por agente"
+    },
+    "tmaUnit": "min",
+    "noData": "Sin datos para el período seleccionado"
+  },
   "new": "Nueva atención",
   "search": "Buscar conversación...",
   "myAttendances": "Mis atenciones",

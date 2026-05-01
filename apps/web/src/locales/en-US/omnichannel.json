@@ -1,5 +1,41 @@
 {
   "title": "Conversations",
+  "metrics": {
+    "title": "Metrics and Reports",
+    "export": "Export CSV",
+    "filters": {
+      "period": "Period",
+      "agent": "Agent",
+      "channel": "Channel",
+      "department": "Department",
+      "allAgents": "All agents",
+      "allChannels": "All channels",
+      "allDepartments": "All departments",
+      "today": "Today",
+      "7days": "7 days",
+      "30days": "30 days",
+      "90days": "90 days",
+      "custom": "Custom"
+    },
+    "cards": {
+      "total": "Conversations",
+      "tma": "Avg. Handle Time",
+      "csat": "Avg. CSAT",
+      "resolved": "Resolved",
+      "firstResponse": "First Response"
+    },
+    "charts": {
+      "volume": "Conversation volume",
+      "byAgent": "By agent",
+      "byChannel": "By channel",
+      "byDepartment": "By department",
+      "peakHours": "Peak hours",
+      "csatDistribution": "CSAT distribution",
+      "agentPerformance": "Agent performance"
+    },
+    "tmaUnit": "min",
+    "noData": "No data for the selected period"
+  },
   "new": "New conversation",
   "search": "Search conversation...",
   "myAttendances": "My conversations",

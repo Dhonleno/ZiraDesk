@@ -92,6 +92,7 @@ function Breadcrumb() {
 
   const routeLabels: Record<string, string> = {
     '/omnichannel/monitor': 'Monitor',
+    '/omnichannel/metrics': 'Métricas',
     '/crm/organizations': 'Organizações',
     '/crm/contacts':      'Contatos',
     '/tickets':           'Tickets',
@@ -111,7 +112,9 @@ function Breadcrumb() {
     ?? (pathname.startsWith('/omnichannel/monitor')
       ? 'Monitor'
       : isConversations
-        ? 'Central de Atendimento'
+        ? pathname.startsWith('/omnichannel/metrics')
+          ? 'Métricas'
+          : 'Central de Atendimento'
         : pathname.startsWith('/crm/organizations')
           ? 'Organizações'
           : pathname.startsWith('/crm/contacts')
@@ -557,6 +560,16 @@ export function TenantLayout() {
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
               <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </NavItem>
+
+          {/* Métricas */}
+          <NavItem to="/omnichannel/metrics" title="Métricas">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="7.75" y="6.5" width="2.5" height="6" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="11.5" y="4" width="2.5" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
             </svg>
           </NavItem>
 

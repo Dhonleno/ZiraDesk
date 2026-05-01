@@ -743,7 +743,8 @@
   border-radius: var(--r-lg);
   padding: 12px 16px;
   box-shadow: 0 4px 20px rgba(167, 139, 250, .3);
-  min-width: 320px;
+  width: 100%;
+  min-width: 0;
 }
 
 .help-toast-icon {
@@ -753,6 +754,7 @@
 
 .help-toast-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -767,11 +769,16 @@
   font-size: 11px;
   color: var(--txt-3);
   font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  hyphens: none;
 }
 
 .help-toast-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .agents-list {
@@ -809,6 +816,230 @@
 
 @media (max-width: 1024px) {
   .monitor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 16px;
+}
+
+.metric-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.metric-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--txt);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.metric-subtitle {
+  font-size: 12px;
+  color: var(--txt-3);
+}
+
+.chart-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 20px;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 16px;
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filters-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.period-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-3);
+  border-radius: var(--r);
+  padding: 3px;
+}
+
+.period-tab {
+  padding: 5px 12px;
+  border-radius: var(--r);
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: none;
+  color: var(--txt-3);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all .15s;
+}
+
+.period-tab.active {
+  background: var(--bg);
+  color: var(--txt);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+}
+
+.filter-select {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 10px;
+  outline: none;
+}
+
+.filter-select:focus {
+  border-color: var(--teal);
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 2px 6px;
+  overflow-x: auto;
+}
+
+.heatmap-corner {
+  width: 36px;
+}
+
+.heatmap-hour-label {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 16px;
+  font-size: 9px;
+  color: var(--txt-3);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  padding: 2px 0;
+}
+
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 36px repeat(24, minmax(16px, 1fr));
+  gap: 2px;
+}
+
+.heatmap-day-label {
+  font-size: 11px;
+  color: var(--txt-2);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.heatmap-cell {
+  height: 24px;
+  border-radius: 3px;
+  cursor: default;
+  transition: transform .1s;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.2);
+  z-index: 1;
+}
+
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.metrics-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border-bottom: 1px solid var(--line);
+}
+
+.metrics-table td {
+  padding: 10px 12px;
+  color: var(--txt);
+  border-bottom: 1px solid var(--line);
+}
+
+.metrics-table tr:last-child td {
+  border-bottom: none;
+}
+
+.metrics-table tr:hover td {
+  background: var(--bg-3);
+}
+
+@media (max-width: 1200px) {
+  .metrics-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .metrics-grid {
     grid-template-columns: 1fr;
   }
 }

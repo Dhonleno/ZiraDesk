@@ -1021,6 +1021,67 @@ export interface ListMessagesParams {
   before?: string;
 }
 
+export interface MetricsFiltersParams {
+  date_from?: string;
+  date_to?: string;
+  agent_id?: string;
+  channel_type?: string;
+  department?: string;
+}
+
+export interface MetricsOverviewData {
+  total: {
+    total: number;
+    resolved: number;
+    open: number;
+    bot: number;
+  };
+  tma: number;
+  first_response_minutes: number;
+  csat: {
+    avg_score: number | null;
+    total_responses: number;
+    positive: number;
+  };
+}
+
+export interface MetricsVolumePoint {
+  date: string;
+  total: number;
+  resolved: number;
+}
+
+export interface MetricsByAgentPoint {
+  agent_name: string;
+  agent_id: string;
+  total: number;
+  resolved: number;
+  avg_minutes: number | null;
+  avg_csat: number | null;
+}
+
+export interface MetricsByChannelPoint {
+  channel_type: string;
+  total: number;
+}
+
+export interface MetricsByDepartmentPoint {
+  department: string;
+  total: number;
+  avg_csat: number | null;
+}
+
+export interface MetricsPeakHoursPoint {
+  day_of_week: number;
+  hour: number;
+  total: number;
+}
+
+export interface MetricsCsatPoint {
+  score: number;
+  total: number;
+}
+
 export interface OmnichannelMessagesPage {
   data: OmnichannelMessage[];
   has_more: boolean;
@@ -1059,6 +1120,37 @@ export const omnichannelApi = {
   monitor: async (): Promise<MonitorData> => {
     const res = await api.get<{ success: boolean; data: MonitorData }>('/omnichannel/monitor');
     return res.data.data;
+  },
+
+  metrics: {
+    getOverview: async (params?: MetricsFiltersParams): Promise<MetricsOverviewData> => {
+      const res = await api.get<{ success: boolean; data: MetricsOverviewData }>('/omnichannel/metrics/overview', { params });
+      return res.data.data;
+    },
+    getVolume: async (params?: MetricsFiltersParams): Promise<MetricsVolumePoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsVolumePoint[] }>('/omnichannel/metrics/volume', { params });
+      return res.data.data;
+    },
+    getByAgent: async (params?: MetricsFiltersParams): Promise<MetricsByAgentPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsByAgentPoint[] }>('/omnichannel/metrics/by-agent', { params });
+      return res.data.data;
+    },
+    getByChannel: async (params?: MetricsFiltersParams): Promise<MetricsByChannelPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsByChannelPoint[] }>('/omnichannel/metrics/by-channel', { params });
+      return res.data.data;
+    },
+    getByDepartment: async (params?: MetricsFiltersParams): Promise<MetricsByDepartmentPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsByDepartmentPoint[] }>('/omnichannel/metrics/by-department', { params });
+      return res.data.data;
+    },
+    getPeakHours: async (params?: MetricsFiltersParams): Promise<MetricsPeakHoursPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsPeakHoursPoint[] }>('/omnichannel/metrics/peak-hours', { params });
+      return res.data.data;
+    },
+    getCsat: async (params?: MetricsFiltersParams): Promise<MetricsCsatPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsCsatPoint[] }>('/omnichannel/metrics/csat', { params });
+      return res.data.data;
+    },
   },
 
   listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {

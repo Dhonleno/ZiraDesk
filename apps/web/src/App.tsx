@@ -13,6 +13,7 @@ import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/omnichannel/Conversations';
 import { MonitorPage } from './pages/omnichannel/Monitor';
+import { MetricsPage } from './pages/omnichannel/Metrics';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
@@ -104,6 +105,7 @@ export function App() {
             <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
             <Route path="omnichannel/monitor" element={<MonitorPage />} />
+            <Route path="omnichannel/metrics" element={<MetricsPage />} />
             <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/clients" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/organizations" element={<OrganizationsPage />} />
