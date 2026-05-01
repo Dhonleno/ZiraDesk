@@ -42,6 +42,7 @@ interface UserPayload {
   email: string;
   role: string;
   tenantId?: string;
+  schemaName?: string;
   isSuperAdmin: boolean;
 }
 
@@ -53,6 +54,7 @@ function signTokens(payload: UserPayload): TokenPair {
     role: payload.role,
     isSuperAdmin: payload.isSuperAdmin,
     ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
+    ...(payload.schemaName ? { schemaName: payload.schemaName } : {}),
   };
 
   const accessToken = jwt.sign(base, env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
@@ -110,6 +112,7 @@ export async function loginWithEmailPassword(
     email: dbUser.email,
     role: dbUser.role,
     ...(tenantId ? { tenantId } : {}),
+    ...(tenantSchemaName ? { schemaName: tenantSchemaName } : {}),
     isSuperAdmin: false,
   };
 

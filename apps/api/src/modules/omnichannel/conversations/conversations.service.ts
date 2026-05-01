@@ -55,7 +55,9 @@ interface ConversationRow {
   created_at: Date;
   metadata: unknown;
   contact_name: string | null;
+  contact_email: string | null;
   contact_phone: string | null;
+  contact_whatsapp: string | null;
   organization_name: string | null;
   assigned_name: string | null;
   channel_name: string | null;
@@ -85,20 +87,30 @@ interface MessageCountRow {
   count: bigint;
 }
 
-interface MessagePageResult {
-  messages: MessageRow[];
-  has_more: boolean;
-  total: number;
+function isLegacySchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    (message.includes('column') && message.includes('does not exist')) ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
 }
 
-interface ConversationCounts {
-  active: number;
-  mine: number;
-  queue: number;
-  closed: number;
+interface ListConversationSqlContext {
+  whereSql: string;
+  params: unknown[];
+  limitPlaceholder: string;
+  offsetPlaceholder: string;
 }
 
-export async function listConversations(query: ListConversationsQuery, userId?: string, _tenantId?: string) {
+function buildListConversationSqlContext(
+  query: ListConversationsQuery,
+  userId: string | undefined,
+  searchColumn: string,
+  contactColumn: string,
+  outboundCondition: string,
+): ListConversationSqlContext {
   const { page, perPage, tab, sub_status, status, search, assigned_to_me, contact_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
@@ -114,7 +126,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     conditions.push("c.status IN ('open', 'active_outbound')");
 
     if (assigned_to_me) {
-      conditions.push(`c.assigned_to = ${pushParam(userId ?? null)}::uuid`);
+      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
     }
   } else if (tab === 'queue') {
     conditions.push('c.assigned_to IS NULL');
@@ -127,65 +139,170 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     } else if (sub_status === 'closed') {
       conditions.push("c.status = 'closed'");
     } else if (sub_status === 'outbound') {
-      conditions.push("c.conversation_type = 'outbound'");
+      conditions.push(outboundCondition);
     }
   } else if (status) {
     conditions.push(`c.status = ${pushParam(status)}::text`);
   }
 
   if (search) {
-    conditions.push(`ct.name ILIKE '%' || ${pushParam(search)}::text || '%'`);
+    conditions.push(`${searchColumn} ILIKE '%' || ${pushParam(search)}::text || '%'`);
   }
 
   if (contact_id) {
-    conditions.push(`c.contact_id = ${pushParam(contact_id)}::uuid`);
+    conditions.push(`${contactColumn} = ${pushParam(contact_id)}::uuid`);
   }
 
   const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-  const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `SELECT
-       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
-       c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.created_at, c.metadata,
-       ct.name AS contact_name, ct.phone AS contact_phone,
-       o.name AS organization_name,
-       u.name AS assigned_name,
-       ch.name AS channel_name
-     FROM conversations c
-     LEFT JOIN contacts ct ON ct.id = c.contact_id
-     LEFT JOIN organizations o ON o.id = c.organization_id
-     LEFT JOIN users u ON u.id = c.assigned_to
-     LEFT JOIN channels ch ON ch.id = c.channel_id
-     ${whereSql}
-     ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
-     LIMIT ${pushParam(perPage)} OFFSET ${pushParam(offset)}`,
-    ...params,
-  );
-
-  const countParams = params.slice(0, -2);
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count
-     FROM conversations c
-     LEFT JOIN contacts ct ON ct.id = c.contact_id
-     ${whereSql}`,
-    ...countParams,
-  );
-
-  const total = Number(countRows[0]?.count ?? 0);
+  const limitPlaceholder = pushParam(perPage);
+  const offsetPlaceholder = pushParam(offset);
 
   return {
-    data: rows,
-    meta: {
-      total,
-      page,
-      perPage,
-      totalPages: Math.ceil(total / perPage),
-    },
+    whereSql,
+    params,
+    limitPlaceholder,
+    offsetPlaceholder,
   };
 }
 
-export async function getConversationCounts(userId?: string, _tenantId?: string): Promise<ConversationCounts> {
+interface MessagePageResult {
+  messages: MessageRow[];
+  has_more: boolean;
+  total: number;
+}
+
+interface ConversationCounts {
+  active: number;
+  mine: number;
+  queue: number;
+  closed: number;
+}
+
+export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
+  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+
+  const modernContext = buildListConversationSqlContext(
+    query,
+    userId,
+    'ct.name',
+    'c.contact_id',
+    "c.conversation_type = 'outbound'",
+  );
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+      `SELECT
+         c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+         c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
+         c.resolved_at, c.created_at, c.metadata,
+         ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
+         o.name AS organization_name,
+         u.name AS assigned_name,
+         ch.name AS channel_name
+       FROM conversations c
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       LEFT JOIN organizations o ON o.id = c.organization_id
+       LEFT JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN channels ch ON ch.id = c.channel_id
+       ${modernContext.whereSql}
+       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
+       LIMIT ${modernContext.limitPlaceholder} OFFSET ${modernContext.offsetPlaceholder}`,
+      ...modernContext.params,
+    );
+
+    const countParams = modernContext.params.slice(0, -2);
+    const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+      `SELECT COUNT(*) AS count
+       FROM conversations c
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       ${modernContext.whereSql}`,
+      ...countParams,
+    );
+
+    const total = Number(countRows[0]?.count ?? 0);
+
+    return {
+      data: rows,
+      meta: {
+        total,
+        page: query.page,
+        perPage: query.perPage,
+        totalPages: Math.ceil(total / query.perPage),
+      },
+    };
+  } catch (error) {
+    if (!isLegacySchemaError(error)) throw error;
+
+    const legacyContext = buildListConversationSqlContext(
+      query,
+      userId,
+      'cl.name',
+      'c.client_id',
+      "COALESCE(c.metadata->>'type', 'inbound') = 'outbound'",
+    );
+
+    const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+      `SELECT
+         c.id,
+         c.client_id AS contact_id,
+         NULL::uuid AS organization_id,
+         c.channel_id,
+         c.channel_type,
+         COALESCE(c.metadata->>'type', 'inbound') AS conversation_type,
+         c.external_id,
+         c.status,
+         NULL::text AS protocol_number,
+         c.assigned_to,
+         c.subject,
+         c.last_message,
+         c.last_message_at,
+         c.resolved_at,
+         c.created_at,
+         c.metadata,
+         cl.name AS contact_name,
+         cl.email AS contact_email,
+         cl.phone AS contact_phone,
+         cl.phone AS contact_whatsapp,
+         NULL::text AS organization_name,
+         u.name AS assigned_name,
+         ch.name AS channel_name
+       FROM conversations c
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       LEFT JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN channels ch ON ch.id = c.channel_id
+       ${legacyContext.whereSql}
+       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
+       LIMIT ${legacyContext.limitPlaceholder} OFFSET ${legacyContext.offsetPlaceholder}`,
+      ...legacyContext.params,
+    );
+
+    const countParams = legacyContext.params.slice(0, -2);
+    const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+      `SELECT COUNT(*) AS count
+       FROM conversations c
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       ${legacyContext.whereSql}`,
+      ...countParams,
+    );
+
+    const total = Number(countRows[0]?.count ?? 0);
+
+    return {
+      data: rows,
+      meta: {
+        total,
+        page: query.page,
+        perPage: query.perPage,
+        totalPages: Math.ceil(total / query.perPage),
+      },
+    };
+  }
+}
+
+export async function getConversationCounts(userId?: string, tenantId?: string): Promise<ConversationCounts> {
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const conversationRef = `${schemaPrefix}conversations`;
+
   const rows = await prisma.$queryRawUnsafe<Array<{
     active: bigint;
     mine: bigint;
@@ -198,7 +315,7 @@ export async function getConversationCounts(userId?: string, _tenantId?: string)
            AND status IN ('open', 'active_outbound')
        ) AS active,
        COUNT(*) FILTER (
-         WHERE assigned_to = $1::uuid
+         WHERE assigned_to::text = $1::text
            AND status IN ('open', 'active_outbound')
        ) AS mine,
        COUNT(*) FILTER (
@@ -208,7 +325,7 @@ export async function getConversationCounts(userId?: string, _tenantId?: string)
        COUNT(*) FILTER (
          WHERE status IN ('resolved', 'closed')
        ) AS closed
-     FROM conversations`,
+     FROM ${conversationRef}`,
     userId ?? null,
   );
 
@@ -228,7 +345,7 @@ export async function getConversationWithMessages(conversationId: string, tenant
        c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.created_at, c.metadata,
-       ct.name AS contact_name, ct.phone AS contact_phone,
+       ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        o.name AS organization_name,
        u.name AS assigned_name,
        ch.name AS channel_name

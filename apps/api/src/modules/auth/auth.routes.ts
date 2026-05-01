@@ -11,6 +11,13 @@ import { prisma } from '../../config/database.js';
 
 const REFRESH_COOKIE = 'zd_refresh';
 
+const RESERVED_SUBDOMAINS = new Set(['app', 'www', 'api', 'localhost', '127', '']);
+
+function extractSlugFromHost(host: string = ''): string | null {
+  const subdomain = host.split('.')[0] ?? '';
+  return RESERVED_SUBDOMAINS.has(subdomain) ? null : subdomain;
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/login
   app.post('/login', async (request, reply) => {
@@ -21,15 +28,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Dados inválidos', details: parsed.error.flatten() });
     }
 
-    const { email, password, tenantSlug } = parsed.data;
+    const { email, password, tenantSlug: bodySlug } = parsed.data;
 
     try {
-      // Se tenantSlug fornecido (dev sem subdomain), resolve o schema manualmente
+      // Em produção: resolve pelo subdomínio do Host header
+      // Em desenvolvimento: usa tenantSlug do body (campo workspace no formulário)
+      const isProduction = process.env['NODE_ENV'] === 'production';
+      const resolvedSlug = isProduction
+        ? extractSlugFromHost(request.headers.host)
+        : (bodySlug ?? null);
+
       let tenantSchemaName: string | undefined;
       let tenantId: string | undefined;
-      if (tenantSlug) {
+      if (resolvedSlug) {
         const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug },
+          where: { slug: resolvedSlug },
           select: { id: true, schemaName: true, status: true },
         });
         if (!tenant) {

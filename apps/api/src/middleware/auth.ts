@@ -15,6 +15,7 @@ interface JwtPayload {
   name: string;
   role: AuthenticatedUser['role'];
   tenantId?: string;
+  schemaName?: string;
   isSuperAdmin: boolean;
 }
 
@@ -51,6 +52,7 @@ export async function authMiddleware(
         email: payload.email,
         role: payload.role,
         tenantId: payload.tenantId,
+        ...(payload.schemaName ? { schemaName: payload.schemaName } : {}),
         isSuperAdmin: false,
       };
     }

@@ -15,6 +15,13 @@ export async function tenantSchemaFromJwt(
     return reply.code(401).send({ error: 'Token inválido: tenantId ausente' });
   }
 
+  // Fast path: schemaName already in JWT (tokens issued after this deploy)
+  if (user.schemaName) {
+    await prisma.$executeRawUnsafe(`SET search_path TO "${user.schemaName}", public`);
+    return;
+  }
+
+  // Fallback: lookup DB for tokens issued before schemaName was added to JWT
   const tenant = await prisma.tenant.findUnique({
     where: { id: user.tenantId },
     select: { schemaName: true, status: true },
