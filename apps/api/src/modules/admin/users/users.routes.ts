@@ -9,6 +9,7 @@ import {
   inviteUser,
   updateUser,
   deleteUser,
+  resetUserPassword,
   NotFoundError,
   ConflictError,
   ForbiddenError,
@@ -75,6 +76,19 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/reset-password', { preHandler: guard }, async (request, reply) => {
+    try {
+      const result = await resetUserPassword(request.params.id);
+      return reply.send({ success: true, data: result });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

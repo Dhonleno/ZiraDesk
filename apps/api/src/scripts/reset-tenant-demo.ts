@@ -1,10 +1,30 @@
 import { PrismaClient } from '@prisma/client';
+import { encryptCredentials } from '../utils/crypto.js';
 
 const prisma = new PrismaClient();
 const SCHEMA = 'tenant_demo';
 
 async function exec(sql: string, ...params: unknown[]) {
   return prisma.$executeRawUnsafe(sql, ...params);
+}
+
+function buildWhatsappChannelCredentials(): string {
+  if (process.env.WHATSAPP_CHANNEL_CREDENTIALS) {
+    return process.env.WHATSAPP_CHANNEL_CREDENTIALS;
+  }
+
+  const credentials = {
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    wabaId: process.env.WHATSAPP_WABA_ID,
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
+  };
+  const filledCredentials = Object.fromEntries(
+    Object.entries(credentials).filter(([, value]) => typeof value === 'string' && value.trim()),
+  );
+
+  if (Object.keys(filledCredentials).length === 0) return '{}';
+  return JSON.stringify(encryptCredentials(filledCredentials));
 }
 
 async function main() {
@@ -93,7 +113,7 @@ async function main() {
   `);
 
   // Recriar canal WhatsApp com credenciais do env (se definido)
-  const credentials = process.env.WHATSAPP_CHANNEL_CREDENTIALS ?? '{}';
+  const credentials = buildWhatsappChannelCredentials();
   await exec(
     `INSERT INTO channels (id, type, name, credentials, status, created_at)
      VALUES (gen_random_uuid(), 'whatsapp', 'WhatsApp Principal', $1::jsonb, 'active', NOW())`,

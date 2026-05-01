@@ -83,21 +83,15 @@ function normalizeOptionalText(value?: string | null): string | null {
 }
 
 export function formatBotMenu(menu: BotMenu): string {
-  const lines = [
-    menu.greeting.trim(),
-    '',
-    ...menu.options
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
-      .map((option) => `${option.number}. ${option.label}`),
-  ];
-
+  const greeting = menu.greeting.trim();
+  const optionLines = menu.options
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order || a.number - b.number)
+    .map((opt) => `${opt.number}. ${opt.label}`)
+    .join('\n');
   const footer = menu.footer?.trim();
-  if (footer) {
-    lines.push('', footer);
-  }
 
-  return lines.join('\n').trim();
+  return `${greeting}\n\n${optionLines}` + (footer ? `\n\n${footer}` : '');
 }
 
 export async function ensureBotInfrastructure(

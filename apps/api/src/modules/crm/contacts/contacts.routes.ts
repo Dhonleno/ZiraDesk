@@ -6,6 +6,7 @@ import { createContactSchema, updateContactSchema, listContactsQuerySchema, link
 import {
   listContacts,
   getContact,
+  getContactStats,
   createContact,
   updateContact,
   deleteContact,
@@ -52,6 +53,22 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  // GET /api/crm/contacts/:id/stats
+  app.get<{ Params: { id: string } }>(
+    '/:id/stats',
+    { preHandler: guard },
+    async (request, reply) => {
+      try {
+        const stats = await getContactStats(request.params.id);
+        return reply.send({ success: true, data: stats });
+      } catch (err) {
+        if (err instanceof NotFoundError)
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        throw err;
+      }
+    },
+  );
 
   // PATCH /api/crm/contacts/:id
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {

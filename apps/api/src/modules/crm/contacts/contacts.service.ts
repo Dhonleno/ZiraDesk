@@ -36,6 +36,13 @@ interface ContactRow {
   updated_at: Date;
 }
 
+interface ContactStatsRow {
+  contact_exists: boolean;
+  total_conversations: bigint;
+  total_messages: bigint;
+  open_tickets: bigint;
+}
+
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
@@ -92,6 +99,46 @@ export async function getContact(id: string) {
   );
   if (!rows[0]) throw new NotFoundError('Contato');
   return rows[0];
+}
+
+/* ── getContactStats ─────────────────────────────────────────────────────── */
+export async function getContactStats(id: string) {
+  const [stats] = await prisma.$queryRawUnsafe<ContactStatsRow[]>(
+    `WITH contact_row AS (
+       SELECT id FROM contacts WHERE id = $1::uuid
+     ),
+     conv_stats AS (
+       SELECT COUNT(*) AS total_conversations
+       FROM conversations
+       WHERE contact_id = $1::uuid
+     ),
+     msg_stats AS (
+       SELECT COUNT(m.*) AS total_messages
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.contact_id = $1::uuid
+     ),
+     ticket_stats AS (
+       SELECT COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) AS open_tickets
+       FROM tickets
+       WHERE contact_id = $1::uuid
+     )
+     SELECT
+       EXISTS(SELECT 1 FROM contact_row) AS contact_exists,
+       conv_stats.total_conversations,
+       msg_stats.total_messages,
+       ticket_stats.open_tickets
+     FROM conv_stats, msg_stats, ticket_stats`,
+    id,
+  );
+
+  if (!stats?.contact_exists) throw new NotFoundError('Contato');
+
+  return {
+    total_conversations: Number(stats.total_conversations ?? 0),
+    total_messages: Number(stats.total_messages ?? 0),
+    open_tickets: Number(stats.open_tickets ?? 0),
+  };
 }
 
 /* ── findByWhatsapp ──────────────────────────────────────────────────────── */

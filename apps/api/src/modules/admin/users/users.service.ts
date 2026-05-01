@@ -82,7 +82,7 @@ export async function listUsers(query: ListUsersQuery) {
 
 export async function getUser(id: string) {
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-    `SELECT id, name, email, role, status, last_seen_at, created_at FROM users WHERE id = $1 LIMIT 1`,
+    `SELECT id, name, email, role, status, last_seen_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
     id,
   );
   if (!rows[0]) throw new NotFoundError('Usuário');
@@ -137,7 +137,7 @@ export async function updateUser(id: string, data: UpdateUserInput) {
      SET name   = COALESCE($1, name),
          role   = COALESCE($2, role),
          status = COALESCE($3, status)
-     WHERE id = $4
+     WHERE id = $4::uuid
      RETURNING id, name, email, role, status, last_seen_at, created_at`,
     data.name ?? null,
     data.role ?? null,
@@ -145,6 +145,24 @@ export async function updateUser(id: string, data: UpdateUserInput) {
     id,
   );
   return rows[0]!;
+}
+
+export async function resetUserPassword(id: string) {
+  const user = await getUser(id);
+  if (user.role === 'owner') {
+    throw new ForbiddenError('Não é possível redefinir a senha do proprietário da conta');
+  }
+
+  const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE users SET password_hash = $1 WHERE id = $2::uuid`,
+    passwordHash,
+    id,
+  );
+
+  return { tempPassword };
 }
 
 export async function deleteUser(id: string, requesterId: string) {
@@ -158,7 +176,7 @@ export async function deleteUser(id: string, requesterId: string) {
   }
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-    `UPDATE users SET status = 'inactive' WHERE id = $1
+    `UPDATE users SET status = 'inactive' WHERE id = $1::uuid
      RETURNING id, name, email, role, status, last_seen_at, created_at`,
     id,
   );
