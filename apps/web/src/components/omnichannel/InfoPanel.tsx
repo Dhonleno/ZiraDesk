@@ -249,7 +249,10 @@ export function InfoPanel({ conversationId }: Props) {
     || null;
   const contactEmail = contactData?.email ?? conv?.contact_email ?? conv?.client_email ?? null;
   const contactName = (contactData?.name ?? conv?.contact_name ?? conv?.client_name ?? null)?.trim();
-  const name = contactName || 'Cliente não identificado';
+  const organizationId = contactData?.organization_id ?? conv?.organization_id ?? null;
+  const organizationName = (contactData?.organization_name ?? conv?.organization_name ?? null)?.trim() || null;
+  const name = contactName || 'Contato não identificado';
+  const contactBadgeLabel = organizationName ? `Contato · ${organizationName}` : 'Contato avulso';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const currentChannelSub =
     conv?.channel_type === 'email'
@@ -320,13 +323,37 @@ export function InfoPanel({ conversationId }: Props) {
               </div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)' }}>{name}</div>
-                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{t('info.client')}</div>
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{contactBadgeLabel}</div>
               </div>
-              {chBadge && (
-                <span style={{ padding: '2px 10px', borderRadius: 'var(--r-pill)', fontSize: 10, fontWeight: 500, background: chBadge.bg, color: chBadge.color, border: `1px solid ${chBadge.border}` }}>
-                  {chBadge.label}
-                </span>
-              )}
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                  Organização
+                </div>
+                <div
+                  title={organizationName ?? undefined}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 'var(--r)',
+                    border: '1px solid var(--line-2)',
+                    background: 'var(--bg-3)',
+                    color: organizationName ? 'var(--txt-2)' : 'var(--txt-3)',
+                    fontSize: 11,
+                    maxWidth: '100%',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                    <rect x="1" y="2.5" width="9" height="6.5" rx="1.3" stroke="currentColor" strokeWidth="1.1" />
+                    <path d="M3.5 2.5V2a1 1 0 011-1h2a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                  </svg>
+                  {organizationName ?? 'Sem organização'}
+                </div>
+              </div>
               {/* Links CRM */}
               {contactId && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', width: '100%' }}>
@@ -340,15 +367,15 @@ export function InfoPanel({ conversationId }: Props) {
                     {t('info.viewFullProfile')}
                   </button>
 
-                  {contactData?.organization_id ? (
+                  {organizationId ? (
                     <button
-                      onClick={() => navigate(`/crm/organizations?id=${contactData.organization_id}`)}
+                      onClick={() => navigate(`/crm/organizations?id=${organizationId}`)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 11, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; }}
                     >
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><rect x="1" y="2.5" width="9" height="6.5" rx="1.3" stroke="currentColor" strokeWidth="1.1"/><path d="M3.5 2.5V2a1 1 0 011-1h2a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                      {contactData.organization_name}
+                      {organizationName ?? 'Ver organização'}
                     </button>
                   ) : (
                     <button
@@ -390,6 +417,17 @@ export function InfoPanel({ conversationId }: Props) {
             {/* Contact info */}
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
               <SectionTitle action={<span style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}>Editar</span>}>{t('info.information')}</SectionTitle>
+              <InfoField
+                label="Organização"
+                value={organizationName}
+                empty="Sem organização"
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <rect x="1.5" y="3" width="11" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M4.5 3v-.8a1 1 0 011-1h3a1 1 0 011 1V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                }
+              />
               <InfoField
                 label={t('info.email')}
                 value={contactEmail}

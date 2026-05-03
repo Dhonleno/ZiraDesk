@@ -107,7 +107,8 @@ export function App() {
             <Route path="omnichannel/monitor" element={<MonitorPage />} />
             <Route path="omnichannel/metrics" element={<MetricsPage />} />
             <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
-            <Route path="crm/clients" element={<Navigate to="/crm/organizations" replace />} />
+            <Route path="crm/clients" element={<Navigate to="/crm/contacts" replace />} />
+            <Route path="crm/clients/:id" element={<Navigate to="/crm/contacts" replace />} />
             <Route path="crm/organizations" element={<OrganizationsPage />} />
             <Route path="crm/organizations/:id" element={<OrganizationsPage />} />
             <Route path="crm/contacts" element={<ContactsPage />} />

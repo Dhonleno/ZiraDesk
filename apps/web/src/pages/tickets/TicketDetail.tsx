@@ -102,6 +102,7 @@ export function TicketDetail({ ticketId }: Props) {
   if (!ticket) return null;
 
   const isResolved = ticket.status === 'resolved' || ticket.status === 'closed';
+  const ticketContactName = ticket.contact_name ?? ticket.client_name;
 
   function handleTitleSave() {
     if (titleDraft.trim().length >= 3 && titleDraft !== ticket!.title) {
@@ -244,8 +245,8 @@ export function TicketDetail({ ticketId }: Props) {
           </Field>
 
           <Field label={t('tickets.fields.client')}>
-            {ticket.client_name
-              ? <span style={{ color: 'var(--teal)' }}>{ticket.client_name}</span>
+            {ticketContactName
+              ? <span style={{ color: 'var(--teal)' }}>{ticketContactName}</span>
               : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noClient')}</span>
             }
           </Field>

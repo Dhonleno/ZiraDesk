@@ -843,6 +843,8 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export interface Ticket {
   id:              string;
   client_id:       string | null;
+  contact_id?:     string | null;
+  organization_id?: string | null;
   conversation_id: string | null;
   title:           string;
   description:     string | null;
@@ -859,6 +861,8 @@ export interface Ticket {
   assignee_name:   string | null;
   assignee_avatar: string | null;
   client_name:     string | null;
+  contact_name?:   string | null;
+  organization_name?: string | null;
   client_email:    string | null;
 }
 
@@ -898,6 +902,8 @@ export interface ListTicketsParams {
   priority?:    TicketPriority;
   assigned_to?: string;
   client_id?:   string;
+  contact_id?:  string;
+  organization_id?: string;
   category?:    string;
   sort_by?:     'created_at' | 'updated_at' | 'priority' | 'due_date';
   sort_order?:  'asc' | 'desc';
@@ -973,7 +979,19 @@ export interface OmnichannelMessage {
   status: 'sent' | 'delivered' | 'read' | 'failed';
   is_internal: boolean;
   created_at: string;
-  metadata?: Record<string, unknown>;
+  metadata?: {
+    filename?: string;
+    mention?: {
+      message_id: string;
+      sender_type: 'agent' | 'client' | 'bot' | 'system' | string;
+      sender_label: string;
+      content: string;
+      content_type: 'text' | 'image' | 'audio' | 'video' | 'document' | string;
+      external_id?: string | null;
+      media_id?: string | null;
+      media_subtype?: string | null;
+    };
+  } & Record<string, unknown>;
 }
 
 export interface ListConversationsParams {
@@ -1006,6 +1024,7 @@ export interface SendMessagePayload {
   media_id?: string;
   media_type?: 'image' | 'audio' | 'video' | 'document';
   media_filename?: string;
+  mention_message_id?: string;
 }
 
 export interface UploadedMediaResponse {

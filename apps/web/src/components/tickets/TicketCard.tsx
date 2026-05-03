@@ -45,6 +45,7 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
   const due    = dueStatus(ticket.due_date);
   const dueCol = due === 'overdue' ? 'var(--red)' : due === 'soon' ? 'var(--amber)' : 'var(--txt-3)';
   const ticketKey = ticket.id.slice(-6).toUpperCase();
+  const ticketContactName = ticket.contact_name ?? ticket.client_name;
 
   return (
     <div
@@ -82,11 +83,11 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
 
       {/* Row 3: client + assignee + date */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--txt-3)' }}>
-        {ticket.client_name && (
+        {ticketContactName && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Initials name={ticket.client_name} color="linear-gradient(135deg,var(--blue),var(--purple))" />
+            <Initials name={ticketContactName} color="linear-gradient(135deg,var(--blue),var(--purple))" />
             <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {ticket.client_name}
+              {ticketContactName}
             </span>
           </span>
         )}

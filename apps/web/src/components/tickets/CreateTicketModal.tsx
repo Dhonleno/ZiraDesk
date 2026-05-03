@@ -41,15 +41,15 @@ export function CreateTicketModal({ open, onClose }: Props) {
   const toast  = useToast();
   const queryClient = useQueryClient();
 
-  const [clientSearch, setClientSearch] = useState('');
+  const [contactSearch, setContactSearch] = useState('');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedContactName, setSelectedContactName] = useState('');
-  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
 
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
 
-  const debouncedClientSearch = useDebounce(clientSearch, 300);
+  const debouncedContactSearch = useDebounce(contactSearch, 300);
 
   const { register, handleSubmit, watch, setValue, getValues, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -59,9 +59,9 @@ export function CreateTicketModal({ open, onClose }: Props) {
   const tags = watch('tags');
 
   const { data: contactResults } = useQuery({
-    queryKey: ['crm-contacts-search', debouncedClientSearch],
-    queryFn: () => contactsApi.list({ search: debouncedClientSearch, per_page: 8 }),
-    enabled: debouncedClientSearch.length > 1 && showClientDropdown,
+    queryKey: ['crm-contacts-search', debouncedContactSearch],
+    queryFn: () => contactsApi.list({ search: debouncedContactSearch, per_page: 8 }),
+    enabled: debouncedContactSearch.length > 1 && showContactDropdown,
     staleTime: 10_000,
   });
 
@@ -167,7 +167,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 borderRadius: 'var(--r)', background: 'var(--teal-dim)', border: '1px solid var(--teal)',
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedContactName}</span>
-                <button type="button" onClick={() => { setSelectedContactId(null); setSelectedContactName(''); setClientSearch(''); }}
+                <button type="button" onClick={() => { setSelectedContactId(null); setSelectedContactName(''); setContactSearch(''); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}>
                   ×
                 </button>
@@ -176,14 +176,14 @@ export function CreateTicketModal({ open, onClose }: Props) {
               <input
                 type="text"
                 placeholder={t('tickets.form.searchClient')}
-                value={clientSearch}
-                onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
-                onFocus={() => setShowClientDropdown(true)}
-                onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+                value={contactSearch}
+                onChange={(e) => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
+                onFocus={() => setShowContactDropdown(true)}
+                onBlur={() => setTimeout(() => setShowContactDropdown(false), 150)}
                 style={{ ...selectStyle, display: 'block' }}
               />
             )}
-            {showClientDropdown && !selectedContactId && contactResults && contactResults.data.length > 0 && (
+            {showContactDropdown && !selectedContactId && contactResults && contactResults.data.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
                 background: 'var(--bg-3)', border: '1px solid var(--line)',
@@ -194,7 +194,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
                   <button key={c.id} type="button" onMouseDown={() => {
                     setSelectedContactId(c.id);
                     setSelectedContactName(c.name);
-                    setShowClientDropdown(false);
+                    setShowContactDropdown(false);
                   }} style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
                     background: 'none', border: 'none', cursor: 'pointer', fontSize: 13,

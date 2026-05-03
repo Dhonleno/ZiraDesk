@@ -5,7 +5,7 @@ import { searchApi, type GlobalSearchResult } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { Skeleton } from './Skeleton';
 
-type ResultType = 'client' | 'ticket' | 'conversation';
+type ResultType = 'contact' | 'ticket' | 'conversation';
 
 interface FlatResult {
   key: string;
@@ -21,7 +21,7 @@ interface GlobalSearchProps {
 }
 
 function iconPath(type: ResultType) {
-  if (type === 'client') {
+  if (type === 'contact') {
     return <><circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></>;
   }
   if (type === 'ticket') {
@@ -35,7 +35,7 @@ function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
   return [
     ...data.contacts.map((client) => ({
       key: `contact:${client.id}`,
-      type: 'client' as const,
+      type: 'contact' as const,
       title: client.name,
       subtitle: client.email ?? client.phone ?? 'Contato',
       href: `/crm/contacts?contact=${client.id}`,
@@ -50,7 +50,7 @@ function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
     ...data.conversations.map((conversation) => ({
       key: `conversation:${conversation.id}`,
       type: 'conversation' as const,
-      title: conversation.contact_name ?? 'Cliente não identificado',
+      title: conversation.contact_name ?? 'Contato não identificado',
       subtitle: conversation.last_message ?? 'Conversa',
       href: `/omnichannel/conversations?conversation=${conversation.id}`,
     })),
@@ -58,7 +58,7 @@ function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
 }
 
 const GROUPS: Array<{ type: ResultType; label: string }> = [
-  { type: 'client', label: 'Clientes' },
+  { type: 'contact', label: 'Contatos' },
   { type: 'ticket', label: 'Tickets' },
   { type: 'conversation', label: 'Conversas' },
 ];
@@ -132,7 +132,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Buscar clientes, tickets e conversas..."
+            placeholder="Buscar contatos, tickets e conversas..."
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--txt)', fontSize: 15, fontFamily: 'var(--font)' }}
           />
           <span style={{ fontSize: 11, color: 'var(--txt-3)', border: '1px solid var(--line)', borderRadius: 6, padding: '2px 6px' }}>ESC</span>

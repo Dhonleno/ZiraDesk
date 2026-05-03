@@ -31,14 +31,14 @@
       "status": "Status",
       "priority": "Prioridade",
       "assignedTo": "Atribuído a",
-      "client": "Cliente",
+      "client": "Contato",
       "category": "Categoria",
       "dueDate": "Prazo",
       "tags": "Tags",
       "createdAt": "Criado em",
       "updatedAt": "Atualizado em",
       "noResponsible": "Sem responsável",
-      "noClient": "Sem cliente vinculado",
+      "noClient": "Sem contato vinculado",
       "noDueDate": "Sem prazo"
     },
     "comments": {
@@ -68,8 +68,8 @@
       "assigned": "Ticket atribuído",
       "selectPriority": "Selecione a prioridade",
       "selectStatus": "Selecione o status",
-      "searchClient": "Buscar cliente...",
-      "noClient": "Nenhum cliente",
+      "searchClient": "Buscar contato...",
+      "noClient": "Nenhum contato",
       "searchUser": "Buscar usuário...",
       "noUser": "Sem atribuição"
     },

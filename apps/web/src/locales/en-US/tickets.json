@@ -31,14 +31,14 @@
       "status": "Status",
       "priority": "Priority",
       "assignedTo": "Assigned to",
-      "client": "Client",
+      "client": "Contact",
       "category": "Category",
       "dueDate": "Due date",
       "tags": "Tags",
       "createdAt": "Created at",
       "updatedAt": "Updated at",
       "noResponsible": "Unassigned",
-      "noClient": "No client linked",
+      "noClient": "No contact linked",
       "noDueDate": "No due date"
     },
     "comments": {
@@ -68,8 +68,8 @@
       "assigned": "Ticket assigned",
       "selectPriority": "Select priority",
       "selectStatus": "Select status",
-      "searchClient": "Search client...",
-      "noClient": "No client",
+      "searchClient": "Search contact...",
+      "noClient": "No contact",
       "searchUser": "Search user...",
       "noUser": "No assignee"
     },
