@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
+import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import { createContactSchema, updateContactSchema, listContactsQuerySchema, linkOrganizationSchema } from './contacts.schema.js';
 import {
   listContacts,
@@ -15,7 +16,12 @@ import {
   ConflictError,
 } from './contacts.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const guard = [
+  authMiddleware,
+  tenantSchemaFromJwt,
+  ensureCrmInfrastructureMiddleware,
+  hasRole('owner', 'admin', 'agent'),
+];
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts

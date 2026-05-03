@@ -21,6 +21,7 @@ import { TagDropdown } from './TagDropdown';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
+type MentionData = NonNullable<NonNullable<Message['metadata']>['mention']>;
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
 
@@ -130,6 +131,76 @@ const COMMON_EMOJIS = [
   '📞', '💬', '✔️', '⚡', '🎯', '💡',
 ] as const;
 
+function buildMentionPreview(content: string | null | undefined, contentType: string): string {
+  const normalized = (content ?? '').trim();
+  if (normalized) return normalized.slice(0, 255);
+
+  switch (contentType) {
+    case 'image':
+      return '[Imagem]';
+    case 'audio':
+      return '[Áudio]';
+    case 'video':
+      return '[Vídeo]';
+    case 'document':
+      return '[Documento]';
+    default:
+      return '[Mensagem]';
+  }
+}
+
+function extractMessageMediaId(message: Message): string | null {
+  if (message.media_url?.trim()) return message.media_url.trim();
+  if (!message.metadata || typeof message.metadata !== 'object') return null;
+  const mediaId = (message.metadata as Record<string, unknown>).media_id;
+  return typeof mediaId === 'string' && mediaId.trim() ? mediaId.trim() : null;
+}
+
+function mentionTypeLabel(mention: MentionData): string {
+  if (mention.content_type === 'image') {
+    return mention.media_subtype === 'sticker' ? 'Figurinha' : 'Foto';
+  }
+  if (mention.content_type === 'video') return 'Vídeo';
+  if (mention.content_type === 'audio') return 'Áudio';
+  if (mention.content_type === 'document') return 'Documento';
+  return mention.content;
+}
+
+function MentionMediaThumb({ conversationId, mediaId }: { conversationId: string; mediaId: string }) {
+  const { data: mediaBlob } = useQuery({
+    queryKey: ['mention-media-thumb', conversationId, mediaId],
+    queryFn: () => omnichannelApi.downloadMedia(mediaId, conversationId),
+    staleTime: 60 * 60 * 1000,
+  });
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mediaBlob) return;
+    const url = URL.createObjectURL(mediaBlob);
+    setThumbUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [mediaBlob]);
+
+  if (!thumbUrl) return null;
+
+  return (
+    <img
+      src={thumbUrl}
+      alt="mídia mencionada"
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 6,
+        objectFit: 'cover',
+        border: '1px solid var(--line)',
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 interface ToolbarButtonProps {
   icon: React.ReactNode;
   tooltip: string;
@@ -206,6 +277,7 @@ export function ChatArea({ conversationId }: Props) {
   const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
   const [unseenMessageCount, setUnseenMessageCount] = useState(0);
   const [isAssuming, setIsAssuming] = useState(false);
+  const [mentioningMessage, setMentioningMessage] = useState<MentionData | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -431,6 +503,7 @@ export function ChatArea({ conversationId }: Props) {
     setShowShortcutSuggestions(false);
     setShortcutSuggestions([]);
     setSelectedShortcutIndex(0);
+    setMentioningMessage(null);
     clearLocalMediaPreviews();
     pendingInitialScrollRef.current = true;
     stickToBottomRef.current = true;
@@ -607,15 +680,17 @@ export function ChatArea({ conversationId }: Props) {
   }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
   const sendMutation = useMutation({
-    mutationFn: (payload: { text: string; isInternalMessage: boolean }) =>
+    mutationFn: (payload: { text: string; isInternalMessage: boolean; mentionMessageId?: string | null }) =>
       omnichannelApi.sendMessage(conversationId, {
         content: payload.text,
         contentType: 'text',
         isInternal: payload.isInternalMessage,
+        ...(payload.mentionMessageId ? { mention_message_id: payload.mentionMessageId } : {}),
       }),
     onSuccess: () => {
       setContent('');
       setIsInternal(false);
+      setMentioningMessage(null);
       shouldAutoScrollNextRef.current = true;
       nextScrollBehaviorRef.current = 'smooth';
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -716,7 +791,11 @@ export function ChatArea({ conversationId }: Props) {
     if (!canSendMessage) return;
     const text = content.trim();
     if (!text || sendMutation.isPending) return;
-    sendMutation.mutate({ text, isInternalMessage: isInternal });
+    sendMutation.mutate({
+      text,
+      isInternalMessage: isInternal,
+      mentionMessageId: mentioningMessage?.message_id ?? null,
+    });
   }
 
   function resizeComposer() {
@@ -818,6 +897,32 @@ export function ChatArea({ conversationId }: Props) {
     });
   }
 
+  function handleMentionMessage(message: Message, senderLabel: string) {
+    if (message.sender_type === 'system') return;
+    const mediaSubtype = (
+      message.metadata
+      && typeof message.metadata === 'object'
+      && 'media_subtype' in message.metadata
+      && typeof (message.metadata as Record<string, unknown>).media_subtype === 'string'
+    )
+      ? String((message.metadata as Record<string, unknown>).media_subtype)
+      : null;
+    setMentioningMessage({
+      message_id: message.id,
+      sender_type: message.sender_type,
+      sender_label: senderLabel,
+      content: buildMentionPreview(message.content, message.content_type),
+      content_type: message.content_type,
+      external_id: null,
+      media_id: extractMessageMediaId(message),
+      media_subtype: mediaSubtype,
+    });
+
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }
+
   function appendEmojiToComposer(emoji: string) {
     applyComposerText(`${content}${emoji}`);
     setShowEmojiPicker(false);
@@ -870,6 +975,10 @@ export function ChatArea({ conversationId }: Props) {
   const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isResolved;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
   const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
+  const organizationName = (
+    conv?.organization_name
+    ?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+  )?.trim() ?? null;
   const avatarName = conv?.contact_name ?? conv?.client_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
@@ -896,8 +1005,8 @@ export function ChatArea({ conversationId }: Props) {
         style={{
           background: 'var(--bg-2)',
           borderBottom: '1px solid var(--line)',
-          padding: '0 20px',
-          height: 60,
+          padding: '8px 20px',
+          minHeight: 68,
           display: 'flex',
           alignItems: 'center',
           gap: 14,
@@ -922,8 +1031,40 @@ export function ChatArea({ conversationId }: Props) {
           >
             {displayName.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{displayName}</div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              title={organizationName ? `${displayName} | ${organizationName}` : displayName}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 6,
+                minWidth: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: 'var(--txt)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {displayName}
+              </span>
+              {organizationName && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--txt-3)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  | {organizationName}
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
               {chBadge && (
                 <span
@@ -1300,6 +1441,8 @@ export function ChatArea({ conversationId }: Props) {
                   : isAgent
                     ? 'var(--teal)'
                     : 'var(--txt-3)';
+                const mention = msg.metadata?.mention ?? null;
+                const canMentionThisMessage = canSendMessage && !msg.is_internal;
 
                 if (isSystem) {
                   return (
@@ -1374,23 +1517,43 @@ export function ChatArea({ conversationId }: Props) {
                     </div>
 
                     <div style={{ maxWidth: '65%', display: 'flex', flexDirection: 'column', alignItems: isCompanySide ? 'flex-end' : 'flex-start' }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          marginBottom: 2,
-                          letterSpacing: '0.02em',
-                          color: senderLabelColor,
-                          alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
-                          maxWidth: '100%',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                        title={senderLabel}
-                      >
-                        {senderLabel}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            letterSpacing: '0.02em',
+                            color: senderLabelColor,
+                            alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
+                            maxWidth: '100%',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={senderLabel}
+                        >
+                          {senderLabel}
+                        </span>
+                        {canMentionThisMessage && (
+                          <button
+                            type="button"
+                            onClick={() => handleMentionMessage(msg, senderLabel)}
+                            title="Mencionar mensagem"
+                            style={{
+                              border: '1px solid var(--line)',
+                              background: 'var(--bg-4)',
+                              color: 'var(--txt-3)',
+                              borderRadius: 999,
+                              padding: '1px 6px',
+                              fontSize: 10,
+                              cursor: 'pointer',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            ↩
+                          </button>
+                        )}
+                      </div>
                       <div
                         style={{
                           padding: '9px 13px',
@@ -1417,6 +1580,32 @@ export function ChatArea({ conversationId }: Props) {
                                 : '1px solid var(--line-2)',
                         }}
                       >
+                        {mention && (
+                          <div
+                            style={{
+                              marginBottom: 7,
+                              padding: '6px 8px',
+                              borderLeft: '3px solid rgba(0,201,167,.65)',
+                              background: 'rgba(0,0,0,.12)',
+                              borderRadius: 8,
+                            }}
+                          >
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', marginBottom: 2 }}>
+                              {mention.sender_label}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {mention.media_id && mention.content_type === 'image' && (
+                                <MentionMediaThumb
+                                  conversationId={conversationId}
+                                  mediaId={mention.media_id}
+                                />
+                              )}
+                              <div style={{ fontSize: 12, opacity: 0.9, whiteSpace: 'pre-wrap' }}>
+                                {mention.content_type === 'text' ? mention.content : mentionTypeLabel(mention)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {msg.is_internal && (
                           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                             {t('chat.internalNote')}
@@ -1519,9 +1708,11 @@ export function ChatArea({ conversationId }: Props) {
               ref={mediaUploadRef}
               conversationId={conversationId}
               disabled={!canSendMessage}
+              mentionMessageId={mentioningMessage?.message_id ?? null}
               onActiveChange={setIsMediaActive}
               onSent={async (payload) => {
                 registerLocalMediaPreview(payload);
+                setMentioningMessage(null);
                 shouldAutoScrollNextRef.current = true;
                 nextScrollBehaviorRef.current = 'smooth';
                 void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -1533,9 +1724,11 @@ export function ChatArea({ conversationId }: Props) {
               ref={audioRecorderRef}
               conversationId={conversationId}
               disabled={!canSendMessage}
+              mentionMessageId={mentioningMessage?.message_id ?? null}
               onActiveChange={setIsAudioActive}
               onSent={async (payload) => {
                 registerLocalMediaPreview(payload);
+                setMentioningMessage(null);
                 shouldAutoScrollNextRef.current = true;
                 nextScrollBehaviorRef.current = 'smooth';
                 void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -1753,18 +1946,69 @@ export function ChatArea({ conversationId }: Props) {
             </div>
 
             {canSendMessage ? (
-              <div
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  gap: 8,
-                  background: isInternal ? 'rgba(245,158,11,.08)' : 'var(--bg-3)',
-                  border: `1px solid ${isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)'}`,
-                  borderRadius: 12,
-                  padding: '10px 10px 10px 12px',
-                }}
-              >
+              <>
+                {mentioningMessage && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      marginBottom: 8,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(0,201,167,.25)',
+                      background: 'rgba(0,201,167,.08)',
+                    }}
+                  >
+                    <div style={{ width: 3, borderRadius: 999, background: 'var(--teal)', alignSelf: 'stretch' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600, marginBottom: 2 }}>
+                        Respondendo {mentioningMessage.sender_label}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {mentioningMessage.media_id && mentioningMessage.content_type === 'image' && (
+                          <MentionMediaThumb
+                            conversationId={conversationId}
+                            mediaId={mentioningMessage.media_id}
+                          />
+                        )}
+                        <div style={{ fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {mentioningMessage.content_type === 'text' ? mentioningMessage.content : mentionTypeLabel(mentioningMessage)}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMentioningMessage(null)}
+                      title="Remover menção"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        border: '1px solid var(--line)',
+                        background: 'var(--bg-3)',
+                        color: 'var(--txt-2)',
+                        cursor: 'pointer',
+                        lineHeight: 1,
+                        fontSize: 14,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <div
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: 8,
+                    background: isInternal ? 'rgba(245,158,11,.08)' : 'var(--bg-3)',
+                    border: `1px solid ${isInternal ? 'rgba(245,158,11,.3)' : 'var(--line-2)'}`,
+                    borderRadius: 12,
+                    padding: '10px 10px 10px 12px',
+                  }}
+                >
                 {showShortcutSuggestions && shortcutSuggestions.length > 0 && !isComposerAttachmentActive ? (
                   <div
                     ref={shortcutDropdownRef}
@@ -1944,7 +2188,8 @@ export function ChatArea({ conversationId }: Props) {
                     </svg>
                   </span>
                 </button>
-              </div>
+                </div>
+              </>
             ) : isUnassigned ? (
               <div
                 style={{

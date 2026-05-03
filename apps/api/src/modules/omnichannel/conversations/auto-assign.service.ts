@@ -46,8 +46,8 @@ export async function ensureAgentAssignmentsInfrastructure(
       user_id UUID NOT NULL UNIQUE REFERENCES ${usersRef}(id) ON DELETE CASCADE,
       last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       active_conversations INTEGER NOT NULL DEFAULT 0,
-      is_available BOOLEAN NOT NULL DEFAULT true,
-      status VARCHAR(20) NOT NULL DEFAULT 'online',
+      is_available BOOLEAN NOT NULL DEFAULT false,
+      status VARCHAR(20) NOT NULL DEFAULT 'offline',
       pause_reason VARCHAR(100),
       pause_started_at TIMESTAMPTZ,
       pause_notes TEXT,
@@ -57,15 +57,23 @@ export async function ensureAgentAssignmentsInfrastructure(
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${assignmentsRef}
-    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'online',
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'offline',
     ADD COLUMN IF NOT EXISTS pause_reason VARCHAR(100),
     ADD COLUMN IF NOT EXISTS pause_started_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS pause_notes TEXT
   `);
 
   await prisma.$executeRawUnsafe(`
-    INSERT INTO ${assignmentsRef} (user_id)
+    ALTER TABLE ${assignmentsRef}
+    ALTER COLUMN is_available SET DEFAULT false,
+    ALTER COLUMN status SET DEFAULT 'offline'
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${assignmentsRef} (user_id, is_available, status)
     SELECT id
+         , false
+         , 'offline'
     FROM ${usersRef}
     WHERE status = 'active'
       AND role IN ('owner', 'admin', 'agent')

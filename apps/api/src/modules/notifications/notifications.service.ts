@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database.js';
+import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 
 type NotificationType = 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment' | 'conversation_message';
 
@@ -24,9 +25,14 @@ export interface NotificationItem {
   href: string;
 }
 
-async function ensureNotificationReadsTable() {
+function tableRef(schemaName: string, table: string): string {
+  return `${quoteIdent(schemaName)}.${table}`;
+}
+
+async function ensureNotificationReadsTable(schemaName: string) {
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS notification_reads (
+    CREATE TABLE IF NOT EXISTS ${notificationReadsRef} (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL,
       notification_id UUID NOT NULL,
@@ -36,9 +42,10 @@ async function ensureNotificationReadsTable() {
   `);
 }
 
-async function ensureAuditLogsTable() {
+async function ensureAuditLogsTable(schemaName: string) {
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS audit_logs (
+    CREATE TABLE IF NOT EXISTS ${auditLogsRef} (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NULL,
       action TEXT NOT NULL,
@@ -103,9 +110,14 @@ function toNotification(row: NotificationRow): NotificationItem {
   };
 }
 
-export async function listNotifications(userId: string) {
-  await ensureAuditLogsTable();
-  await ensureNotificationReadsTable();
+export async function listNotifications(userId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
+  const ticketsRef = tableRef(schemaName, 'tickets');
+  const conversationsRef = tableRef(schemaName, 'conversations');
+  const contactsRef = tableRef(schemaName, 'contacts');
 
   const rows = await prisma.$queryRawUnsafe<NotificationRow[]>(
     `SELECT
@@ -118,18 +130,18 @@ export async function listNotifications(userId: string) {
        t.title AS ticket_title,
        c.subject AS conversation_subject,
        ct.name AS contact_name
-     FROM audit_logs al
-     LEFT JOIN notification_reads nr
+     FROM ${auditLogsRef} al
+     LEFT JOIN ${notificationReadsRef} nr
        ON nr.notification_id = al.id AND nr.user_id = $1::uuid
-     LEFT JOIN tickets t
+     LEFT JOIN ${ticketsRef} t
        ON t.id = CASE
          WHEN al.action = 'ticket.assigned' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
-     LEFT JOIN conversations c
+     LEFT JOIN ${conversationsRef} c
        ON c.id = CASE WHEN al.action = 'conversation.assigned' THEN al.entity_id ELSE NULL END
-     LEFT JOIN contacts ct ON ct.id = c.contact_id
+     LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      WHERE (
        al.action = 'ticket.assigned'
        AND al.new_data->>'assigned_to' = $1
@@ -152,11 +164,12 @@ export async function listNotifications(userId: string) {
   return rows.map(toNotification);
 }
 
-export async function markNotificationRead(userId: string, notificationId: string) {
-  await ensureAuditLogsTable();
-  await ensureNotificationReadsTable();
+export async function markNotificationRead(userId: string, notificationId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
   await prisma.$executeRawUnsafe(
-    `INSERT INTO notification_reads (user_id, notification_id)
+    `INSERT INTO ${notificationReadsRef} (user_id, notification_id)
      VALUES ($1::uuid, $2::uuid)
      ON CONFLICT (user_id, notification_id) DO NOTHING`,
     userId,
@@ -165,16 +178,18 @@ export async function markNotificationRead(userId: string, notificationId: strin
   return { read: true };
 }
 
-export async function markAllNotificationsRead(userId: string) {
-  await ensureAuditLogsTable();
-  await ensureNotificationReadsTable();
-  const notifications = await listNotifications(userId);
+export async function markAllNotificationsRead(userId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const notifications = await listNotifications(userId, schemaName);
   if (notifications.length === 0) return { read: 0 };
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO notification_reads (user_id, notification_id)
+    `INSERT INTO ${notificationReadsRef} (user_id, notification_id)
      SELECT $1::uuid, id
-     FROM audit_logs
+     FROM ${auditLogsRef}
      WHERE id = ANY($2::uuid[])
      ON CONFLICT (user_id, notification_id) DO NOTHING`,
     userId,

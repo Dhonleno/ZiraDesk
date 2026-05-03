@@ -22,6 +22,18 @@ interface ToastState {
   removeToast: (id: string) => void;
 }
 
+function normalizeProtocolNumber(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const compact = value.replace(/\s+/g, '').trim();
+  if (!compact) return null;
+
+  const upper = compact.toUpperCase();
+  if (/^ZD-\d{6}-\d{6}$/.test(upper)) return upper;
+  if (/^\d{6}-\d{6}$/.test(compact)) return `ZD-${compact}`;
+  return compact;
+}
+
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   addToast: (toast) => {
@@ -58,7 +70,7 @@ export function useToast() {
       onDecline: options.onDecline,
       persistent: true,
     };
-    if (options.protocol !== undefined) payload.protocol = options.protocol;
+    if (options.protocol !== undefined) payload.protocol = normalizeProtocolNumber(options.protocol);
     if (options.agentName !== undefined) payload.agentName = options.agentName;
     addToast(payload);
   }, [addToast]);

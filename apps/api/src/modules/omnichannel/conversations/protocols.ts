@@ -49,12 +49,20 @@ export async function ensureConversationProtocolInfrastructure(
      ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) DEFAULT 'inbound'`,
   );
 
-  await db.$executeRawUnsafe(
-    `UPDATE ${conversationsRef}
-     SET conversation_type = 'outbound'
-     WHERE metadata->>'type' = 'outbound'
-       AND conversation_type IS DISTINCT FROM 'outbound'`,
-  );
+  try {
+    await db.$executeRawUnsafe(
+      `UPDATE ${conversationsRef}
+       SET conversation_type = 'outbound'
+       WHERE metadata->>'type' = 'outbound'
+         AND conversation_type IS DISTINCT FROM 'outbound'`,
+    );
+  } catch (error) {
+    // Schemas legados podem não ter a coluna metadata; nesses casos seguimos sem bloquear listagens.
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (!(message.includes('column') && message.includes('metadata') && message.includes('does not exist'))) {
+      throw error;
+    }
+  }
 
   await db.$executeRawUnsafe(
     `UPDATE ${conversationsRef}

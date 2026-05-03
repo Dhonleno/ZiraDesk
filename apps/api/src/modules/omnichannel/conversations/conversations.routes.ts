@@ -166,6 +166,8 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
             mediaId: result.mediaId,
             mediaType: result.mediaType,
             mediaFilename: result.mediaFilename,
+            replyToExternalId: result.replyToExternalId,
+            replyToMessageId: result.replyToMessageId,
           };
           request.log.info(
             {

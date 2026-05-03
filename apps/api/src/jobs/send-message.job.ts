@@ -15,6 +15,14 @@ interface SendMessageJob {
   mediaId?: string | null;
   mediaType?: string | null;
   mediaFilename?: string | null;
+  replyToExternalId?: string | null;
+  replyToMessageId?: string | null;
+}
+
+function normalizeWhatsappText(content: string): string {
+  return content
+    .replace(/\r\n/g, '\n')
+    .replace(/\\n/g, '\n');
 }
 
 function quoteIdent(identifier: string): string {
@@ -53,21 +61,54 @@ async function persistExternalId(job: SendMessageJob, externalId: string): Promi
   );
 }
 
-function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function resolveReplyExternalId(job: SendMessageJob): Promise<string | null> {
+  if (job.replyToExternalId?.trim()) return job.replyToExternalId.trim();
+  if (!job.replyToMessageId) return null;
+
+  const schemaName = await resolveSchemaName(job);
+  if (!schemaName) return null;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const rows = await prisma.$queryRawUnsafe<Array<{ external_id: string | null }>>(
+      `SELECT external_id
+       FROM ${quoteIdent(schemaName)}.messages
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      job.replyToMessageId,
+    );
+    const resolved = rows[0]?.external_id?.trim() ?? null;
+    if (resolved) return resolved;
+    if (attempt < 3) await sleep(350);
+  }
+
+  return null;
+}
+
+function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExternalId: string | null) {
+  const normalizedContent = normalizeWhatsappText(job.content ?? '');
+  const context = replyExternalId
+    ? { context: { message_id: replyExternalId } }
+    : {};
+
   if (!job.mediaId || !job.mediaType) {
     return {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: sanitizedPhone,
       type: 'text',
-      text: { body: job.content },
+      text: { body: normalizedContent },
+      ...context,
     };
   }
 
   const mediaTypeRaw = (job.mediaType ?? '').toLowerCase();
   const mediaGroup = mediaTypeRaw.includes('/') ? mediaTypeRaw.split('/')[0] : mediaTypeRaw;
   const isDocumentByType = mediaTypeRaw === 'document' || mediaGroup === 'application' || mediaGroup === 'text';
-  const caption = job.content?.trim() || undefined;
+  const caption = normalizedContent.trim() || undefined;
   switch (mediaGroup) {
     case 'image':
       return {
@@ -76,6 +117,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
         to: sanitizedPhone,
         type: 'image',
         image: { id: job.mediaId, ...(caption ? { caption } : {}) },
+        ...context,
       };
     case 'audio':
       return {
@@ -84,6 +126,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
         to: sanitizedPhone,
         type: 'audio',
         audio: { id: job.mediaId },
+        ...context,
       };
     case 'video':
       return {
@@ -92,6 +135,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
         to: sanitizedPhone,
         type: 'video',
         video: { id: job.mediaId, ...(caption ? { caption } : {}) },
+        ...context,
       };
     case 'application':
     case 'text':
@@ -105,6 +149,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
           filename: job.mediaFilename ?? 'documento',
           ...(caption ? { caption } : {}),
         },
+        ...context,
       };
     default:
       if (isDocumentByType) {
@@ -118,6 +163,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
             filename: job.mediaFilename ?? 'documento',
             ...(caption ? { caption } : {}),
           },
+          ...context,
         };
       }
       return {
@@ -125,7 +171,8 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string) {
         recipient_type: 'individual',
         to: sanitizedPhone,
         type: 'text',
-        text: { body: job.content },
+        text: { body: normalizedContent },
+        ...context,
       };
   }
 }
@@ -153,7 +200,8 @@ const worker = new Worker<SendMessageJob>(
         }
         // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
         const sanitizedPhone = (job.data.to ?? '').replace(/\D/g, '');
-        const body = buildWhatsAppBody(job.data, sanitizedPhone);
+        const replyExternalId = await resolveReplyExternalId(job.data);
+        const body = buildWhatsAppBody(job.data, sanitizedPhone, replyExternalId);
 
         console.log('[WhatsApp Send] Job data:', JSON.stringify(job.data, null, 2));
         console.log('[WhatsApp Send] PhoneNumberId:', phoneNumberId);

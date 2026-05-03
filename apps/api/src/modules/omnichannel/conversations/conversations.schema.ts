@@ -50,6 +50,7 @@ export const sendMessageBodySchema = z.object({
   media_id: z.string().optional(),
   media_type: z.enum(['image', 'audio', 'video', 'document']).optional(),
   media_filename: z.string().max(255).optional(),
+  mention_message_id: z.string().uuid().optional(),
 }).refine((data) => Boolean(data.content?.trim()) || Boolean(data.media_id), {
   message: 'Mensagem deve conter texto ou mídia',
 }).refine((data) => !data.media_id || Boolean(data.media_type), {

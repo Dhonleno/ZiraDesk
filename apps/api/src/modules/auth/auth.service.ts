@@ -132,6 +132,7 @@ export function verifyRefreshToken(
       name: string;
       role: string;
       tenantId?: string;
+      schemaName?: string;
       isSuperAdmin: boolean;
     };
 
@@ -143,6 +144,7 @@ export function verifyRefreshToken(
       isSuperAdmin: payload.isSuperAdmin,
     };
     if (payload.tenantId) result.tenantId = payload.tenantId;
+    if (payload.schemaName) result.schemaName = payload.schemaName;
     return result;
   } catch {
     throw new Error(msg.tokenExpired);
@@ -157,6 +159,7 @@ export function refreshAccessToken(payload: UserPayload): string {
     role: payload.role,
     isSuperAdmin: payload.isSuperAdmin,
     ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
+    ...(payload.schemaName ? { schemaName: payload.schemaName } : {}),
   };
 
   return jwt.sign(base, env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });

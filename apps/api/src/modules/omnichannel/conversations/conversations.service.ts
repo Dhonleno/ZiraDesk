@@ -140,6 +140,34 @@ interface MessageRow {
   metadata: unknown;
 }
 
+interface MentionSourceMessageRow {
+  id: string;
+  content: string | null;
+  content_type: string;
+  media_url: string | null;
+  external_id: string | null;
+  sender_type: string;
+  metadata: unknown;
+  agent_name: string | null;
+  contact_name: string | null;
+}
+
+interface MentionMetadata {
+  message_id: string;
+  sender_type: string;
+  sender_label: string;
+  content: string;
+  content_type: string;
+  external_id: string | null;
+  media_id?: string | null;
+  media_subtype?: string | null;
+}
+
+interface MessageMetadataPatch {
+  filename?: string;
+  mention?: MentionMetadata;
+}
+
 interface MessageCursorRow {
   id: string;
   created_at: Date;
@@ -261,6 +289,44 @@ interface ConversationCounts {
   mine: number;
   queue: number;
   closed: number;
+}
+
+function buildMentionContentPreview(content: string | null | undefined, contentType: string): string {
+  const normalized = (content ?? '').trim();
+  if (normalized) return normalized.slice(0, 255);
+
+  switch (contentType) {
+    case 'image':
+      return '[Imagem]';
+    case 'audio':
+      return '[Áudio]';
+    case 'video':
+      return '[Vídeo]';
+    case 'document':
+      return '[Documento]';
+    default:
+      return '[Mensagem]';
+  }
+}
+
+function buildMentionSenderLabel(message: MentionSourceMessageRow): string {
+  if (message.sender_type === 'agent') return message.agent_name ?? 'Agente';
+  if (message.sender_type === 'bot') return 'Bot';
+  if (message.sender_type === 'system') return 'Sistema';
+  return message.contact_name ?? 'Cliente';
+}
+
+function getMentionMediaId(message: MentionSourceMessageRow): string | null {
+  if (message.media_url?.trim()) return message.media_url.trim();
+  if (!message.metadata || typeof message.metadata !== 'object') return null;
+  const mediaId = (message.metadata as Record<string, unknown>).media_id;
+  return typeof mediaId === 'string' && mediaId.trim() ? mediaId.trim() : null;
+}
+
+function getMentionMediaSubtype(message: MentionSourceMessageRow): string | null {
+  if (!message.metadata || typeof message.metadata !== 'object') return null;
+  const mediaSubtype = (message.metadata as Record<string, unknown>).media_subtype;
+  return typeof mediaSubtype === 'string' && mediaSubtype.trim() ? mediaSubtype.trim() : null;
 }
 
 export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
@@ -617,6 +683,8 @@ export interface SendMessageResult {
   mediaId: string | null;
   mediaType: 'image' | 'audio' | 'video' | 'document' | null;
   mediaFilename: string | null;
+  replyToExternalId: string | null;
+  replyToMessageId: string | null;
 }
 
 export interface MessageDispatchPayload {
@@ -671,7 +739,55 @@ export async function sendMessage(
   const content = body.content?.trim() ?? '';
   const mediaId = body.media_id ?? null;
   const mediaFilename = body.media_filename ?? null;
-  const metadataPatch = mediaFilename ? JSON.stringify({ filename: mediaFilename }) : '{}';
+  const mentionMessageId = body.mention_message_id ?? null;
+  const metadataPatch: MessageMetadataPatch = {};
+
+  if (mediaFilename) {
+    metadataPatch.filename = mediaFilename;
+  }
+
+  let replyToExternalId: string | null = null;
+  let replyToMessageId: string | null = null;
+
+  if (mentionMessageId) {
+    const mentionRows = await prisma.$queryRawUnsafe<MentionSourceMessageRow[]>(
+      `SELECT
+         m.id,
+         m.content,
+         m.content_type,
+         m.media_url,
+         m.external_id,
+         m.sender_type,
+         m.metadata,
+         u.name AS agent_name,
+         ct.name AS contact_name
+       FROM messages m
+       LEFT JOIN users u ON u.id = m.sender_id
+       LEFT JOIN conversations c ON c.id = m.conversation_id
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       WHERE m.id = $1::uuid
+         AND m.conversation_id = $2::uuid
+       LIMIT 1`,
+      mentionMessageId,
+      conversationId,
+    );
+    const mentionSource = mentionRows[0];
+    if (!mentionSource) throw new NotFoundError('Mensagem mencionada não encontrada');
+
+    metadataPatch.mention = {
+      message_id: mentionSource.id,
+      sender_type: mentionSource.sender_type,
+      sender_label: buildMentionSenderLabel(mentionSource),
+      content: buildMentionContentPreview(mentionSource.content, mentionSource.content_type),
+      content_type: mentionSource.content_type,
+      external_id: mentionSource.external_id,
+      media_id: getMentionMediaId(mentionSource),
+      media_subtype: getMentionMediaSubtype(mentionSource),
+    };
+
+    replyToMessageId = mentionSource.id;
+    replyToExternalId = mentionSource.external_id;
+  }
 
   const msgRows = await prisma.$queryRawUnsafe<MessageRow[]>(
     `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, media_url, is_internal, metadata)
@@ -683,7 +799,7 @@ export async function sendMessage(
     contentType,
     mediaId,
     body.isInternal ?? false,
-    metadataPatch,
+    JSON.stringify(metadataPatch),
   );
 
   const message = msgRows[0]!;
@@ -720,6 +836,8 @@ export async function sendMessage(
     mediaId,
     mediaType: mediaId ? (contentType as 'image' | 'audio' | 'video' | 'document') : null,
     mediaFilename,
+    replyToExternalId,
+    replyToMessageId,
   };
 }
 

@@ -1,0 +1,206 @@
+D:\Projetos\ZiraDesk\apps\web\src\pages\admin\Dashboard.tsx:73:label: t('tenantAdmin.dashboard.stats.clients'),
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:8:import { CreateClientModal } from '../../components/crm/CreateClientModal';
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:9:import { EditClientModal } from '../../components/crm/EditClientModal';
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:10:import { ClientProfile } from '../../components/crm/ClientProfile';
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:33:export function CrmClientsPage() {
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:76:<h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)' }}>{t('clients.title')}</h1>
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:79:{t('clients.total', { n: meta.total.toLocaleString('pt-BR') })}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:88:{t('clients.newClient')}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:103:placeholder={t('clients.searchPlaceholder')}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:115:{t('clients.loading')}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:120:<span style={{ fontSize: 13, color: 'var(--txt-2)' }}>{t('clients.noClients')}</span>
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:127:{ label: t('clients.table.client'), sort: true  },
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:185:title={t('clients.actions.edit')}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:207:{t('clients.pagination.showing')}{' '}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:211:{' '}{t('clients.pagination.of')}{' '}
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:215:<span>{meta.per_page} {t('clients.pagination.perPage')}</span>
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:252:<ClientProfile clientId={selectedId} onEdit={setEditContact} />
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:255:<CreateClientModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Clients.tsx:256:<EditClientModal client={editContact} onClose={() => setEditContact(null)} />
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Organizations.tsx:12:type StatusFilter = 'all' | 'lead' | 'prospect' | 'client' | 'inactive';
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Organizations.tsx:14:const STATUS_TABS: StatusFilter[] = ['all', 'lead', 'prospect', 'client', 'inactive'];
+D:\Projetos\ZiraDesk\apps\web\src\pages\crm\Organizations.tsx:62:client:   t('organizations.status.client'),
+D:\Projetos\ZiraDesk\apps\web\src\pages\tickets\TicketDetail.tsx:246:<Field label={t('tickets.fields.client')}>
+D:\Projetos\ZiraDesk\apps\web\src\pages\tickets\TicketDetail.tsx:247:{ticket.client_name
+D:\Projetos\ZiraDesk\apps\web\src\pages\tickets\TicketDetail.tsx:248:? <span style={{ color: 'var(--teal)' }}>{ticket.client_name}</span>
+D:\Projetos\ZiraDesk\apps\web\src\pages\tickets\TicketDetail.tsx:249:: <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noClient')}</span>
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:44:clientId: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:45:onEdit: (client: CrmContact) => void;
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:50:export function ClientProfile({ clientId, onEdit }: Props) {
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:54:queryKey: ['crm-contact', clientId],
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:55:queryFn: () => contactsApi.get(clientId!),
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:56:enabled: !!clientId,
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ClientProfile.tsx:59:if (!clientId) {
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ContactBadge.tsx:1:type OrgStatus = 'lead' | 'prospect' | 'client' | 'inactive';
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\ContactBadge.tsx:6:client:   { bg: 'var(--teal-dim)',  color: 'var(--teal)',  border: 'rgba(0,201,167,.25)' },
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:31:export function CreateClientModal({ open, onClose }: Props) {
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:68:toast.success(t('clients.modal.successCreated'));
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:96:<Modal open={open} onClose={handleClose} title={t('clients.modal.newTitle')} maxWidth="md">
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:100:label={t('clients.modal.fields.name')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:108:label={t('clients.modal.fields.email')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:114:label={t('clients.modal.fields.phone')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:128:label={t('clients.modal.fields.document')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:147:{t('clients.modal.fields.tags')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:173:placeholder={t('clients.modal.tagsHint')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateClientModal.tsx:188:{mutation.isPending ? t('clients.modal.submitting') : t('clients.modal.submit')}
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateOrganizationModal.tsx:19:status:      z.enum(['lead', 'prospect', 'client', 'inactive']),
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\CreateOrganizationModal.tsx:105:{ value: 'client',   label: t('organizations.status.client') },
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:28:client: CrmContact | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:32:export function EditClientModal({ client, onClose }: Props) {
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:51:if (!client) return;
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:53:name:       client.name,
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:54:email:      client.email      ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:55:phone:      client.phone      ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:56:whatsapp:   client.whatsapp   ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:57:document:   client.document   ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:58:role:       client.role       ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:59:department: client.department ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:60:notes:      client.notes      ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:61:tags:       client.tags,
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:64:}, [client, reset]);
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:81:return contactsApi.update(client!.id, payload);
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditClientModal.tsx:108:<Modal open={!!client} onClose={onClose} title="Editar contato" maxWidth="md">
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditOrganizationModal.tsx:21:status:         z.enum(['lead', 'prospect', 'client', 'inactive']),
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\EditOrganizationModal.tsx:96:{ value: 'client',   label: t('organizations.status.client') },
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\OrganizationCard.tsx:30:client:   t('organizations.status.client'),
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\OrganizationDetail.tsx:106:client:   t('organizations.status.client'),
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\OrganizationDetail.tsx:118:type OrgConv = { id: string; channel_type: string; channel_name: string | null; client_name: string | null; last_message: string | null; last_message_at: string | null; status: string; created_at: string };
+D:\Projetos\ZiraDesk\apps\web\src\components\crm\OrganizationDetail.tsx:272:<span style={{ fontSize: 12, fontWeight: 500, color: 'var(--txt)' }}>{conv.client_name ?? '—'}</span>
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:834:contactName: data?.conversation?.contact_name ?? data?.conversation?.client_name ?? '',
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:977:const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:980:?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:982:const avatarName = conv?.contact_name ?? conv?.client_name ?? null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:1423:const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:1429:?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:1431:const clientLabel = organizationDisplayName
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ChatArea.tsx:1438:: clientLabel;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ConversationList.tsx:26:client_name: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ConversationList.tsx:27:client_email: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ConversationList.tsx:721:const displayName = conv.contact_name ?? conv.client_name ?? 'Visitante';
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ConversationList.tsx:724:?? (conv.contact_name && conv.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\ConversationList.tsx:726:const avatarName = conv.contact_name ?? conv.client_name;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\CreateConversationModal.tsx:233:{t('form.client')} *
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\CreateConversationModal.tsx:264:placeholder={t('form.clientPlaceholder')}
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\CreateConversationModal.tsx:315:<p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.clientRequired')}</p>
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:14:client_id: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:17:client_name: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:18:client_email: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:19:client_phone: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:20:client_whatsapp?: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:40:interface ClientStats {
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:206:const contactId = conv?.contact_id ?? conv?.client_id ?? null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:214:const { data: clientStats, isLoading: statsLoading } = useQuery({
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:215:queryKey: ['crm-client-stats', contactId],
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:217:const res = await api.get<{ success: boolean; data: ClientStats }>(`/crm/contacts/${contactId!}/stats`);
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:225:queryKey: ['omnichannel-client-history', contactId, conversationId],
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:246:|| conv?.client_whatsapp?.trim()
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:248:|| conv?.client_phone?.trim()
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:250:const contactEmail = contactData?.email ?? conv?.contact_email ?? conv?.client_email ?? null;
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:251:const contactName = (contactData?.name ?? conv?.contact_name ?? conv?.client_name ?? null)?.trim();
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:254:const name = contactName || 'Cliente não identificado';
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:325:<div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{t('info.client')}</div>
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:404:{ val: contactId ? String(clientStats?.total_messages ?? 0) : '—', lbl: t('info.messages') },
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:405:{ val: contactId ? String(clientStats?.total_conversations ?? 0) : '—', lbl: t('info.attendances') },
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:406:{ val: contactId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: 'Tickets abertos' },
+D:\Projetos\ZiraDesk\apps\web\src\components\omnichannel\InfoPanel.tsx:518:{t('csat.pending', { defaultValue: 'Aguardando avaliação do cliente...' })}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:44:const [clientSearch, setClientSearch] = useState('');
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:47:const [showClientDropdown, setShowClientDropdown] = useState(false);
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:52:const debouncedClientSearch = useDebounce(clientSearch, 300);
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:62:queryKey: ['crm-contacts-search', debouncedClientSearch],
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:63:queryFn: () => contactsApi.list({ search: debouncedClientSearch, per_page: 8 }),
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:64:enabled: debouncedClientSearch.length > 1 && showClientDropdown,
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:163:{t('tickets.fields.client')}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:170:<button type="button" onClick={() => { setSelectedContactId(null); setSelectedContactName(''); setClientSearch(''); }}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:178:placeholder={t('tickets.form.searchClient')}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:179:value={clientSearch}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:180:onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:181:onFocus={() => setShowClientDropdown(true)}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:182:onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:186:{showClientDropdown && !selectedContactId && contactResults && contactResults.data.length > 0 && (
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\CreateTicketModal.tsx:197:setShowClientDropdown(false);
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\TicketCard.tsx:83:{/* Row 3: client + assignee + date */}
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\TicketCard.tsx:85:{ticket.client_name && (
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\TicketCard.tsx:87:<Initials name={ticket.client_name} color="linear-gradient(135deg,var(--blue),var(--purple))" />
+D:\Projetos\ZiraDesk\apps\web\src\components\tickets\TicketCard.tsx:89:{ticket.client_name}
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:8:type ResultType = 'client' | 'ticket' | 'conversation';
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:24:if (type === 'client') {
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:36:...data.contacts.map((client) => ({
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:37:key: `contact:${client.id}`,
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:38:type: 'client' as const,
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:39:title: client.name,
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:40:subtitle: client.email ?? client.phone ?? 'Contato',
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:41:href: `/crm/contacts?contact=${client.id}`,
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:53:title: conversation.contact_name ?? 'Cliente não identificado',
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:61:{ type: 'client', label: 'Clientes' },
+D:\Projetos\ZiraDesk\apps\web\src\components\ui\GlobalSearch.tsx:135:placeholder="Buscar clientes, tickets e conversas..."
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\admin.json:314:"clients": "Clients",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\crm.json:19:"client": "Client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\omnichannel.json:259:"client": "Client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\omnichannel.json:266:"client": "Client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\omnichannel.json:267:"clientPlaceholder": "Search client...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\omnichannel.json:285:"errorLoadClients": "Error loading clients",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\omnichannel.json:287:"clientRequired": "Please select a client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\tickets.json:34:"client": "Client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\tickets.json:41:"noClient": "No client linked",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\tickets.json:71:"searchClient": "Search client...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\en-US\tickets.json:72:"noClient": "No client",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\admin.json:110:"enabledHint": "Envía una encuesta al cliente al resolver conversaciones",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\admin.json:135:"awayMessagePlaceholder": "Mensaje enviado al cliente fuera del horario...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\admin.json:149:"activeHint": "Los clientes recibirán el menú automáticamente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\admin.json:314:"clients": "Clientes",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\crm.json:19:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:52:"warning": "Aparecerá en Activas hasta que el cliente responda",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:53:"activated": "¡El cliente respondió a la atención activa!"
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:69:"emptyHint": "Cuando los clientes entren en contacto aparecerán aquí"
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:137:"subtitle": "¿Cómo fue la experiencia del cliente?",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:156:"pending": "Esperando evaluación del cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:157:"waitingComment": "Esperando comentario del cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:259:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:266:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:267:"clientPlaceholder": "Buscar cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:272:"typeInboundHelp": "Registrar contacto del cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:274:"typeOutboundHelp": "Vas a contactar al cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:279:"initialMessageOutboundPlaceholder": "Escribe el mensaje que será enviado al cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:285:"errorLoadClients": "Error al cargar clientes",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\omnichannel.json:287:"clientRequired": "Seleccione un cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\tickets.json:34:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\tickets.json:41:"noClient": "Sin cliente vinculado",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\tickets.json:71:"searchClient": "Buscar cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\es\tickets.json:72:"noClient": "Sin cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\admin.json:110:"enabledHint": "Envia avaliação ao cliente ao resolver atendimentos",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\admin.json:135:"awayMessagePlaceholder": "Mensagem enviada ao cliente fora do horário...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\admin.json:149:"activeHint": "Clientes receberão o menu automaticamente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\admin.json:331:"clients": "Clientes",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\crm.json:19:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:52:"warning": "Aparecerá em Ativos até o cliente responder",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:53:"activated": "Cliente respondeu ao atendimento ativo!"
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:69:"emptyHint": "Quando clientes entrarem em contato aparecerão aqui"
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:137:"subtitle": "Como foi a experiência do cliente?",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:156:"pending": "Aguardando avaliação do cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:259:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:266:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:267:"clientPlaceholder": "Buscar cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:272:"typeInboundHelp": "Registrar contato do cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:274:"typeOutboundHelp": "Você vai contatar o cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:279:"initialMessageOutboundPlaceholder": "Digite a mensagem que será enviada ao cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:285:"errorLoadClients": "Erro ao buscar clientes",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\omnichannel.json:287:"clientRequired": "Selecione um cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\tickets.json:34:"client": "Cliente",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\tickets.json:41:"noClient": "Sem cliente vinculado",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\tickets.json:71:"searchClient": "Buscar cliente...",
+D:\Projetos\ZiraDesk\apps\web\src\locales\pt-BR\tickets.json:72:"noClient": "Nenhum cliente",
+D:\Projetos\ZiraDesk\apps\web\src\App.tsx:110:<Route path="crm/clients" element={<Navigate to="/crm/organizations" replace />} />
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:386:status: 'lead' | 'prospect' | 'client' | 'inactive';
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:845:client_id:       string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:861:client_name:     string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:862:client_email:    string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:900:client_id?:   string;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:944:client_id: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:947:client_name: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:948:client_email: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:949:client_phone: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:950:client_whatsapp?: string | null;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:968:sender_type: 'agent' | 'client' | 'bot' | 'system';
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:980:sender_type: 'agent' | 'client' | 'bot' | 'system' | string;
+D:\Projetos\ZiraDesk\apps\web\src\services\api.ts:1000:client_id?: string;
+D:\Projetos\ZiraDesk\packages\shared\src\types\organization.ts:9:status: 'lead' | 'prospect' | 'client' | 'inactive';

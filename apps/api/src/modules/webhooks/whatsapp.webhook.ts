@@ -28,7 +28,20 @@ interface MetaMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker';
+  type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction';
+  context?: {
+    id?: string;
+    from?: string;
+  };
+  reaction?: {
+    message_id?: string;
+    emoji?: string;
+  };
+  sticker?: {
+    id?: string;
+    mime_type?: string;
+    animated?: boolean;
+  };
   text?: { body: string };
   image?: { id: string; mime_type: string; caption?: string };
   audio?: { id: string; mime_type: string };
@@ -114,6 +127,18 @@ interface ChannelMatch {
   channelCredentials: Record<string, string>;
 }
 
+interface MentionLookupRow {
+  id: string;
+  sender_type: string;
+  content: string | null;
+  content_type: string;
+  media_url: string | null;
+  metadata: unknown;
+  external_id: string | null;
+  agent_name: string | null;
+  contact_name: string | null;
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -134,6 +159,44 @@ function withWhatsappEnvFallback(credentials: Record<string, string>): Record<st
     accessToken: getCredentialValue(credentials, 'accessToken', 'access_token') ?? env.WHATSAPP_ACCESS_TOKEN,
     verifyToken: getCredentialValue(credentials, 'verifyToken', 'verify_token') ?? env.WHATSAPP_VERIFY_TOKEN,
   };
+}
+
+function buildMentionPreview(content: string | null | undefined, contentType: string): string {
+  const normalized = (content ?? '').trim();
+  if (normalized) return normalized.slice(0, 255);
+
+  switch (contentType) {
+    case 'image':
+      return '[Imagem]';
+    case 'audio':
+      return '[Áudio]';
+    case 'video':
+      return '[Vídeo]';
+    case 'document':
+      return '[Documento]';
+    default:
+      return '[Mensagem]';
+  }
+}
+
+function buildMentionSenderLabel(row: MentionLookupRow): string {
+  if (row.sender_type === 'agent') return row.agent_name ?? 'Agente';
+  if (row.sender_type === 'bot') return 'Bot';
+  if (row.sender_type === 'system') return 'Sistema';
+  return row.contact_name ?? 'Cliente';
+}
+
+function getMentionMediaId(row: MentionLookupRow): string | null {
+  if (row.media_url?.trim()) return row.media_url.trim();
+  if (!row.metadata || typeof row.metadata !== 'object') return null;
+  const mediaId = (row.metadata as Record<string, unknown>).media_id;
+  return typeof mediaId === 'string' && mediaId.trim() ? mediaId.trim() : null;
+}
+
+function getMentionMediaSubtype(row: MentionLookupRow): string | null {
+  if (!row.metadata || typeof row.metadata !== 'object') return null;
+  const mediaSubtype = (row.metadata as Record<string, unknown>).media_subtype;
+  return typeof mediaSubtype === 'string' && mediaSubtype.trim() ? mediaSubtype.trim() : null;
 }
 
 async function findChannelByPhoneNumberId(
@@ -302,7 +365,7 @@ async function processIncomingMessage(
       contentType = 'text';
       break;
     case 'image':
-      content = message.image?.caption ?? '📷 Imagem';
+      content = message.image?.caption?.trim() ?? '';
       contentType = 'image';
       externalMediaId = message.image?.id ?? null;
       if (message.image?.mime_type) mediaMetadata.mime_type = message.image.mime_type;
@@ -326,6 +389,18 @@ async function processIncomingMessage(
       if (message.document?.filename) mediaMetadata.filename = message.document.filename;
       if (message.document?.mime_type) mediaMetadata.mime_type = message.document.mime_type;
       break;
+    case 'sticker':
+      content = '🧩 Figurinha';
+      contentType = 'image';
+      externalMediaId = message.sticker?.id ?? null;
+      if (message.sticker?.mime_type) mediaMetadata.mime_type = message.sticker.mime_type;
+      if (typeof message.sticker?.animated === 'boolean') mediaMetadata.sticker_animated = message.sticker.animated;
+      mediaMetadata.media_subtype = 'sticker';
+      break;
+    case 'reaction':
+      content = message.reaction?.emoji?.trim() || 'Reação removida';
+      contentType = 'text';
+      break;
     default:
       content = '📎 Anexo';
       contentType = 'text';
@@ -334,6 +409,10 @@ async function processIncomingMessage(
   if (externalMediaId) {
     mediaMetadata.media_id = externalMediaId;
   }
+  const quotedExternalId =
+    message.context?.id?.trim()
+    || message.reaction?.message_id?.trim()
+    || null;
 
   // Ensure schema/function exists outside the transaction to avoid concurrent DDL errors
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
@@ -438,6 +517,50 @@ async function processIncomingMessage(
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
 
+    let mentionMetadata: Record<string, unknown> | null = null;
+    if (quotedExternalId) {
+      const mentionRows = await tx.$queryRawUnsafe<MentionLookupRow[]>(
+        `SELECT
+           m.id,
+           m.sender_type,
+           m.content,
+           m.content_type,
+           m.media_url,
+           m.metadata,
+           m.external_id,
+           u.name AS agent_name,
+           ct.name AS contact_name
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.sender_id
+         LEFT JOIN conversations c ON c.id = m.conversation_id
+         LEFT JOIN contacts ct ON ct.id = c.contact_id
+         WHERE m.external_id = $1
+           AND m.conversation_id = $2::uuid
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        quotedExternalId,
+        conversationId,
+      );
+      const mention = mentionRows[0];
+      if (mention) {
+        mentionMetadata = {
+          message_id: mention.id,
+          sender_type: mention.sender_type,
+          sender_label: buildMentionSenderLabel(mention),
+          content: buildMentionPreview(mention.content, mention.content_type),
+          content_type: mention.content_type,
+          external_id: mention.external_id,
+          media_id: getMentionMediaId(mention),
+          media_subtype: getMentionMediaSubtype(mention),
+        };
+      }
+    }
+
+    const incomingMessageMetadata: Record<string, unknown> = {
+      ...mediaMetadata,
+      ...(mentionMetadata ? { mention: mentionMetadata } : {}),
+    };
+
     if (currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment') {
       const msgRows = await tx.$queryRawUnsafe<
         [{ id: string; content: string; created_at: Date; sender_type: string }]
@@ -451,7 +574,7 @@ async function processIncomingMessage(
         contentType,
         externalMediaId,
         message.id,
-        JSON.stringify(mediaMetadata),
+        JSON.stringify(incomingMessageMetadata),
       );
       const savedMessage = msgRows[0]!;
 
@@ -567,7 +690,7 @@ async function processIncomingMessage(
       contentType,
       externalMediaId,
       message.id,
-      JSON.stringify(mediaMetadata),
+      JSON.stringify(incomingMessageMetadata),
     );
     const savedMessage = msgRows[0]!;
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/auth.store';
 import type { LoginInput } from '@ziradesk/shared';
+import { disconnectSocket } from '../services/socket';
 
 interface LoginResponseData {
   accessToken: string;
@@ -32,6 +33,7 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      disconnectSocket();
       await api.post('/auth/logout');
     },
     onSettled: () => {

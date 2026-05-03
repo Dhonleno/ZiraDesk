@@ -35,5 +35,9 @@ export async function tenantSchemaFromJwt(
     return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
   }
 
+  request.user = {
+    ...user,
+    schemaName: tenant.schemaName,
+  };
   await prisma.$executeRawUnsafe(`SET search_path TO "${tenant.schemaName}", public`);
 }

@@ -18,6 +18,7 @@ interface MediaUploadProps {
   disabled?: boolean;
   onSent: (payload: SentMediaPayload) => Promise<void> | void;
   onActiveChange?: (active: boolean) => void;
+  mentionMessageId?: string | null;
 }
 
 function detectMediaType(mime: string): 'image' | 'audio' | 'video' | 'document' {
@@ -34,7 +35,7 @@ function formatFileSize(bytes: number) {
 }
 
 export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
-  ({ conversationId, disabled, onSent, onActiveChange }, ref) => {
+  ({ conversationId, disabled, onSent, onActiveChange, mentionMessageId }, ref) => {
     const { t } = useTranslation('omnichannel');
     const toast = useToast();
     const inputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +91,7 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
           media_type: upload.media_type,
           media_filename: upload.filename,
           contentType: upload.media_type,
+          ...(mentionMessageId ? { mention_message_id: mentionMessageId } : {}),
         });
 
         localPreviewUrl = URL.createObjectURL(selectedFile);

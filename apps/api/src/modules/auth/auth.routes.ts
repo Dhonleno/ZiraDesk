@@ -8,6 +8,9 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.service.js';
 import { prisma } from '../../config/database.js';
+import { authMiddleware } from '../../middleware/auth.js';
+import { quoteIdent } from '../omnichannel/conversations/protocols.js';
+import { getSocketServer } from '../../socket/index.js';
 
 const REFRESH_COOKIE = 'zd_refresh';
 
@@ -82,7 +85,33 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/auth/logout
-  app.post('/logout', async (_request, reply) => {
+  app.post('/logout', { preHandler: [authMiddleware] }, async (request, reply) => {
+    if (!request.user.isSuperAdmin && request.user.tenantId) {
+      const tenantSchema = request.user.schemaName ?? (
+        await prisma.tenant.findUnique({
+          where: { id: request.user.tenantId },
+          select: { schemaName: true },
+        })
+      )?.schemaName;
+
+      if (tenantSchema) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE ${quoteIdent(tenantSchema)}.agent_assignments
+           SET status = 'offline',
+               is_available = false
+           WHERE user_id = $1::uuid`,
+          request.user.id,
+        );
+
+        try {
+          const io = getSocketServer();
+          io.to(`tenant:${request.user.tenantId}`).emit('agent:offline', { userId: request.user.id });
+        } catch {
+          // socket server not available during startup/shutdown
+        }
+      }
+    }
+
     reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
     return reply.code(200).send({ message: 'Sessão encerrada' });
   });

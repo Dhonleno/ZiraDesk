@@ -15,6 +15,7 @@ interface AudioRecorderProps {
   disabled?: boolean;
   onSent: (payload: SentMediaPayload) => Promise<void> | void;
   onActiveChange?: (active: boolean) => void;
+  mentionMessageId?: string | null;
 }
 
 type StopMode = 'preview' | 'discard' | null;
@@ -178,7 +179,7 @@ function drawStaticWave(ctx: CanvasRenderingContext2D, width: number, height: nu
 }
 
 export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>(
-  ({ conversationId, disabled, onSent, onActiveChange }, ref) => {
+  ({ conversationId, disabled, onSent, onActiveChange, mentionMessageId }, ref) => {
     const { t } = useTranslation('omnichannel');
     const toast = useToast();
     const { load, convertToMp3, progress } = useFFmpeg();
@@ -589,6 +590,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           media_type: 'audio',
           media_filename: upload.filename,
           contentType: 'audio',
+          ...(mentionMessageId ? { mention_message_id: mentionMessageId } : {}),
         });
 
         localPreviewUrl = await fileToDataUrl(fileToUpload);

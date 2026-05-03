@@ -7,7 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { ticketsApi, contactsApi, adminApi } from '../../services/api';
+import { ticketsApi, contactsApi, organizationsApi, adminApi } from '../../services/api';
+import type { CrmContact, CrmOrganization } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -46,10 +47,16 @@ export function CreateTicketModal({ open, onClose }: Props) {
   const [selectedContactName, setSelectedContactName] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
 
+  const [organizationSearch, setOrganizationSearch] = useState('');
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null);
+  const [selectedOrganizationName, setSelectedOrganizationName] = useState('');
+  const [showOrganizationDropdown, setShowOrganizationDropdown] = useState(false);
+
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
 
   const debouncedContactSearch = useDebounce(contactSearch, 300);
+  const debouncedOrganizationSearch = useDebounce(organizationSearch, 300);
 
   const { register, handleSubmit, watch, setValue, getValues, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -72,6 +79,13 @@ export function CreateTicketModal({ open, onClose }: Props) {
     enabled: open,
   });
 
+  const { data: organizationResults } = useQuery({
+    queryKey: ['crm-organizations-search', debouncedOrganizationSearch],
+    queryFn: () => organizationsApi.list({ search: debouncedOrganizationSearch, per_page: 8 }),
+    enabled: debouncedOrganizationSearch.length > 1 && showOrganizationDropdown,
+    staleTime: 10_000,
+  });
+
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
       const payload: import('../../services/api').CreateTicketPayload = {
@@ -84,6 +98,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
       if (values.category)     payload.category     = values.category;
       if (values.due_date)     payload.due_date     = new Date(values.due_date).toISOString();
       if (selectedContactId)   payload.contact_id   = selectedContactId;
+      if (selectedOrganizationId) payload.organization_id = selectedOrganizationId;
       if (assigneeId)          payload.assigned_to  = assigneeId;
       return ticketsApi.create(payload);
     },
@@ -94,6 +109,9 @@ export function CreateTicketModal({ open, onClose }: Props) {
       reset();
       setSelectedContactId(null);
       setSelectedContactName('');
+      setSelectedOrganizationId(null);
+      setSelectedOrganizationName('');
+      setOrganizationSearch('');
       setAssigneeId(null);
       setTagInput('');
       onClose();
@@ -112,6 +130,52 @@ export function CreateTicketModal({ open, onClose }: Props) {
 
   function removeTag(tag: string) {
     setValue('tags', getValues('tags').filter(t => t !== tag));
+  }
+
+  function handleContactSelect(contact: CrmContact) {
+    setSelectedContactId(contact.id);
+    setSelectedContactName(contact.name);
+    setShowContactDropdown(false);
+
+    if (contact.organization_id) {
+      setSelectedOrganizationId(contact.organization_id);
+      setSelectedOrganizationName(
+        contact.organization_name
+          ?? t('tickets.form.organizationLinked', { defaultValue: 'Organizacao vinculada' }),
+      );
+      setOrganizationSearch('');
+      setShowOrganizationDropdown(false);
+      return;
+    }
+
+    setSelectedOrganizationId(null);
+    setSelectedOrganizationName('');
+    setOrganizationSearch('');
+    setShowOrganizationDropdown(false);
+  }
+
+  function handleClearContact() {
+    setSelectedContactId(null);
+    setSelectedContactName('');
+    setContactSearch('');
+    setShowContactDropdown(false);
+    setSelectedOrganizationId(null);
+    setSelectedOrganizationName('');
+    setOrganizationSearch('');
+    setShowOrganizationDropdown(false);
+  }
+
+  function handleOrganizationSelect(org: CrmOrganization) {
+    setSelectedOrganizationId(org.id);
+    setSelectedOrganizationName(org.name);
+    setShowOrganizationDropdown(false);
+  }
+
+  function handleClearOrganization() {
+    setSelectedOrganizationId(null);
+    setSelectedOrganizationName('');
+    setOrganizationSearch('');
+    setShowOrganizationDropdown(false);
   }
 
   const users = usersData?.data ?? [];
@@ -167,7 +231,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 borderRadius: 'var(--r)', background: 'var(--teal-dim)', border: '1px solid var(--teal)',
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedContactName}</span>
-                <button type="button" onClick={() => { setSelectedContactId(null); setSelectedContactName(''); setContactSearch(''); }}
+                <button type="button" onClick={handleClearContact}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}>
                   ×
                 </button>
@@ -191,17 +255,66 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 maxHeight: 200, overflowY: 'auto', marginTop: 2,
               }}>
                 {contactResults.data.map((c) => (
-                  <button key={c.id} type="button" onMouseDown={() => {
-                    setSelectedContactId(c.id);
-                    setSelectedContactName(c.name);
-                    setShowContactDropdown(false);
-                  }} style={{
+                  <button key={c.id} type="button" onMouseDown={() => handleContactSelect(c)} style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
                     background: 'none', border: 'none', cursor: 'pointer', fontSize: 13,
                     color: 'var(--txt)', fontFamily: 'var(--font)',
                   }}>
                     <span style={{ fontWeight: 500 }}>{c.name}</span>
                     {c.email && <span style={{ marginLeft: 8, color: 'var(--txt-3)', fontSize: 11 }}>{c.email}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Organization search (optional) */}
+          <div style={{ position: 'relative' }}>
+            <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
+              {t('tickets.fields.organization', { defaultValue: 'Organizacao' })}
+            </label>
+            {selectedOrganizationId ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                borderRadius: 'var(--r)', background: 'var(--blue-dim)', border: '1px solid var(--blue)',
+                fontSize: 13, color: 'var(--txt)' }}>
+                <span style={{ flex: 1 }}>{selectedOrganizationName}</span>
+                <button
+                  type="button"
+                  onClick={handleClearOrganization}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <input
+                type="text"
+                placeholder={t('tickets.form.searchOrganization', { defaultValue: 'Buscar organizacao...' })}
+                value={organizationSearch}
+                onChange={(e) => {
+                  setOrganizationSearch(e.target.value);
+                  setShowOrganizationDropdown(true);
+                }}
+                onFocus={() => setShowOrganizationDropdown(true)}
+                onBlur={() => setTimeout(() => setShowOrganizationDropdown(false), 150)}
+                style={{ ...selectStyle, display: 'block' }}
+              />
+            )}
+            {showOrganizationDropdown && !selectedOrganizationId && organizationResults && organizationResults.data.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                background: 'var(--bg-3)', border: '1px solid var(--line)',
+                borderRadius: 'var(--r)', boxShadow: '0 8px 24px rgba(0,0,0,.4)',
+                maxHeight: 200, overflowY: 'auto', marginTop: 2,
+              }}>
+                {organizationResults.data.map((org) => (
+                  <button key={org.id} type="button" onMouseDown={() => handleOrganizationSelect(org)} style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+                    background: 'none', border: 'none', cursor: 'pointer', fontSize: 13,
+                    color: 'var(--txt)', fontFamily: 'var(--font)',
+                  }}>
+                    <span style={{ fontWeight: 500 }}>{org.name}</span>
+                    {org.email && <span style={{ marginLeft: 8, color: 'var(--txt-3)', fontSize: 11 }}>{org.email}</span>}
                   </button>
                 ))}
               </div>

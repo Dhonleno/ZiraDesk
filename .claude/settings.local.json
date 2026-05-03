@@ -36,7 +36,15 @@
       "Bash(psql -h localhost -U ziradesk -d ziradesk -c ' *)",
       "Bash(python -m json.tool)",
       "Bash(grep -E \"\\\\.ts$\")",
-      "Bash(pnpm --filter @ziradesk/api add bullmq)"
+      "Bash(pnpm --filter @ziradesk/api add bullmq)",
+      "Bash(psql postgresql://ziradesk:ziradesk@localhost:5432/ziradesk -c ' *)",
+      "Bash(where psql *)",
+      "PowerShell(Get-Command psql -ErrorAction SilentlyContinue)",
+      "Bash(npx tsc *)",
+      "Bash(pnpm --filter @ziradesk/web add @ffmpeg/ffmpeg @ffmpeg/util)",
+      "Bash(node -e \"const p = require\\('./apps/web/node_modules/@ffmpeg/ffmpeg/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(npx tsx *)",
+      "Bash(pnpm --filter api build)"
     ]
   }
 }

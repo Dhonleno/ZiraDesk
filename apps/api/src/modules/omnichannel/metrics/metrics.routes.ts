@@ -24,29 +24,33 @@ const metricsQuerySchema = z.object({
   department: z.string().optional(),
 });
 
-function startOfDay(date: Date): Date {
-  const value = new Date(date);
-  value.setHours(0, 0, 0, 0);
-  return value;
-}
-
-function endOfDay(date: Date): Date {
-  const value = new Date(date);
-  value.setHours(23, 59, 59, 999);
-  return value;
-}
-
-function parseDateOrNull(value: string | undefined): Date | null {
+function parseDatePartsOrNull(value: string | undefined): { year: number; month: number; day: number } | null {
   if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function buildUtcDate(year: number, month: number, day: number, hour = 0, minute = 0, second = 0, ms = 0): Date {
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, second, ms));
+}
+
+function startOfUtcDay(date: Date): Date {
+  return buildUtcDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), 0, 0, 0, 0);
+}
+
+function nextUtcDay(date: Date): Date {
+  return new Date(startOfUtcDay(date).getTime() + 24 * 60 * 60 * 1000);
 }
 
 function getDefaultDateFrom(): Date {
   const now = new Date();
-  now.setDate(now.getDate() - 7);
-  return startOfDay(now);
+  const start = startOfUtcDay(now);
+  return new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
 }
 
 function resolveSchemaNameFromRequest(request: { user: { tenantId?: string; schemaName?: string } }) {
@@ -64,11 +68,18 @@ function resolveSchemaNameFromRequest(request: { user: { tenantId?: string; sche
 }
 
 function getFilters(raw: z.infer<typeof metricsQuerySchema>) {
-  const dateFromRaw = parseDateOrNull(raw.date_from);
-  const dateToRaw = parseDateOrNull(raw.date_to);
+  const dateFromParts = parseDatePartsOrNull(raw.date_from);
+  const dateToParts = parseDatePartsOrNull(raw.date_to);
 
-  const dateFrom = dateFromRaw ? startOfDay(dateFromRaw) : getDefaultDateFrom();
-  const dateTo = dateToRaw ? endOfDay(dateToRaw) : endOfDay(new Date());
+  const dateFrom = dateFromParts
+    ? buildUtcDate(dateFromParts.year, dateFromParts.month, dateFromParts.day, 0, 0, 0, 0)
+    : getDefaultDateFrom();
+  const dateTo = dateToParts
+    ? buildUtcDate(dateToParts.year, dateToParts.month, dateToParts.day, 23, 59, 59, 999)
+    : new Date();
+  const dateToExclusive = dateToParts
+    ? buildUtcDate(dateToParts.year, dateToParts.month, dateToParts.day + 1, 0, 0, 0, 0)
+    : nextUtcDay(dateTo);
 
   if (dateFrom > dateTo) {
     throw new Error('Período inválido: date_from maior que date_to');
@@ -77,6 +88,7 @@ function getFilters(raw: z.infer<typeof metricsQuerySchema>) {
   return {
     dateFrom,
     dateTo,
+    dateToExclusive,
     ...(raw.agent_id ? { agentId: raw.agent_id } : {}),
     ...(raw.channel_type ? { channelType: raw.channel_type } : {}),
     ...(raw.department ? { department: raw.department } : {}),
@@ -224,4 +236,3 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 }
-

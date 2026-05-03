@@ -2,6 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { getMonitorSnapshot } from './monitor.service.js';
+import { getSocketServer } from '../../socket/index.js';
+import { prisma } from '../../config/database.js';
+import { quoteIdent } from './conversations/protocols.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
@@ -16,6 +19,42 @@ export async function omnichannelMonitorRoutes(app: FastifyInstance): Promise<vo
     }
 
     const data = await getMonitorSnapshot(schemaName);
+
+    try {
+      const io = getSocketServer();
+      const tenantId = request.user.tenantId!;
+      const connectedSockets = await io.in(`tenant:${tenantId}`).fetchSockets();
+      const connectedUserIds = new Set(
+        connectedSockets
+          .map((socket) => String(socket.data.userId ?? ''))
+          .filter((value) => value.length > 0),
+      );
+
+      const staleOnlineAgentIds = data.agents
+        .filter((agent) => agent.status === 'online' && !connectedUserIds.has(agent.id))
+        .map((agent) => agent.id);
+
+      if (staleOnlineAgentIds.length > 0) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE ${quoteIdent(schemaName)}.agent_assignments
+           SET status = 'offline',
+               is_available = false
+           WHERE status = 'online'
+             AND user_id = ANY($1::uuid[])`,
+          staleOnlineAgentIds,
+        );
+      }
+
+      data.agents = data.agents.map((agent) => {
+        if (agent.status === 'online' && !connectedUserIds.has(agent.id)) {
+          return { ...agent, status: 'offline' };
+        }
+        return agent;
+      });
+    } catch {
+      // If socket server is unavailable, keep DB-based status as fallback.
+    }
+
     return reply.send({ success: true, data });
   });
 }

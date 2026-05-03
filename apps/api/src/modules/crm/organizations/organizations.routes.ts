@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
+import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import { createOrganizationSchema, updateOrganizationSchema, listOrganizationsQuerySchema } from './organizations.schema.js';
 import {
   listOrganizations,
@@ -17,7 +18,12 @@ import {
   ConflictError,
 } from './organizations.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const guard = [
+  authMiddleware,
+  tenantSchemaFromJwt,
+  ensureCrmInfrastructureMiddleware,
+  hasRole('owner', 'admin', 'agent'),
+];
 
 export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '../ui/Modal';
 import { contactsApi, organizationsApi } from '../../services/api';
+import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { ContactAvatar } from './ContactAvatar';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -16,11 +17,14 @@ interface Props {
 
 export function LinkOrganizationModal({ open, onClose, contactId, contactName }: Props) {
   const { t } = useTranslation('crm');
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
   const toast = useToast();
   const queryClient = useQueryClient();
   const [searchRaw, setSearchRaw] = useState('');
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const search = useDebounce(searchRaw, 300);
+  const hasValidSession = isAuthenticated && Boolean(token);
 
   const { data, isLoading } = useQuery({
     queryKey: ['crm-organizations-search', search],
@@ -29,7 +33,7 @@ export function LinkOrganizationModal({ open, onClose, contactId, contactName }:
       if (search) params.search = search;
       return organizationsApi.list(params);
     },
-    enabled: open,
+    enabled: open && hasValidSession,
   });
 
   const organizations = data?.data ?? [];
@@ -130,13 +134,13 @@ export function LinkOrganizationModal({ open, onClose, contactId, contactName }:
           </button>
           <button
             onClick={() => mutation.mutate()}
-            disabled={!selectedOrgId || mutation.isPending}
+            disabled={!hasValidSession || !selectedOrgId || mutation.isPending}
             style={{
               padding: '6px 14px', borderRadius: 'var(--r)',
               border: '1px solid var(--teal)', background: 'var(--teal)',
               color: 'var(--on-teal)', fontSize: 12, fontWeight: 600,
-              cursor: selectedOrgId && !mutation.isPending ? 'pointer' : 'not-allowed',
-              opacity: !selectedOrgId || mutation.isPending ? 0.5 : 1,
+              cursor: hasValidSession && selectedOrgId && !mutation.isPending ? 'pointer' : 'not-allowed',
+              opacity: !hasValidSession || !selectedOrgId || mutation.isPending ? 0.5 : 1,
               fontFamily: 'var(--font)',
             }}
           >

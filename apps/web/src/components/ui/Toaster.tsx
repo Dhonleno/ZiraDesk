@@ -19,7 +19,10 @@ export function Toaster() {
   const { toasts, removeToast } = useToastStore();
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 w-80">
+    <div
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+      style={{ width: 'min(92vw, 420px)' }}
+    >
       {toasts.map((toast) => {
         if (toast.type === 'help_request') {
           return (
@@ -27,7 +30,7 @@ export function Toaster() {
               <div className="help-toast-icon">🆘</div>
               <div className="help-toast-content">
                 <strong>{toast.message}</strong>
-                {toast.protocol ? <span>Protocolo {toast.protocol}</span> : null}
+                {toast.protocol ? <span title={`Protocolo ${toast.protocol}`}>Protocolo {toast.protocol}</span> : null}
               </div>
               <div className="help-toast-actions">
                 <button

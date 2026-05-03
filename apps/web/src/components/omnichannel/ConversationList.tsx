@@ -22,6 +22,7 @@ interface ConversationItem {
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   contact_name?: string | null;
   contact_email?: string | null;
+  organization_name?: string | null;
   client_name: string | null;
   client_email: string | null;
   assigned_name: string | null;
@@ -718,8 +719,11 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           : (data ?? []).map((conv) => {
               const isActive = selectedId === conv.id;
               const displayName = conv.contact_name ?? conv.client_name ?? 'Visitante';
+              const organizationName = (
+                conv.organization_name
+                ?? (conv.contact_name && conv.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
+              )?.trim() ?? null;
               const avatarName = conv.contact_name ?? conv.client_name;
-              const chStyle = CH_STYLE[conv.channel_type];
               const hasUnread = (conv.unread_count ?? 0) > 0;
               const hasNewActivity = newActivity.has(conv.id);
               const isNewConversation = newConversations.has(conv.id);
@@ -801,6 +805,21 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                         }}>
                           {displayName}
                         </span>
+                        {organizationName && (
+                          <span
+                            title={organizationName}
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--txt-3)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: 150,
+                            }}
+                          >
+                            {organizationName}
+                          </span>
+                        )}
                         {conv.protocol_number && (
                           <span
                             title={conv.protocol_number}
@@ -875,20 +894,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                       {conv.last_message ?? conv.subject ?? '—'}
                     </p>
 
-                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {chStyle && (
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          padding: '1px 7px',
-                          borderRadius: 'var(--r-pill)',
-                          background: chStyle.bg,
-                          color: chStyle.color,
-                          border: `1px solid ${chStyle.border}`,
-                        }}>
-                          {chStyle.label}
-                        </span>
-                      )}
+                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
                       {conv.conversation_type === 'outbound' && (
                         <span style={{
                           fontSize: 10,
@@ -898,6 +904,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           background: 'rgba(245,158,11,.14)',
                           color: '#F59E0B',
                           border: '1px solid rgba(245,158,11,.28)',
+                          whiteSpace: 'nowrap',
                         }}>
                           {t('outboundBadge')}
                         </span>
@@ -911,6 +918,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           background: 'var(--purple-dim)',
                           color: 'var(--purple)',
                           border: '1px solid rgba(167,139,250,.2)',
+                          whiteSpace: 'nowrap',
                         }}>
                           {t('botBadge')}
                         </span>
@@ -924,6 +932,10 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           background: 'var(--blue-dim)',
                           color: 'var(--blue)',
                           border: '1px solid rgba(96,165,250,.2)',
+                          whiteSpace: 'nowrap',
+                          maxWidth: 110,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                         }}>
                           {botDepartment}
                         </span>
@@ -934,6 +946,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           padding: '1px 7px', borderRadius: 'var(--r-pill)',
                           background: 'var(--bg-4)', color: 'var(--txt-3)',
                           border: '1px solid var(--line)',
+                          whiteSpace: 'nowrap',
                         }}>
                           {t('status.resolved')}
                         </span>
@@ -943,6 +956,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
                           fontSize: 10,
                           color: '#F59E0B',
                           fontWeight: 600,
+                          whiteSpace: 'nowrap',
                         }}>
                           {'⭐'.repeat(conv.csat_score)} {conv.csat_score}/5
                         </span>

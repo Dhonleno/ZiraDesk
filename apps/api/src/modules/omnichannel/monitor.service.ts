@@ -3,6 +3,7 @@ import {
   ensureAgentAssignmentsInfrastructure,
   ensureAgentBotSkillsInfrastructure,
 } from './conversations/auto-assign.service.js';
+import { quoteIdent } from './conversations/protocols.js';
 
 interface MonitorAgent {
   id: string;
@@ -41,9 +42,19 @@ interface MonitorResponse {
   };
 }
 
+function tableRef(schemaName: string, table: string): string {
+  return `${quoteIdent(schemaName)}.${table}`;
+}
+
 export async function getMonitorSnapshot(schemaName: string): Promise<MonitorResponse> {
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
+  const usersRef = tableRef(schemaName, 'users');
+  const assignmentsRef = tableRef(schemaName, 'agent_assignments');
+  const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
+  const botOptionsRef = tableRef(schemaName, 'bot_options');
+  const conversationsRef = tableRef(schemaName, 'conversations');
+  const messagesRef = tableRef(schemaName, 'messages');
 
   const [agents, queueRows, activeRows, statsRows] = await Promise.all([
     prisma.$queryRawUnsafe<Array<{
@@ -80,11 +91,11 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
            ) FILTER (WHERE bo.id IS NOT NULL),
            '[]'::json
          ) AS skills
-       FROM users u
-       LEFT JOIN agent_assignments aa ON aa.user_id = u.id
-       LEFT JOIN agent_bot_skills abs ON abs.user_id = u.id
-       LEFT JOIN bot_options bo ON bo.id = abs.bot_option_id
-       LEFT JOIN bot_options parent ON parent.id = bo.parent_option_id
+       FROM ${usersRef} u
+       LEFT JOIN ${assignmentsRef} aa ON aa.user_id = u.id
+       LEFT JOIN ${agentBotSkillsRef} abs ON abs.user_id = u.id
+       LEFT JOIN ${botOptionsRef} bo ON bo.id = abs.bot_option_id
+       LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
        WHERE u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
        GROUP BY
@@ -102,14 +113,14 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
       `SELECT
          NULLIF(TRIM(COALESCE(metadata->>'bot_tag', '')), '') AS tag,
          COUNT(*) AS total
-       FROM conversations
+       FROM ${conversationsRef}
        WHERE assigned_to IS NULL
          AND status IN ('open', 'pending', 'bot')
        GROUP BY tag`,
     ),
     prisma.$queryRawUnsafe<Array<{ agent_id: string; total: bigint }>>(
       `SELECT assigned_to::text AS agent_id, COUNT(*) AS total
-       FROM conversations
+       FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
          AND status IN ('open', 'active_outbound', 'in_service', 'pending', 'bot')
        GROUP BY assigned_to`,
@@ -122,19 +133,19 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
       `SELECT
          (
            SELECT COUNT(*)
-           FROM conversations c
+           FROM ${conversationsRef} c
            WHERE c.resolved_at IS NOT NULL
              AND c.resolved_at::date = CURRENT_DATE
          ) AS total_resolved,
          (
            SELECT AVG(EXTRACT(EPOCH FROM (c.resolved_at - c.created_at)) / 60.0)
-           FROM conversations c
+           FROM ${conversationsRef} c
            WHERE c.resolved_at IS NOT NULL
              AND c.resolved_at::date = CURRENT_DATE
          ) AS avg_resolution_minutes,
          (
            SELECT COUNT(*)
-           FROM messages m
+           FROM ${messagesRef} m
            WHERE m.created_at::date = CURRENT_DATE
          ) AS total_messages`,
     ),

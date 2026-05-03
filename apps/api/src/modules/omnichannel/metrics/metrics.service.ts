@@ -4,6 +4,7 @@ import { prisma } from '../../../config/database.js';
 interface MetricsFilters {
   dateFrom: Date;
   dateTo: Date;
+  dateToExclusive: Date;
   agentId?: string;
   channelType?: string;
   department?: string;
@@ -37,8 +38,8 @@ function addCommonFilters(
   const prefix = alias ? `${alias}.` : '';
   params.push(filters.dateFrom);
   where.push(`${prefix}created_at >= $${params.length}::timestamptz`);
-  params.push(filters.dateTo);
-  where.push(`${prefix}created_at <= $${params.length}::timestamptz`);
+  params.push(filters.dateToExclusive);
+  where.push(`${prefix}created_at < $${params.length}::timestamptz`);
 
   if (filters.agentId) {
     params.push(filters.agentId);
@@ -122,6 +123,11 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
       ...firstResponseParams,
     );
 
+    const csatWhere: string[] = ['csat_score IS NOT NULL'];
+    const csatParams: unknown[] = [];
+    addCommonFilters(csatWhere, csatParams, filters);
+    const csatWhereSql = csatWhere.length ? `WHERE ${csatWhere.join(' AND ')}` : '';
+
     const csatRows = await tx.$queryRawUnsafe<Array<{
       avg_score: number | null;
       total_responses: bigint;
@@ -129,11 +135,11 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
     }>>(
       `SELECT
          ROUND(AVG(csat_score)::numeric, 1) AS avg_score,
-         COUNT(*) FILTER (WHERE csat_score IS NOT NULL) AS total_responses,
+         COUNT(*) AS total_responses,
          COUNT(*) FILTER (WHERE csat_score >= 4) AS positive
        FROM conversations
-       ${whereSql}`,
-      ...params,
+       ${csatWhereSql}`,
+      ...csatParams,
     );
 
     const total = totalRows[0];

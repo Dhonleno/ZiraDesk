@@ -917,6 +917,7 @@ export interface CreateTicketPayload {
   category?:       string;
   assigned_to?:    string;
   contact_id?:     string;
+  organization_id?: string;
   conversation_id?: string;
   due_date?:       string;
   tags?:           string[];

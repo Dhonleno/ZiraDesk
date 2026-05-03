@@ -46,6 +46,7 @@ const CHANNEL_COLORS: Record<string, string> = {
 
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS = Array.from({ length: 24 }, (_, index) => `${String(index).padStart(2, '0')}h`);
+const HEATMAP_LABEL_STEP = 3;
 
 function toDateInputValue(date: Date): string {
   const year = date.getFullYear();
@@ -250,10 +251,14 @@ function PeakHoursHeatmap({ data, title }: { data: MetricsPeakHoursPoint[]; titl
     <div className="chart-card">
       <h3 className="chart-title">{title}</h3>
       <div className="heatmap-grid">
-        <div className="heatmap-corner" />
-        {HOURS.map((hour) => (
-          <div key={hour} className="heatmap-hour-label">{hour}</div>
-        ))}
+        <div className="heatmap-hours-row">
+          <div className="heatmap-corner" />
+          {HOURS.map((hour, hourIdx) => (
+            <div key={hour} className="heatmap-hour-label">
+              {hourIdx % HEATMAP_LABEL_STEP === 0 ? hour : ''}
+            </div>
+          ))}
+        </div>
         {DAYS.map((day, dayIdx) => (
           <div key={day} className="heatmap-row">
             <div className="heatmap-day-label">{day}</div>
@@ -417,6 +422,8 @@ export function MetricsPage() {
     return (resolved / total) * 100;
   }, [data?.overview.total.resolved, data?.overview.total.total]);
 
+  const csatAverage = data?.overview.csat.avg_score;
+
   const exportCsv = () => {
     const rows = [
       ['Agente', 'Total', 'Resolvidos', 'TMA (min)', 'CSAT'],
@@ -528,7 +535,7 @@ export function MetricsPage() {
         />
         <MetricCard
           title={t('metrics.cards.csat')}
-          value={data?.overview.csat.avg_score ? `${data.overview.csat.avg_score}⭐` : '—'}
+          value={csatAverage !== null && csatAverage !== undefined ? `${csatAverage}⭐` : '—'}
           subtitle={`${data?.overview.csat.total_responses ?? 0} respostas`}
           icon="⭐"
           color="var(--amber)"
