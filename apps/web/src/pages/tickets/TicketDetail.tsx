@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ticketsApi, type Ticket } from '../../services/api';
+import { ticketsApi, type Ticket, type TicketTimelineEvent } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { TicketStatusBadge } from '../../components/tickets/TicketStatusBadge';
 import { TicketPriorityBadge } from '../../components/tickets/TicketPriorityBadge';
 import { TicketComments } from '../../components/tickets/TicketComments';
 import { AssignTicketModal } from '../../components/tickets/AssignTicketModal';
+import { ContactAvatar } from '../../components/crm/ContactAvatar';
+import { subscribeToEvent } from '../../services/socket';
 
 
 interface Props {
@@ -29,6 +32,20 @@ const selectStyle: React.CSSProperties = {
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'agora';
+  if (diffMins < 60) return `${diffMins}m`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -54,6 +71,82 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
+function TimelineEvent({
+  event,
+  showLine,
+}: {
+  event: TicketTimelineEvent;
+  showLine: boolean;
+}) {
+  const { t } = useTranslation('tickets');
+  const icons: Record<string, string> = {
+    created: '🎫',
+    status_changed: '🔄',
+    priority_changed: '⚡',
+    assigned: '👤',
+    tag_added: '🏷️',
+    tag_removed: '🏷️',
+    comment_added: '💬',
+    resolved: '✅',
+  };
+
+  const message = (() => {
+    if (event.event_type === 'created') return t('tickets.timeline.created');
+    if (event.event_type === 'status_changed') {
+      return t('tickets.timeline.status_changed', { old: event.old_value ?? '—', new: event.new_value ?? '—' });
+    }
+    if (event.event_type === 'priority_changed') {
+      return t('tickets.timeline.priority_changed', { old: event.old_value ?? '—', new: event.new_value ?? '—' });
+    }
+    if (event.event_type === 'assigned') {
+      if (event.new_value) return t('tickets.timeline.assigned', { name: event.new_value });
+      return t('tickets.timeline.unassigned');
+    }
+    if (event.event_type === 'tag_added') return t('tickets.timeline.tag_added', { tag: event.new_value ?? '—' });
+    if (event.event_type === 'tag_removed') return t('tickets.timeline.tag_removed', { tag: event.old_value ?? '—' });
+    if (event.event_type === 'comment_added') return t('tickets.timeline.comment_added');
+    if (event.event_type === 'resolved') return t('tickets.timeline.resolved');
+    return event.event_type;
+  })();
+
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: '10px 0', position: 'relative' }}>
+      <div style={{
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        background: 'var(--bg-3)',
+        border: '1px solid var(--line-2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 13,
+        flexShrink: 0,
+        zIndex: 1,
+      }}>
+        <span>{icons[event.event_type] ?? '•'}</span>
+      </div>
+      {showLine ? (
+        <div style={{
+          position: 'absolute',
+          left: 14,
+          top: 32,
+          bottom: -10,
+          width: 1,
+          background: 'var(--line)',
+        }} />
+      ) : null}
+      <div style={{ flex: 1, paddingTop: 4, position: 'relative' }}>
+        <div style={{ fontSize: 13, color: 'var(--txt)' }}>{message}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 2, fontSize: 11, color: 'var(--txt-3)' }}>
+          <span style={{ fontWeight: 500 }}>{event.user_name ?? 'Sistema'}</span>
+          <span>{formatRelativeDate(event.created_at)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TicketDetail({ ticketId }: Props) {
   const { t } = useTranslation('tickets');
   const toast = useToast();
@@ -61,6 +154,7 @@ export function TicketDetail({ ticketId }: Props) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'comments' | 'timeline'>('comments');
 
   const { data: ticket, isPending } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -68,6 +162,22 @@ export function TicketDetail({ ticketId }: Props) {
     enabled: !!ticketId,
     staleTime: 30_000,
   });
+
+  const { data: timeline = [], isPending: timelineLoading } = useQuery({
+    queryKey: ['ticket-timeline', ticketId],
+    queryFn: () => ticketsApi.getTimeline(ticketId!),
+    enabled: !!ticketId,
+    staleTime: 10_000,
+  });
+
+  useEffect(() => {
+    if (!ticketId) return undefined;
+    return subscribeToEvent<{ ticketId: string }>('ticket:event', (data) => {
+      if (data.ticketId === ticketId) {
+        void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', ticketId] });
+      }
+    });
+  }, [queryClient, ticketId]);
 
   const updateMutation = useMutation({
     mutationFn: (patch: Parameters<typeof ticketsApi.update>[1]) =>
@@ -245,9 +355,52 @@ export function TicketDetail({ ticketId }: Props) {
           </Field>
 
           <Field label={t('tickets.fields.client')}>
-            {ticketContactName
-              ? <span style={{ color: 'var(--teal)' }}>{ticketContactName}</span>
+            {ticketContactName && ticket.contact_id
+              ? (
+                <Link to={`/crm/contacts/${ticket.contact_id ?? ''}?id=${ticket.contact_id ?? ''}`} style={{ textDecoration: 'none' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '3px 8px',
+                    borderRadius: 'var(--r-pill)',
+                    border: '1px solid var(--line)',
+                    background: 'var(--bg-3)',
+                    color: 'var(--teal)',
+                  }}>
+                    <ContactAvatar id={ticket.contact_id ?? undefined} name={ticketContactName} size={20} />
+                    {ticketContactName}
+                  </span>
+                </Link>
+              )
+              : ticketContactName
+                ? <span style={{ color: 'var(--teal)' }}>{ticketContactName}</span>
               : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noClient')}</span>
+            }
+          </Field>
+
+          <Field label={t('tickets.organization', { defaultValue: 'Organização' })}>
+            {ticket.organization_name && ticket.organization_id
+              ? (
+                <Link to={`/crm/organizations/${ticket.organization_id ?? ''}?id=${ticket.organization_id ?? ''}`} style={{ textDecoration: 'none' }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '3px 8px',
+                    borderRadius: 'var(--r-pill)',
+                    border: '1px solid var(--line)',
+                    background: 'var(--bg-3)',
+                    color: 'var(--txt)',
+                  }}>
+                    <span aria-hidden>🏢</span>
+                    {ticket.organization_name}
+                  </span>
+                </Link>
+              )
+              : ticket.organization_name
+                ? <span>{ticket.organization_name}</span>
+              : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noOrganization', { defaultValue: 'Não vinculada' })}</span>
             }
           </Field>
 
@@ -302,7 +455,64 @@ export function TicketDetail({ ticketId }: Props) {
             </div>
           )}
 
-          <TicketComments ticketId={ticket.id} />
+          <div>
+            <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--line)', marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('comments')}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: activeTab === 'comments' ? 'var(--teal)' : 'var(--txt-3)',
+                  borderBottom: activeTab === 'comments' ? '2px solid var(--teal)' : '2px solid transparent',
+                  marginBottom: -1,
+                  padding: '8px 0',
+                }}
+              >
+                {t('tickets.comments.title')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('timeline')}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: activeTab === 'timeline' ? 'var(--teal)' : 'var(--txt-3)',
+                  borderBottom: activeTab === 'timeline' ? '2px solid var(--teal)' : '2px solid transparent',
+                  marginBottom: -1,
+                  padding: '8px 0',
+                }}
+              >
+                {t('tickets.timeline.title')}
+              </button>
+            </div>
+
+            {activeTab === 'comments' ? (
+              <TicketComments ticketId={ticket.id} />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '8px 0' }}>
+                {timelineLoading ? (
+                  <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>Carregando...</div>
+                ) : timeline.length === 0 ? (
+                  <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>Sem eventos no histórico</div>
+                ) : (
+                  timeline.map((event, index) => (
+                    <TimelineEvent
+                      key={event.id}
+                      event={event}
+                      showLine={index < timeline.length - 1}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

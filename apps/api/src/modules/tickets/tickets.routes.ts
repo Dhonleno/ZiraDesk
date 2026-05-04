@@ -19,6 +19,7 @@ import {
   listComments,
   addComment,
   deleteComment,
+  getTicketTimeline,
   getStats,
   NotFoundError,
   ForbiddenError,
@@ -57,6 +58,19 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     }
     const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!);
     return reply.code(201).send({ success: true, data: ticket });
+  });
+
+  // GET /api/tickets/:id/timeline
+  app.get<{ Params: { id: string } }>('/:id/timeline', { preHandler: guard }, async (request, reply) => {
+    try {
+      const timeline = await getTicketTimeline(request.params.id);
+      return reply.send({ success: true, data: timeline });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // GET /api/tickets/:id

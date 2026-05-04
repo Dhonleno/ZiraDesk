@@ -4,6 +4,7 @@ export const createTicketSchema = z.object({
   contact_id:      z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),
   conversation_id: z.string().uuid().optional(),
+  source_conversation_id: z.string().uuid().optional(),
   title:           z.string().min(3).max(255),
   description:     z.string().optional(),
   status:          z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).default('open'),

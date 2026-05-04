@@ -39,6 +39,7 @@
       "updatedAt": "Updated at",
       "noResponsible": "Unassigned",
       "noClient": "No contact linked",
+      "noOrganization": "Not linked",
       "noDueDate": "No due date"
     },
     "comments": {
@@ -62,6 +63,7 @@
       "create": "Create ticket",
       "creating": "Creating...",
       "created": "Ticket created successfully",
+      "openCreatedTicket": "Open ticket",
       "updated": "Ticket updated",
       "resolved": "Ticket resolved",
       "closed": "Ticket closed",
@@ -73,6 +75,21 @@
       "searchUser": "Search user...",
       "noUser": "No assignee"
     },
+    "timeline": {
+      "title": "History",
+      "created": "Ticket created",
+      "status_changed": "Status changed from \"{{old}}\" to \"{{new}}\"",
+      "priority_changed": "Priority changed from \"{{old}}\" to \"{{new}}\"",
+      "assigned": "Assigned to {{name}}",
+      "unassigned": "Assignment removed",
+      "tag_added": "Tag \"{{tag}}\" added",
+      "tag_removed": "Tag \"{{tag}}\" removed",
+      "comment_added": "Comment added",
+      "resolved": "Ticket resolved"
+    },
+    "organization": "Organization",
+    "sourceConversation": "Originated from conversation {{protocol}}",
+    "filterByAgent": "All agents",
     "realtime": {
       "newTicket": "New ticket created",
       "assignedToYou": "A ticket was assigned to you"

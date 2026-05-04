@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -28,6 +28,16 @@ type FormValues = z.infer<typeof schema>;
 interface Props {
   open:    boolean;
   onClose: () => void;
+  defaultValues?: {
+    contact_id?: string;
+    contact_name?: string;
+    organization_id?: string;
+    organization_name?: string;
+    title?: string;
+    source_conversation_id?: string;
+    source_protocol?: string | null;
+  };
+  onCreated?: (ticket: import('../../services/api').Ticket) => void;
 }
 
 const selectStyle: React.CSSProperties = {
@@ -37,7 +47,7 @@ const selectStyle: React.CSSProperties = {
 };
 
 /* ── Component ───────────────────────────────────────────────────────────── */
-export function CreateTicketModal({ open, onClose }: Props) {
+export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: Props) {
   const { t } = useTranslation('tickets');
   const toast  = useToast();
   const queryClient = useQueryClient();
@@ -64,6 +74,39 @@ export function CreateTicketModal({ open, onClose }: Props) {
   });
 
   const tags = watch('tags');
+  const hasSourceConversation = Boolean(defaultValues?.source_conversation_id);
+  const contactReadonly = hasSourceConversation;
+  const organizationReadonly = hasSourceConversation;
+
+  useEffect(() => {
+    if (!open) return;
+
+    setValue('title', defaultValues?.title ?? '');
+
+    if (defaultValues?.contact_id) {
+      setSelectedContactId(defaultValues.contact_id);
+      setSelectedContactName(defaultValues.contact_name ?? '');
+      setShowContactDropdown(false);
+      setContactSearch('');
+    } else {
+      setSelectedContactId(null);
+      setSelectedContactName('');
+      setShowContactDropdown(false);
+      setContactSearch('');
+    }
+
+    if (defaultValues?.organization_id) {
+      setSelectedOrganizationId(defaultValues.organization_id);
+      setSelectedOrganizationName(defaultValues.organization_name ?? '');
+      setShowOrganizationDropdown(false);
+      setOrganizationSearch('');
+    } else {
+      setSelectedOrganizationId(null);
+      setSelectedOrganizationName('');
+      setShowOrganizationDropdown(false);
+      setOrganizationSearch('');
+    }
+  }, [defaultValues, open, setValue]);
 
   const { data: contactResults } = useQuery({
     queryKey: ['crm-contacts-search', debouncedContactSearch],
@@ -100,12 +143,17 @@ export function CreateTicketModal({ open, onClose }: Props) {
       if (selectedContactId)   payload.contact_id   = selectedContactId;
       if (selectedOrganizationId) payload.organization_id = selectedOrganizationId;
       if (assigneeId)          payload.assigned_to  = assigneeId;
+      if (defaultValues?.source_conversation_id) payload.source_conversation_id = defaultValues.source_conversation_id;
       return ticketsApi.create(payload);
     },
-    onSuccess: () => {
+    onSuccess: (createdTicket) => {
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
       void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
-      toast.success(t('tickets.form.created'));
+      toast.success(t('tickets.form.created'), {
+        linkLabel: t('tickets.form.openCreatedTicket', { defaultValue: 'Abrir ticket' }),
+        linkHref: `/tickets/${createdTicket.id}`,
+      });
+      onCreated?.(createdTicket);
       reset();
       setSelectedContactId(null);
       setSelectedContactName('');
@@ -155,6 +203,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
   }
 
   function handleClearContact() {
+    if (contactReadonly) return;
     setSelectedContactId(null);
     setSelectedContactName('');
     setContactSearch('');
@@ -172,6 +221,7 @@ export function CreateTicketModal({ open, onClose }: Props) {
   }
 
   function handleClearOrganization() {
+    if (organizationReadonly) return;
     setSelectedOrganizationId(null);
     setSelectedOrganizationName('');
     setOrganizationSearch('');
@@ -184,6 +234,23 @@ export function CreateTicketModal({ open, onClose }: Props) {
     <Modal open={open} onClose={onClose} title={t('tickets.form.create')} maxWidth="md">
       <form onSubmit={handleSubmit((v) => mutation.mutate(v))}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {hasSourceConversation ? (
+            <div style={{
+              padding: '8px 10px',
+              borderRadius: 'var(--r)',
+              border: '1px solid rgba(96,165,250,.35)',
+              background: 'var(--blue-dim)',
+              color: 'var(--blue)',
+              fontSize: 12,
+              fontWeight: 500,
+            }}>
+              {t('tickets.sourceConversation', {
+                protocol: defaultValues?.source_protocol ?? defaultValues?.source_conversation_id ?? '—',
+                defaultValue: 'Originado do atendimento {{protocol}}',
+              })}
+            </div>
+          ) : null}
 
           <Input label={t('tickets.fields.title')} error={errors.title?.message} autoFocus {...register('title')} />
 
@@ -231,10 +298,12 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 borderRadius: 'var(--r)', background: 'var(--teal-dim)', border: '1px solid var(--teal)',
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedContactName}</span>
-                <button type="button" onClick={handleClearContact}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}>
-                  ×
-                </button>
+                {!contactReadonly ? (
+                  <button type="button" onClick={handleClearContact}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}>
+                    ×
+                  </button>
+                ) : null}
               </div>
             ) : (
               <input
@@ -244,10 +313,11 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 onChange={(e) => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
                 onFocus={() => setShowContactDropdown(true)}
                 onBlur={() => setTimeout(() => setShowContactDropdown(false), 150)}
+                disabled={contactReadonly}
                 style={{ ...selectStyle, display: 'block' }}
               />
             )}
-            {showContactDropdown && !selectedContactId && contactResults && contactResults.data.length > 0 && (
+            {showContactDropdown && !selectedContactId && !contactReadonly && contactResults && contactResults.data.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
                 background: 'var(--bg-3)', border: '1px solid var(--line)',
@@ -278,13 +348,15 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 borderRadius: 'var(--r)', background: 'var(--blue-dim)', border: '1px solid var(--blue)',
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedOrganizationName}</span>
-                <button
-                  type="button"
-                  onClick={handleClearOrganization}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}
-                >
-                  ×
-                </button>
+                {!organizationReadonly ? (
+                  <button
+                    type="button"
+                    onClick={handleClearOrganization}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                ) : null}
               </div>
             ) : (
               <input
@@ -297,10 +369,11 @@ export function CreateTicketModal({ open, onClose }: Props) {
                 }}
                 onFocus={() => setShowOrganizationDropdown(true)}
                 onBlur={() => setTimeout(() => setShowOrganizationDropdown(false), 150)}
+                disabled={organizationReadonly}
                 style={{ ...selectStyle, display: 'block' }}
               />
             )}
-            {showOrganizationDropdown && !selectedOrganizationId && organizationResults && organizationResults.data.length > 0 && (
+            {showOrganizationDropdown && !selectedOrganizationId && !organizationReadonly && organizationResults && organizationResults.data.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
                 background: 'var(--bg-3)', border: '1px solid var(--line)',

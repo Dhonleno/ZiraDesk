@@ -28,6 +28,7 @@ interface TicketRow {
   contact_id:       string | null;
   organization_id:  string | null;
   conversation_id:  string | null;
+  source_conversation_id: string | null;
   title:            string;
   description:      string | null;
   status:           string;
@@ -70,10 +71,98 @@ interface StatsRow {
   avg_resolution_time_hours: number | null;
 }
 
+interface TicketEventRow {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  event_type: string;
+  old_value: string | null;
+  new_value: string | null;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+  user_name: string | null;
+  avatar_url: string | null;
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
+}
+
+type RawExecutor = typeof prisma;
+let ticketInfraEnsured = false;
+
+async function ensureTicketInfrastructure(): Promise<void> {
+  if (ticketInfraEnsured) return;
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      event_type VARCHAR(50) NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
+    ON ticket_events(ticket_id)
+  `);
+
+  ticketInfraEnsured = true;
+}
+
+async function logTicketEvent(
+  ticketId: string,
+  userId: string,
+  eventType: string,
+  oldValue?: string | null,
+  newValue?: string | null,
+  metadata?: Record<string, unknown>,
+  tx: RawExecutor = prisma,
+): Promise<TicketEventRow | null> {
+  await ensureTicketInfrastructure();
+
+  const rows = await tx.$queryRawUnsafe<TicketEventRow[]>(
+    `INSERT INTO ticket_events
+      (ticket_id, user_id, event_type, old_value, new_value, metadata)
+     VALUES
+      ($1::uuid, $2::uuid, $3, $4, $5, $6::jsonb)
+     RETURNING
+      id, ticket_id, user_id, event_type, old_value, new_value, metadata, created_at,
+      NULL::text AS user_name, NULL::text AS avatar_url`,
+    ticketId,
+    userId,
+    eventType,
+    oldValue ?? null,
+    newValue ?? null,
+    JSON.stringify(metadata ?? {}),
+  );
+  return rows[0] ?? null;
+}
+
+function emitTicketEvent(tenantId: string, ticketId: string, event: TicketEventRow, userName?: string | null) {
+  try {
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:event', {
+      ticketId,
+      event: {
+        ...event,
+        user_name: userName ?? event.user_name ?? null,
+      },
+    });
+  } catch {
+    // socket não inicializado em testes
+  }
 }
 
 const SORT_COLUMNS: Record<string, string> = {
@@ -85,7 +174,7 @@ const SORT_COLUMNS: Record<string, string> = {
 
 const BASE_SELECT = `
   SELECT
-    t.id, t.contact_id, t.organization_id, t.conversation_id, t.title, t.description,
+    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.title, t.description,
     t.status, t.priority, t.category, t.assigned_to, t.resolved_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
@@ -99,6 +188,7 @@ const BASE_SELECT = `
 
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery) {
+  await ensureTicketInfrastructure();
   const { page, per_page, search, status, priority, assigned_to, contact_id, organization_id, category, sort_by, sort_order } = query;
   const offset = (page - 1) * per_page;
 
@@ -145,6 +235,7 @@ export async function listTickets(query: ListTicketsQuery) {
 
 /* ── getTicket ───────────────────────────────────────────────────────────── */
 export async function getTicket(id: string) {
+  await ensureTicketInfrastructure();
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `${BASE_SELECT}
      WHERE t.id = $1::uuid
@@ -157,22 +248,24 @@ export async function getTicket(id: string) {
 
 /* ── createTicket ────────────────────────────────────────────────────────── */
 export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string) {
+  await ensureTicketInfrastructure();
   const tagsLiteral = toPgArray(data.tags ?? []);
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `INSERT INTO tickets
-       (contact_id, organization_id, conversation_id, title, description, status, priority, category,
+       (contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
         assigned_to, due_date, tags)
      VALUES
-       ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::uuid, $10::timestamptz, $11::text[])
+       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10::uuid, $11::timestamptz, $12::text[])
      RETURNING
-       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name`,
     data.contact_id      ?? null,
     data.organization_id ?? null,
     data.conversation_id ?? null,
+    data.source_conversation_id ?? null,
     data.title,
     data.description     ?? null,
     data.status,
@@ -191,6 +284,16 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     createdBy, ticket.id, JSON.stringify(ticket),
   );
 
+  const createdEvent = await logTicketEvent(
+    ticket.id,
+    createdBy,
+    'created',
+    null,
+    null,
+    { status: ticket.status, priority: ticket.priority },
+  );
+  if (createdEvent) emitTicketEvent(tenantId, ticket.id, createdEvent);
+
   try {
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:created', { ticket });
   } catch { /* socket não inicializado em testes */ }
@@ -200,6 +303,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 
 /* ── updateTicket ────────────────────────────────────────────────────────── */
 export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string) {
+  await ensureTicketInfrastructure();
   const old = await getTicket(id);
 
   const newStatus    = data.status    ?? old.status;
@@ -223,7 +327,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        updated_at      = NOW()
      WHERE id = $9::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name`,
@@ -246,6 +350,56 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
      VALUES ($1::uuid, 'ticket.updated', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
     updatedBy, id, JSON.stringify(old), JSON.stringify(ticket),
   );
+
+  if (old.status !== ticket.status) {
+    const statusEvent = await logTicketEvent(id, updatedBy, 'status_changed', old.status, ticket.status);
+    if (statusEvent) emitTicketEvent(tenantId, id, statusEvent);
+  }
+
+  if (old.priority !== ticket.priority) {
+    const priorityEvent = await logTicketEvent(id, updatedBy, 'priority_changed', old.priority, ticket.priority);
+    if (priorityEvent) emitTicketEvent(tenantId, id, priorityEvent);
+  }
+
+  if (old.assigned_to !== ticket.assigned_to) {
+    let assigneeName: string | null = null;
+    if (ticket.assigned_to) {
+      const assigneeRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+        `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+        ticket.assigned_to,
+      );
+      assigneeName = assigneeRows[0]?.name ?? null;
+    }
+    const assignedEvent = await logTicketEvent(
+      id,
+      updatedBy,
+      'assigned',
+      old.assignee_name ?? null,
+      assigneeName,
+      { old_assigned_to: old.assigned_to, new_assigned_to: ticket.assigned_to },
+    );
+    if (assignedEvent) emitTicketEvent(tenantId, id, assignedEvent);
+  }
+
+  const oldTags = new Set(old.tags ?? []);
+  const newTags = new Set(ticket.tags ?? []);
+  const addedTags = [...newTags].filter((tag) => !oldTags.has(tag));
+  const removedTags = [...oldTags].filter((tag) => !newTags.has(tag));
+
+  for (const tag of addedTags) {
+    const tagAddedEvent = await logTicketEvent(id, updatedBy, 'tag_added', null, tag);
+    if (tagAddedEvent) emitTicketEvent(tenantId, id, tagAddedEvent);
+  }
+
+  for (const tag of removedTags) {
+    const tagRemovedEvent = await logTicketEvent(id, updatedBy, 'tag_removed', tag, null);
+    if (tagRemovedEvent) emitTicketEvent(tenantId, id, tagRemovedEvent);
+  }
+
+  if (old.status !== 'resolved' && ticket.status === 'resolved') {
+    const resolvedEvent = await logTicketEvent(id, updatedBy, 'resolved', null, null);
+    if (resolvedEvent) emitTicketEvent(tenantId, id, resolvedEvent);
+  }
 
   try {
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
@@ -278,11 +432,13 @@ export async function deleteTicket(id: string, deletedBy: string, tenantId: stri
 
 /* ── assignTicket ────────────────────────────────────────────────────────── */
 export async function assignTicket(id: string, userId: string, assignedBy: string, tenantId: string) {
+  await ensureTicketInfrastructure();
+  const previous = await getTicket(id);
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name`,
@@ -297,6 +453,21 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
      VALUES ($1::uuid, 'ticket.assigned', 'ticket', $2::uuid, $3::jsonb)`,
     assignedBy, id, JSON.stringify({ assigned_to: userId }),
   );
+
+  const assigneeRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+    `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+    userId,
+  );
+  const assigneeName = assigneeRows[0]?.name ?? null;
+  const assignedEvent = await logTicketEvent(
+    id,
+    assignedBy,
+    'assigned',
+    previous.assignee_name ?? null,
+    assigneeName,
+    { old_assigned_to: previous.assigned_to, new_assigned_to: userId },
+  );
+  if (assignedEvent) emitTicketEvent(tenantId, id, assignedEvent, assigneeName);
 
   try {
     const io = getSocketServer();
@@ -354,6 +525,16 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
     userId, comment.id, JSON.stringify(comment),
   );
 
+  const commentEvent = await logTicketEvent(
+    ticketId,
+    userId,
+    'comment_added',
+    null,
+    null,
+    { comment_id: comment.id, is_internal: comment.is_internal },
+  );
+  if (commentEvent) emitTicketEvent(tenantId, ticketId, commentEvent);
+
   try {
     const io = getSocketServer();
     io.to(`tenant:${tenantId}`).emit('ticket:comment_added', { comment });
@@ -402,6 +583,33 @@ export async function deleteComment(commentId: string, userId: string, tenantId:
   } catch { /* socket não inicializado em testes */ }
 
   return { deleted: true };
+}
+
+/* ── getTicketTimeline ───────────────────────────────────────────────────── */
+export async function getTicketTimeline(ticketId: string) {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketEventRow[]>(
+    `SELECT
+       te.id,
+       te.ticket_id,
+       te.user_id,
+       te.event_type,
+       te.old_value,
+       te.new_value,
+       te.metadata,
+       te.created_at,
+       u.name AS user_name,
+       u.avatar_url
+     FROM ticket_events te
+     LEFT JOIN users u ON u.id = te.user_id
+     WHERE te.ticket_id = $1::uuid
+     ORDER BY te.created_at ASC`,
+    ticketId,
+  );
+
+  return rows;
 }
 
 /* ── getStats ────────────────────────────────────────────────────────────── */

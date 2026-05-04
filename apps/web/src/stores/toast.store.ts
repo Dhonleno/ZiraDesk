@@ -8,6 +8,8 @@ export interface Toast {
   message: string;
   type: ToastType;
   icon?: string;
+  linkLabel?: string;
+  linkHref?: string;
   protocol?: string | null;
   agentName?: string;
   persistent?: boolean;
@@ -52,9 +54,9 @@ export const useToastStore = create<ToastState>((set) => ({
 
 export function useToast() {
   const { addToast } = useToastStore();
-  const success = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'success', ...options }), [addToast]);
-  const error = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'error', ...options }), [addToast]);
-  const info = useCallback((message: string, options?: { icon?: string }) => addToast({ message, type: 'info', ...options }), [addToast]);
+  const success = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'success', ...options }), [addToast]);
+  const error = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'error', ...options }), [addToast]);
+  const info = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'info', ...options }), [addToast]);
   const helpRequest = useCallback((options: {
     message: string;
     protocol?: string | null;

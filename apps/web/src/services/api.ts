@@ -846,6 +846,7 @@ export interface Ticket {
   contact_id?:     string | null;
   organization_id?: string | null;
   conversation_id: string | null;
+  source_conversation_id?: string | null;
   title:           string;
   description:     string | null;
   status:          TicketStatus;
@@ -875,6 +876,19 @@ export interface TicketComment {
   created_at:    string;
   author_name:   string | null;
   author_avatar: string | null;
+}
+
+export interface TicketTimelineEvent {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  event_type: string;
+  old_value: string | null;
+  new_value: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  user_name: string | null;
+  avatar_url: string | null;
 }
 
 export interface TicketStats {
@@ -919,6 +933,7 @@ export interface CreateTicketPayload {
   contact_id?:     string;
   organization_id?: string;
   conversation_id?: string;
+  source_conversation_id?: string;
   due_date?:       string;
   tags?:           string[];
 }
@@ -1438,6 +1453,11 @@ export const ticketsApi = {
 
   listComments: async (ticketId: string): Promise<TicketComment[]> => {
     const res = await api.get<{ success: boolean; data: TicketComment[] }>(`/tickets/${ticketId}/comments`);
+    return res.data.data;
+  },
+
+  getTimeline: async (ticketId: string): Promise<TicketTimelineEvent[]> => {
+    const res = await api.get<{ success: boolean; data: TicketTimelineEvent[] }>(`/tickets/${ticketId}/timeline`);
     return res.data.data;
   },
 

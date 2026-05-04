@@ -407,6 +407,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
       organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
       conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
+      source_conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
       title           VARCHAR(255) NOT NULL,
       description     TEXT,
       status          VARCHAR(30)  NOT NULL DEFAULT 'open',
@@ -420,6 +421,24 @@ async function createTenantTables(schemaName: string): Promise<void> {
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_events (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id   UUID REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      user_id     UUID REFERENCES "${schemaName}".users(id),
+      event_type  VARCHAR(50) NOT NULL,
+      old_value   TEXT,
+      new_value   TEXT,
+      metadata    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_ticket_events_ticket"
+    ON "${schemaName}".ticket_events(ticket_id)
   `);
 
   await prisma.$executeRawUnsafe(`

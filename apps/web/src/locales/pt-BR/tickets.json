@@ -39,6 +39,7 @@
       "updatedAt": "Atualizado em",
       "noResponsible": "Sem responsável",
       "noClient": "Sem contato vinculado",
+      "noOrganization": "Não vinculada",
       "noDueDate": "Sem prazo"
     },
     "comments": {
@@ -62,6 +63,7 @@
       "create": "Criar ticket",
       "creating": "Criando...",
       "created": "Ticket criado com sucesso",
+      "openCreatedTicket": "Abrir ticket",
       "updated": "Ticket atualizado",
       "resolved": "Ticket resolvido",
       "closed": "Ticket fechado",
@@ -73,6 +75,21 @@
       "searchUser": "Buscar usuário...",
       "noUser": "Sem atribuição"
     },
+    "timeline": {
+      "title": "Histórico",
+      "created": "Ticket criado",
+      "status_changed": "Status alterado de \"{{old}}\" para \"{{new}}\"",
+      "priority_changed": "Prioridade alterada de \"{{old}}\" para \"{{new}}\"",
+      "assigned": "Atribuído para {{name}}",
+      "unassigned": "Atribuição removida",
+      "tag_added": "Etiqueta \"{{tag}}\" adicionada",
+      "tag_removed": "Etiqueta \"{{tag}}\" removida",
+      "comment_added": "Comentário adicionado",
+      "resolved": "Ticket resolvido"
+    },
+    "organization": "Organização",
+    "sourceConversation": "Originado do atendimento {{protocol}}",
+    "filterByAgent": "Todos os agentes",
     "realtime": {
       "newTicket": "Novo ticket criado",
       "assignedToYou": "Um ticket foi atribuído a você"

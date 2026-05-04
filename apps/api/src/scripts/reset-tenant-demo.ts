@@ -34,6 +34,15 @@ async function main() {
 
   // Limpar em ordem para respeitar FKs
   await exec(`DELETE FROM audit_logs`);
+  await exec(`
+    DO $$
+    BEGIN
+      IF to_regclass('ticket_events') IS NOT NULL THEN
+        DELETE FROM ticket_events;
+      END IF;
+    END
+    $$;
+  `);
   await exec(`DELETE FROM ticket_comments`);
   await exec(`DELETE FROM tickets`);
   await exec(`DELETE FROM messages`);
@@ -130,8 +139,24 @@ async function main() {
   await exec(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS contact_id      UUID REFERENCES contacts(id)      ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL
+    ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL
   `);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS ticket_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      event_type VARCHAR(50) NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events(ticket_id)`);
 
   // Recriar canal WhatsApp com credenciais do env (se definido)
   const credentials = buildWhatsappChannelCredentials();
@@ -143,9 +168,9 @@ async function main() {
 
   console.log(`${SCHEMA} resetado com sucesso!`);
   console.log('Tabelas criadas: organizations, contacts');
-  console.log('Tabelas atualizadas: conversations (contact_id, organization_id), tickets (contact_id, organization_id)');
+  console.log('Tabelas atualizadas: conversations (contact_id, organization_id), tickets (contact_id, organization_id, source_conversation_id)');
   console.log('Tabela removida: clients, skills, agent_skills');
-  console.log('Tabela criada: agent_bot_skills');
+  console.log('Tabelas criadas: agent_bot_skills, ticket_events');
 
   await prisma.$disconnect();
 }

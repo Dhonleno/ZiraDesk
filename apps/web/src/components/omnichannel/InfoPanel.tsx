@@ -6,6 +6,7 @@ import { api, contactsApi, conversationTags } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
 import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
+import { CreateTicketModal } from '../tickets/CreateTicketModal';
 
 interface Conversation {
   id: string;
@@ -26,6 +27,7 @@ interface Conversation {
   assigned_name: string | null;
   channel_name: string | null;
   subject: string | null;
+  protocol_number?: string | null;
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;
@@ -177,6 +179,16 @@ export function InfoPanel({ conversationId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [createTicketData, setCreateTicketData] = useState<{
+    contact_id?: string;
+    contact_name?: string;
+    organization_id?: string;
+    organization_name?: string;
+    title?: string;
+    source_conversation_id?: string;
+    source_protocol?: string | null;
+  }>();
 
   useEffect(() => {
     const unsubscribe = subscribeToEvent<{
@@ -266,6 +278,32 @@ export function InfoPanel({ conversationId }: Props) {
     await refetchConvTags();
     await qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     await qc.invalidateQueries({ queryKey: ['conversations'] });
+  }
+
+  function handleCreateTicket() {
+    if (!conv) return;
+
+    const nextData: {
+      contact_id?: string;
+      contact_name?: string;
+      organization_id?: string;
+      organization_name?: string;
+      title?: string;
+      source_conversation_id?: string;
+      source_protocol?: string | null;
+    } = {
+      title: `Atendimento ${conv.protocol_number ?? conv.id.slice(-6).toUpperCase()}`,
+      source_conversation_id: conv.id,
+      source_protocol: conv.protocol_number ?? null,
+    };
+
+    if (contactId) nextData.contact_id = contactId;
+    if (conv.contact_name ?? conv.client_name) nextData.contact_name = conv.contact_name ?? conv.client_name ?? '';
+    if (conv.organization_id) nextData.organization_id = conv.organization_id;
+    if (conv.organization_name) nextData.organization_name = conv.organization_name;
+
+    setCreateTicketData(nextData);
+    setShowCreateTicket(true);
   }
 
   return (
@@ -589,11 +627,12 @@ export function InfoPanel({ conversationId }: Props) {
                 {[
                   { label: t('info.createProposal'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                   { label: t('info.schedule'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.viewTickets'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.createTicket'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.viewTickets'), onClick: () => navigate('/tickets'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.createTicket'), onClick: handleCreateTicket, icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                 ].map((a) => (
                   <button
                     key={a.label}
+                    onClick={a.onClick}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-5)'; e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.color = 'var(--txt)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt-2)'; }}
@@ -691,6 +730,23 @@ export function InfoPanel({ conversationId }: Props) {
           contactName={name}
         />
       )}
+
+      <CreateTicketModal
+        open={showCreateTicket}
+        onClose={() => setShowCreateTicket(false)}
+        {...(createTicketData ? { defaultValues: createTicketData } : {})}
+        onCreated={() => {
+          if (contactId) {
+            qc.setQueryData<ClientStats | undefined>(['crm-client-stats', contactId], (current) => (
+              current
+                ? { ...current, open_tickets: current.open_tickets + 1 }
+                : current
+            ));
+            void qc.invalidateQueries({ queryKey: ['crm-client-stats', contactId] });
+          }
+          void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+        }}
+      />
     </div>
   );
 }

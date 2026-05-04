@@ -88,7 +88,17 @@ export function Toaster() {
             ].join(' ')}
           >
             <span className="mt-0.5 shrink-0 text-sm font-bold">{toast.icon ?? icon}</span>
-            <p className="flex-1 text-sm text-txt">{toast.message}</p>
+            <div className="flex-1">
+              <p className="text-sm text-txt">{toast.message}</p>
+              {toast.linkHref && toast.linkLabel ? (
+                <a
+                  href={toast.linkHref}
+                  className="mt-1 inline-block text-xs font-medium text-teal hover:opacity-80"
+                >
+                  {toast.linkLabel}
+                </a>
+              ) : null}
+            </div>
             <button
               onClick={() => removeToast(toast.id)}
               className="shrink-0 text-txt-3 hover:text-txt-2 transition-opacity"
