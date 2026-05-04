@@ -377,7 +377,7 @@ export function TenantLayout() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)' }}>
+    <div className="tenant-layout" style={{ background: 'var(--bg)', color: 'var(--txt)' }}>
 
       {/* ── Topbar ── */}
       <header style={{
@@ -665,8 +665,10 @@ export function TenantLayout() {
         </nav>
 
         {/* Content area */}
-        <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Outlet />
+        <main className="tenant-main" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className={pathname.startsWith('/admin') ? 'admin-content' : undefined}>
+            <Outlet />
+          </div>
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />

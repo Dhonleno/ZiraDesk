@@ -221,13 +221,13 @@ export function Skills() {
   };
 
   return (
-    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+    <div className="admin-page space-y-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>{t('tenantAdmin.skills.title')}</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>{t('tenantAdmin.skills.subtitle')}</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16 }}>
+      <div className="admin-two-col">
         <section className="rounded-xl p-4" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
           <h2 style={{ margin: '0 0 12px', fontSize: 15, color: 'var(--txt)' }}>{t('tenantAdmin.skills.title')}</h2>
           {loadingOptions ? (

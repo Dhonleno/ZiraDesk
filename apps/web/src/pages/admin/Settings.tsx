@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { adminApi } from '../../services/api';
-import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
 
@@ -32,21 +31,61 @@ const LANGUAGES = [
 ];
 
 const TIMEZONES = [
-  'America/Sao_Paulo',
-  'America/Manaus',
-  'America/Belem',
-  'America/Fortaleza',
-  'America/Recife',
-  'America/Noronha',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Lisbon',
-  'Europe/Madrid',
-  'UTC',
+  { value: 'America/Sao_Paulo', label: 'America/São_Paulo (GMT-3)' },
+  { value: 'America/Manaus', label: 'America/Manaus (GMT-4)' },
+  { value: 'America/Belem', label: 'America/Belém (GMT-3)' },
+  { value: 'America/Fortaleza', label: 'America/Fortaleza (GMT-3)' },
+  { value: 'America/Recife', label: 'America/Recife (GMT-3)' },
+  { value: 'America/Noronha', label: 'America/Noronha (GMT-2)' },
+  { value: 'America/New_York', label: 'America/New_York (GMT-5/-4)' },
+  { value: 'America/Chicago', label: 'America/Chicago (GMT-6/-5)' },
+  { value: 'America/Denver', label: 'America/Denver (GMT-7/-6)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (GMT-8/-7)' },
+  { value: 'Europe/London', label: 'Europe/London (GMT+0/+1)' },
+  { value: 'Europe/Lisbon', label: 'Europe/Lisbon (GMT+0/+1)' },
+  { value: 'Europe/Madrid', label: 'Europe/Madrid (GMT+1/+2)' },
+  { value: 'UTC', label: 'UTC' },
 ];
+
+function SettingsCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="settings-card">
+      <div className="settings-card-header">
+        <span className="settings-card-icon">{icon}</span>
+        <span className="settings-card-title">{title}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ToggleRow({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="settings-toggle-row">
+      <div>
+        <div className="settings-toggle-label">{label}</div>
+        <div className="settings-toggle-desc">{description}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function Settings() {
   const { t } = useTranslation('admin');
@@ -63,7 +102,7 @@ export function Settings() {
     handleSubmit,
     reset,
     watch,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<SettingsForm>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
@@ -89,30 +128,29 @@ export function Settings() {
   });
 
   useEffect(() => {
-    if (data) {
-      reset({
-        name: data.name,
-        language: (data.language as SettingsForm['language']) ?? 'pt-BR',
-        timezone: data.timezone ?? 'America/Sao_Paulo',
-        csat_enabled: data.csat_enabled ?? true,
-        csat_message: data.csat_message ?? '',
-        inactivity_enabled: data.inactivity_enabled ?? true,
-        inactivity_warning_minutes: data.inactivity_warning_minutes ?? 30,
-        inactivity_close_minutes: data.inactivity_close_minutes ?? 60,
-        inactivity_warning_message:
-          data.inactivity_warning_message
-          ?? 'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
-        inactivity_close_message:
-          data.inactivity_close_message
-          ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
-        bot_assigned_message: data.bot_assigned_message ?? [
-          '✅ Seu atendimento foi aceito!',
-          '',
-          'Você está sendo atendido por *{{agent}}*.',
-          'Em breve entraremos em contato. 😊',
-        ].join('\n'),
-      });
-    }
+    if (!data) return;
+    reset({
+      name: data.name,
+      language: (data.language as SettingsForm['language']) ?? 'pt-BR',
+      timezone: data.timezone ?? 'America/Sao_Paulo',
+      csat_enabled: data.csat_enabled ?? true,
+      csat_message: data.csat_message ?? '',
+      inactivity_enabled: data.inactivity_enabled ?? true,
+      inactivity_warning_minutes: data.inactivity_warning_minutes ?? 30,
+      inactivity_close_minutes: data.inactivity_close_minutes ?? 60,
+      inactivity_warning_message:
+        data.inactivity_warning_message
+        ?? 'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
+      inactivity_close_message:
+        data.inactivity_close_message
+        ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
+      bot_assigned_message: data.bot_assigned_message ?? [
+        '✅ Seu atendimento foi aceito!',
+        '',
+        'Você está sendo atendido por *{{agent}}*.',
+        'Em breve entraremos em contato. 😊',
+      ].join('\n'),
+    });
   }, [data, reset]);
 
   const mutation = useMutation({
@@ -165,348 +203,231 @@ export function Settings() {
     uploadLogoMutation.mutate(file);
   };
 
-  const selectStyle: React.CSSProperties = {
-    background: 'var(--bg-3)',
-    border: '1px solid var(--line)',
-    color: 'var(--txt)',
-    height: '2.5rem',
-    borderRadius: '0.5rem',
-    padding: '0 0.75rem',
-    fontSize: '0.875rem',
-    width: '100%',
-    outline: 'none',
-  };
   const inactivityEnabled = watch('inactivity_enabled');
+  const csatEnabled = watch('csat_enabled');
 
   return (
-    <div className="space-y-6 max-w-xl p-6">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
-          {t('tenantAdmin.settings.title')}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-          {t('tenantAdmin.settings.subtitle')}
-        </p>
+    <div className="admin-page settings-page">
+      <div className="settings-header">
+        <h1>{t('tenantAdmin.settings.title')}</h1>
+        <p>{t('tenantAdmin.settings.subtitle')}</p>
       </div>
 
-      <div
-        className="rounded-xl p-6"
-        style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
-      >
-        {isLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-lg bg-bg-3" />
-            ))}
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit((v) => {
-            if (v.inactivity_close_minutes <= v.inactivity_warning_minutes) {
+      {isLoading ? (
+        <div className="settings-grid">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="settings-card" style={{ height: 200, opacity: 0.5 }} />
+          ))}
+        </div>
+      ) : (
+        <form
+          onSubmit={handleSubmit((values) => {
+            if (values.inactivity_close_minutes <= values.inactivity_warning_minutes) {
               toast.error(t('tenantAdmin.settings.inactivity.validation.closeGreaterThanWarning'));
               return;
             }
-            mutation.mutate(v);
-          })} className="space-y-5">
-            <div
-              style={{
-                border: '1px solid var(--line)',
-                borderRadius: '0.75rem',
-                padding: '0.85rem 0.9rem',
-                background: 'var(--bg-3)',
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 10 }}>
-                Identidade Visual
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 12,
-                    border: '1px solid var(--line)',
-                    background: 'var(--bg-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                  }}
-                >
-                  {data?.logo_url ? (
-                    <img
-                      src={data.logo_url}
-                      alt="Logo"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt-3)' }}>Z</span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  <label
-                    htmlFor="logo-input"
-                    style={{
-                      width: 'fit-content',
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      border: '1px solid var(--line-2)',
-                      background: 'var(--bg-4)',
-                      color: 'var(--txt-2)',
-                      fontSize: 12,
-                      cursor: uploadLogoMutation.isPending ? 'wait' : 'pointer',
-                    }}
-                  >
-                    {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
-                  </label>
-                  <input
-                    id="logo-input"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                    onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
-                    style={{ display: 'none' }}
-                  />
-
-                  {data?.logo_url && (
-                    <button
-                      type="button"
-                      onClick={() => removeLogoMutation.mutate()}
-                      disabled={removeLogoMutation.isPending}
+            mutation.mutate(values);
+          })}
+          className="settings-page"
+        >
+          <div className="settings-grid">
+            <div className="settings-col">
+              <SettingsCard title="Identidade Visual" icon="🎨">
+                <div className="logo-section">
+                  <div className="logo-preview">
+                    {data?.logo_url ? (
+                      <img src={data.logo_url} alt="Logo" />
+                    ) : (
+                      <span className="logo-placeholder">Z</span>
+                    )}
+                  </div>
+                  <div className="logo-info">
+                    <label
+                      htmlFor="logo-input"
                       style={{
                         width: 'fit-content',
-                        border: 'none',
-                        background: 'none',
-                        color: 'var(--red)',
+                        padding: '6px 10px',
+                        borderRadius: 'var(--r)',
+                        border: '1px solid var(--line-2)',
+                        background: 'var(--bg-4)',
+                        color: 'var(--txt-2)',
                         fontSize: 12,
-                        cursor: 'pointer',
-                        padding: 0,
+                        cursor: uploadLogoMutation.isPending ? 'wait' : 'pointer',
                       }}
                     >
-                      {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
-                    </button>
-                  )}
-
-                  <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
-                    PNG, JPG, WEBP ou SVG. Máximo 2MB.
-                  </span>
+                      {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
+                    </label>
+                    <input
+                      id="logo-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
+                      style={{ display: 'none' }}
+                    />
+                    <span className="field-hint">PNG, JPG, WEBP ou SVG. Máximo 2MB.</span>
+                    {data?.logo_url ? (
+                      <button
+                        type="button"
+                        onClick={() => removeLogoMutation.mutate()}
+                        style={{
+                          width: 'fit-content',
+                          color: 'var(--red)',
+                          border: 'none',
+                          background: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 12,
+                        }}
+                      >
+                        {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <Input
-              label={t('tenantAdmin.settings.fields.name')}
-              error={errors.name?.message}
-              {...register('name')}
-            />
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                {t('tenantAdmin.settings.fields.language')}
-              </label>
-              <select style={selectStyle} {...register('language')}>
-                {LANGUAGES.map((l) => (
-                  <option key={l.value} value={l.value}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                {t('tenantAdmin.settings.fields.timezone')}
-              </label>
-              <select style={selectStyle} {...register('timezone')}>
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div
-              style={{
-                border: '1px solid var(--line)',
-                borderRadius: '0.75rem',
-                padding: '0.85rem 0.9rem',
-                background: 'var(--bg-3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.75rem',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
-                  {t('tenantAdmin.settings.csat.enabled')}
+                <div className="settings-field">
+                  <label>{t('tenantAdmin.settings.fields.name')}</label>
+                  <input className="settings-input" {...register('name')} />
+                  {errors.name?.message ? (
+                    <span className="field-hint" style={{ color: 'var(--red)' }}>{errors.name.message}</span>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--txt-3)', marginTop: 2 }}>
-                  {t('tenantAdmin.settings.csat.enabledHint')}
+              </SettingsCard>
+
+              <SettingsCard title="Localização e Idioma" icon="🌐">
+                <div className="form-row-2">
+                  <div className="settings-field">
+                    <label>{t('tenantAdmin.settings.fields.language')}</label>
+                    <select className="settings-select" {...register('language')}>
+                      {LANGUAGES.map((language) => (
+                        <option key={language.value} value={language.value}>
+                          {language.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="settings-field">
+                    <label>{t('tenantAdmin.settings.fields.timezone')}</label>
+                    <select className="settings-select" {...register('timezone')}>
+                      {TIMEZONES.map((timezone) => (
+                        <option key={timezone.value} value={timezone.value}>
+                          {timezone.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <input
-                type="checkbox"
-                {...register('csat_enabled')}
-                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
-              />
+              </SettingsCard>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                {t('tenantAdmin.settings.csat.message')}
-              </label>
-              <textarea
-                rows={6}
-                {...register('csat_message')}
-                placeholder={t('tenantAdmin.settings.csat.messagePlaceholder')}
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--txt)',
-                  borderRadius: '0.5rem',
-                  padding: '0.75rem',
-                  fontSize: '0.875rem',
-                  fontFamily: 'var(--font)',
-                  resize: 'vertical',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                border: '1px solid var(--line)',
-                borderRadius: '0.75rem',
-                padding: '0.85rem 0.9rem',
-                background: 'var(--bg-3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.75rem',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
-                  {t('tenantAdmin.settings.inactivity.enabled')}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--txt-3)', marginTop: 2 }}>
-                  {t('tenantAdmin.settings.inactivity.enabledHint')}
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                {...register('inactivity_enabled')}
-                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
-              />
-            </div>
-
-            {inactivityEnabled && (
-              <>
-                <Input
-                  type="number"
-                  label={t('tenantAdmin.settings.inactivity.warningMinutes')}
-                  min={1}
-                  max={1440}
-                  error={errors.inactivity_warning_minutes?.message}
-                  {...register('inactivity_warning_minutes', { valueAsNumber: true })}
-                />
-
-                <Input
-                  type="number"
-                  label={t('tenantAdmin.settings.inactivity.closeMinutes')}
-                  min={1}
-                  max={1440}
-                  error={errors.inactivity_close_minutes?.message}
-                  {...register('inactivity_close_minutes', { valueAsNumber: true })}
-                />
-                <p className="text-xs -mt-3" style={{ color: 'var(--txt-3)' }}>
-                  {t('tenantAdmin.settings.inactivity.closeHint')}
-                </p>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                    {t('tenantAdmin.settings.inactivity.warningMessage')}
-                  </label>
-                  <textarea
-                    rows={3}
-                    {...register('inactivity_warning_message')}
-                    placeholder={t('tenantAdmin.settings.inactivity.warningMessageHint')}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-3)',
-                      border: '1px solid var(--line)',
-                      color: 'var(--txt)',
-                      borderRadius: '0.5rem',
-                      padding: '0.75rem',
-                      fontSize: '0.875rem',
-                      fontFamily: 'var(--font)',
-                      resize: 'vertical',
-                      outline: 'none',
-                    }}
+            <div className="settings-col">
+              <SettingsCard title="Pesquisa de Satisfação (CSAT)" icon="⭐">
+                <ToggleRow
+                  label={t('tenantAdmin.settings.csat.enabled')}
+                  description={t('tenantAdmin.settings.csat.enabledHint')}
+                >
+                  <input
+                    type="checkbox"
+                    {...register('csat_enabled')}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
                   />
-                </div>
+                </ToggleRow>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                    {t('tenantAdmin.settings.inactivity.closeMessage')}
-                  </label>
-                  <textarea
-                    rows={3}
-                    {...register('inactivity_close_message')}
-                    style={{
-                      width: '100%',
-                      background: 'var(--bg-3)',
-                      border: '1px solid var(--line)',
-                      color: 'var(--txt)',
-                      borderRadius: '0.5rem',
-                      padding: '0.75rem',
-                      fontSize: '0.875rem',
-                      fontFamily: 'var(--font)',
-                      resize: 'vertical',
-                      outline: 'none',
-                    }}
+                {csatEnabled ? (
+                  <div className="settings-field">
+                    <label>{t('tenantAdmin.settings.csat.message')}</label>
+                    <textarea
+                      className="settings-textarea"
+                      rows={3}
+                      {...register('csat_message')}
+                      placeholder={t('tenantAdmin.settings.csat.messagePlaceholder')}
+                    />
+                  </div>
+                ) : null}
+              </SettingsCard>
+
+              <SettingsCard title={t('tenantAdmin.settings.inactivity.title')} icon="⏱️">
+                <ToggleRow
+                  label={t('tenantAdmin.settings.inactivity.enabled')}
+                  description={t('tenantAdmin.settings.inactivity.enabledHint')}
+                >
+                  <input
+                    type="checkbox"
+                    {...register('inactivity_enabled')}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
                   />
+                </ToggleRow>
+
+                {inactivityEnabled ? (
+                  <>
+                    <div className="form-row-2">
+                      <div className="settings-field">
+                        <label>{t('tenantAdmin.settings.inactivity.warningMinutes')}</label>
+                        <input
+                          className="settings-input"
+                          type="number"
+                          min={5}
+                          max={120}
+                          {...register('inactivity_warning_minutes', { valueAsNumber: true })}
+                        />
+                        <span className="field-hint">{t('tenantAdmin.settings.inactivity.warningHint')}</span>
+                      </div>
+                      <div className="settings-field">
+                        <label>{t('tenantAdmin.settings.inactivity.closeMinutes')}</label>
+                        <input
+                          className="settings-input"
+                          type="number"
+                          min={10}
+                          max={480}
+                          {...register('inactivity_close_minutes', { valueAsNumber: true })}
+                        />
+                        <span className="field-hint">{t('tenantAdmin.settings.inactivity.closeHint')}</span>
+                      </div>
+                    </div>
+
+                    <div className="settings-field">
+                      <label>{t('tenantAdmin.settings.inactivity.warningMessage')}</label>
+                      <textarea
+                        className="settings-textarea"
+                        rows={2}
+                        {...register('inactivity_warning_message')}
+                      />
+                      <span className="field-hint">{t('tenantAdmin.settings.inactivity.warningMessageHint')}</span>
+                    </div>
+
+                    <div className="settings-field">
+                      <label>{t('tenantAdmin.settings.inactivity.closeMessage')}</label>
+                      <textarea
+                        className="settings-textarea"
+                        rows={2}
+                        {...register('inactivity_close_message')}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </SettingsCard>
+
+              <SettingsCard title="Bot de Atendimento" icon="🤖">
+                <div className="settings-field">
+                  <label>{t('tenantAdmin.settings.bot.assignedMessage')}</label>
+                  <textarea
+                    className="settings-textarea"
+                    rows={4}
+                    {...register('bot_assigned_message')}
+                  />
+                  <span className="field-hint">{t('tenantAdmin.settings.bot.assignedMessageHint')}</span>
                 </div>
-              </>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                {t('tenantAdmin.settings.bot.assignedMessage')}
-              </label>
-              <textarea
-                rows={4}
-                {...register('bot_assigned_message')}
-                placeholder="{{agent}}"
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--txt)',
-                  borderRadius: '0.5rem',
-                  padding: '0.75rem',
-                  fontSize: '0.875rem',
-                  fontFamily: 'var(--font)',
-                  resize: 'vertical',
-                  outline: 'none',
-                }}
-              />
-              <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
-                {t('tenantAdmin.settings.bot.assignedMessageHint')}
-              </p>
+              </SettingsCard>
             </div>
+          </div>
 
-            <div className="flex justify-end pt-2">
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
+          <div className="settings-footer">
+            <Button type="submit" disabled={mutation.isPending || !isDirty}>
+              {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

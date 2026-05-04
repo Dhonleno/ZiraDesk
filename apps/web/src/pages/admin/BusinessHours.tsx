@@ -17,73 +17,45 @@ interface DayRowProps {
 }
 
 const TIMEZONES = [
-  'America/Sao_Paulo',
-  'America/Manaus',
-  'America/Belem',
-  'America/Fortaleza',
-  'America/Recife',
-  'America/Noronha',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Lisbon',
-  'Europe/Madrid',
-  'UTC',
+  { value: 'America/Sao_Paulo', label: 'America/São_Paulo (GMT-3)' },
+  { value: 'America/Manaus', label: 'America/Manaus (GMT-4)' },
+  { value: 'America/Belem', label: 'America/Belém (GMT-3)' },
+  { value: 'America/Fortaleza', label: 'America/Fortaleza (GMT-3)' },
+  { value: 'America/Recife', label: 'America/Recife (GMT-3)' },
+  { value: 'America/Noronha', label: 'America/Noronha (GMT-2)' },
+  { value: 'UTC', label: 'UTC' },
 ];
 
 function DayRow({ day, label, isActive, openTime, closeTime, onChange }: DayRowProps) {
   const { t } = useTranslation('admin');
-
   return (
     <div
       style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(130px, 1fr) auto',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '12px 16px',
+        gap: 12,
+        padding: '10px 0',
         borderBottom: '1px solid var(--line)',
-        gap: 16,
       }}
     >
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          cursor: 'pointer',
-          minWidth: 150,
-        }}
-      >
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--txt)', fontSize: 13 }}>
         <input
           type="checkbox"
           checked={isActive}
           onChange={(event) => onChange(day, { is_active: event.target.checked })}
         />
-        <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{label}</span>
+        <span>{label}</span>
       </label>
 
       {isActive ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--txt-2)' }}>
-          <input
-            type="time"
-            value={openTime}
-            onChange={(event) => onChange(day, { open_time: event.target.value })}
-            style={timeInputStyle}
-          />
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--txt-2)', fontSize: 12 }}>
+          <input type="time" value={openTime} onChange={(event) => onChange(day, { open_time: event.target.value })} style={timeInputStyle} />
           <span>{t('tenantAdmin.businessHours.until')}</span>
-          <input
-            type="time"
-            value={closeTime}
-            onChange={(event) => onChange(day, { close_time: event.target.value })}
-            style={timeInputStyle}
-          />
+          <input type="time" value={closeTime} onChange={(event) => onChange(day, { close_time: event.target.value })} style={timeInputStyle} />
         </div>
       ) : (
-        <span style={{ fontSize: 12, color: 'var(--txt-3)', fontStyle: 'italic' }}>
-          {t('tenantAdmin.businessHours.closed')}
-        </span>
+        <span style={{ color: 'var(--txt-3)', fontSize: 12 }}>{t('tenantAdmin.businessHours.closed')}</span>
       )}
     </div>
   );
@@ -93,9 +65,9 @@ const selectStyle: React.CSSProperties = {
   background: 'var(--bg-3)',
   border: '1px solid var(--line-2)',
   color: 'var(--txt)',
-  height: 40,
+  height: 36,
   borderRadius: 'var(--r)',
-  padding: '0 12px',
+  padding: '0 10px',
   fontSize: 13,
   width: '100%',
   outline: 'none',
@@ -107,9 +79,9 @@ const timeInputStyle: React.CSSProperties = {
   borderRadius: 'var(--r)',
   color: 'var(--txt)',
   fontFamily: 'var(--mono)',
-  fontSize: 13,
-  padding: '4px 8px',
-  width: 90,
+  fontSize: 12,
+  padding: '2px 6px',
+  width: 88,
   outline: 'none',
 };
 
@@ -130,12 +102,10 @@ export function BusinessHours() {
     queryKey: ['admin', 'business-hours'],
     queryFn: adminApi.businessHours.list,
   });
-
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
   });
-
   const { data: status } = useQuery({
     queryKey: ['admin', 'business-hours-status'],
     queryFn: adminApi.businessHours.getStatus,
@@ -151,8 +121,8 @@ export function BusinessHours() {
     setTimezone(settings.timezone ?? 'America/Sao_Paulo');
     setAwayMessageEnabled(settings.away_message_enabled ?? true);
     setAwayMessage(
-      settings.away_message ??
-        'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
+      settings.away_message
+      ?? 'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
     );
   }, [settings]);
 
@@ -162,7 +132,6 @@ export function BusinessHours() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'business-hours'] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'business-hours-status'] });
-      toast.success(t('tenantAdmin.businessHours.saved'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
@@ -184,11 +153,7 @@ export function BusinessHours() {
 
   const handleDayChange = (day: number, patch: BusinessHourPatch) => {
     setHours((current) =>
-      current.map((hour) =>
-        hour.day_of_week === day
-          ? { ...hour, ...patch }
-          : hour,
-      ),
+      current.map((hour) => (hour.day_of_week === day ? { ...hour, ...patch } : hour)),
     );
 
     pendingByDay.current[day] = { ...pendingByDay.current[day], ...patch };
@@ -205,172 +170,122 @@ export function BusinessHours() {
     [hours],
   );
 
-  const statusLabel = useMemo(() => {
-    if (!status) return null;
+  const statusText = useMemo(() => {
+    if (!status) return '';
     if (status.is_open) {
-      return t('tenantAdmin.businessHours.status.closesAt', {
-        time: status.closes_at ?? '--:--',
-      });
+      return `${t('tenantAdmin.businessHours.status.open')} - ${t('tenantAdmin.businessHours.status.closesAt', { time: status.closes_at ?? '--:--' })}`;
     }
     if (status.next_open_day !== null && status.next_open_time) {
-      return t('tenantAdmin.businessHours.status.opensAt', {
+      return `${t('tenantAdmin.businessHours.status.closed')} - ${t('tenantAdmin.businessHours.status.opensAt', {
         day: t(`tenantAdmin.businessHours.days.${status.next_open_day}`),
         time: status.next_open_time,
-      });
+      })}`;
     }
-    return null;
+    return t('tenantAdmin.businessHours.status.closed');
   }, [status, t]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 820, overflow: 'auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: 'var(--txt)', fontSize: 24, fontWeight: 700, margin: 0 }}>
-          {t('tenantAdmin.businessHours.title')}
-        </h1>
-        <p style={{ color: 'var(--txt-2)', fontSize: 14, margin: '6px 0 0' }}>
-          {t('tenantAdmin.businessHours.subtitle')}
-        </p>
+    <div className="admin-page bh-page">
+      <div className="bh-header">
+        <div>
+          <h1>{t('tenantAdmin.businessHours.title')}</h1>
+          <p>{t('tenantAdmin.businessHours.subtitle')}</p>
+        </div>
+        {status ? (
+          <div className={`status-badge-pill ${status.is_open ? 'open' : 'closed'}`}>
+            <span className="status-dot-mini" />
+            {statusText}
+          </div>
+        ) : null}
       </div>
 
-      <div
-        style={{
-          background: 'var(--bg-2)',
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--r-lg)',
-          padding: 20,
-        }}
-      >
-        <div style={{ display: 'grid', gap: 18 }}>
-          <label style={{ display: 'grid', gap: 8 }}>
-            <span style={{ color: 'var(--txt-2)', fontSize: 13, fontWeight: 600 }}>
-              {t('tenantAdmin.businessHours.timezone')}
-            </span>
-            <select value={timezone} onChange={(event) => setTimezone(event.target.value)} style={selectStyle}>
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
-            {isLoading
-              ? Array.from({ length: 7 }).map((_, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      height: 46,
-                      borderBottom: index === 6 ? 'none' : '1px solid var(--line)',
-                      background: 'var(--bg-3)',
-                      opacity: 0.45,
-                    }}
-                  />
-                ))
-              : orderedHours.map((hour, index) => (
-                  <div key={hour.day_of_week} style={{ borderBottom: index === orderedHours.length - 1 ? 'none' : undefined }}>
-                    <DayRow
-                      day={hour.day_of_week}
-                      label={t(`tenantAdmin.businessHours.days.${hour.day_of_week}`)}
-                      isActive={hour.is_active}
-                      openTime={hour.open_time}
-                      closeTime={hour.close_time}
-                      onChange={handleDayChange}
-                    />
-                  </div>
+      <div className="bh-grid">
+        <section className="bh-card">
+          <div className="bh-card-header">
+            <h3>Dias e horários</h3>
+            <div style={{ minWidth: 250 }}>
+              <select value={timezone} onChange={(event) => setTimezone(event.target.value)} style={selectStyle}>
+                {TIMEZONES.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
                 ))}
+              </select>
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div>
-              <h2 style={{ color: 'var(--txt)', fontSize: 15, fontWeight: 700, margin: 0 }}>
-                {t('tenantAdmin.businessHours.awayMessage')}
-              </h2>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  marginTop: 10,
-                  color: 'var(--txt-2)',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={awayMessageEnabled}
-                  onChange={(event) => setAwayMessageEnabled(event.target.checked)}
-                />
-                {t('tenantAdmin.businessHours.awayMessageLabel')}
-              </label>
+          {isLoading ? (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {Array.from({ length: 7 }).map((_, index) => (
+                <div key={index} style={{ height: 34, borderRadius: 'var(--r)', background: 'var(--bg-3)', opacity: 0.5 }} />
+              ))}
             </div>
+          ) : (
+            <div>
+              {orderedHours.map((hour) => (
+                <DayRow
+                  key={hour.day_of_week}
+                  day={hour.day_of_week}
+                  label={t(`tenantAdmin.businessHours.days.${hour.day_of_week}`)}
+                  isActive={hour.is_active}
+                  openTime={hour.open_time}
+                  closeTime={hour.close_time}
+                  onChange={handleDayChange}
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
-            <textarea
-              value={awayMessage}
-              onChange={(event) => setAwayMessage(event.target.value)}
-              placeholder={t('tenantAdmin.businessHours.awayMessagePlaceholder')}
-              rows={4}
-              style={{
-                resize: 'vertical',
-                minHeight: 104,
-                background: 'var(--bg-3)',
-                border: '1px solid var(--line-2)',
-                borderRadius: 'var(--r)',
-                color: 'var(--txt)',
-                fontSize: 13,
-                lineHeight: 1.5,
-                padding: 12,
-                outline: 'none',
-              }}
+        <section className="bh-card">
+          <h3 style={{ margin: 0, color: 'var(--txt)' }}>Mensagem de ausência</h3>
+          <p style={{ margin: '6px 0 0', color: 'var(--txt-3)', fontSize: 12 }}>
+            Enviada automaticamente quando o cliente contata fora do horário de atendimento.
+          </p>
+
+          <div className="settings-toggle-row" style={{ marginTop: 8 }}>
+            <div className="settings-toggle-label">Enviar mensagem automática</div>
+            <input
+              type="checkbox"
+              checked={awayMessageEnabled}
+              onChange={(event) => setAwayMessageEnabled(event.target.checked)}
+              style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
             />
           </div>
 
-          {status && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                width: 'fit-content',
-                padding: '10px 14px',
-                borderRadius: 'var(--r)',
-                fontSize: 13,
-                fontWeight: 600,
-                background: status.is_open ? 'var(--green-dim)' : 'var(--red-dim)',
-                color: status.is_open ? 'var(--green)' : 'var(--red)',
-                border: status.is_open
-                  ? '1px solid rgba(62,207,142,.25)'
-                  : '1px solid rgba(248,113,113,.25)',
-              }}
-            >
-              <span
-                aria-hidden
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: 'currentColor',
-                }}
+          {awayMessageEnabled ? (
+            <div className="settings-field">
+              <label>Mensagem</label>
+              <textarea
+                className="settings-textarea"
+                rows={6}
+                value={awayMessage}
+                onChange={(event) => setAwayMessage(event.target.value)}
+                placeholder={t('tenantAdmin.businessHours.awayMessagePlaceholder')}
               />
-              {t(`tenantAdmin.businessHours.status.${status.is_open ? 'open' : 'closed'}`)}
-              {statusLabel ? ` — ${statusLabel}` : ''}
+              <span className="field-hint">
+                O sistema adiciona automaticamente o próximo horário de abertura.
+              </span>
             </div>
-          )}
+          ) : null}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="button"
-              onClick={() => settingsMutation.mutate()}
-              loading={settingsMutation.isPending}
-            >
-              {settingsMutation.isPending
-                ? t('tenantAdmin.common.saving')
-                : t('tenantAdmin.businessHours.save')}
+          <div className="message-preview">
+            <div className="preview-label">Pré-visualização</div>
+            <div className="whatsapp-bubble">
+              {(awayMessage || 'Olá! No momento estamos fora do horário de atendimento.').trim()}
+              {'\n\n'}⏰ Retornaremos segunda-feira às 08:00.
+              {'\n\n'}Este atendimento será encerrado. Até logo! 👋
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+            <Button type="button" onClick={() => settingsMutation.mutate()} disabled={settingsMutation.isPending}>
+              {settingsMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.businessHours.save')}
             </Button>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
 }
+

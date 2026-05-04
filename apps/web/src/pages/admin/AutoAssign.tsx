@@ -121,7 +121,7 @@ export function AutoAssign() {
   );
 
   return (
-    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+    <div className="admin-page space-y-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
           {t('tenantAdmin.autoAssign.title')}
@@ -131,15 +131,15 @@ export function AutoAssign() {
         </p>
       </div>
 
-      <div className="rounded-xl p-6 space-y-6" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
-            ))}
-          </div>
-        ) : (
-          <>
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
+          ))}
+        </div>
+      ) : (
+        <div className="admin-two-col">
+          <section className="rounded-xl p-5 space-y-5" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
             <label className="flex items-center justify-between gap-4 rounded-lg px-4 py-3" style={{ background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
               <span className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
                 {t('tenantAdmin.autoAssign.active')}
@@ -174,11 +174,30 @@ export function AutoAssign() {
               </select>
             </div>
 
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                onClick={() => {
+                  const confirmed = window.confirm(t('tenantAdmin.autoAssign.resetConfirm'));
+                  if (confirmed) resetMutation.mutate();
+                }}
+                disabled={resetMutation.isPending}
+                variant="secondary"
+              >
+                {t('tenantAdmin.autoAssign.reset')}
+              </Button>
+
+              <Button type="button" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.common.save')}
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-xl p-5 space-y-5" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
             <div className="space-y-3">
               <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
                 {t('tenantAdmin.autoAssign.agents')}
               </p>
-
               <div className="space-y-2 rounded-lg p-2" style={{ border: '1px solid var(--line)', background: 'var(--bg-3)' }}>
                 {agents.map((agent: AutoAssignAgent) => (
                   <label
@@ -223,11 +242,11 @@ export function AutoAssign() {
                           time: formatRelative(agent.last_assigned_at, i18n.language),
                         })}
                       </p>
-                      {agent.status === 'paused' && agent.pause_started_at && (
+                      {agent.status === 'paused' && agent.pause_started_at ? (
                         <p className="text-xs" style={{ color: 'var(--amber)', marginTop: 2 }}>
                           {(agent.pause_reason ?? t('tenantAdmin.pause.reasons.other'))} - {formatPauseAgo(agent.pause_started_at, i18n.language)}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                     <input
                       type="checkbox"
@@ -240,11 +259,11 @@ export function AutoAssign() {
                   </label>
                 ))}
 
-                {agents.length === 0 && (
+                {agents.length === 0 ? (
                   <p className="px-3 py-4 text-sm" style={{ color: 'var(--txt-3)' }}>
                     {t('tenantAdmin.common.noResults')}
                   </p>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -275,27 +294,9 @@ export function AutoAssign() {
                 )}
               </div>
             </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <Button
-                type="button"
-                onClick={() => {
-                  const confirmed = window.confirm(t('tenantAdmin.autoAssign.resetConfirm'));
-                  if (confirmed) resetMutation.mutate();
-                }}
-                disabled={resetMutation.isPending}
-                variant="secondary"
-              >
-                {t('tenantAdmin.autoAssign.reset')}
-              </Button>
-
-              <Button type="button" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.common.save')}
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
