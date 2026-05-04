@@ -67,27 +67,44 @@ export async function createChannel(data: CreateChannelInput) {
 
 export async function updateChannel(id: string, data: UpdateChannelInput) {
   const existingRows = await prisma.$queryRawUnsafe<ChannelRow[]>(
-    `SELECT id, credentials FROM channels WHERE id = $1 LIMIT 1`,
+    `SELECT id, credentials, settings FROM channels WHERE id = $1 LIMIT 1`,
     id,
   );
   if (!existingRows[0]) throw new NotFoundError('Canal');
 
-  const encryptedCredentials = data.credentials
-    ? encryptCredentials(data.credentials)
-    : existingRows[0].credentials;
+  const currentCredentials = decryptCredentials(existingRows[0].credentials);
+  const incomingCredentials = data.credentials ?? {};
+  const mergedCredentials = data.credentials
+    ? { ...currentCredentials, ...incomingCredentials }
+    : currentCredentials;
+
+  if (
+    data.credentials
+    && (!Object.prototype.hasOwnProperty.call(data.credentials, 'accessToken')
+      || !String(data.credentials.accessToken ?? '').trim())
+    && currentCredentials.accessToken
+  ) {
+    mergedCredentials.accessToken = currentCredentials.accessToken;
+  }
+
+  const encryptedCredentials = encryptCredentials(mergedCredentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
+
+  const currentSettings = (existingRows[0].settings as Record<string, unknown>) ?? {};
+  const mergedSettings = data.settings ? { ...currentSettings, ...data.settings } : currentSettings;
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
     `UPDATE channels
      SET name        = COALESCE($1, name),
          credentials = $2::jsonb,
-         settings    = COALESCE($3::jsonb, settings),
-         status      = COALESCE($4, status)
+         settings    = $3::jsonb,
+         status      = COALESCE($4, status),
+         updated_at  = NOW()
      WHERE id = $5
      RETURNING id, type, name, status, settings, created_at`,
     data.name ?? null,
     credentialsJson,
-    data.settings ? JSON.stringify(data.settings) : null,
+    JSON.stringify(mergedSettings),
     data.status ?? null,
     id,
   );

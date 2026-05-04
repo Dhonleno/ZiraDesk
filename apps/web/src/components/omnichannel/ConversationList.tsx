@@ -118,15 +118,17 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNew?: () => void;
+  initialAgentId?: string;
 }
 
-export function ConversationList({ selectedId, onSelect, onNew }: Props) {
+export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('active');
-  const [assignedToMe, setAssignedToMe] = useState(true);
+  const [assignedToMe, setAssignedToMe] = useState(!initialAgentId);
+  const [filterAgentId, setFilterAgentId] = useState(initialAgentId ?? '');
   const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
   const [filterTagId, setFilterTagId] = useState<string | null>(null);
   const [showTagFilterDropdown, setShowTagFilterDropdown] = useState(false);
@@ -137,6 +139,13 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
+
+  useEffect(() => {
+    setFilterAgentId(initialAgentId ?? '');
+    setAssignedToMe(!initialAgentId);
+    setActiveTab('active');
+    setSubStatus(null);
+  }, [initialAgentId]);
 
   const clearTimer = useCallback((timers: Map<string, number>, id: string) => {
     const timer = timers.get(id);
@@ -320,7 +329,7 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
   const selectedTag = allTags.find((tag) => tag.id === filterTagId) ?? null;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch, filterTagId],
+    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch, filterTagId, filterAgentId],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
         '/omnichannel/conversations',
@@ -328,7 +337,11 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           params: {
             perPage: 50,
             tab: activeTab,
-            assigned_to_me: activeTab === 'active' ? (assignedToMe ? true : undefined) : undefined,
+            assigned_to_me:
+              activeTab === 'active' && !filterAgentId
+                ? (assignedToMe ? true : undefined)
+                : undefined,
+            agent_id: filterAgentId || undefined,
             sub_status: activeTab === 'closed' ? subStatus ?? undefined : undefined,
             search: debouncedSearch || undefined,
             tag_id: filterTagId ?? undefined,
@@ -536,7 +549,40 @@ export function ConversationList({ selectedId, onSelect, onNew }: Props) {
           )}
         </div>
 
-        {activeTab === 'active' && (
+        {filterAgentId && (
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                fontSize: 10,
+                border: '1px solid rgba(0,201,167,.25)',
+                background: 'var(--teal-dim)',
+                color: 'var(--teal)',
+                borderRadius: 'var(--r-pill)',
+                padding: '2px 8px',
+              }}
+            >
+              Filtro por agente
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterAgentId('');
+                setAssignedToMe(true);
+              }}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                color: 'var(--txt-3)',
+                fontSize: 12,
+              }}
+            >
+              Limpar
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'active' && !filterAgentId && (
           <button
             onClick={() => setAssignedToMe((v) => !v)}
             style={{

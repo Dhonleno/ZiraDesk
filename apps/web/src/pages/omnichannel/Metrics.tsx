@@ -25,6 +25,7 @@ import {
   type MetricsPeakHoursPoint,
   type MetricsVolumePoint,
 } from '../../services/api';
+import { useToast } from '../../stores/toast.store';
 
 type PeriodKey = 'today' | '7' | '30' | '90' | 'custom';
 
@@ -365,12 +366,14 @@ function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: strin
 
 export function MetricsPage() {
   const { t } = useTranslation('omnichannel');
+  const toast = useToast();
   const [period, setPeriod] = useState<PeriodKey>('7');
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
   const [agentId, setAgentId] = useState<string>('');
   const [channelType, setChannelType] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
+  const maxDateRange = 365;
 
   const { dateFrom, dateTo } = useMemo(
     () => computeDates(period, customFrom, customTo),
@@ -424,26 +427,59 @@ export function MetricsPage() {
 
   const csatAverage = data?.overview.csat.avg_score;
 
-  const exportCsv = () => {
-    const rows = [
-      ['Agente', 'Total', 'Resolvidos', 'TMA (min)', 'CSAT'],
-      ...(data?.byAgent ?? []).map((agent) => [
-        agent.agent_name,
-        String(agent.total),
-        String(agent.resolved),
-        agent.avg_minutes ? String(agent.avg_minutes) : '',
-        agent.avg_csat ? String(agent.avg_csat) : '',
-      ]),
-    ];
+  const exportCsv = async () => {
+    try {
+      const params = { date_from: dateFrom, date_to: dateTo };
+      const [overview, byAgent, byChannel, byDepartment] = await Promise.all([
+        omnichannelApi.metrics.getOverview(params),
+        omnichannelApi.metrics.getByAgent(params),
+        omnichannelApi.metrics.getByChannel(params),
+        omnichannelApi.metrics.getByDepartment(params),
+      ]);
 
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `relatorio-${dateFrom}-${dateTo}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+      const sections: Array<Array<string | number>> = [
+        [`Relatório ZiraDesk - ${dateFrom} a ${dateTo}`],
+        [],
+        ['RESUMO GERAL'],
+        ['Total de atendimentos', overview.total.total],
+        ['Resolvidos', overview.total.resolved],
+        ['Em aberto', overview.total.open],
+        ['TMA (minutos)', overview.tma],
+        ['CSAT médio', overview.csat.avg_score ?? '—'],
+        [],
+        ['DESEMPENHO POR AGENTE'],
+        ['Agente', 'Total', 'Resolvidos', 'TMA (min)', 'CSAT'],
+        ...byAgent.map((agent) => ([
+          agent.agent_name,
+          agent.total,
+          agent.resolved,
+          agent.avg_minutes ?? '—',
+          agent.avg_csat ?? '—',
+        ])),
+        [],
+        ['VOLUME POR CANAL'],
+        ['Canal', 'Total'],
+        ...byChannel.map((channel) => ([channel.channel_type, channel.total])),
+        [],
+        ['VOLUME POR DEPARTAMENTO'],
+        ['Departamento', 'Total', 'CSAT médio'],
+        ...byDepartment.map((item) => ([item.department, item.total, item.avg_csat ?? '—'])),
+      ];
+
+      const csv = sections
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ziradesk-relatorio-${dateFrom}-${dateTo}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Não foi possível exportar o relatório agora.');
+    }
   };
 
   const noData = !isLoading && (data?.overview.total.total ?? 0) === 0;
@@ -479,13 +515,46 @@ export function MetricsPage() {
               type="date"
               className="filter-select"
               value={customFrom}
-              onChange={(event) => setCustomFrom(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setCustomFrom(value);
+                if (customTo && value > customTo) {
+                  setCustomTo('');
+                  toast.info('Data final foi limpa pois era anterior à nova data inicial');
+                  return;
+                }
+                if (customTo && value) {
+                  const daysDiff = Math.floor(
+                    (new Date(customTo).getTime() - new Date(value).getTime()) / 86400000,
+                  );
+                  if (daysDiff > maxDateRange) {
+                    setCustomTo('');
+                    toast.error(`Período máximo: ${maxDateRange} dias`);
+                  }
+                }
+              }}
             />
             <input
               type="date"
               className="filter-select"
               value={customTo}
-              onChange={(event) => setCustomTo(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (customFrom && value < customFrom) {
+                  toast.error('A data final não pode ser anterior à data inicial');
+                  return;
+                }
+                if (customFrom && value) {
+                  const daysDiff = Math.floor(
+                    (new Date(value).getTime() - new Date(customFrom).getTime()) / 86400000,
+                  );
+                  if (daysDiff > maxDateRange) {
+                    toast.error(`Período máximo: ${maxDateRange} dias`);
+                    return;
+                  }
+                }
+                setCustomTo(value);
+              }}
             />
           </>
         ) : null}

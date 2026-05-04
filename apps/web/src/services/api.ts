@@ -33,6 +33,7 @@ interface Channel {
   type: string;
   name: string;
   status: string;
+  credentials?: Record<string, unknown>;
   settings: unknown;
   created_at: string;
 }
@@ -544,6 +545,16 @@ export const adminApi = {
     return res.data.data;
   },
 
+  uploadSettingsLogo: async (file: File): Promise<{ logo_url: string }> => {
+    const form = new FormData();
+    form.append('logo', file);
+    const res = await api.post<{ success: boolean; data: { logo_url: string } }>(
+      '/admin/settings/logo',
+      form,
+    );
+    return res.data.data;
+  },
+
   autoAssign: {
     getConfig: async (): Promise<AutoAssignConfig> => {
       const res = await api.get<{ success: boolean; data: AutoAssignConfig }>('/admin/auto-assign');
@@ -606,6 +617,11 @@ export const adminApi = {
 
   listChannels: async (): Promise<Channel[]> => {
     const res = await api.get<{ success: boolean; data: Channel[] }>('/admin/channels');
+    return res.data.data;
+  },
+
+  getChannel: async (id: string): Promise<Channel> => {
+    const res = await api.get<{ success: boolean; data: Channel }>(`/admin/channels/${id}`);
     return res.data.data;
   },
 
@@ -1019,6 +1035,7 @@ export interface ListConversationsParams {
   search?: string;
   status?: string;
   assigned_to_me?: boolean;
+  agent_id?: string;
   client_id?: string;
   contact_id?: string;
   organization_id?: string;

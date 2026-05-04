@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -238,17 +238,49 @@ export function InfoPanel({ conversationId }: Props) {
     retry: false,
   });
 
-  const { data: history = [], isLoading: historyLoading } = useQuery({
-    queryKey: ['omnichannel-client-history', contactId, conversationId],
+  const { data: contactConversations = [], isLoading: contactConversationsLoading } = useQuery({
+    queryKey: ['omnichannel-contact-conversations', contactId],
     queryFn: async () => {
-      const params = new URLSearchParams({ contact_id: contactId!, per_page: '5' });
-      const res = await api.get<{ success: boolean; data: Conversation[] }>(
-        `/omnichannel/conversations?${params}`,
-      );
-      return res.data.data.filter((item) => item.id !== conversationId);
+      const res = await api.get<{ success: boolean; data: Conversation[] }>('/omnichannel/conversations', {
+        params: {
+          contact_id: contactId!,
+          perPage: 50,
+        },
+      });
+      return res.data.data ?? [];
     },
     enabled: !!contactId,
   });
+
+  const channelsSummary = useMemo(() => {
+    const byType = new Map<string, { type: string; count: number; lastUsed: string | null }>();
+
+    for (const conversation of contactConversations) {
+      const type = conversation.channel_type;
+      const usedAt = conversation.last_message_at ?? conversation.created_at;
+      const current = byType.get(type);
+      if (!current) {
+        byType.set(type, { type, count: 1, lastUsed: usedAt });
+        continue;
+      }
+
+      current.count += 1;
+      const currentTime = current.lastUsed ? new Date(current.lastUsed).getTime() : 0;
+      const nextTime = usedAt ? new Date(usedAt).getTime() : 0;
+      if (nextTime > currentTime) {
+        current.lastUsed = usedAt;
+      }
+    }
+
+    return Array.from(byType.values());
+  }, [contactConversations]);
+
+  const history = useMemo(
+    () => contactConversations
+      .filter((conversation) => conversation.id !== conversationId)
+      .slice(0, 5),
+    [contactConversations, conversationId],
+  );
 
   const { data: convTags = [], refetch: refetchConvTags } = useQuery({
     queryKey: ['conversation-tags', conversationId],
@@ -676,23 +708,37 @@ export function InfoPanel({ conversationId }: Props) {
           <div style={{ padding: '14px 16px' }}>
             <SectionTitle>{t('info.activeChannels')}</SectionTitle>
             <div>
-              {conv && chBadge ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 7, background: chBadge.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {channelIcon(conv.channel_type)}
+              {channelsSummary.length > 0 ? channelsSummary.map((item) => {
+                const badge = CH_BADGE[item.type] ?? {
+                  bg: 'var(--bg-5)',
+                  color: 'var(--txt-2)',
+                  border: 'var(--line-2)',
+                  label: item.type,
+                };
+
+                return (
+                  <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: badge.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {channelIcon(item.type)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{badge.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                        {item.count} conversa(s) · último: {relativeTime(item.lastUsed)}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{chBadge.label}</div>
-                    <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentChannelSub ?? '—'}</div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>{relativeTime(conv.last_message_at ?? conv.created_at)}</div>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 18, background: 'var(--bg-5)', borderRadius: 'var(--r-pill)', fontSize: 10, color: 'var(--txt-2)', marginTop: 2, padding: '0 7px' }}>Atual</div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>—</div>
+                );
+              }) : (
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>Nenhum canal identificado</div>
               )}
+
+              {conv && chBadge && currentChannelSub && (
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt-3)' }}>
+                  Canal atual: {chBadge.label} · {currentChannelSub}
+                </div>
+              )}
+
               {contactId && (
                 <button
                   onClick={() => navigate(`/crm/contacts?id=${contactId}`)}
@@ -708,7 +754,7 @@ export function InfoPanel({ conversationId }: Props) {
         {activeTab === 'history' && (
           <div style={{ padding: '14px 16px' }}>
             <SectionTitle>{t('info.recentActivity')}</SectionTitle>
-            {historyLoading ? (
+            {contactConversationsLoading ? (
               <div style={{ display: 'grid', gap: 8 }}>
                 <Skeleton height={52} />
                 <Skeleton height={52} />
@@ -730,13 +776,25 @@ export function InfoPanel({ conversationId }: Props) {
                         {channelIcon(item.channel_type)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{badge?.label ?? item.channel_type}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{badge?.label ?? item.channel_type}</div>
+                          {item.protocol_number && (
+                            <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                              {item.protocol_number}
+                            </div>
+                          )}
+                        </div>
                         <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.last_message ?? item.subject ?? 'Sem mensagens'}
+                          {(item.last_message ?? item.subject ?? 'Sem mensagens').slice(0, 60)}
                         </div>
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
-                        {relativeTime(item.last_message_at ?? item.created_at)}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                          {relativeTime(item.last_message_at ?? item.created_at)}
+                        </div>
+                        <div style={{ marginTop: 2, fontSize: 10, color: 'var(--txt-3)' }}>
+                          {item.status}
+                        </div>
                       </div>
                     </button>
                   );

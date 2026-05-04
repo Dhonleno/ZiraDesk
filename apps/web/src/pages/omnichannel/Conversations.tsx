@@ -13,11 +13,14 @@ export function ConversationsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [searchParams] = useSearchParams();
+  const [filterAgentId, setFilterAgentId] = useState('');
   const qc = useQueryClient();
 
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
+    const agentIdFromUrl = searchParams.get('agent_id');
     if (conversationId) setSelectedId(conversationId);
+    setFilterAgentId(agentIdFromUrl ?? '');
   }, [searchParams]);
 
   useEffect(() => {
@@ -79,7 +82,12 @@ export function ConversationsPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <ConversationList selectedId={selectedId} onSelect={setSelectedId} onNew={() => setShowModal(true)} />
+      <ConversationList
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onNew={() => setShowModal(true)}
+        initialAgentId={filterAgentId}
+      />
 
       {selectedId ? (
         <>

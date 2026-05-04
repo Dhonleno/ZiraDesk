@@ -20,6 +20,7 @@ export const listConversationsQuerySchema = z
     status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: booleanQueryParamSchema.optional(),
+    agent_id: z.string().uuid().optional(),
     contact_id: z.string().uuid().optional(),
     organization_id: z.string().uuid().optional(),
     tag_id: z.string().uuid().optional(),

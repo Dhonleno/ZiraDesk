@@ -215,7 +215,7 @@ function buildListConversationSqlContext(
   outboundCondition: string,
   tagAssignmentsRef: string,
 ): ListConversationSqlContext {
-  const { page, perPage, tab, sub_status, status, search, assigned_to_me, contact_id, tag_id } = query;
+  const { page, perPage, tab, sub_status, status, search, assigned_to_me, agent_id, contact_id, tag_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
   const conditions: string[] = [];
@@ -251,6 +251,10 @@ function buildListConversationSqlContext(
 
   if (search) {
     conditions.push(`${searchColumn} ILIKE '%' || ${pushParam(search)}::text || '%'`);
+  }
+
+  if (agent_id) {
+    conditions.push(`c.assigned_to = ${pushParam(agent_id)}::uuid`);
   }
 
   if (contact_id) {

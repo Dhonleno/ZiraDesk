@@ -5,6 +5,7 @@ import { adminApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { Button } from '../../components/ui/Button';
 import { AddChannelModal } from '../../components/admin/AddChannelModal';
+import { EditChannelModal } from '../../components/admin/EditChannelModal';
 
 interface Channel {
   id: string;
@@ -79,6 +80,7 @@ export function Channels() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  const [editChannelId, setEditChannelId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'channels'],
@@ -104,6 +106,19 @@ export function Channels() {
       }
     },
     onError: () => toast.error(t('tenantAdmin.channels.messages.testFail')),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (channel: Channel) => (
+      adminApi.updateChannel(channel.id, {
+        status: channel.status === 'active' ? 'inactive' : 'active',
+      })
+    ),
+    onSuccess: async (_res, channel) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
+      toast.success(channel.status === 'active' ? 'Canal desativado' : 'Canal ativado');
+    },
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
   const channels = data ?? [];
@@ -203,6 +218,23 @@ export function Channels() {
                     {t('tenantAdmin.common.test')}
                   </button>
                   <button
+                    onClick={() => setEditChannelId(channel.id)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                    style={{ background: 'var(--bg-4)', color: 'var(--txt-2)', border: '1px solid var(--line)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
+                  >
+                    Configurar
+                  </button>
+                  <button
+                    onClick={() => toggleMutation.mutate(channel)}
+                    disabled={toggleMutation.isPending}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                    style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(96,165,250,.2)' }}
+                  >
+                    {channel.status === 'active' ? 'Desativar' : 'Ativar'}
+                  </button>
+                  <button
                     onClick={() => deleteMutation.mutate(channel.id)}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
                     style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(248,113,113,.2)' }}
@@ -219,6 +251,11 @@ export function Channels() {
       )}
 
       <AddChannelModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditChannelModal
+        open={Boolean(editChannelId)}
+        channelId={editChannelId}
+        onClose={() => setEditChannelId(null)}
+      />
     </div>
   );
 }

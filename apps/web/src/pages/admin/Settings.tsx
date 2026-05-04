@@ -95,6 +95,38 @@ export function Settings() {
     },
   });
 
+  const uploadLogoMutation = useMutation({
+    mutationFn: (file: File) => adminApi.uploadSettingsLogo(file),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      toast.success('Logo atualizada com sucesso');
+    },
+    onError: () => toast.error('Erro ao enviar logo'),
+  });
+
+  const removeLogoMutation = useMutation({
+    mutationFn: () => adminApi.updateSettings({ logo_url: null }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      toast.success('Logo removida');
+    },
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+  });
+
+  const handleLogoUpload = (file?: File | null) => {
+    if (!file) return;
+    const accepted = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+    if (!accepted.includes(file.type)) {
+      toast.error('Formato inválido. Use PNG, JPG, WEBP ou SVG.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 2MB.');
+      return;
+    }
+    uploadLogoMutation.mutate(file);
+  };
+
   const selectStyle: React.CSSProperties = {
     background: 'var(--bg-3)',
     border: '1px solid var(--line)',
@@ -130,6 +162,93 @@ export function Settings() {
           </div>
         ) : (
           <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-5">
+            <div
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: '0.75rem',
+                padding: '0.85rem 0.9rem',
+                background: 'var(--bg-3)',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 10 }}>
+                Identidade Visual
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 12,
+                    border: '1px solid var(--line)',
+                    background: 'var(--bg-2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }}
+                >
+                  {data?.logo_url ? (
+                    <img
+                      src={data.logo_url}
+                      alt="Logo"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt-3)' }}>Z</span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                  <label
+                    htmlFor="logo-input"
+                    style={{
+                      width: 'fit-content',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--line-2)',
+                      background: 'var(--bg-4)',
+                      color: 'var(--txt-2)',
+                      fontSize: 12,
+                      cursor: uploadLogoMutation.isPending ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
+                  </label>
+                  <input
+                    id="logo-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
+                    style={{ display: 'none' }}
+                  />
+
+                  {data?.logo_url && (
+                    <button
+                      type="button"
+                      onClick={() => removeLogoMutation.mutate()}
+                      disabled={removeLogoMutation.isPending}
+                      style={{
+                        width: 'fit-content',
+                        border: 'none',
+                        background: 'none',
+                        color: 'var(--red)',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
+                    </button>
+                  )}
+
+                  <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                    PNG, JPG, WEBP ou SVG. Máximo 2MB.
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <Input
               label={t('tenantAdmin.settings.fields.name')}
               error={errors.name?.message}
