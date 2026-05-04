@@ -148,6 +148,26 @@
       "edit": "Edit",
       "delete": "Delete"
     },
+    "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
+    "deleteWarning": "This action cannot be undone.",
+    "hasActiveConversations": "Contact has active conversations.",
+    "hasNoActiveChannels": "No active channel available",
+    "selectContact": "Select a contact",
+    "selectContactHint": "Click a contact to view details",
+    "tabs": {
+      "data": "Data",
+      "conversations": "Conversations",
+      "tickets": "Tickets",
+      "notes": "Notes"
+    },
+    "notes": {
+      "placeholder": "Add notes about this contact...",
+      "save": "Save notes",
+      "saved": "Notes saved"
+    },
+    "startConversation": "Start conversation",
+    "selectChannel": "Select channel",
+    "selectChannelHint": "Which channel do you want to use?",
     "messages": {
       "linked": "Contact linked to organization",
       "unlinked": "Contact unlinked",

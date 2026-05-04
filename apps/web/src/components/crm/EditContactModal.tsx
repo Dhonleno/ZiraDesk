@@ -29,9 +29,10 @@ type FormValues = z.infer<typeof schema>;
 interface Props {
   contact: CrmContact | null;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export function EditContactModal({ contact, onClose }: Props) {
+export function EditContactModal({ contact, onClose, onSuccess }: Props) {
   const { t } = useTranslation('crm');
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -75,10 +76,14 @@ export function EditContactModal({ contact, onClose }: Props) {
     }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      if (contact?.id) {
+        void queryClient.invalidateQueries({ queryKey: ['crm-contact', contact.id] });
+      }
       if (contact?.organization_id) {
         void queryClient.invalidateQueries({ queryKey: ['org-contacts', contact.organization_id] });
       }
       toast.success(t('contacts.messages.updated'));
+      onSuccess?.();
       onClose();
     },
     onError: () => {

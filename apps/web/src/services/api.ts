@@ -1027,6 +1027,7 @@ export interface ListConversationsParams {
 
 export interface CreateConversationPayload {
   contact_id: string;
+  organization_id?: string;
   channel_id: string;
   type?: 'inbound' | 'outbound';
   subject?: string;

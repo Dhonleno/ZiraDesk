@@ -22,6 +22,12 @@ const guard = [
   ensureCrmInfrastructureMiddleware,
   hasRole('owner', 'admin', 'agent'),
 ];
+const deleteGuard = [
+  authMiddleware,
+  tenantSchemaFromJwt,
+  ensureCrmInfrastructureMiddleware,
+  hasRole('owner', 'admin'),
+];
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts
@@ -92,7 +98,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/crm/contacts/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: deleteGuard }, async (request, reply) => {
     try {
       const contact = await deleteContact(request.params.id, request.user.id);
       return reply.send({ success: true, data: contact });

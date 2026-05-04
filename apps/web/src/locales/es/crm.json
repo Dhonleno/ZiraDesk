@@ -148,6 +148,26 @@
       "edit": "Editar",
       "delete": "Eliminar"
     },
+    "deleteConfirm": "¿Seguro que deseas eliminar \"{{name}}\"?",
+    "deleteWarning": "Esta acción no se puede deshacer.",
+    "hasActiveConversations": "El contacto tiene conversaciones activas.",
+    "hasNoActiveChannels": "No hay canales activos disponibles",
+    "selectContact": "Seleccione un contacto",
+    "selectContactHint": "Haga clic en un contacto para ver los detalles",
+    "tabs": {
+      "data": "Datos",
+      "conversations": "Conversaciones",
+      "tickets": "Tickets",
+      "notes": "Notas"
+    },
+    "notes": {
+      "placeholder": "Agregue observaciones sobre este contacto...",
+      "save": "Guardar notas",
+      "saved": "Notas guardadas"
+    },
+    "startConversation": "Iniciar conversación",
+    "selectChannel": "Seleccionar canal",
+    "selectChannelHint": "¿Qué canal deseas usar?",
     "messages": {
       "linked": "Contacto vinculado a la organización",
       "unlinked": "Contacto desvinculado",

@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { api, contactsApi, conversationTags } from '../../services/api';
+import { api, contactsApi, conversationTags, type CrmContact } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
+import { EditContactModal } from '../crm/EditContactModal';
 import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
+import { useToast } from '../../stores/toast.store';
 
 interface Conversation {
   id: string;
@@ -175,9 +177,11 @@ interface Props {
 export function InfoPanel({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const navigate = useNavigate();
+  const toast = useToast();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
+  const [showEditContact, setShowEditContact] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [createTicketData, setCreateTicketData] = useState<{
@@ -186,6 +190,7 @@ export function InfoPanel({ conversationId }: Props) {
     organization_id?: string;
     organization_name?: string;
     title?: string;
+    category?: string;
     source_conversation_id?: string;
     source_protocol?: string | null;
   }>();
@@ -280,7 +285,7 @@ export function InfoPanel({ conversationId }: Props) {
     await qc.invalidateQueries({ queryKey: ['conversations'] });
   }
 
-  function handleCreateTicket() {
+  function handleCreateTicket(overrides?: { title?: string; category?: string }) {
     if (!conv) return;
 
     const nextData: {
@@ -289,12 +294,14 @@ export function InfoPanel({ conversationId }: Props) {
       organization_id?: string;
       organization_name?: string;
       title?: string;
+      category?: string;
       source_conversation_id?: string;
       source_protocol?: string | null;
     } = {
       title: `Atendimento ${conv.protocol_number ?? conv.id.slice(-6).toUpperCase()}`,
       source_conversation_id: conv.id,
       source_protocol: conv.protocol_number ?? null,
+      ...(overrides ?? {}),
     };
 
     if (contactId) nextData.contact_id = contactId;
@@ -304,6 +311,13 @@ export function InfoPanel({ conversationId }: Props) {
 
     setCreateTicketData(nextData);
     setShowCreateTicket(true);
+  }
+
+  function handleCreateProposal() {
+    handleCreateTicket({
+      title: `Proposta — ${contactName ?? conv?.client_name ?? 'Contato'}`,
+      category: 'Proposta',
+    });
   }
 
   return (
@@ -454,7 +468,19 @@ export function InfoPanel({ conversationId }: Props) {
 
             {/* Contact info */}
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-              <SectionTitle action={<span style={{ cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}>Editar</span>}>{t('info.information')}</SectionTitle>
+              <SectionTitle
+                action={(
+                  <button
+                    type="button"
+                    onClick={() => setShowEditContact(true)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}
+                  >
+                    Editar
+                  </button>
+                )}
+              >
+                {t('info.information')}
+              </SectionTitle>
               <InfoField
                 label="Organização"
                 value={organizationName}
@@ -625,10 +651,10 @@ export function InfoPanel({ conversationId }: Props) {
               <SectionTitle>{t('info.quickActions')}</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {[
-                  { label: t('info.createProposal'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.schedule'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.viewTickets'), onClick: () => navigate('/tickets'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.createTicket'), onClick: handleCreateTicket, icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.createProposal'), onClick: handleCreateProposal, icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.schedule'), onClick: () => toast.info('Funcionalidade de agenda em breve!'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.viewTickets'), onClick: () => navigate(`/tickets${contactId ? `?contact_id=${contactId}` : ''}`), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.createTicket'), onClick: () => handleCreateTicket(), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                 ].map((a) => (
                   <button
                     key={a.label}
@@ -730,6 +756,14 @@ export function InfoPanel({ conversationId }: Props) {
           contactName={name}
         />
       )}
+      <EditContactModal
+        contact={showEditContact ? (contactData as CrmContact | undefined) ?? null : null}
+        onClose={() => setShowEditContact(false)}
+        onSuccess={() => {
+          void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+          if (contactId) void qc.invalidateQueries({ queryKey: ['crm-contact', contactId] });
+        }}
+      />
 
       <CreateTicketModal
         open={showCreateTicket}

@@ -242,11 +242,15 @@ export async function deleteContact(id: string, deletedBy: string) {
   const existing = await getContact(id);
 
   const linked = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count FROM conversations WHERE contact_id = $1::uuid`, id,
+    `SELECT COUNT(*) AS count
+     FROM conversations
+     WHERE contact_id = $1::uuid
+       AND status IN ('open', 'pending', 'bot')`,
+    id,
   );
 
   if (Number(linked[0]?.count ?? 0) > 0) {
-    throw new ConflictError('Não é possível excluir um contato com conversas vinculadas');
+    throw new ConflictError('Contato possui conversas ativas. Encerre-as antes de excluir.');
   }
 
   await prisma.$executeRawUnsafe(`DELETE FROM contacts WHERE id = $1::uuid`, id);

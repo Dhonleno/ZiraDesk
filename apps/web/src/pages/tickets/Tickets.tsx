@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, ticketsApi, type Ticket, type TicketStatus, type TicketPriority } from '../../services/api';
@@ -45,6 +45,7 @@ const selectStyle: React.CSSProperties = {
 export function TicketsPage() {
   const { t } = useTranslation('tickets');
   const { id: paramId } = useParams<{ id?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -58,6 +59,7 @@ export function TicketsPage() {
 
   const debouncedSearch = useDebounce(search, 300);
   const selectedId = paramId ?? null;
+  const contactFilter = searchParams.get('contact_id');
 
   /* ── Status tabs ── */
   const STATUS_TABS: StatusTabDef[] = [
@@ -71,7 +73,7 @@ export function TicketsPage() {
 
   /* ── Queries ── */
   const { data: ticketsData, isPending: listLoading } = useQuery({
-    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent],
+    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, contactFilter],
     queryFn: () => {
       const params: import('../../services/api').ListTicketsParams = {
         per_page:   50,
@@ -82,6 +84,7 @@ export function TicketsPage() {
       if (statusTab !== 'all')  params.status   = statusTab;
       if (priority)             params.priority  = priority;
       if (filterAgent)          params.assigned_to = filterAgent;
+      if (contactFilter)        params.contact_id = contactFilter;
       return ticketsApi.list(params);
     },
     staleTime: 30_000,

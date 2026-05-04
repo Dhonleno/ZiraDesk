@@ -34,6 +34,7 @@ interface Props {
     organization_id?: string;
     organization_name?: string;
     title?: string;
+    category?: string;
     source_conversation_id?: string;
     source_protocol?: string | null;
   };
@@ -82,6 +83,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     if (!open) return;
 
     setValue('title', defaultValues?.title ?? '');
+    setValue('category', defaultValues?.category ?? '');
 
     if (defaultValues?.contact_id) {
       setSelectedContactId(defaultValues.contact_id);

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { CrmOrganization, CrmContact } from '../../services/api';
-import { organizationsApi } from '../../services/api';
+import { adminApi, omnichannelApi, organizationsApi } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { OrgStatusBadge } from './ContactBadge';
 import { OrganizationStats } from './OrganizationStats';
@@ -11,6 +11,7 @@ import { ContactCard } from './ContactCard';
 import { EditOrganizationModal } from './EditOrganizationModal';
 import { CreateContactModal } from './CreateContactModal';
 import { EditContactModal } from './EditContactModal';
+import { SelectChannelModal } from './SelectChannelModal';
 import { useToast } from '../../stores/toast.store';
 
 type Tab = 'data' | 'contacts' | 'conversations' | 'tickets' | 'notes';
@@ -65,6 +66,9 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const [editContact, setEditContact] = useState<CrmContact | null>(null);
   const [notes, setNotes] = useState(org.notes ?? '');
   const [notesDirty, setNotesDirty] = useState(false);
+  const [showSelectChannel, setShowSelectChannel] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [conversationTargetContact, setConversationTargetContact] = useState<CrmContact | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['org-stats', org.id],
@@ -75,6 +79,15 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     queryKey: ['org-contacts', org.id],
     queryFn:  () => organizationsApi.getContacts(org.id),
     enabled:  activeTab === 'contacts',
+  });
+
+  const { data: activeChannels = [] } = useQuery({
+    queryKey: ['crm-active-channels'],
+    queryFn: async () => {
+      const list = await adminApi.listChannels();
+      return list.filter((channel) => channel.status === 'active');
+    },
+    staleTime: 60_000,
   });
 
   const { data: convData, isLoading: convsLoading } = useQuery({
@@ -124,6 +137,50 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const rawTicketData = ticketData as { data?: OrgTicket[] } | OrgTicket[] | undefined;
   const tickets: OrgTicket[] = Array.isArray(rawTicketData) ? rawTicketData : (rawTicketData as { data?: OrgTicket[] } | undefined)?.data ?? [];
 
+  async function createConversationByChannel(channelId: string, preferredContact?: CrmContact | null) {
+    const contacts = orgContacts.length > 0 ? orgContacts : await organizationsApi.getContacts(org.id);
+    const targetContact =
+      preferredContact
+      ?? conversationTargetContact
+      ?? contacts.find((contact) => contact.is_primary)
+      ?? contacts[0];
+    if (!targetContact) {
+      toast.error('Adicione um contato antes de iniciar conversa');
+      return;
+    }
+
+    setCreatingConversation(true);
+    try {
+      const created = await omnichannelApi.createConversation({
+        contact_id: targetContact.id,
+        organization_id: org.id,
+        channel_id: channelId,
+        type: 'outbound',
+        initial_message: `Olá ${targetContact.name}, iniciamos seu atendimento.`,
+      });
+      navigate(`/omnichannel/conversations?conversation=${created.id}`);
+    } catch {
+      toast.error('Não foi possível iniciar conversa');
+    } finally {
+      setCreatingConversation(false);
+      setShowSelectChannel(false);
+      setConversationTargetContact(null);
+    }
+  }
+
+  async function handleStartConversation(preferredContact?: CrmContact | null) {
+    setConversationTargetContact(preferredContact ?? null);
+    if (activeChannels.length === 0) {
+      toast.error(t('contacts.hasNoActiveChannels', { defaultValue: 'Nenhum canal ativo disponível' }));
+      return;
+    }
+    if (activeChannels.length === 1) {
+      await createConversationByChannel(activeChannels[0]!.id, preferredContact);
+      return;
+    }
+    setShowSelectChannel(true);
+  }
+
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg-2)' }}>
@@ -143,14 +200,15 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => setEditOrg(true)}
+                    onClick={() => setEditOrg(true)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--line-2)', background: 'var(--bg-4)', color: 'var(--txt-2)', fontFamily: 'var(--font)', fontWeight: 500 }}
                 >
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 8.5l1-1.5 5-5 1.5 1.5-5 5-2 .5.5-1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                   {t('organizations.actions.edit')}
                 </button>
                 <button
-                  onClick={() => navigate(`/omnichannel/conversations`)}
+                  onClick={() => void handleStartConversation()}
+                  disabled={creatingConversation}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontFamily: 'var(--font)', fontWeight: 600 }}
                 >
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 7.5V3a1 1 0 011-1h6a1 1 0 011 1v3.5a1 1 0 01-1 1H4.5l-3 2v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
@@ -241,7 +299,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     key={c.id}
                     contact={c}
                     onEdit={setEditContact}
-                    onStartConversation={() => navigate('/omnichannel/conversations')}
+                    onStartConversation={() => { void handleStartConversation(c); }}
                   />
                 ))
               )}
@@ -347,6 +405,12 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       <EditOrganizationModal org={editOrg ? org : null} onClose={() => setEditOrg(false)} />
       <CreateContactModal open={createContact} onClose={() => setCreateContact(false)} defaultOrganizationId={org.id} />
       <EditContactModal contact={editContact} onClose={() => setEditContact(null)} />
+      <SelectChannelModal
+        open={showSelectChannel}
+        channels={activeChannels.map((channel) => ({ id: channel.id, name: channel.name, type: channel.type }))}
+        onClose={() => setShowSelectChannel(false)}
+        onSelect={(channelId) => { void createConversationByChannel(channelId, conversationTargetContact); }}
+      />
     </>
   );
 }
