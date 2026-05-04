@@ -13,6 +13,13 @@ const envSchema = z.object({
   WHATSAPP_WABA_ID: z.string(),
   WHATSAPP_ACCESS_TOKEN: z.string(),
   WHATSAPP_VERIFY_TOKEN: z.string(),
+  TWILIO_ACCOUNT_SID: z.string(),
+  TWILIO_AUTH_TOKEN: z.string(),
+  TWILIO_PHONE_NUMBER: z.string(),
+  TWILIO_TWIML_APP_SID: z.string(),
+  TWILIO_API_KEY: z.string(),
+  TWILIO_API_SECRET: z.string(),
+  API_URL: z.string(),
 });
 
 const parsed = envSchema.safeParse(process.env);

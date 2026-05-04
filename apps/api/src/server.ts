@@ -18,6 +18,7 @@ import { ticketModuleRoutes } from './modules/tickets/index.js';
 import { webhookRoutes } from './modules/webhooks/index.js';
 import { notificationsRoutes } from './modules/notifications/notifications.routes.js';
 import { searchRoutes } from './modules/search/search.routes.js';
+import { callsRoutes } from './modules/calls/calls.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 
@@ -86,6 +87,7 @@ async function bootstrap(): Promise<void> {
   await app.register(ticketModuleRoutes, { prefix: '/api/tickets' });
   await app.register(notificationsRoutes, { prefix: '/api/notifications' });
   await app.register(searchRoutes, { prefix: '/api/search' });
+  await app.register(callsRoutes, { prefix: '/api/calls' });
 
   app.get('/health', async (_request, reply) => {
     const services = {

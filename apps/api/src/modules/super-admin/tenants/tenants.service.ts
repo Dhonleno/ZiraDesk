@@ -336,6 +336,26 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".call_records (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES "${schemaName}".users(id),
+      call_sid VARCHAR(50) UNIQUE NOT NULL,
+      to_phone VARCHAR(30),
+      from_phone VARCHAR(30),
+      status VARCHAR(30) DEFAULT 'initiated',
+      duration INTEGER,
+      recording_url TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_call_records_conversation"
+    ON "${schemaName}".call_records(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversation_helpers (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,

@@ -9,6 +9,7 @@ import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
 import { useToast } from '../../stores/toast.store';
+import { CallWidget } from './CallWidget';
 
 interface Conversation {
   id: string;
@@ -545,6 +546,16 @@ export function InfoPanel({ conversationId }: Props) {
                   </svg>
                 }
               />
+
+              {contactPhone ? (
+                <div style={{ marginTop: 12 }}>
+                  <CallWidget
+                    contactName={contactName ?? 'Contato'}
+                    contactPhone={contactPhone}
+                    conversationId={conversationId}
+                  />
+                </div>
+              ) : null}
             </div>
 
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>

@@ -22,6 +22,11 @@ import { TagDropdown } from './TagDropdown';
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
 type MentionData = NonNullable<NonNullable<Message['metadata']>['mention']>;
+type CallRecordingMetadata = {
+  recording_url: string;
+  duration?: number;
+  call_sid?: string;
+};
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
 
@@ -154,6 +159,38 @@ function extractMessageMediaId(message: Message): string | null {
   if (!message.metadata || typeof message.metadata !== 'object') return null;
   const mediaId = (message.metadata as Record<string, unknown>).media_id;
   return typeof mediaId === 'string' && mediaId.trim() ? mediaId.trim() : null;
+}
+
+function parseCallRecordingMetadata(message: Message): CallRecordingMetadata | null {
+  if (message.content_type !== 'call_recording') return null;
+  if (!message.metadata || typeof message.metadata !== 'object') return null;
+
+  const metadata = message.metadata as Record<string, unknown>;
+  const recordingUrl = metadata.recording_url;
+  if (typeof recordingUrl !== 'string' || !recordingUrl.trim()) return null;
+
+  const durationRaw = metadata.duration;
+  const duration = typeof durationRaw === 'number'
+    ? durationRaw
+    : typeof durationRaw === 'string' && durationRaw.trim()
+      ? Number(durationRaw)
+      : undefined;
+
+  const callSidRaw = metadata.call_sid;
+  const callSid = typeof callSidRaw === 'string' ? callSidRaw : undefined;
+
+  return {
+    recording_url: recordingUrl,
+    ...(Number.isFinite(duration) ? { duration: Number(duration) } : {}),
+    ...(callSid ? { call_sid: callSid } : {}),
+  };
+}
+
+function formatCallRecordingDuration(seconds: number | undefined): string {
+  const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds!)) : 0;
+  const minutes = Math.floor(value / 60);
+  const remainingSeconds = value % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
 function mentionTypeLabel(mention: MentionData): string {
@@ -666,6 +703,11 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
     });
 
+    const unsubCallStatus = subscribeToEvent<{ conversationId: string }>('call:status', (event) => {
+      if (event.conversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['call-history', conversationId] });
+    });
+
     return () => {
       unsubNew();
       unsubIncoming();
@@ -676,6 +718,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubHelpRequested();
       unsubHelpAccepted();
       unsubHelpDeclined();
+      unsubCallStatus();
     };
   }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
@@ -1419,9 +1462,11 @@ export function ChatArea({ conversationId }: Props) {
                 const isAgent = msg.sender_type === 'agent';
                 const isBot = msg.sender_type === 'bot';
                 const isSystem = msg.sender_type === 'system';
+                const isCallRecording = msg.content_type === 'call_recording';
+                const callRecordingMeta = parseCallRecordingMetadata(msg);
                 const isCompanySide = isAgent || isBot;
                 const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
-                const showMessageContent = Boolean(msg.content) && !hideAudioLabel;
+                const showMessageContent = Boolean(msg.content) && !hideAudioLabel && !isCallRecording;
                 const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
                 const contactDisplayName = displayName;
                 const organizationDisplayName = (
@@ -1431,20 +1476,24 @@ export function ChatArea({ conversationId }: Props) {
                 const clientLabel = organizationDisplayName
                   ? `${contactDisplayName} - ${organizationDisplayName}`
                   : contactDisplayName;
-                const senderLabel = isBot
-                  ? '🤖 Bot'
-                  : isAgent
-                    ? agentDisplayName
-                    : clientLabel;
-                const senderLabelColor = isBot
-                  ? 'var(--purple)'
-                  : isAgent
-                    ? 'var(--teal)'
-                    : 'var(--txt-3)';
+                const senderLabel = isSystem
+                  ? 'Sistema'
+                  : isBot
+                    ? '🤖 Bot'
+                    : isAgent
+                      ? agentDisplayName
+                      : clientLabel;
+                const senderLabelColor = isSystem
+                  ? 'var(--txt-3)'
+                  : isBot
+                    ? 'var(--purple)'
+                    : isAgent
+                      ? 'var(--teal)'
+                      : 'var(--txt-3)';
                 const mention = msg.metadata?.mention ?? null;
                 const canMentionThisMessage = canSendMessage && !msg.is_internal;
 
-                if (isSystem) {
+                if (isSystem && !isCallRecording) {
                   return (
                     <div
                       key={msg.id}
@@ -1611,7 +1660,21 @@ export function ChatArea({ conversationId }: Props) {
                             {t('chat.internalNote')}
                           </div>
                         )}
-                        {msg.content_type !== 'text' && (
+                        {isCallRecording && callRecordingMeta ? (
+                          <div className="call-recording-msg">
+                            <div className="recording-icon">📞</div>
+                            <div className="recording-info">
+                              <span className="recording-label">Gravação da chamada</span>
+                              <span className="recording-duration">
+                                {formatCallRecordingDuration(callRecordingMeta.duration)}
+                              </span>
+                            </div>
+                            <audio controls src={callRecordingMeta.recording_url}>
+                              <source src={callRecordingMeta.recording_url} />
+                            </audio>
+                          </div>
+                        ) : null}
+                        {msg.content_type !== 'text' && !isCallRecording && (
                           <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
                             <MessageMedia
                               message={msg}

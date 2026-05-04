@@ -857,6 +857,37 @@ export const conversationTags = {
   },
 };
 
+export interface CallRecord {
+  id: string;
+  conversation_id: string;
+  agent_id: string | null;
+  call_sid: string;
+  to_phone: string | null;
+  from_phone: string | null;
+  status: string;
+  duration: number | null;
+  recording_url: string | null;
+  created_at: string;
+  agent_name?: string | null;
+}
+
+export const callsApi = {
+  getToken: async (): Promise<{ token: string }> => {
+    const res = await api.get<{ success: boolean; token: string }>('/calls/token');
+    return { token: res.data.token };
+  },
+
+  makeCall: async (data: { to_phone: string; conversation_id: string }) => {
+    const res = await api.post<{ success: boolean; call_sid: string }>('/calls/make', data);
+    return res.data;
+  },
+
+  getHistory: async (conversationId: string): Promise<CallRecord[]> => {
+    const res = await api.get<{ success: boolean; data: CallRecord[] }>(`/calls/conversation/${conversationId}`);
+    return res.data.data;
+  },
+};
+
 // ── Tickets Types ─────────────────────────────────────────────────────────────
 
 export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';

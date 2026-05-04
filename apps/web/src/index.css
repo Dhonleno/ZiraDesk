@@ -271,3 +271,186 @@
 .applied-tag button:hover {
   opacity: 1;
 }
+
+.call-start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r);
+  background: var(--green-dim);
+  border: 1px solid rgba(62, 207, 142, 0.25);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font);
+}
+
+.call-start-btn:hover {
+  background: var(--green);
+  color: #fff;
+}
+
+.call-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.call-widget {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 240px;
+}
+
+.call-widget.in-progress {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.1);
+}
+
+.call-widget.failed {
+  border-color: var(--red);
+}
+
+.call-contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.call-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--teal-dim);
+  color: var(--teal);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.call-info {
+  min-width: 0;
+}
+
+.call-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-phone {
+  font-size: 11px;
+  color: var(--txt-3);
+  font-family: var(--mono);
+}
+
+.call-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--mono);
+}
+
+.call-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.call-status-dot.in-progress {
+  animation: zd-pulse-dot 1s ease infinite;
+}
+
+.call-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.call-ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  border-radius: var(--r);
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  color: var(--txt-2);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font);
+  flex: 1;
+}
+
+.call-ctrl-btn:hover {
+  background: var(--bg-4);
+}
+
+.call-ctrl-btn.active {
+  background: var(--amber-dim);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--amber);
+}
+
+.call-ctrl-btn.hangup {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  flex: 1.5;
+}
+
+.call-ctrl-btn.hangup:hover {
+  background: #dc2626;
+}
+
+.call-recording-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  max-width: 280px;
+}
+
+.recording-icon {
+  font-size: 20px;
+}
+
+.recording-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recording-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt);
+}
+
+.recording-duration {
+  font-size: 11px;
+  color: var(--txt-3);
+  font-family: var(--mono);
+}
