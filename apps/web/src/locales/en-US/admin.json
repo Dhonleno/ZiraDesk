@@ -111,6 +111,25 @@
         "message": "CSAT opening message",
         "messagePlaceholder": "Your service was closed!..."
       },
+      "inactivity": {
+        "title": "Conversation Inactivity",
+        "enabled": "Enable inactivity monitoring",
+        "enabledHint": "Automatically closes conversations with no reply",
+        "warningMinutes": "Warning time (minutes)",
+        "warningHint": "Send a warning after X minutes without reply",
+        "closeMinutes": "Close time (minutes)",
+        "closeHint": "Must be greater than warning time",
+        "warningMessage": "Warning message",
+        "warningMessageHint": "Use {{time}} and {{remaining}}",
+        "closeMessage": "Close message",
+        "validation": {
+          "closeGreaterThanWarning": "Close time must be greater than warning time"
+        }
+      },
+      "bot": {
+        "assignedMessage": "Message when assigned to agent",
+        "assignedMessageHint": "Sent to customer when an agent takes over the conversation"
+      },
       "messages": {
         "saved": "Settings saved successfully"
       }

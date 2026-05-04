@@ -14,6 +14,12 @@ interface TenantSettings {
   away_message_enabled?: boolean;
   csat_enabled?: boolean;
   csat_message?: string | null;
+  inactivity_enabled?: boolean;
+  inactivity_warning_minutes?: number;
+  inactivity_close_minutes?: number;
+  inactivity_warning_message?: string;
+  inactivity_close_message?: string;
+  bot_assigned_message?: string;
   created_at?: string;
   plan?: { id: string; name: string; slug: string; priceMonth: string };
 }

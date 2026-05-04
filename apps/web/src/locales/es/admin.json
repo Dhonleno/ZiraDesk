@@ -111,6 +111,25 @@
         "message": "Mensaje inicial del CSAT",
         "messagePlaceholder": "¡Tu atención fue finalizada!..."
       },
+      "inactivity": {
+        "title": "Inactividad de Atención",
+        "enabled": "Activar monitoreo de inactividad",
+        "enabledHint": "Cierra automáticamente conversaciones sin respuesta",
+        "warningMinutes": "Tiempo para aviso (minutos)",
+        "warningHint": "Enviar aviso después de X minutos sin respuesta",
+        "closeMinutes": "Tiempo para cerrar (minutos)",
+        "closeHint": "Debe ser mayor que el tiempo de aviso",
+        "warningMessage": "Mensaje de aviso",
+        "warningMessageHint": "Usa {{time}} y {{remaining}}",
+        "closeMessage": "Mensaje de cierre",
+        "validation": {
+          "closeGreaterThanWarning": "El tiempo de cierre debe ser mayor que el tiempo de aviso"
+        }
+      },
+      "bot": {
+        "assignedMessage": "Mensaje al transferir a un agente",
+        "assignedMessageHint": "Se envía al cliente cuando un agente toma la conversación"
+      },
       "messages": {
         "saved": "Configuración guardada con éxito"
       }

@@ -33,6 +33,10 @@ import {
 } from './conversations.service.js';
 import { getSocketServer } from '../../../socket/index.js';
 import { messageQueue } from '../../../jobs/queue.js';
+import {
+  cancelInactivityJobs,
+  scheduleInactivityCheck,
+} from '../../../jobs/inactivity.job.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
 import { sendCsatMessage } from './csat.service.js';
@@ -183,6 +187,31 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           await messageQueue.add('send', {
             ...queueData,
           });
+        }
+
+        const tenantId = tenantUser.tenantId ?? null;
+        const schemaName = tenantUser.schemaName ?? null;
+        if (tenantId && schemaName) {
+          await cancelInactivityJobs(request.params.id);
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { settings: true },
+          });
+          const settings = (tenant?.settings as Record<string, unknown> | null) ?? {};
+          const inactivityEnabled = settings.inactivity_enabled !== false;
+          const warningRaw = Number(settings.inactivity_warning_minutes ?? 30);
+          const warningMinutes = Number.isFinite(warningRaw)
+            ? Math.max(1, Math.floor(warningRaw))
+            : 30;
+
+          if (inactivityEnabled) {
+            await scheduleInactivityCheck(
+              request.params.id,
+              tenantId,
+              schemaName,
+              warningMinutes,
+            );
+          }
         }
 
         return reply.code(201).send({ success: true, data: result.message });

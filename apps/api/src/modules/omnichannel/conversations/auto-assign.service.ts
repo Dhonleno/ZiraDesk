@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Server } from 'socket.io';
 import { quoteIdent } from './protocols.js';
+import { decryptCredentials } from '../../../utils/crypto.js';
+import { sendWhatsAppTextMessage } from './csat.service.js';
 
 interface AgentCandidateRow {
   user_id: string;
@@ -9,6 +11,14 @@ interface AgentCandidateRow {
 
 interface QueueConversationRow {
   id: string;
+}
+
+interface ConversationDispatchRow {
+  id: string;
+  whatsapp: string | null;
+  phone: string | null;
+  credentials: string | object | null;
+  channel_type: string;
 }
 
 interface AutoAssignSettings {
@@ -227,6 +237,7 @@ async function resolveAgentForAssignment(
 async function persistAutoAssignment(
   prisma: PrismaClient,
   schemaName: string,
+  tenantSettings: unknown,
   conversationId: string,
   agentId: string,
   agentName: string,
@@ -267,6 +278,69 @@ async function persistAutoAssignment(
     conversationId,
     `Atendimento atribuido automaticamente para ${agentName}`,
   );
+
+  try {
+    const convRows = await prisma.$queryRawUnsafe<ConversationDispatchRow[]>(
+      `SELECT
+         c.id,
+         ct.whatsapp,
+         ct.phone,
+         ch.credentials,
+         ch.type AS channel_type
+       FROM ${conversationsRef} c
+       JOIN ${tableRef(schemaName, 'contacts')} ct ON ct.id = c.contact_id
+       JOIN ${tableRef(schemaName, 'channels')} ch ON ch.id = c.channel_id
+       WHERE c.id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+
+    const conversation = convRows[0];
+    if (!conversation || conversation.channel_type !== 'whatsapp') return true;
+
+    const credentials = conversation.credentials ? decryptCredentials(conversation.credentials) : {};
+    const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
+    const accessToken = credentials.accessToken ?? credentials.access_token;
+    const clientPhone = (conversation.whatsapp ?? conversation.phone ?? '').replace(/\D/g, '');
+    if (!phoneNumberId || !accessToken || !clientPhone) return true;
+
+    const settings = (typeof tenantSettings === 'object' && tenantSettings !== null)
+      ? (tenantSettings as Record<string, unknown>)
+      : {};
+
+    const configuredTemplate = typeof settings.bot_assigned_message === 'string'
+      ? settings.bot_assigned_message.trim()
+      : '';
+
+    const assignMessage = (configuredTemplate || [
+      '✅ Seu atendimento foi aceito!',
+      '',
+      `Você está sendo atendido por *${agentName}*.`,
+      'Em breve entraremos em contato. 😊',
+    ].join('\n')).replace(/\{\{\s*agent\s*\}\}/gi, agentName);
+
+    const sent = await sendWhatsAppTextMessage({
+      text: assignMessage,
+      to: clientPhone,
+      phoneNumberId,
+      accessToken,
+    });
+
+    if (sent) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO ${messagesRef} (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+         VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
+        conversationId,
+        assignMessage,
+      );
+    }
+  } catch (error) {
+    console.error('[AutoAssign] Failed to notify customer after assignment', {
+      conversationId,
+      agentId,
+      error,
+    });
+  }
 
   return true;
 }
@@ -335,6 +409,7 @@ export async function autoAssignConversation(
   const assigned = await persistAutoAssignment(
     prisma,
     schemaName,
+    tenant?.settings,
     conversationId,
     nextAgent.user_id,
     nextAgent.name,

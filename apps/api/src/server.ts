@@ -1,5 +1,6 @@
 import './config/env.js'; // valida env antes de qualquer coisa
 import './jobs/send-message.job.js'; // inicia o worker de mensagens
+import './jobs/inactivity.job.js'; // inicia o worker de inatividade
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';

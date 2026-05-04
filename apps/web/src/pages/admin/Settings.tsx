@@ -15,6 +15,12 @@ const settingsSchema = z.object({
   timezone: z.string().min(1),
   csat_enabled: z.boolean().default(true),
   csat_message: z.string().max(2000).optional(),
+  inactivity_enabled: z.boolean().default(true),
+  inactivity_warning_minutes: z.number().int().min(1).max(1440),
+  inactivity_close_minutes: z.number().int().min(1).max(1440),
+  inactivity_warning_message: z.string().max(2000).optional(),
+  inactivity_close_message: z.string().max(2000).optional(),
+  bot_assigned_message: z.string().max(1000).optional(),
 });
 
 type SettingsForm = z.infer<typeof settingsSchema>;
@@ -56,6 +62,7 @@ export function Settings() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<SettingsForm>({
     resolver: zodResolver(settingsSchema),
@@ -65,6 +72,19 @@ export function Settings() {
       timezone: 'America/Sao_Paulo',
       csat_enabled: true,
       csat_message: '',
+      inactivity_enabled: true,
+      inactivity_warning_minutes: 30,
+      inactivity_close_minutes: 60,
+      inactivity_warning_message:
+        'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
+      inactivity_close_message:
+        'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
+      bot_assigned_message: [
+        '✅ Seu atendimento foi aceito!',
+        '',
+        'Você está sendo atendido por *{{agent}}*.',
+        'Em breve entraremos em contato. 😊',
+      ].join('\n'),
     },
   });
 
@@ -76,6 +96,21 @@ export function Settings() {
         timezone: data.timezone ?? 'America/Sao_Paulo',
         csat_enabled: data.csat_enabled ?? true,
         csat_message: data.csat_message ?? '',
+        inactivity_enabled: data.inactivity_enabled ?? true,
+        inactivity_warning_minutes: data.inactivity_warning_minutes ?? 30,
+        inactivity_close_minutes: data.inactivity_close_minutes ?? 60,
+        inactivity_warning_message:
+          data.inactivity_warning_message
+          ?? 'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
+        inactivity_close_message:
+          data.inactivity_close_message
+          ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
+        bot_assigned_message: data.bot_assigned_message ?? [
+          '✅ Seu atendimento foi aceito!',
+          '',
+          'Você está sendo atendido por *{{agent}}*.',
+          'Em breve entraremos em contato. 😊',
+        ].join('\n'),
       });
     }
   }, [data, reset]);
@@ -85,6 +120,9 @@ export function Settings() {
       adminApi.updateSettings({
         ...values,
         csat_message: values.csat_message ?? null,
+        inactivity_warning_message: values.inactivity_warning_message ?? '',
+        inactivity_close_message: values.inactivity_close_message ?? '',
+        bot_assigned_message: values.bot_assigned_message ?? '',
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
@@ -138,6 +176,7 @@ export function Settings() {
     width: '100%',
     outline: 'none',
   };
+  const inactivityEnabled = watch('inactivity_enabled');
 
   return (
     <div className="space-y-6 max-w-xl p-6">
@@ -161,7 +200,13 @@ export function Settings() {
             ))}
           </div>
         ) : (
-          <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-5">
+          <form onSubmit={handleSubmit((v) => {
+            if (v.inactivity_close_minutes <= v.inactivity_warning_minutes) {
+              toast.error(t('tenantAdmin.settings.inactivity.validation.closeGreaterThanWarning'));
+              return;
+            }
+            mutation.mutate(v);
+          })} className="space-y-5">
             <div
               style={{
                 border: '1px solid var(--line)',
@@ -329,6 +374,129 @@ export function Settings() {
                   outline: 'none',
                 }}
               />
+            </div>
+
+            <div
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: '0.75rem',
+                padding: '0.85rem 0.9rem',
+                background: 'var(--bg-3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
+                  {t('tenantAdmin.settings.inactivity.enabled')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--txt-3)', marginTop: 2 }}>
+                  {t('tenantAdmin.settings.inactivity.enabledHint')}
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                {...register('inactivity_enabled')}
+                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
+              />
+            </div>
+
+            {inactivityEnabled && (
+              <>
+                <Input
+                  type="number"
+                  label={t('tenantAdmin.settings.inactivity.warningMinutes')}
+                  min={1}
+                  max={1440}
+                  error={errors.inactivity_warning_minutes?.message}
+                  {...register('inactivity_warning_minutes', { valueAsNumber: true })}
+                />
+
+                <Input
+                  type="number"
+                  label={t('tenantAdmin.settings.inactivity.closeMinutes')}
+                  min={1}
+                  max={1440}
+                  error={errors.inactivity_close_minutes?.message}
+                  {...register('inactivity_close_minutes', { valueAsNumber: true })}
+                />
+                <p className="text-xs -mt-3" style={{ color: 'var(--txt-3)' }}>
+                  {t('tenantAdmin.settings.inactivity.closeHint')}
+                </p>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                    {t('tenantAdmin.settings.inactivity.warningMessage')}
+                  </label>
+                  <textarea
+                    rows={3}
+                    {...register('inactivity_warning_message')}
+                    placeholder={t('tenantAdmin.settings.inactivity.warningMessageHint')}
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-3)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--txt)',
+                      borderRadius: '0.5rem',
+                      padding: '0.75rem',
+                      fontSize: '0.875rem',
+                      fontFamily: 'var(--font)',
+                      resize: 'vertical',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                    {t('tenantAdmin.settings.inactivity.closeMessage')}
+                  </label>
+                  <textarea
+                    rows={3}
+                    {...register('inactivity_close_message')}
+                    style={{
+                      width: '100%',
+                      background: 'var(--bg-3)',
+                      border: '1px solid var(--line)',
+                      color: 'var(--txt)',
+                      borderRadius: '0.5rem',
+                      padding: '0.75rem',
+                      fontSize: '0.875rem',
+                      fontFamily: 'var(--font)',
+                      resize: 'vertical',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                {t('tenantAdmin.settings.bot.assignedMessage')}
+              </label>
+              <textarea
+                rows={4}
+                {...register('bot_assigned_message')}
+                placeholder="{{agent}}"
+                style={{
+                  width: '100%',
+                  background: 'var(--bg-3)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--txt)',
+                  borderRadius: '0.5rem',
+                  padding: '0.75rem',
+                  fontSize: '0.875rem',
+                  fontFamily: 'var(--font)',
+                  resize: 'vertical',
+                  outline: 'none',
+                }}
+              />
+              <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
+                {t('tenantAdmin.settings.bot.assignedMessageHint')}
+              </p>
             </div>
 
             <div className="flex justify-end pt-2">

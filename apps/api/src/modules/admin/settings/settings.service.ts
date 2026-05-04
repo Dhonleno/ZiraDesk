@@ -13,6 +13,17 @@ const LOGO_EXT_BY_MIME: Record<string, string> = {
   'image/svg+xml': 'svg',
 };
 
+const DEFAULT_INACTIVITY_WARNING_MESSAGE =
+  'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.';
+const DEFAULT_INACTIVITY_CLOSE_MESSAGE =
+  'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊';
+const DEFAULT_BOT_ASSIGNED_MESSAGE = [
+  '✅ Seu atendimento foi aceito!',
+  '',
+  'Você está sendo atendido por *{{agent}}*.',
+  'Em breve entraremos em contato. 😊',
+].join('\n');
+
 async function ensureLogoDir() {
   await fs.mkdir(LOGO_DIR, { recursive: true });
 }
@@ -84,6 +95,15 @@ export async function getSettings(tenantId: string) {
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
+    inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,
+    inactivity_close_minutes: (s.inactivity_close_minutes as number | undefined) ?? 60,
+    inactivity_warning_message:
+      (s.inactivity_warning_message as string | undefined) ?? DEFAULT_INACTIVITY_WARNING_MESSAGE,
+    inactivity_close_message:
+      (s.inactivity_close_message as string | undefined) ?? DEFAULT_INACTIVITY_CLOSE_MESSAGE,
+    bot_assigned_message:
+      (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -109,6 +129,22 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       : {}),
     ...(data.csat_enabled !== undefined ? { csat_enabled: data.csat_enabled } : {}),
     ...(data.csat_message !== undefined ? { csat_message: data.csat_message } : {}),
+    ...(data.inactivity_enabled !== undefined ? { inactivity_enabled: data.inactivity_enabled } : {}),
+    ...(data.inactivity_warning_minutes !== undefined
+      ? { inactivity_warning_minutes: data.inactivity_warning_minutes }
+      : {}),
+    ...(data.inactivity_close_minutes !== undefined
+      ? { inactivity_close_minutes: data.inactivity_close_minutes }
+      : {}),
+    ...(data.inactivity_warning_message !== undefined
+      ? { inactivity_warning_message: data.inactivity_warning_message }
+      : {}),
+    ...(data.inactivity_close_message !== undefined
+      ? { inactivity_close_message: data.inactivity_close_message }
+      : {}),
+    ...(data.bot_assigned_message !== undefined
+      ? { bot_assigned_message: data.bot_assigned_message }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -134,6 +170,15 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
+    inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,
+    inactivity_close_minutes: (s.inactivity_close_minutes as number | undefined) ?? 60,
+    inactivity_warning_message:
+      (s.inactivity_warning_message as string | undefined) ?? DEFAULT_INACTIVITY_WARNING_MESSAGE,
+    inactivity_close_message:
+      (s.inactivity_close_message as string | undefined) ?? DEFAULT_INACTIVITY_CLOSE_MESSAGE,
+    bot_assigned_message:
+      (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
   };
 }
 

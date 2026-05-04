@@ -9,7 +9,10 @@ import {
   ensureBotInfrastructure,
   processBotMessage,
 } from '../admin/bot/bot.service.js';
-import { isWithinBusinessHours } from '../admin/business-hours/business-hours.service.js';
+import {
+  getBusinessHoursStatus,
+  isWithinBusinessHours,
+} from '../admin/business-hours/business-hours.service.js';
 import {
   buildProtocolMessage,
   callGenerateProtocol,
@@ -23,6 +26,10 @@ import {
   buildCsatThankYouMessage,
   sendWhatsAppTextMessage,
 } from '../omnichannel/conversations/csat.service.js';
+import {
+  cancelInactivityJobs,
+  scheduleInactivityCheck,
+} from '../../jobs/inactivity.job.js';
 
 interface MetaMessage {
   from: string;
@@ -139,6 +146,10 @@ interface MentionLookupRow {
   contact_name: string | null;
 }
 
+interface ActiveConversationByPhoneRow {
+  id: string;
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -250,33 +261,115 @@ async function findChannelByPhoneNumberId(
   return null;
 }
 
-async function sendAwayMessageIfNeeded({
+function getLocalWeekday(timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+  });
+  const weekday = formatter.format(new Date());
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return weekdayMap[weekday] ?? 0;
+}
+
+async function getNextOpenTime(
+  timezone: string,
+  schemaName: string,
+): Promise<string | null> {
+  const status = await getBusinessHoursStatus(timezone, prisma, schemaName);
+  if (status.next_open_day === null || !status.next_open_time) return null;
+
+  const currentDay = getLocalWeekday(timezone);
+  if (status.next_open_day === currentDay) {
+    return `hoje às ${status.next_open_time}`;
+  }
+
+  const dayNames = [
+    'domingo',
+    'segunda-feira',
+    'terça-feira',
+    'quarta-feira',
+    'quinta-feira',
+    'sexta-feira',
+    'sábado',
+  ];
+  const dayName = dayNames[status.next_open_day] ?? 'em breve';
+  return `${dayName} às ${status.next_open_time}`;
+}
+
+async function insertBotMessage(
+  conversationId: string,
+  schemaName: string,
+  content: string,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".messages (
+      id, conversation_id, sender_type, content, content_type, is_internal, created_at
+    )
+    VALUES (
+      gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW()
+    )`,
+    conversationId,
+    content,
+  );
+}
+
+async function closeConversationOutsideHours(
+  conversationId: string,
+  schemaName: string,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `UPDATE "${schemaName}".conversations
+     SET status = 'closed',
+         resolved_at = NOW()
+     WHERE id = $1::uuid
+       AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')`,
+    conversationId,
+  );
+}
+
+async function handleOutsideBusinessHours({
   tenantId,
+  tenantSettings,
   schemaName,
-  phoneNumberId,
+  channelId,
   senderPhone,
+  formattedPhone,
   channelCredentials,
 }: {
   tenantId: string;
+  tenantSettings: Record<string, unknown>;
   schemaName: string;
-  phoneNumberId: string;
+  channelId: string;
   senderPhone: string;
+  formattedPhone: string;
   channelCredentials: Record<string, string>;
-}): Promise<boolean> {
-  const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
-    'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
-    tenantId,
-  );
-  const tenantSettings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
+}): Promise<void> {
   const timezone = (tenantSettings.timezone as string | undefined) ?? 'America/Sao_Paulo';
-  const awayMessage =
-    (tenantSettings.away_message as string | undefined) ??
-    'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐';
   const awayMessageEnabled = tenantSettings.away_message_enabled !== false;
+  const awayMessage = (tenantSettings.away_message as string | undefined)
+    ?? 'Olá! No momento estamos fora do horário de atendimento.';
 
-  const isOpen = await isWithinBusinessHours(prisma, timezone, schemaName);
-  if (isOpen) return false;
-  if (!awayMessageEnabled) return true;
+  const openConversationRows = await prisma.$queryRawUnsafe<ActiveConversationByPhoneRow[]>(
+    `SELECT c.id
+     FROM "${schemaName}".conversations c
+     JOIN "${schemaName}".contacts ct ON ct.id = c.contact_id
+     WHERE c.channel_id = $1::uuid
+       AND (ct.whatsapp = $2 OR ct.phone = $2)
+       AND c.status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+     ORDER BY c.created_at DESC
+     LIMIT 1`,
+    channelId,
+    formattedPhone,
+  );
+  const conversationId = openConversationRows[0]?.id ?? null;
 
   const todayKey = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
@@ -284,46 +377,51 @@ async function sendAwayMessageIfNeeded({
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
-  const redisKey = `away_msg:${tenantId}:${senderPhone}:${todayKey}`;
+  const redisKey = conversationId
+    ? `away_conv:${conversationId}:${todayKey}`
+    : `away_phone:${tenantId}:${senderPhone}:${todayKey}`;
   const alreadySent = await redis.get(redisKey);
-  if (alreadySent) return true;
 
-  const accessToken = channelCredentials.accessToken;
-  if (!accessToken) {
-    console.warn('[WhatsApp] Away message skipped: missing access token');
-    return true;
-  }
+  if (!alreadySent && awayMessageEnabled) {
+    const nextOpenInfo = await getNextOpenTime(timezone, schemaName);
+    const fullMessage = [
+      awayMessage,
+      '',
+      nextOpenInfo
+        ? `⏰ Retornaremos ${nextOpenInfo}.`
+        : '⏰ Retorne durante nosso horário de atendimento.',
+      '',
+      'Este atendimento será encerrado. Até logo! 👋',
+    ].join('\n');
 
-  try {
-    const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: senderPhone.replace(/^\+/, ''),
-        type: 'text',
-        text: { body: awayMessage },
-      }),
-    });
-
-    if (!response.ok) {
-      const details = await response.text().catch(() => '');
-      console.warn('[WhatsApp] Away message failed', {
-        status: response.status,
-        details: details.substring(0, 500),
+    const phoneNumberId = getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id');
+    const accessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
+    if (phoneNumberId && accessToken) {
+      const sent = await sendWhatsAppTextMessage({
+        text: fullMessage,
+        to: senderPhone,
+        phoneNumberId,
+        accessToken,
       });
-      return true;
-    }
 
-    await redis.setex(redisKey, 86400, '1');
-  } catch (err) {
-    console.warn('[WhatsApp] Away message error', err);
+      if (sent) {
+        if (conversationId) {
+          await insertBotMessage(conversationId, schemaName, fullMessage);
+        }
+        await redis.setex(redisKey, 86400, '1');
+      }
+    }
   }
 
-  return true;
+  if (!conversationId) return;
+
+  await cancelInactivityJobs(conversationId);
+  await closeConversationOutsideHours(conversationId, schemaName);
+  const io = getSocketServer();
+  io.to(`tenant:${tenantId}`).emit('conversation:updated', {
+    conversationId,
+    status: 'closed',
+  });
 }
 
 async function processIncomingMessage(
@@ -353,6 +451,26 @@ async function processIncomingMessage(
   const formattedPhone = senderPhone.startsWith('55')
     ? `+${senderPhone}`
     : `+55${senderPhone}`;
+  const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
+    'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
+    tenantId,
+  );
+  const tenantSettings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
+  const timezone = (tenantSettings.timezone as string | undefined) ?? 'America/Sao_Paulo';
+  const isOpen = await isWithinBusinessHours(prisma, timezone, schemaName);
+
+  if (!isOpen) {
+    await handleOutsideBusinessHours({
+      tenantId,
+      tenantSettings,
+      schemaName,
+      channelId,
+      senderPhone,
+      formattedPhone,
+      channelCredentials,
+    });
+    return;
+  }
 
   let content = '';
   let contentType = 'text';
@@ -418,13 +536,7 @@ async function processIncomingMessage(
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
   await ensureConversationCsatInfrastructure(prisma, schemaName);
   await ensureBotInfrastructure(prisma, schemaName);
-  const outsideBusinessHours = await sendAwayMessageIfNeeded({
-    tenantId,
-    schemaName,
-    phoneNumberId,
-    senderPhone,
-    channelCredentials,
-  });
+  const outsideBusinessHours = false;
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
@@ -811,6 +923,22 @@ async function processIncomingMessage(
       conversationId: result.conversationId,
       ...result.csatPayload,
     });
+  }
+
+  await cancelInactivityJobs(result.conversationId);
+  const inactivityEnabled = tenantSettings.inactivity_enabled !== false;
+  const warningMinutesRaw = Number(tenantSettings.inactivity_warning_minutes ?? 30);
+  const warningMinutes = Number.isFinite(warningMinutesRaw)
+    ? Math.max(1, Math.floor(warningMinutesRaw))
+    : 30;
+
+  if (inactivityEnabled && isOpen) {
+    await scheduleInactivityCheck(
+      result.conversationId,
+      tenantId,
+      schemaName,
+      warningMinutes,
+    );
   }
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
