@@ -78,7 +78,7 @@ export function PauseReasons() {
   });
 
   return (
-    <div className="admin-page space-y-6">
+    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
           {t('tenantAdmin.pauseReasons.title')}
@@ -88,67 +88,62 @@ export function PauseReasons() {
         </p>
       </div>
 
-      <div className="admin-two-col">
-        <section className="rounded-xl p-5 space-y-4" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-          <h2 style={{ margin: 0, color: 'var(--txt)', fontSize: 15, fontWeight: 700 }}>
-            {t('tenantAdmin.pauseReasons.new')}
-          </h2>
+      <div className="rounded-xl p-5 space-y-4" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+        <h2 style={{ margin: 0, color: 'var(--txt)', fontSize: 15, fontWeight: 700 }}>
+          {t('tenantAdmin.pauseReasons.new')}
+        </h2>
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            <input
-              value={newReason.label}
-              onChange={(event) => setNewReason((cur) => ({ ...cur, label: event.target.value }))}
-              placeholder={t('tenantAdmin.pauseReasons.fields.label')}
-              style={inputStyle}
-              maxLength={100}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 120px', gap: 8 }}>
-              <input
-                value={newReason.icon}
-                onChange={(event) => setNewReason((cur) => ({ ...cur, icon: event.target.value }))}
-                placeholder={t('tenantAdmin.pauseReasons.fields.icon')}
-                style={inputStyle}
-                maxLength={10}
-              />
-              <input
-                type="number"
-                min={0}
-                value={newReason.sort_order}
-                onChange={(event) => setNewReason((cur) => ({ ...cur, sort_order: Number(event.target.value) || 0 }))}
-                placeholder={t('tenantAdmin.pauseReasons.fields.sort')}
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                type="button"
-                onClick={() =>
-                  createMutation.mutate({
-                    label: newReason.label.trim(),
-                    icon: newReason.icon.trim() || '⏸️',
-                    sort_order: newReason.sort_order,
-                  })
-                }
-                disabled={!newReason.label.trim() || createMutation.isPending}
-                loading={createMutation.isPending}
-              >
-                {t('tenantAdmin.common.save')}
-              </Button>
-            </div>
-          </div>
-        </section>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px auto', gap: 8 }}>
+          <input
+            value={newReason.label}
+            onChange={(event) => setNewReason((cur) => ({ ...cur, label: event.target.value }))}
+            placeholder={t('tenantAdmin.pauseReasons.fields.label')}
+            style={inputStyle}
+            maxLength={100}
+          />
+          <input
+            value={newReason.icon}
+            onChange={(event) => setNewReason((cur) => ({ ...cur, icon: event.target.value }))}
+            placeholder={t('tenantAdmin.pauseReasons.fields.icon')}
+            style={inputStyle}
+            maxLength={10}
+          />
+          <input
+            type="number"
+            min={0}
+            value={newReason.sort_order}
+            onChange={(event) => setNewReason((cur) => ({ ...cur, sort_order: Number(event.target.value) || 0 }))}
+            placeholder={t('tenantAdmin.pauseReasons.fields.sort')}
+            style={inputStyle}
+          />
+          <Button
+            type="button"
+            onClick={() =>
+              createMutation.mutate({
+                label: newReason.label.trim(),
+                icon: newReason.icon.trim() || '⏸️',
+                sort_order: newReason.sort_order,
+              })
+            }
+            disabled={!newReason.label.trim() || createMutation.isPending}
+            loading={createMutation.isPending}
+          >
+            {t('tenantAdmin.common.save')}
+          </Button>
+        </div>
+      </div>
 
-        <section className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-          {isLoading ? (
-            Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
-            ))
-          ) : reasons.length === 0 ? (
-            <p style={{ margin: 0, padding: 12, color: 'var(--txt-3)', fontSize: 13 }}>
-              {t('tenantAdmin.common.noResults')}
-            </p>
-          ) : (
-            reasons.map((reason) => {
+      <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
+          ))
+        ) : reasons.length === 0 ? (
+          <p style={{ margin: 0, padding: 12, color: 'var(--txt-3)', fontSize: 13 }}>
+            {t('tenantAdmin.common.noResults')}
+          </p>
+        ) : (
+          reasons.map((reason) => {
             const isEditing = editingId === reason.id;
             const draft = isEditing ? editingDraft : null;
 
@@ -291,9 +286,8 @@ export function PauseReasons() {
                 </div>
               </div>
             );
-            })
-          )}
-        </section>
+          })
+        )}
       </div>
     </div>
   );

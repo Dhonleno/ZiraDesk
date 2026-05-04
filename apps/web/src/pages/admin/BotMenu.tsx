@@ -483,7 +483,7 @@ export function BotMenu() {
     addOptionMutation.isPending || addSubOptionMutation.isPending || updateOptionMutation.isPending;
 
   return (
-    <div className="admin-page space-y-6">
+    <div style={{ padding: 24, maxWidth: 980, overflow: 'auto' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ color: 'var(--txt)', fontSize: 24, fontWeight: 700, margin: 0 }}>
           {t('tenantAdmin.bot.title')}
@@ -493,24 +493,22 @@ export function BotMenu() {
         </p>
       </div>
 
-      {isLoading ? (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} style={{ height: 42, background: 'var(--bg-3)', borderRadius: 'var(--r)', opacity: 0.55 }} />
-          ))}
-        </div>
-      ) : (
-        <div className="admin-two-col">
-          <section
-            style={{
-              background: 'var(--bg-2)',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--r-lg)',
-              padding: 20,
-              display: 'grid',
-              gap: 16,
-            }}
-          >
+      <div
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--r-lg)',
+          padding: 20,
+        }}
+      >
+        {isLoading ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} style={{ height: 42, background: 'var(--bg-3)', borderRadius: 'var(--r)', opacity: 0.55 }} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 18 }}>
             <button
               type="button"
               onClick={() => {
@@ -558,46 +556,17 @@ export function BotMenu() {
               {t('tenantAdmin.bot.active')}
             </button>
 
-            {isActive ? (
+            {isActive && (
               <div style={{ color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid rgba(0,201,167,.22)', borderRadius: 'var(--r)', padding: '9px 12px', fontSize: 13 }}>
                 {t('tenantAdmin.bot.activeHint')}
               </div>
-            ) : null}
+            )}
 
             <label style={{ display: 'grid', gap: 8 }}>
               <span style={labelStyle}>{t('tenantAdmin.bot.greeting')}</span>
               <textarea value={greeting} onChange={(event) => setGreeting(event.target.value)} rows={4} style={textareaStyle} />
             </label>
 
-            <label style={{ display: 'grid', gap: 8 }}>
-              <span style={labelStyle}>{t('tenantAdmin.bot.invalidMsg')}</span>
-              <textarea value={invalidMsg} onChange={(event) => setInvalidMsg(event.target.value)} rows={3} style={textareaStyle} />
-            </label>
-
-            <label style={{ display: 'grid', gap: 8 }}>
-              <span style={labelStyle}>{t('tenantAdmin.bot.footer')}</span>
-              <textarea value={footer} onChange={(event) => setFooter(event.target.value)} rows={2} style={textareaStyle} />
-            </label>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button type="button" onClick={saveMenu} loading={updateMenuMutation.isPending}>
-                {updateMenuMutation.isPending
-                  ? t('tenantAdmin.common.saving')
-                  : t('tenantAdmin.settings.saveSettings')}
-              </Button>
-            </div>
-          </section>
-
-          <section
-            style={{
-              background: 'var(--bg-2)',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--r-lg)',
-              padding: 20,
-              display: 'grid',
-              gap: 16,
-            }}
-          >
             <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
               <div
                 style={{
@@ -652,6 +621,16 @@ export function BotMenu() {
               )}
             </div>
 
+            <label style={{ display: 'grid', gap: 8 }}>
+              <span style={labelStyle}>{t('tenantAdmin.bot.invalidMsg')}</span>
+              <textarea value={invalidMsg} onChange={(event) => setInvalidMsg(event.target.value)} rows={3} style={textareaStyle} />
+            </label>
+
+            <label style={{ display: 'grid', gap: 8 }}>
+              <span style={labelStyle}>{t('tenantAdmin.bot.footer')}</span>
+              <textarea value={footer} onChange={(event) => setFooter(event.target.value)} rows={2} style={textareaStyle} />
+            </label>
+
             <div style={{ display: 'grid', gap: 8 }}>
               <span style={labelStyle}>{t('tenantAdmin.bot.preview')}</span>
               <pre
@@ -671,9 +650,17 @@ export function BotMenu() {
                 {preview || t('tenantAdmin.bot.emptyPreview')}
               </pre>
             </div>
-          </section>
-        </div>
-      )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button type="button" onClick={saveMenu} loading={updateMenuMutation.isPending}>
+                {updateMenuMutation.isPending
+                  ? t('tenantAdmin.common.saving')
+                  : t('tenantAdmin.settings.saveSettings')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <OptionModal
         open={isOptionModalOpen}
@@ -764,3 +751,4 @@ const iconButtonStyle: CSSProperties = {
   fontSize: 12,
   fontFamily: 'var(--font)',
 };
+
