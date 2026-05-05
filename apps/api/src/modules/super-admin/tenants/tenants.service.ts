@@ -427,12 +427,31 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_types (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(80) NOT NULL,
+      icon        VARCHAR(20) NOT NULL DEFAULT '🎫',
+      color       VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX "${schemaName}_idx_ticket_types_name_unique"
+    ON "${schemaName}".ticket_types (LOWER(name))
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".tickets (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
       organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
       conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
       source_conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
+      type_id         UUID REFERENCES "${schemaName}".ticket_types(id) ON DELETE SET NULL,
       title           VARCHAR(255) NOT NULL,
       description     TEXT,
       status          VARCHAR(30)  NOT NULL DEFAULT 'open',
@@ -446,6 +465,11 @@ async function createTenantTables(schemaName: string): Promise<void> {
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_tickets_type_id"
+    ON "${schemaName}".tickets(type_id)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -475,6 +499,25 @@ async function createTenantTables(schemaName: string): Promise<void> {
       is_internal BOOLEAN      NOT NULL DEFAULT FALSE,
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_attachments (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id   UUID REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      comment_id  UUID REFERENCES "${schemaName}".ticket_comments(id) ON DELETE CASCADE,
+      user_id     UUID REFERENCES "${schemaName}".users(id),
+      filename    VARCHAR(255) NOT NULL,
+      file_url    VARCHAR(500) NOT NULL,
+      file_size   INTEGER,
+      mime_type   VARCHAR(100),
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_ticket_attachments_ticket"
+    ON "${schemaName}".ticket_attachments(ticket_id)
   `);
 
   await prisma.$executeRawUnsafe(`

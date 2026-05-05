@@ -10,6 +10,7 @@ export const createTicketSchema = z.object({
   status:          z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).default('open'),
   priority:        z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   category:        z.string().max(100).optional(),
+  type_id:         z.string().uuid().nullable().optional(),
   assigned_to:     z.string().uuid().optional(),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),

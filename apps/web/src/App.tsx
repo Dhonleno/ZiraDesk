@@ -28,6 +28,7 @@ import { AutoAssign as AdminAutoAssign } from './pages/admin/AutoAssign';
 import { PauseReasons as AdminPauseReasons } from './pages/admin/PauseReasons';
 import { Skills as AdminSkills } from './pages/admin/Skills';
 import { ConversationTags as AdminConversationTags } from './pages/admin/ConversationTags';
+import { TicketTypes as AdminTicketTypes } from './pages/admin/TicketTypes';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -128,6 +129,7 @@ export function App() {
               <Route path="pause-reasons" element={<AdminPauseReasons />} />
               <Route path="skills" element={<AdminSkills />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
+              <Route path="ticket-types" element={<AdminTicketTypes />} />
               <Route path="conversation-tags" element={<AdminConversationTags />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

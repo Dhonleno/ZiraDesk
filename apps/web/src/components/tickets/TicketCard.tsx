@@ -73,6 +73,18 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
         </span>
         <TicketStatusBadge status={ticket.status} />
         <TicketPriorityBadge priority={ticket.priority} size="sm" />
+        {ticket.type_name && ticket.type_color ? (
+          <span
+            className="ticket-type-badge"
+            style={{
+              background: `${ticket.type_color}22`,
+              color: ticket.type_color,
+              borderColor: `${ticket.type_color}44`,
+            }}
+          >
+            {ticket.type_icon ?? '🎫'} {ticket.type_name}
+          </span>
+        ) : null}
       </div>
 
       {/* Row 2: title */}

@@ -127,6 +127,13 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        <AdminNavItem to="/admin/ticket-types" label={t('tenantAdmin.nav.ticketTypes')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <path d="M3.2 4.2h8.6a1.2 1.2 0 0 1 1.2 1.2v1.1a1 1 0 0 0-.8.9.98.98 0 0 0 .8.9v1.2a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 9.6V8.4a1 1 0 0 0 .8-.9 1 1 0 0 0-.8-.9V5.4a1.2 1.2 0 0 1 1.2-1.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            <path d="M6 6.4h3M6 8.6h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        </AdminNavItem>
+
         <AdminNavItem to="/admin/conversation-tags" label={t('tenantAdmin.nav.conversationTags')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M1.8 2h5l6.2 6.2-4.8 4.8L2 6.8V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />

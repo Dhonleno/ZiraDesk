@@ -228,6 +228,17 @@ export interface PauseReason {
   created_at: string;
 }
 
+export interface TicketType {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Skill {
   id: string;
   number: number;
@@ -762,6 +773,31 @@ export const adminApi = {
     },
   },
 
+  ticketTypes: {
+    list: async (): Promise<TicketType[]> => {
+      const res = await api.get<{ success: boolean; data: TicketType[] }>('/admin/ticket-types');
+      return res.data.data;
+    },
+
+    create: async (data: { name: string; icon?: string; color?: string; sort_order?: number }): Promise<TicketType> => {
+      const res = await api.post<{ success: boolean; data: TicketType }>('/admin/ticket-types', data);
+      return res.data.data;
+    },
+
+    update: async (
+      id: string,
+      data: Partial<{ name: string; icon: string; color: string; sort_order: number; is_active: boolean }>,
+    ): Promise<TicketType> => {
+      const res = await api.patch<{ success: boolean; data: TicketType }>(`/admin/ticket-types/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<TicketType> => {
+      const res = await api.delete<{ success: boolean; data: TicketType }>(`/admin/ticket-types/${id}`);
+      return res.data.data;
+    },
+  },
+
   skills: {
     list: async (): Promise<Skill[]> => {
       const res = await api.get<{ success: boolean; data: Skill[] }>('/admin/skills');
@@ -915,6 +951,10 @@ export interface Ticket {
   organization_id?: string | null;
   conversation_id: string | null;
   source_conversation_id?: string | null;
+  type_id?: string | null;
+  type_name?: string | null;
+  type_icon?: string | null;
+  type_color?: string | null;
   title:           string;
   description:     string | null;
   status:          TicketStatus;
@@ -944,6 +984,18 @@ export interface TicketComment {
   created_at:    string;
   author_name:   string | null;
   author_avatar: string | null;
+}
+
+export interface TicketAttachment {
+  id: string;
+  ticket_id: string;
+  comment_id: string | null;
+  user_id: string | null;
+  filename: string;
+  file_url: string;
+  file_size: number | null;
+  mime_type: string | null;
+  created_at: string;
 }
 
 export interface TicketTimelineEvent {
@@ -997,6 +1049,7 @@ export interface CreateTicketPayload {
   status?:         TicketStatus;
   priority?:       TicketPriority;
   category?:       string;
+  type_id?:        string | null;
   assigned_to?:    string;
   contact_id?:     string;
   organization_id?: string;
@@ -1569,6 +1622,39 @@ export const ticketsApi = {
 
   deleteComment: async (ticketId: string, commentId: string) => {
     const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(`/tickets/${ticketId}/comments/${commentId}`);
+    return res.data;
+  },
+
+  listAttachments: async (ticketId: string): Promise<TicketAttachment[]> => {
+    const res = await api.get<{ success: boolean; data: TicketAttachment[] }>(`/tickets/${ticketId}/attachments`);
+    return res.data.data;
+  },
+
+  uploadAttachment: async (ticketId: string, file: File, commentId?: string): Promise<TicketAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    if (commentId) {
+      form.append('comment_id', commentId);
+    }
+
+    const res = await api.post<{ success: boolean; data: TicketAttachment }>(
+      `/tickets/${ticketId}/attachments`,
+      form,
+    );
+    return res.data.data;
+  },
+
+  deleteAttachment: async (attachmentId: string): Promise<{ deleted: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(
+      `/tickets/attachments/${attachmentId}`,
+    );
+    return res.data.data;
+  },
+
+  downloadAttachment: async (attachmentId: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/tickets/attachments/${attachmentId}/content`, {
+      responseType: 'blob',
+    });
     return res.data;
   },
 };

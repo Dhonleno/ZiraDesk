@@ -1,3 +1,4 @@
+import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
 import { hasRole } from '../../middleware/rbac.js';
@@ -19,6 +20,10 @@ import {
   listComments,
   addComment,
   deleteComment,
+  listAttachments,
+  addAttachment,
+  deleteAttachment,
+  readAttachmentContent,
   getTicketTimeline,
   getStats,
   NotFoundError,
@@ -28,6 +33,13 @@ import {
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
 
 export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    limits: {
+      fileSize: 15 * 1024 * 1024,
+      files: 1,
+    },
+  });
+
   // GET /api/tickets
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const parsed = listTicketsQuerySchema.safeParse(request.query);
@@ -193,6 +205,120 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(404).send({ success: false, error: { message: err.message } });
         if (err instanceof ForbiddenError)
           return reply.code(403).send({ success: false, error: { message: err.message } });
+        throw err;
+      }
+    },
+  );
+
+  // GET /api/tickets/:id/attachments
+  app.get<{ Params: { id: string } }>('/:id/attachments', { preHandler: guard }, async (request, reply) => {
+    try {
+      const attachments = await listAttachments(request.params.id);
+      return reply.send({ success: true, data: attachments });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/tickets/:id/attachments
+  app.post<{ Params: { id: string } }>('/:id/attachments', { preHandler: guard }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Content-Type deve ser multipart/form-data' },
+      });
+    }
+
+    let fileBuffer: Buffer | null = null;
+    let fileName = '';
+    let mimeType = '';
+    let commentId: string | null = null;
+
+    for await (const part of request.parts()) {
+      if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+        fileBuffer = await part.toBuffer();
+        fileName = part.filename;
+        mimeType = part.mimetype;
+        continue;
+      }
+
+      if (part.type === 'field' && part.fieldname === 'comment_id') {
+        const rawValue = String(part.value ?? '').trim();
+        commentId = rawValue || null;
+        continue;
+      }
+
+      if (part.type === 'file') {
+        await part.toBuffer();
+      }
+    }
+
+    if (!fileBuffer || !fileName || !mimeType) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Arquivo não enviado' },
+      });
+    }
+
+    try {
+      const data = await addAttachment({
+        ticketId: request.params.id,
+        commentId,
+        userId: request.user.id,
+        fileName,
+        mimeType,
+        buffer: fileBuffer,
+      });
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // DELETE /api/tickets/attachments/:attachmentId
+  app.delete<{ Params: { attachmentId: string } }>(
+    '/attachments/:attachmentId',
+    { preHandler: guard },
+    async (request, reply) => {
+      try {
+        const result = await deleteAttachment(request.params.attachmentId, request.user.id);
+        return reply.send({ success: true, data: result });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        if (err instanceof ForbiddenError) {
+          return reply.code(403).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // GET /api/tickets/attachments/:attachmentId/content
+  app.get<{ Params: { attachmentId: string } }>(
+    '/attachments/:attachmentId/content',
+    { preHandler: guard },
+    async (request, reply) => {
+      try {
+        const { content, filename, mimeType } = await readAttachmentContent(request.params.attachmentId);
+        reply.header('Content-Type', mimeType);
+        reply.header('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
+        reply.header('Cache-Control', 'private, max-age=3600');
+        return reply.send(content);
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
         throw err;
       }
     },

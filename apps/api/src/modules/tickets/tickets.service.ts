@@ -1,5 +1,8 @@
 import { prisma } from '../../config/database.js';
 import { getSocketServer } from '../../socket/index.js';
+import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import type {
   CreateTicketInput,
   UpdateTicketInput,
@@ -29,6 +32,7 @@ interface TicketRow {
   organization_id:  string | null;
   conversation_id:  string | null;
   source_conversation_id: string | null;
+  type_id:          string | null;
   title:            string;
   description:      string | null;
   status:           string;
@@ -45,6 +49,9 @@ interface TicketRow {
   assignee_avatar:  string | null;
   contact_name:     string | null;
   organization_name: string | null;
+  type_name:        string | null;
+  type_icon:        string | null;
+  type_color:       string | null;
 }
 
 interface CommentRow {
@@ -56,6 +63,18 @@ interface CommentRow {
   created_at:  Date;
   author_name:   string | null;
   author_avatar: string | null;
+}
+
+interface TicketAttachmentRow {
+  id: string;
+  ticket_id: string;
+  comment_id: string | null;
+  user_id: string | null;
+  filename: string;
+  file_url: string;
+  file_size: number | null;
+  mime_type: string | null;
+  created_at: Date;
 }
 
 interface StatsRow {
@@ -90,6 +109,41 @@ function toPgArray(arr: string[]): string {
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
 }
 
+const ATTACHMENTS_BASE_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'tickets');
+const ALLOWED_ATTACHMENT_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024;
+
+function sanitizeFileName(fileName: string): string {
+  const base = path.basename(fileName).trim();
+  const normalized = base.replace(/[^\w.\-()\s]/g, '_').replace(/\s+/g, '_');
+  return normalized || 'arquivo';
+}
+
+async function ensureAttachmentDir(ticketId: string): Promise<string> {
+  const dir = path.join(ATTACHMENTS_BASE_DIR, ticketId);
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
+}
+
+function ensurePathInside(baseDir: string, targetPath: string): void {
+  const resolvedBase = path.resolve(baseDir);
+  const resolvedTarget = path.resolve(targetPath);
+  if (!resolvedTarget.startsWith(resolvedBase)) {
+    throw new ForbiddenError('Caminho de arquivo inválido');
+  }
+}
+
 type RawExecutor = typeof prisma;
 let ticketInfraEnsured = false;
 
@@ -97,8 +151,36 @@ async function ensureTicketInfrastructure(): Promise<void> {
   if (ticketInfraEnsured) return;
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_types (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(80) NOT NULL,
+      icon VARCHAR(20) NOT NULL DEFAULT '🎫',
+      color VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_types_name_unique
+    ON ticket_types (LOWER(name))
+  `);
+
+  await prisma.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS type_id UUID REFERENCES ticket_types(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_tickets_type_id
+    ON tickets(type_id)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -117,6 +199,25 @@ async function ensureTicketInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
     ON ticket_events(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      comment_id UUID REFERENCES ticket_comments(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      filename VARCHAR(255) NOT NULL,
+      file_url VARCHAR(500) NOT NULL,
+      file_size INTEGER,
+      mime_type VARCHAR(100),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
+    ON ticket_attachments(ticket_id)
   `);
 
   ticketInfraEnsured = true;
@@ -174,17 +275,21 @@ const SORT_COLUMNS: Record<string, string> = {
 
 const BASE_SELECT = `
   SELECT
-    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.title, t.description,
+    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.title, t.description,
     t.status, t.priority, t.category, t.assigned_to, t.resolved_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
     ct.name       AS contact_name,
-    o.name        AS organization_name
+    o.name        AS organization_name,
+    tt.name       AS type_name,
+    tt.icon       AS type_icon,
+    tt.color      AS type_color
   FROM tickets t
   LEFT JOIN users         u  ON u.id  = t.assigned_to
   LEFT JOIN contacts      ct ON ct.id = t.contact_id
-  LEFT JOIN organizations o  ON o.id  = t.organization_id`;
+  LEFT JOIN organizations o  ON o.id  = t.organization_id
+  LEFT JOIN ticket_types  tt ON tt.id = t.type_id`;
 
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery) {
@@ -253,19 +358,21 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `INSERT INTO tickets
-       (contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
+       (contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
         assigned_to, due_date, tags)
      VALUES
-       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10::uuid, $11::timestamptz, $12::text[])
+       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name`,
+       NULL AS contact_name,  NULL AS organization_name,
+       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
     data.contact_id      ?? null,
     data.organization_id ?? null,
     data.conversation_id ?? null,
     data.source_conversation_id ?? null,
+    data.type_id ?? null,
     data.title,
     data.description     ?? null,
     data.status,
@@ -312,6 +419,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     newStatus !== 'resolved' && old.status === 'resolved' ? 'NULL'  : null;
 
   const tagsLiteral  = data.tags !== undefined ? toPgArray(data.tags) : null;
+  const hasTypeId = Object.prototype.hasOwnProperty.call(data, 'type_id');
+  const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `UPDATE tickets SET
@@ -321,22 +430,26 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        priority        = COALESCE($4,        priority),
        category        = COALESCE($5,        category),
        assigned_to     = COALESCE($6::uuid,  assigned_to),
-       due_date        = COALESCE($7::timestamptz, due_date),
-       tags            = COALESCE($8::text[], tags),
+       type_id         = CASE WHEN $7::boolean THEN $8::uuid ELSE type_id END,
+       due_date        = COALESCE($9::timestamptz, due_date),
+       tags            = COALESCE($10::text[], tags),
        resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
        updated_at      = NOW()
-     WHERE id = $9::uuid
+     WHERE id = $11::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name`,
+       NULL AS contact_name,  NULL AS organization_name,
+       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
     data.title          ?? null,
     data.description    ?? null,
     data.status         ?? null,
     data.priority       ?? null,
     data.category       ?? null,
     data.assigned_to    ?? null,
+    hasTypeId,
+    typeIdValue,
     data.due_date       ?? null,
     tagsLiteral,
     id,
@@ -438,10 +551,11 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name`,
+       NULL AS contact_name,  NULL AS organization_name,
+       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
     userId, id,
   );
 
@@ -583,6 +697,145 @@ export async function deleteComment(commentId: string, userId: string, tenantId:
   } catch { /* socket não inicializado em testes */ }
 
   return { deleted: true };
+}
+
+/* ── attachments ─────────────────────────────────────────────────────────── */
+export async function listAttachments(ticketId: string): Promise<TicketAttachmentRow[]> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
+    `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+     FROM ticket_attachments
+     WHERE ticket_id = $1::uuid
+     ORDER BY created_at DESC`,
+    ticketId,
+  );
+
+  return rows;
+}
+
+export async function addAttachment(params: {
+  ticketId: string;
+  commentId?: string | null;
+  userId: string;
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+}): Promise<TicketAttachmentRow> {
+  await ensureTicketInfrastructure();
+  await getTicket(params.ticketId);
+
+  if (!ALLOWED_ATTACHMENT_MIME.has(params.mimeType)) {
+    throw new ForbiddenError('Tipo de arquivo não permitido');
+  }
+
+  if (params.buffer.length > MAX_ATTACHMENT_SIZE) {
+    throw new ForbiddenError('Arquivo excede o limite de 15MB');
+  }
+
+  if (params.commentId) {
+    const commentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM ticket_comments
+       WHERE id = $1::uuid
+         AND ticket_id = $2::uuid
+       LIMIT 1`,
+      params.commentId,
+      params.ticketId,
+    );
+
+    if (!commentRows[0]) {
+      throw new NotFoundError('Comentário');
+    }
+  }
+
+  const attachmentId = randomUUID();
+  const safeName = sanitizeFileName(params.fileName);
+  const storedFileName = `${attachmentId}-${safeName}`;
+  const dir = await ensureAttachmentDir(params.ticketId);
+  const filePath = path.join(dir, storedFileName);
+  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
+  await fs.writeFile(filePath, params.buffer);
+
+  const fileUrl = `/api/tickets/attachments/${attachmentId}/content`;
+
+  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
+    `INSERT INTO ticket_attachments (id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8)
+     RETURNING id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at`,
+    attachmentId,
+    params.ticketId,
+    params.commentId ?? null,
+    params.userId,
+    safeName,
+    fileUrl,
+    params.buffer.length,
+    params.mimeType,
+  );
+
+  return rows[0]!;
+}
+
+export async function deleteAttachment(attachmentId: string, userId: string): Promise<{ deleted: true }> {
+  await ensureTicketInfrastructure();
+
+  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
+    `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+     FROM ticket_attachments
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    attachmentId,
+  );
+
+  const attachment = rows[0];
+  if (!attachment) throw new NotFoundError('Anexo');
+  if (!attachment.user_id || attachment.user_id !== userId) {
+    throw new ForbiddenError('Você não pode excluir este anexo');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ticket_attachments
+     WHERE id = $1::uuid`,
+    attachmentId,
+  );
+
+  const storedFileName = `${attachment.id}-${sanitizeFileName(attachment.filename)}`;
+  const filePath = path.join(ATTACHMENTS_BASE_DIR, attachment.ticket_id, storedFileName);
+  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
+  await fs.rm(filePath, { force: true }).catch(() => undefined);
+
+  return { deleted: true };
+}
+
+export async function readAttachmentContent(attachmentId: string): Promise<{
+  mimeType: string;
+  filename: string;
+  content: Buffer;
+}> {
+  await ensureTicketInfrastructure();
+
+  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
+    `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+     FROM ticket_attachments
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    attachmentId,
+  );
+
+  const attachment = rows[0];
+  if (!attachment) throw new NotFoundError('Anexo');
+
+  const storedFileName = `${attachment.id}-${sanitizeFileName(attachment.filename)}`;
+  const filePath = path.join(ATTACHMENTS_BASE_DIR, attachment.ticket_id, storedFileName);
+  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
+  const content = await fs.readFile(filePath);
+
+  return {
+    mimeType: attachment.mime_type ?? 'application/octet-stream',
+    filename: attachment.filename,
+    content,
+  };
 }
 
 /* ── getTicketTimeline ───────────────────────────────────────────────────── */

@@ -110,34 +110,23 @@ export function TicketComments({ ticketId }: Props) {
           </p>
         )}
         {comments.map((c) => (
-          <div key={c.id} style={{
-            display: 'flex', gap: 10,
-            opacity: c.is_internal ? 0.85 : 1,
-            background: c.is_internal ? 'var(--amber-dim)' : 'transparent',
-            borderRadius: c.is_internal ? 'var(--r)' : 0,
-            padding: c.is_internal ? '8px 10px' : 0,
-            border: c.is_internal ? '1px solid rgba(245,158,11,.2)' : 'none',
-          }}>
+          <div key={c.id} className={`ticket-comment ${c.is_internal ? 'internal' : 'public'}`}>
             <Avatar name={c.author_name ?? 'U'} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
                   {c.author_name ?? 'Usuário'}
                 </span>
+                <span className={`comment-visibility-badge ${c.is_internal ? 'internal' : 'public'}`}>
+                  {c.is_internal ? '🔒 Interno' : '🌐 Público'}
+                </span>
                 <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>{formatRelative(c.created_at)}</span>
-                {c.is_internal && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--r-pill)',
-                    background: 'var(--amber-dim)', color: 'var(--amber)',
-                  }}>
-                    {t('tickets.comments.internal')}
-                  </span>
-                )}
                 {c.user_id === user?.id && (
                   <button
                     onClick={() => deleteMutation.mutate(c.id)}
                     disabled={deleteMutation.isPending}
                     title={t('tickets.comments.delete')}
+                    aria-label={t('tickets.comments.delete')}
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
                       color: 'var(--txt-3)', display: 'flex', alignItems: 'center', padding: 2,
                       borderRadius: 4, lineHeight: 1 }}
@@ -159,33 +148,47 @@ export function TicketComments({ ticketId }: Props) {
       </div>
 
       {/* Input area */}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={t('tickets.comments.placeholder')}
-          rows={3}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e); }}
-          style={{
-            width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 72,
-            padding: '8px 10px', borderRadius: 'var(--r)', fontSize: 13,
-            background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--txt)',
-            outline: 'none', fontFamily: 'var(--font)', lineHeight: 1.5,
-          }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--txt-2)' }}>
-            <input
-              type="checkbox"
-              checked={isInternal}
-              onChange={(e) => setIsInternal(e.target.checked)}
-              style={{ accentColor: 'var(--amber)', width: 14, height: 14 }}
-            />
-            {t('tickets.comments.internal')}
-          </label>
-          <div style={{ marginLeft: 'auto' }}>
+      <form onSubmit={handleSubmit}>
+        <div className={`comment-composer ${isInternal ? 'internal' : 'public'}`}>
+          <div className="comment-type-toggle">
+            <button
+              type="button"
+              className={!isInternal ? 'active' : ''}
+              onClick={() => setIsInternal(false)}
+            >
+              🌐 Público
+              <span className="toggle-hint">Visível ao cliente</span>
+            </button>
+            <button
+              type="button"
+              className={isInternal ? 'active' : ''}
+              onClick={() => setIsInternal(true)}
+            >
+              🔒 Interno
+              <span className="toggle-hint">Apenas equipe</span>
+            </button>
+          </div>
+
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={isInternal ? 'Nota interna — não visível ao cliente...' : 'Comentário público — visível ao cliente...'}
+            className="zd-textarea comment-textarea"
+            rows={3}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e); }}
+            style={{
+              width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 72,
+              lineHeight: 1.5,
+            }}
+          />
+
+          <div className="comment-footer">
             <Button type="submit" loading={addMutation.isPending} disabled={!content.trim()}>
-              {addMutation.isPending ? t('tickets.comments.sending') : t('tickets.comments.send')}
+              {addMutation.isPending
+                ? t('tickets.comments.sending')
+                : isInternal
+                  ? '🔒 Adicionar nota'
+                  : '💬 Comentar'}
             </Button>
           </div>
         </div>

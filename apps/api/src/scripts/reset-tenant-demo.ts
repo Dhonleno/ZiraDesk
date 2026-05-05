@@ -51,6 +51,9 @@ async function main() {
       IF to_regclass('ticket_events') IS NOT NULL THEN
         DELETE FROM ticket_events;
       END IF;
+      IF to_regclass('ticket_attachments') IS NOT NULL THEN
+        DELETE FROM ticket_attachments;
+      END IF;
     END
     $$;
   `);
@@ -151,7 +154,41 @@ async function main() {
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS contact_id      UUID REFERENCES contacts(id)      ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL
+    ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS type_id UUID
+  `);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS ticket_types (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(80) NOT NULL,
+      icon VARCHAR(20) NOT NULL DEFAULT '🎫',
+      color VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_types_name_unique
+    ON ticket_types (LOWER(name))
+  `);
+
+  await exec(`
+    ALTER TABLE tickets
+    DROP CONSTRAINT IF EXISTS tickets_type_id_fkey
+  `);
+
+  await exec(`
+    ALTER TABLE tickets
+    ADD CONSTRAINT tickets_type_id_fkey
+    FOREIGN KEY (type_id) REFERENCES ticket_types(id) ON DELETE SET NULL
+  `);
+
+  await exec(`
+    CREATE INDEX IF NOT EXISTS idx_tickets_type_id ON tickets(type_id)
   `);
 
   await exec(`
@@ -168,6 +205,22 @@ async function main() {
   `);
 
   await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events(ticket_id)`);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS ticket_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      comment_id UUID REFERENCES ticket_comments(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      filename VARCHAR(255) NOT NULL,
+      file_url VARCHAR(500) NOT NULL,
+      file_size INTEGER,
+      mime_type VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id)`);
 
   // Recriar canal WhatsApp com credenciais do env (se definido)
   const credentials = buildWhatsappChannelCredentials();

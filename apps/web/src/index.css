@@ -167,6 +167,111 @@
   padding: 1px 4px;
 }
 
+.ticket-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.comment-composer.internal {
+  background: rgba(245, 158, 11, .05);
+  border: 1px solid rgba(245, 158, 11, .2);
+  border-radius: var(--r-lg);
+  padding: 12px;
+}
+
+.comment-composer.public {
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: 12px;
+}
+
+.comment-type-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  background: var(--bg-4);
+  border-radius: var(--r);
+  padding: 3px;
+}
+
+.comment-type-toggle button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border: none;
+  background: none;
+  border-radius: var(--r);
+  color: var(--txt-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--font);
+}
+
+.comment-type-toggle button.active {
+  background: var(--bg-1, var(--bg));
+  color: var(--txt);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+}
+
+.toggle-hint {
+  font-size: 10px;
+  color: var(--txt-3);
+}
+
+.comment-textarea {
+  margin-bottom: 10px;
+}
+
+.comment-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ticket-comment {
+  display: flex;
+  gap: 10px;
+  border-left: 3px solid transparent;
+  border-radius: var(--r);
+  padding: 8px 10px;
+}
+
+.ticket-comment.internal {
+  background: rgba(245, 158, 11, .05);
+  border-left-color: var(--amber);
+}
+
+.ticket-comment.public {
+  background: var(--bg-3);
+  border-left-color: var(--teal);
+}
+
+.comment-visibility-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
+
+.comment-visibility-badge.internal {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.comment-visibility-badge.public {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
 .tag-dropdown {
   position: absolute;
   top: calc(100% + 8px);

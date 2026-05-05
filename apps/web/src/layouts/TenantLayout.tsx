@@ -104,6 +104,7 @@ function Breadcrumb() {
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
+    '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };

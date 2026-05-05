@@ -19,6 +19,7 @@ const schema = z.object({
   priority:    z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   status:      z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).default('open'),
   category:    z.string().optional(),
+  type_id:     z.string().uuid().optional().or(z.literal('')),
   due_date:    z.string().optional(),
   tags:        z.array(z.string()),
 });
@@ -124,6 +125,13 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     enabled: open,
   });
 
+  const { data: ticketTypes = [] } = useQuery({
+    queryKey: ['ticket-types'],
+    queryFn: adminApi.ticketTypes.list,
+    staleTime: 60_000,
+    enabled: open,
+  });
+
   const { data: organizationResults } = useQuery({
     queryKey: ['crm-organizations-search', debouncedOrganizationSearch],
     queryFn: () => organizationsApi.list({ search: debouncedOrganizationSearch, per_page: 8 }),
@@ -141,6 +149,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
       };
       if (values.description)  payload.description  = values.description;
       if (values.category)     payload.category     = values.category;
+      if (values.type_id)      payload.type_id      = values.type_id;
       if (values.due_date)     payload.due_date     = new Date(values.due_date).toISOString();
       if (selectedContactId)   payload.contact_id   = selectedContactId;
       if (selectedOrganizationId) payload.organization_id = selectedOrganizationId;
@@ -266,7 +275,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             }} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
                 {t('tickets.fields.priority')}
@@ -405,6 +414,19 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
               <select style={selectStyle} value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value || null)}>
                 <option value="">{t('tickets.form.noUser')}</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
+                {t('tickets.fields.type', { defaultValue: 'Tipo' })}
+              </label>
+              <select style={selectStyle} {...register('type_id')}>
+                <option value="">{t('tickets.form.selectType', { defaultValue: 'Selecione o tipo' })}</option>
+                {ticketTypes.filter((type) => type.is_active).map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.icon} {type.name}
+                  </option>
+                ))}
               </select>
             </div>
             <Input label={t('tickets.fields.category')} {...register('category')} />

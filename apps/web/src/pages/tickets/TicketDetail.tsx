@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ticketsApi, type Ticket, type TicketTimelineEvent } from '../../services/api';
+import { adminApi, ticketsApi, type Ticket, type TicketTimelineEvent } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { useAuthStore } from '../../stores/auth.store';
 import { TicketStatusBadge } from '../../components/tickets/TicketStatusBadge';
 import { TicketPriorityBadge } from '../../components/tickets/TicketPriorityBadge';
 import { TicketComments } from '../../components/tickets/TicketComments';
@@ -18,7 +19,7 @@ interface Props {
 
 const selectStyle: React.CSSProperties = {
   background:   'var(--bg-3)',
-  border:       '1px solid var(--line)',
+  border:       '1px solid var(--line-2)',
   color:        'var(--txt)',
   height:       '1.875rem',
   borderRadius: 'var(--r)',
@@ -79,16 +80,61 @@ function TimelineEvent({
   showLine: boolean;
 }) {
   const { t } = useTranslation('tickets');
-  const icons: Record<string, string> = {
-    created: '🎫',
-    status_changed: '🔄',
-    priority_changed: '⚡',
-    assigned: '👤',
-    tag_added: '🏷️',
-    tag_removed: '🏷️',
-    comment_added: '💬',
-    resolved: '✅',
-  };
+  const icon = (() => {
+    if (event.event_type === 'created') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M3 4.2h8a1.4 1.4 0 0 1 1.4 1.4v1.1a1 1 0 0 0-.8 1 .98.98 0 0 0 .8.9v1.2A1.4 1.4 0 0 1 11 11.2H3A1.4 1.4 0 0 1 1.6 9.8V8.6a1 1 0 0 0 .8-.9 1 1 0 0 0-.8-1V5.6A1.4 1.4 0 0 1 3 4.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'status_changed') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M10.8 5.2 12.4 6.8l-1.6 1.6M12.2 6.8H5.3a2.7 2.7 0 0 0-2.7 2.7M3.2 8.8 1.6 7.2l1.6-1.6M1.8 7.2h6.9a2.7 2.7 0 0 0 2.7-2.7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'priority_changed') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M7.1 2.2 3.4 7.1h2.7l-.6 4.7 5.1-5.9H7.9l.5-3.7h-1.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'assigned') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <circle cx="7" cy="4.7" r="2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M2.5 11.5c0-2.1 1.8-3.4 4.5-3.4s4.5 1.3 4.5 3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'tag_added' || event.event_type === 'tag_removed') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M7.8 2.2H3.5v4.3l4 4 4.3-4.3-4-4Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <circle cx="5.1" cy="4.9" r=".7" fill="currentColor" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'comment_added') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M3 3.6h8a1.4 1.4 0 0 1 1.4 1.4v3.7A1.4 1.4 0 0 1 11 10.1H6.9l-2.4 1.8v-1.8H3A1.4 1.4 0 0 1 1.6 8.7V5A1.4 1.4 0 0 1 3 3.6Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+    if (event.event_type === 'resolved') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="m4.8 7 1.5 1.5 2.9-2.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+    return <span style={{ lineHeight: 1 }}>•</span>;
+  })();
 
   const message = (() => {
     if (event.event_type === 'created') return t('tickets.timeline.created');
@@ -124,7 +170,7 @@ function TimelineEvent({
         flexShrink: 0,
         zIndex: 1,
       }}>
-        <span>{icons[event.event_type] ?? '•'}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-2)' }}>{icon}</span>
       </div>
       {showLine ? (
         <div style={{
@@ -155,6 +201,8 @@ export function TicketDetail({ ticketId }: Props) {
   const [titleDraft, setTitleDraft] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'comments' | 'timeline'>('comments');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const user = useAuthStore((state) => state.user);
 
   const { data: ticket, isPending } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -166,6 +214,20 @@ export function TicketDetail({ ticketId }: Props) {
   const { data: timeline = [], isPending: timelineLoading } = useQuery({
     queryKey: ['ticket-timeline', ticketId],
     queryFn: () => ticketsApi.getTimeline(ticketId!),
+    enabled: !!ticketId,
+    staleTime: 10_000,
+  });
+
+  const { data: ticketTypes = [] } = useQuery({
+    queryKey: ['ticket-types'],
+    queryFn: adminApi.ticketTypes.list,
+    staleTime: 60_000,
+    enabled: !!ticketId,
+  });
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['ticket-attachments', ticketId],
+    queryFn: () => ticketsApi.listAttachments(ticketId!),
     enabled: !!ticketId,
     staleTime: 10_000,
   });
@@ -189,14 +251,35 @@ export function TicketDetail({ ticketId }: Props) {
     onError: () => toast.error('Erro ao atualizar ticket'),
   });
 
+  const uploadAttachmentMutation = useMutation({
+    mutationFn: (file: File) => ticketsApi.uploadAttachment(ticketId!, file),
+    onSuccess: async () => {
+      setAttachmentFile(null);
+      await queryClient.invalidateQueries({ queryKey: ['ticket-attachments', ticketId] });
+      toast.success('Anexo enviado');
+    },
+    onError: () => toast.error('Erro ao enviar anexo'),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: string) => ticketsApi.deleteAttachment(attachmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['ticket-attachments', ticketId] });
+      toast.success('Anexo excluído');
+    },
+    onError: () => toast.error('Você não pode excluir este anexo'),
+  });
+
   if (!ticketId) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden style={{ opacity: 0.25 }}>
-          <rect x="6" y="8" width="36" height="32" rx="4" stroke="var(--txt-3)" strokeWidth="2" />
-          <path d="M14 18h20M14 26h14" stroke="var(--txt-3)" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        <p style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('tickets.noSelection')}</p>
+      <div className="zd-empty-state">
+        <div className="zd-empty-icon" aria-hidden>
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="3.5" y="4" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M7 8h8M7 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </div>
+        <p style={{ color: 'var(--txt-2)', fontSize: 13, margin: 0 }}>{t('tickets.noSelection')}</p>
       </div>
     );
   }
@@ -230,6 +313,29 @@ export function TicketDetail({ ticketId }: Props) {
     toast.success(msg);
   }
 
+  function formatAttachmentSize(bytes: number | null): string {
+    if (!bytes || bytes <= 0) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function handleAttachmentDownload(attachmentId: string, fileName: string) {
+    try {
+      const blob = await ticketsApi.downloadAttachment(attachmentId);
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast.error('Erro ao baixar anexo');
+    }
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -246,8 +352,9 @@ export function TicketDetail({ ticketId }: Props) {
               onKeyDown={(e) => { if (e.key === 'Enter') handleTitleSave(); if (e.key === 'Escape') setEditingTitle(false); }}
               style={{
                 flex: 1, fontSize: 16, fontWeight: 600, background: 'var(--bg-3)',
-                border: '1px solid var(--teal)', borderRadius: 'var(--r)', padding: '4px 8px',
+                border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '4px 8px',
                 color: 'var(--txt)', outline: 'none', fontFamily: 'var(--font)',
+                boxShadow: '0 0 0 3px var(--teal-dim)',
               }}
             />
           ) : (
@@ -262,40 +369,24 @@ export function TicketDetail({ ticketId }: Props) {
           )}
 
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <button onClick={() => setAssignOpen(true)} style={{
-              padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)',
-              background: 'transparent', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer',
-              fontFamily: 'var(--font)', fontWeight: 500,
-            }}>
+            <button onClick={() => setAssignOpen(true)} className="zd-btn">
               {t('tickets.actions.assign')}
             </button>
 
             {!isResolved && (
-              <button onClick={() => quickUpdate({ status: 'resolved' })} style={{
-                padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--green)',
-                background: 'var(--green-dim)', color: 'var(--green)', fontSize: 12, cursor: 'pointer',
-                fontFamily: 'var(--font)', fontWeight: 600,
-              }}>
+              <button onClick={() => quickUpdate({ status: 'resolved' })} className="zd-btn" style={{ borderColor: 'var(--green)', background: 'var(--green-dim)', color: 'var(--green)' }}>
                 {t('tickets.actions.resolve')}
               </button>
             )}
 
             {ticket.status !== 'closed' && (
-              <button onClick={() => quickUpdate({ status: 'closed' })} style={{
-                padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)',
-                background: 'transparent', color: 'var(--txt-3)', fontSize: 12, cursor: 'pointer',
-                fontFamily: 'var(--font)', fontWeight: 500,
-              }}>
+              <button onClick={() => quickUpdate({ status: 'closed' })} className="zd-btn">
                 {t('tickets.actions.close')}
               </button>
             )}
 
             {isResolved && (
-              <button onClick={() => quickUpdate({ status: 'open' })} style={{
-                padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--blue)',
-                background: 'var(--blue-dim)', color: 'var(--blue)', fontSize: 12, cursor: 'pointer',
-                fontFamily: 'var(--font)', fontWeight: 500,
-              }}>
+              <button onClick={() => quickUpdate({ status: 'open' })} className="zd-btn" style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}>
                 {t('tickets.actions.reopen')}
               </button>
             )}
@@ -306,6 +397,18 @@ export function TicketDetail({ ticketId }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <TicketStatusBadge status={ticket.status} />
           <TicketPriorityBadge priority={ticket.priority} />
+          {ticket.type_name && ticket.type_color ? (
+            <span
+              className="ticket-type-badge"
+              style={{
+                background: `${ticket.type_color}22`,
+                color: ticket.type_color,
+                borderColor: `${ticket.type_color}44`,
+              }}
+            >
+              {ticket.type_icon ?? '🎫'} {ticket.type_name}
+            </span>
+          ) : null}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', marginLeft: 4 }}>
             #{ticket.id.slice(-6).toUpperCase()}
           </span>
@@ -322,7 +425,7 @@ export function TicketDetail({ ticketId }: Props) {
           background: 'var(--bg-2)',
         }}>
           <Field label={t('tickets.fields.status')}>
-            <select style={selectStyle} value={ticket.status}
+            <select aria-label="Status do ticket" style={selectStyle} value={ticket.status}
               onChange={(e) => quickUpdate({ status: e.target.value as Ticket['status'] })}>
               <option value="open">{t('tickets.status.open')}</option>
               <option value="in_progress">{t('tickets.status.in_progress')}</option>
@@ -333,12 +436,31 @@ export function TicketDetail({ ticketId }: Props) {
           </Field>
 
           <Field label={t('tickets.fields.priority')}>
-            <select style={selectStyle} value={ticket.priority}
+            <select aria-label="Prioridade do ticket" style={selectStyle} value={ticket.priority}
               onChange={(e) => quickUpdate({ priority: e.target.value as Ticket['priority'] })}>
               <option value="low">{t('tickets.priority.low')}</option>
               <option value="medium">{t('tickets.priority.medium')}</option>
               <option value="high">{t('tickets.priority.high')}</option>
               <option value="urgent">{t('tickets.priority.urgent')}</option>
+            </select>
+          </Field>
+
+          <Field label={t('tickets.fields.type', { defaultValue: 'Tipo' })}>
+            <select
+              aria-label="Tipo do ticket"
+              style={selectStyle}
+              value={ticket.type_id ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                quickUpdate(value ? { type_id: value } : { type_id: null });
+              }}
+            >
+              <option value="">{t('tickets.form.selectType', { defaultValue: 'Selecione o tipo' })}</option>
+              {ticketTypes.filter((type) => type.is_active).map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.icon} {type.name}
+                </option>
+              ))}
             </select>
           </Field>
 
@@ -393,7 +515,10 @@ export function TicketDetail({ ticketId }: Props) {
                     background: 'var(--bg-3)',
                     color: 'var(--txt)',
                   }}>
-                    <span aria-hidden>🏢</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <rect x="1.5" y="3.2" width="9" height="7.3" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
+                      <path d="M4.5 3.2V2.4a.9.9 0 0 1 .9-.9h1.2a.9.9 0 0 1 .9.9v.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                    </svg>
                     {ticket.organization_name}
                   </span>
                 </Link>
@@ -456,6 +581,83 @@ export function TicketDetail({ ticketId }: Props) {
           )}
 
           <div>
+            <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Anexos
+            </h4>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <input
+                type="file"
+                onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
+                style={{ color: 'var(--txt-2)', fontSize: 12 }}
+              />
+              <button
+                type="button"
+                className="zd-btn"
+                disabled={!attachmentFile || uploadAttachmentMutation.isPending}
+                onClick={() => attachmentFile && uploadAttachmentMutation.mutate(attachmentFile)}
+              >
+                {uploadAttachmentMutation.isPending ? 'Enviando...' : 'Enviar anexo'}
+              </button>
+            </div>
+
+            {attachments.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--txt-3)' }}>Sem anexos neste ticket.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--r)',
+                      background: 'var(--bg-3)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleAttachmentDownload(attachment.id, attachment.filename)}
+                      style={{
+                        color: 'var(--teal)',
+                        fontSize: 12,
+                        textDecoration: 'none',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {attachment.filename}
+                    </button>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-3)' }}>
+                      {formatAttachmentSize(attachment.file_size)}
+                    </span>
+                    {attachment.user_id === user?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteAttachmentMutation.mutate(attachment.id)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: 'var(--red)',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                        }}
+                      >
+                        Excluir
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
             <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--line)', marginBottom: 12 }}>
               <button
                 type="button"
@@ -500,7 +702,14 @@ export function TicketDetail({ ticketId }: Props) {
                 {timelineLoading ? (
                   <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>Carregando...</div>
                 ) : timeline.length === 0 ? (
-                  <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>Sem eventos no histórico</div>
+                  <div className="zd-empty-state" style={{ minHeight: 180 }}>
+                    <div className="zd-empty-icon" aria-hidden>
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3.5 10h13M10 3.5v13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div style={{ color: 'var(--txt-2)', fontSize: 12, fontWeight: 500 }}>Sem eventos no histórico</div>
+                  </div>
                 ) : (
                   timeline.map((event, index) => (
                     <TimelineEvent

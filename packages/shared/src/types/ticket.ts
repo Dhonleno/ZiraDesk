@@ -5,6 +5,10 @@ export interface Ticket {
   organization_id?: string;
   organization_name?: string;
   conversation_id?: string;
+  type_id?: string;
+  type_name?: string;
+  type_icon?: string;
+  type_color?: string;
   title: string;
   description?: string;
   status: string;
