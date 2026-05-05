@@ -117,6 +117,8 @@ interface ContactRow {
 
 interface ConversationRow {
   id: string;
+  assigned_to?: string | null;
+  bot_stage?: string | null;
   status?: string;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   csat_score?: number | null;
@@ -578,6 +580,8 @@ async function processIncomingMessage(
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id, status, csat_stage, csat_score
+              , assigned_to
+              , metadata->>'bot_stage' AS bot_stage
        FROM conversations
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
@@ -788,7 +792,15 @@ async function processIncomingMessage(
       };
     }
 
-    const botResponse = await processBotMessage(content, conversationId, isNewConversation, tx, false);
+    const currentAssignedTo = currentConversation?.assigned_to ?? null;
+    const currentBotStage = currentConversation?.bot_stage ?? null;
+    const hasAssignedAgent = Boolean(currentAssignedTo);
+    const canProcessBot = isNewConversation || (!hasAssignedAgent && currentBotStage === 'waiting_choice');
+    const skipBot = hasAssignedAgent || currentBotStage === 'done';
+
+    const botResponse = (!skipBot && canProcessBot)
+      ? await processBotMessage(content, conversationId, isNewConversation, tx, false)
+      : null;
 
     const msgRows = await tx.$queryRawUnsafe<
       [{ id: string; content: string; created_at: Date; sender_type: string }]
