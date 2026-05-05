@@ -8,6 +8,8 @@ import type {
   UpdateTicketInput,
   ListTicketsQuery,
   CreateCommentInput,
+  UpdateChecklistItemInput,
+  CreateTimeEntryInput,
 } from './tickets.schema.js';
 
 /* ── Custom errors ───────────────────────────────────────────────────────── */
@@ -75,6 +77,29 @@ interface TicketAttachmentRow {
   file_size: number | null;
   mime_type: string | null;
   created_at: Date;
+}
+
+interface TicketChecklistRow {
+  id: string;
+  ticket_id: string;
+  title: string;
+  is_done: boolean;
+  done_by: string | null;
+  done_at: Date | null;
+  sort_order: number;
+  created_at: Date;
+  done_by_name: string | null;
+}
+
+interface TicketTimeEntryRow {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  description: string | null;
+  minutes: number;
+  worked_at: Date;
+  created_at: Date;
+  user_name: string | null;
 }
 
 interface StatsRow {
@@ -218,6 +243,41 @@ async function ensureTicketInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
     ON ticket_attachments(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_checklists (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      title VARCHAR(200) NOT NULL,
+      is_done BOOLEAN DEFAULT false,
+      done_by UUID REFERENCES users(id),
+      done_at TIMESTAMPTZ,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_ticket_checklists_ticket
+    ON ticket_checklists(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_time_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      description VARCHAR(300),
+      minutes INTEGER NOT NULL CHECK (minutes > 0),
+      worked_at DATE DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_time_entries_ticket
+    ON ticket_time_entries(ticket_id)
   `);
 
   ticketInfraEnsured = true;
@@ -836,6 +896,235 @@ export async function readAttachmentContent(attachmentId: string): Promise<{
     filename: attachment.filename,
     content,
   };
+}
+
+/* ── checklist ───────────────────────────────────────────────────────────── */
+export async function listChecklistItems(ticketId: string): Promise<TicketChecklistRow[]> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketChecklistRow[]>(
+    `SELECT
+       tc.id,
+       tc.ticket_id,
+       tc.title,
+       tc.is_done,
+       tc.done_by,
+       tc.done_at,
+       tc.sort_order,
+       tc.created_at,
+       u.name AS done_by_name
+     FROM ticket_checklists tc
+     LEFT JOIN users u ON u.id = tc.done_by
+     WHERE tc.ticket_id = $1::uuid
+     ORDER BY tc.sort_order, tc.created_at ASC`,
+    ticketId,
+  );
+
+  return rows;
+}
+
+export async function addChecklistItem(ticketId: string, title: string): Promise<TicketChecklistRow> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketChecklistRow[]>(
+    `WITH inserted AS (
+       INSERT INTO ticket_checklists (ticket_id, title, sort_order)
+       VALUES (
+         $1::uuid,
+         $2,
+         (
+           SELECT COALESCE(MAX(sort_order), 0) + 1
+           FROM ticket_checklists
+           WHERE ticket_id = $1::uuid
+         )
+       )
+       RETURNING id, ticket_id, title, is_done, done_by, done_at, sort_order, created_at
+     )
+     SELECT
+       i.id,
+       i.ticket_id,
+       i.title,
+       i.is_done,
+       i.done_by,
+       i.done_at,
+       i.sort_order,
+       i.created_at,
+       NULL::text AS done_by_name
+     FROM inserted i`,
+    ticketId,
+    title,
+  );
+
+  return rows[0]!;
+}
+
+export async function updateChecklistItem(
+  ticketId: string,
+  itemId: string,
+  payload: UpdateChecklistItemInput,
+  userId: string,
+): Promise<TicketChecklistRow> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketChecklistRow[]>(
+    `WITH updated AS (
+       UPDATE ticket_checklists
+       SET
+         is_done = COALESCE($1::boolean, is_done),
+         done_by = CASE
+           WHEN $1::boolean = true THEN $2::uuid
+           WHEN $1::boolean = false THEN NULL
+           ELSE done_by
+         END,
+         done_at = CASE
+           WHEN $1::boolean = true THEN NOW()
+           WHEN $1::boolean = false THEN NULL
+           ELSE done_at
+         END,
+         title = COALESCE($3, title)
+       WHERE id = $4::uuid
+         AND ticket_id = $5::uuid
+       RETURNING id, ticket_id, title, is_done, done_by, done_at, sort_order, created_at
+     )
+     SELECT
+       u2.id,
+       u2.ticket_id,
+       u2.title,
+       u2.is_done,
+       u2.done_by,
+       u2.done_at,
+       u2.sort_order,
+       u2.created_at,
+       u.name AS done_by_name
+     FROM updated u2
+     LEFT JOIN users u ON u.id = u2.done_by`,
+    payload.is_done ?? null,
+    userId,
+    payload.title ?? null,
+    itemId,
+    ticketId,
+  );
+
+  if (!rows[0]) throw new NotFoundError('Item do checklist');
+  return rows[0];
+}
+
+export async function deleteChecklistItem(ticketId: string, itemId: string): Promise<{ deleted: true }> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `DELETE FROM ticket_checklists
+     WHERE id = $1::uuid
+       AND ticket_id = $2::uuid
+     RETURNING id`,
+    itemId,
+    ticketId,
+  );
+
+  if (!rows[0]) throw new NotFoundError('Item do checklist');
+  return { deleted: true };
+}
+
+/* ── time tracking ───────────────────────────────────────────────────────── */
+export async function listTimeEntries(ticketId: string): Promise<TicketTimeEntryRow[]> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketTimeEntryRow[]>(
+    `SELECT
+       te.id,
+       te.ticket_id,
+       te.user_id,
+       te.description,
+       te.minutes,
+       te.worked_at,
+       te.created_at,
+       u.name AS user_name
+     FROM ticket_time_entries te
+     JOIN users u ON u.id = te.user_id
+     WHERE te.ticket_id = $1::uuid
+     ORDER BY te.worked_at DESC, te.created_at DESC`,
+    ticketId,
+  );
+
+  return rows;
+}
+
+export async function addTimeEntry(
+  ticketId: string,
+  userId: string,
+  payload: CreateTimeEntryInput,
+): Promise<TicketTimeEntryRow> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<TicketTimeEntryRow[]>(
+    `WITH inserted AS (
+       INSERT INTO ticket_time_entries
+         (ticket_id, user_id, minutes, description, worked_at)
+       VALUES
+         ($1::uuid, $2::uuid, $3::integer, $4, COALESCE($5::date, CURRENT_DATE))
+       RETURNING id, ticket_id, user_id, description, minutes, worked_at, created_at
+     )
+     SELECT
+       i.id,
+       i.ticket_id,
+       i.user_id,
+       i.description,
+       i.minutes,
+       i.worked_at,
+       i.created_at,
+       u.name AS user_name
+     FROM inserted i
+     JOIN users u ON u.id = i.user_id`,
+    ticketId,
+    userId,
+    payload.minutes,
+    payload.description ?? null,
+    payload.worked_at ?? null,
+  );
+
+  return rows[0]!;
+}
+
+export async function deleteTimeEntry(
+  ticketId: string,
+  entryId: string,
+  currentUserId: string,
+  role: string,
+): Promise<{ deleted: true }> {
+  await ensureTicketInfrastructure();
+  await getTicket(ticketId);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; user_id: string }>>(
+    `SELECT id, user_id
+     FROM ticket_time_entries
+     WHERE id = $1::uuid
+       AND ticket_id = $2::uuid
+     LIMIT 1`,
+    entryId,
+    ticketId,
+  );
+
+  const entry = rows[0];
+  if (!entry) throw new NotFoundError('Registro de tempo');
+
+  const canDelete = entry.user_id === currentUserId || role === 'owner' || role === 'admin';
+  if (!canDelete) {
+    throw new ForbiddenError('Você não pode excluir este apontamento');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ticket_time_entries
+     WHERE id = $1::uuid`,
+    entryId,
+  );
+
+  return { deleted: true };
 }
 
 /* ── getTicketTimeline ───────────────────────────────────────────────────── */

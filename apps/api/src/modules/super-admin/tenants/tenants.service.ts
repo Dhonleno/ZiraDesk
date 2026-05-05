@@ -521,6 +521,41 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_checklists (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id   UUID REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      title       VARCHAR(200) NOT NULL,
+      is_done     BOOLEAN DEFAULT false,
+      done_by     UUID REFERENCES "${schemaName}".users(id),
+      done_at     TIMESTAMPTZ,
+      sort_order  INTEGER DEFAULT 0,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_ticket_checklists_ticket"
+    ON "${schemaName}".ticket_checklists(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_time_entries (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id   UUID REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      user_id     UUID REFERENCES "${schemaName}".users(id),
+      description VARCHAR(300),
+      minutes     INTEGER NOT NULL CHECK (minutes > 0),
+      worked_at   DATE DEFAULT CURRENT_DATE,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_time_entries_ticket"
+    ON "${schemaName}".ticket_time_entries(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".audit_logs (
       id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id    UUID,

@@ -9,6 +9,8 @@ import { TicketStatusBadge } from '../../components/tickets/TicketStatusBadge';
 import { TicketPriorityBadge } from '../../components/tickets/TicketPriorityBadge';
 import { TicketComments } from '../../components/tickets/TicketComments';
 import { AssignTicketModal } from '../../components/tickets/AssignTicketModal';
+import ChecklistSection from '../../components/tickets/ChecklistSection';
+import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { subscribeToEvent } from '../../services/socket';
 
@@ -656,6 +658,9 @@ export function TicketDetail({ ticketId }: Props) {
               </div>
             )}
           </div>
+
+          <ChecklistSection ticketId={ticket.id} />
+          <TimeTrackingSection ticketId={ticket.id} />
 
           <div>
             <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--line)', marginBottom: 12 }}>

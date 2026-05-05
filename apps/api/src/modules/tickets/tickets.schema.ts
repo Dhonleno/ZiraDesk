@@ -41,8 +41,28 @@ export const assignTicketSchema = z.object({
   user_id: z.string().uuid(),
 });
 
+export const createChecklistItemSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+
+export const updateChecklistItemSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  is_done: z.boolean().optional(),
+}).refine((data) => data.title !== undefined || data.is_done !== undefined, {
+  message: 'Informe ao menos um campo para atualização',
+});
+
+export const createTimeEntrySchema = z.object({
+  minutes: z.number().int().positive(),
+  description: z.string().trim().max(300).optional(),
+  worked_at: z.string().date().optional(),
+});
+
 export type CreateTicketInput  = z.infer<typeof createTicketSchema>;
 export type UpdateTicketInput  = z.infer<typeof updateTicketSchema>;
 export type ListTicketsQuery   = z.infer<typeof listTicketsQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;
+export type CreateChecklistItemInput = z.infer<typeof createChecklistItemSchema>;
+export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
+export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;

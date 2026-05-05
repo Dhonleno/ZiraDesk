@@ -9,6 +9,9 @@ import {
   listTicketsQuerySchema,
   createCommentSchema,
   assignTicketSchema,
+  createChecklistItemSchema,
+  updateChecklistItemSchema,
+  createTimeEntrySchema,
 } from './tickets.schema.js';
 import {
   listTickets,
@@ -24,6 +27,13 @@ import {
   addAttachment,
   deleteAttachment,
   readAttachmentContent,
+  listChecklistItems,
+  addChecklistItem,
+  updateChecklistItem,
+  deleteChecklistItem,
+  listTimeEntries,
+  addTimeEntry,
+  deleteTimeEntry,
   getTicketTimeline,
   getStats,
   NotFoundError,
@@ -163,6 +173,146 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  // GET /api/tickets/:id/checklist
+  app.get<{ Params: { id: string } }>('/:id/checklist', { preHandler: guard }, async (request, reply) => {
+    try {
+      const items = await listChecklistItems(request.params.id);
+      return reply.send({ success: true, data: items });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/tickets/:id/checklist
+  app.post<{ Params: { id: string } }>('/:id/checklist', { preHandler: guard }, async (request, reply) => {
+    const parsed = createChecklistItemSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const item = await addChecklistItem(request.params.id, parsed.data.title);
+      return reply.code(201).send({ success: true, data: item });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // PATCH /api/tickets/:id/checklist/:itemId
+  app.patch<{ Params: { id: string; itemId: string } }>(
+    '/:id/checklist/:itemId',
+    { preHandler: guard },
+    async (request, reply) => {
+      const parsed = updateChecklistItemSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+        });
+      }
+
+      try {
+        const item = await updateChecklistItem(
+          request.params.id,
+          request.params.itemId,
+          parsed.data,
+          request.user.id,
+        );
+        return reply.send({ success: true, data: item });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // DELETE /api/tickets/:id/checklist/:itemId
+  app.delete<{ Params: { id: string; itemId: string } }>(
+    '/:id/checklist/:itemId',
+    { preHandler: guard },
+    async (request, reply) => {
+      try {
+        const result = await deleteChecklistItem(request.params.id, request.params.itemId);
+        return reply.send({ success: true, data: result });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // GET /api/tickets/:id/time
+  app.get<{ Params: { id: string } }>('/:id/time', { preHandler: guard }, async (request, reply) => {
+    try {
+      const entries = await listTimeEntries(request.params.id);
+      return reply.send({ success: true, data: entries });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/tickets/:id/time
+  app.post<{ Params: { id: string } }>('/:id/time', { preHandler: guard }, async (request, reply) => {
+    const parsed = createTimeEntrySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const entry = await addTimeEntry(request.params.id, request.user.id, parsed.data);
+      return reply.code(201).send({ success: true, data: entry });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // DELETE /api/tickets/:id/time/:entryId
+  app.delete<{ Params: { id: string; entryId: string } }>(
+    '/:id/time/:entryId',
+    { preHandler: guard },
+    async (request, reply) => {
+      try {
+        const result = await deleteTimeEntry(
+          request.params.id,
+          request.params.entryId,
+          request.user.id,
+          request.user.role,
+        );
+        return reply.send({ success: true, data: result });
+      } catch (err) {
+        if (err instanceof NotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        if (err instanceof ForbiddenError) {
+          return reply.code(403).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
 
   // POST /api/tickets/:id/comments
   app.post<{ Params: { id: string } }>('/:id/comments', { preHandler: guard }, async (request, reply) => {

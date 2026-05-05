@@ -1011,6 +1011,29 @@ export interface TicketTimelineEvent {
   avatar_url: string | null;
 }
 
+export interface TicketChecklistItem {
+  id: string;
+  ticket_id: string;
+  title: string;
+  is_done: boolean;
+  done_by: string | null;
+  done_at: string | null;
+  sort_order: number;
+  created_at: string;
+  done_by_name: string | null;
+}
+
+export interface TicketTimeEntry {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  description: string | null;
+  minutes: number;
+  worked_at: string;
+  created_at: string;
+  user_name: string | null;
+}
+
 export interface TicketStats {
   total_tickets:            number;
   open_tickets:             number;
@@ -1062,6 +1085,12 @@ export interface CreateTicketPayload {
 export interface CreateCommentPayload {
   content:     string;
   is_internal: boolean;
+}
+
+export interface CreateTicketTimePayload {
+  minutes: number;
+  description?: string;
+  worked_at?: string;
 }
 
 // ── Tickets API ───────────────────────────────────────────────────────────────
@@ -1657,4 +1686,75 @@ export const ticketsApi = {
     });
     return res.data;
   },
+
+  listChecklist: async (ticketId: string): Promise<TicketChecklistItem[]> => {
+    const res = await api.get<{ success: boolean; data: TicketChecklistItem[] }>(
+      `/tickets/${ticketId}/checklist`,
+    );
+    return res.data.data;
+  },
+
+  addChecklist: async (ticketId: string, title: string): Promise<TicketChecklistItem> => {
+    const res = await api.post<{ success: boolean; data: TicketChecklistItem }>(
+      `/tickets/${ticketId}/checklist`,
+      { title },
+    );
+    return res.data.data;
+  },
+
+  updateChecklist: async (
+    ticketId: string,
+    itemId: string,
+    data: Partial<{ title: string; is_done: boolean }>,
+  ): Promise<TicketChecklistItem> => {
+    const res = await api.patch<{ success: boolean; data: TicketChecklistItem }>(
+      `/tickets/${ticketId}/checklist/${itemId}`,
+      data,
+    );
+    return res.data.data;
+  },
+
+  deleteChecklist: async (ticketId: string, itemId: string): Promise<{ deleted: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(
+      `/tickets/${ticketId}/checklist/${itemId}`,
+    );
+    return res.data.data;
+  },
+
+  listTimeEntries: async (ticketId: string): Promise<TicketTimeEntry[]> => {
+    const res = await api.get<{ success: boolean; data: TicketTimeEntry[] }>(
+      `/tickets/${ticketId}/time`,
+    );
+    return res.data.data;
+  },
+
+  addTimeEntry: async (ticketId: string, data: CreateTicketTimePayload): Promise<TicketTimeEntry> => {
+    const res = await api.post<{ success: boolean; data: TicketTimeEntry }>(
+      `/tickets/${ticketId}/time`,
+      data,
+    );
+    return res.data.data;
+  },
+
+  deleteTimeEntry: async (ticketId: string, entryId: string): Promise<{ deleted: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(
+      `/tickets/${ticketId}/time/${entryId}`,
+    );
+    return res.data.data;
+  },
+};
+
+export const ticketChecklist = {
+  list: (ticketId: string) => api.get(`/tickets/${ticketId}/checklist`),
+  add: (ticketId: string, title: string) => api.post(`/tickets/${ticketId}/checklist`, { title }),
+  update: (ticketId: string, itemId: string, data: { title?: string; is_done?: boolean }) =>
+    api.patch(`/tickets/${ticketId}/checklist/${itemId}`, data),
+  delete: (ticketId: string, itemId: string) => api.delete(`/tickets/${ticketId}/checklist/${itemId}`),
+};
+
+export const ticketTime = {
+  list: (ticketId: string) => api.get(`/tickets/${ticketId}/time`),
+  add: (ticketId: string, data: { minutes: number; description?: string; worked_at?: string }) =>
+    api.post(`/tickets/${ticketId}/time`, data),
+  delete: (ticketId: string, entryId: string) => api.delete(`/tickets/${ticketId}/time/${entryId}`),
 };
