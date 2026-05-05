@@ -32,6 +32,7 @@ import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Upgrade } from './pages/settings/Upgrade';
+import { ProfilePage } from './pages/profile/Profile';
 import { NotFound } from './pages/NotFound';
 
 const queryClient = new QueryClient({
@@ -115,6 +116,7 @@ export function App() {
             <Route path="crm/contacts/:id" element={<ContactsPage />} />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="tickets/:id" element={<TicketsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboard />} />

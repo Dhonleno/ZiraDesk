@@ -33,11 +33,16 @@ async function createTenantTables(schemaName: string): Promise<void> {
       password_hash VARCHAR(255) NOT NULL,
       role        VARCHAR(30)   NOT NULL DEFAULT 'agent',
       avatar_url  VARCHAR(500),
+      bio         TEXT,
+      phone       VARCHAR(30),
       status      VARCHAR(20)   NOT NULL DEFAULT 'active',
       last_seen_at TIMESTAMPTZ,
       language    VARCHAR(10)   NOT NULL DEFAULT 'pt-BR',
+      notification_sound BOOLEAN NOT NULL DEFAULT true,
+      notification_desktop BOOLEAN NOT NULL DEFAULT true,
       settings    JSONB         NOT NULL DEFAULT '{}',
-      created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
     )
   `);
 

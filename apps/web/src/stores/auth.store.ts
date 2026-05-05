@@ -7,6 +7,7 @@ export interface AuthUser {
   email: string;
   role: string;
   tenantId?: string;
+  avatar_url?: string | null;
 }
 
 interface AuthState {
@@ -17,6 +18,7 @@ interface AuthState {
 
 interface AuthActions {
   setAuth: (payload: { user?: AuthUser; token: string }) => void;
+  setUser: (userData: Partial<AuthUser>) => void;
   logout: () => void;
 }
 
@@ -34,6 +36,11 @@ export const useAuthStore = create<AuthStore>()(
           user: user ?? state.user,
           token,
           isAuthenticated: true,
+        })),
+
+      setUser: (userData) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, ...userData } : null,
         })),
 
       logout: () =>

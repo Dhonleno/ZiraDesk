@@ -41,6 +41,7 @@ interface UserPayload {
   name: string;
   email: string;
   role: string;
+  avatar_url?: string | null;
   tenantId?: string;
   schemaName?: string;
   isSuperAdmin: boolean;
@@ -96,8 +97,8 @@ export async function loginWithEmailPassword(
   // Usa nome qualificado de schema para evitar race condition com connection pool
   const schema = tenantSchemaName ?? 'public';
   const result = await prisma.$queryRawUnsafe<
-    Array<{ id: string; name: string; email: string; role: string; password_hash: string }>
-  >(`SELECT id, name, email, role, password_hash FROM "${schema}".users WHERE email = $1 LIMIT 1`, email);
+    Array<{ id: string; name: string; email: string; role: string; avatar_url: string | null; password_hash: string }>
+  >(`SELECT id, name, email, role, avatar_url, password_hash FROM "${schema}".users WHERE email = $1 LIMIT 1`, email);
 
   const dbUser = result[0];
 
@@ -111,6 +112,7 @@ export async function loginWithEmailPassword(
     name: dbUser.name,
     email: dbUser.email,
     role: dbUser.role,
+    avatar_url: dbUser.avatar_url,
     ...(tenantId ? { tenantId } : {}),
     ...(tenantSchemaName ? { schemaName: tenantSchemaName } : {}),
     isSuperAdmin: false,

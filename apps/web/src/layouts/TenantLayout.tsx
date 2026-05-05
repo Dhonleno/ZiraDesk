@@ -213,8 +213,10 @@ export function TenantLayout() {
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
   const canToggleAvailability =
     user?.role === 'owner' || user?.role === 'admin' || user?.role === 'agent';
@@ -334,9 +336,12 @@ export function TenantLayout() {
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
-      if (!statusMenuRef.current) return;
-      if (!statusMenuRef.current.contains(event.target as Node)) {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
         setShowStatusMenu(false);
+      }
+
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
       }
     };
 
@@ -345,6 +350,7 @@ export function TenantLayout() {
   }, []);
 
   const initial = user?.name.charAt(0).toUpperCase() ?? '?';
+  const avatarUrl = user?.avatar_url ?? null;
   const isStatusBusy = setAvailabilityMutation.isPending || isStartingPause || isEndingPause;
   const statusLabel =
     agentStatus === 'paused'
@@ -374,6 +380,11 @@ export function TenantLayout() {
     } catch {
       toast.error(t('tenantAdmin.common.errorSave'));
     }
+  };
+
+  const handleLogout = () => {
+    setShowProfileMenu(false);
+    logout();
   };
 
   return (
@@ -482,44 +493,119 @@ export function TenantLayout() {
             </>
           )}
 
-          {/* Avatar */}
-          <div
-            title={user?.name}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--purple), #8B5CF6)',
-              border: '2px solid var(--bg-5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              fontWeight: 600,
-              color: '#fff',
-              cursor: 'default',
-            }}
-          >
-            {initial}
-          </div>
+          <div className="profile-menu-wrapper" ref={profileMenuRef}>
+            <button
+              className="topbar-avatar-btn"
+              onClick={() => setShowProfileMenu((current) => !current)}
+              title={user?.name}
+              aria-label="Abrir menu de perfil"
+              disabled={isLoggingOut}
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={user?.name ?? 'Avatar'} className="topbar-avatar-img" />
+              ) : (
+                <span className="topbar-avatar-initial">{initial}</span>
+              )}
+            </button>
 
-          {/* Logout */}
-          <button
-            onClick={() => logout()}
-            disabled={isLoggingOut}
-            className="tb-icon-btn"
-            aria-label="Sair"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+            {showProfileMenu && (
+              <div className="profile-dropdown">
+                <div className="profile-dropdown-header">
+                  <div className="profile-dropdown-avatar">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt={user?.name ?? 'Avatar'} />
+                    ) : (
+                      <span>{initial}</span>
+                    )}
+                  </div>
+                  <div className="profile-dropdown-info">
+                    <span className="profile-dropdown-name">{user?.name}</span>
+                    <span className="profile-dropdown-email">{user?.email}</span>
+                    <span className="profile-dropdown-role">{roleLabel}</span>
+                  </div>
+                </div>
+
+                <div className="profile-dropdown-divider" />
+
+                <button
+                  className="profile-dropdown-item"
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    navigate('/profile');
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+                    <path
+                      d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Meu perfil
+                </button>
+
+                <button
+                  className="profile-dropdown-item"
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    navigate('/profile?tab=password');
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                    <path
+                      d="M4.5 6V4.5a2.5 2.5 0 015 0V6"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="7" cy="9.5" r="1" fill="currentColor" />
+                  </svg>
+                  Alterar senha
+                </button>
+
+                <button
+                  className="profile-dropdown-item"
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    navigate('/profile?tab=notifications');
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path
+                      d="M7 1.5A4.5 4.5 0 002.5 6v3l-1 1.5h11L11.5 9V6A4.5 4.5 0 007 1.5z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M5.5 10.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                  </svg>
+                  Notificações
+                </button>
+
+                <div className="profile-dropdown-divider" />
+
+                <button className="profile-dropdown-item danger" onClick={handleLogout}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path
+                      d="M5 12H2.5A1.5 1.5 0 011 10.5v-7A1.5 1.5 0 012.5 2H5M9.5 10l3-3-3-3M12.5 7H5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {isLoggingOut ? 'Saindo...' : 'Sair'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -627,18 +713,23 @@ export function TenantLayout() {
               width: 32,
               height: 32,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--purple), #8B5CF6)',
+              background: 'var(--bg-4)',
               border: '2px solid var(--bg-5)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 12,
               fontWeight: 600,
-              color: '#fff',
+              color: 'var(--txt-2)',
               marginBottom: 6,
+              overflow: 'hidden',
             }}
           >
-            {initial}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={user?.name ?? 'Avatar'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              initial
+            )}
           </div>
 
           <NavLink

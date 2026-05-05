@@ -24,6 +24,21 @@ interface TenantSettings {
   plan?: { id: string; name: string; slug: string; priceMonth: string };
 }
 
+export interface MyProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar_url: string | null;
+  bio: string | null;
+  phone: string | null;
+  language: 'pt-BR' | 'en-US' | 'es' | string;
+  notification_sound: boolean;
+  notification_desktop: boolean;
+  status: string;
+  created_at: string;
+}
+
 export interface TenantUser {
   id: string;
   name: string;
@@ -1448,6 +1463,37 @@ export const notificationsApi = {
 
   markAllRead: async () => {
     const res = await api.patch<{ success: boolean; data: { read: number } }>('/notifications/read-all');
+    return res.data.data;
+  },
+};
+
+export const profileApi = {
+  get: async (): Promise<MyProfile> => {
+    const res = await api.get<{ success: boolean; data: MyProfile }>('/auth/me');
+    return res.data.data;
+  },
+
+  update: async (payload: Partial<{
+    name: string;
+    bio: string | null;
+    phone: string | null;
+    language: 'pt-BR' | 'en-US' | 'es';
+    notification_sound: boolean;
+    notification_desktop: boolean;
+  }>): Promise<MyProfile> => {
+    const res = await api.patch<{ success: boolean; data: MyProfile }>('/auth/me', payload);
+    return res.data.data;
+  },
+
+  updatePassword: async (payload: { current_password: string; new_password: string }): Promise<void> => {
+    await api.patch('/auth/me/password', payload);
+  },
+
+  uploadAvatar: async (file: File): Promise<{ avatar_url: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await api.post<{ success: boolean; data: { avatar_url: string } }>('/auth/me/avatar', form);
     return res.data.data;
   },
 };

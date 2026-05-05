@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { profileRoutes } from './profile.routes.js';
 import { loginBodySchema } from './auth.schema.js';
 import {
   loginWithEmailPassword,
@@ -22,6 +23,8 @@ function extractSlugFromHost(host: string = ''): string | null {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(profileRoutes);
+
   // POST /api/auth/login
   app.post('/login', async (request, reply) => {
     const parsed = loginBodySchema.safeParse(request.body);
@@ -75,6 +78,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           name: user.name,
           email: user.email,
           role: user.role,
+          avatar_url: user.avatar_url ?? null,
           ...(user.tenantId ? { tenantId: user.tenantId } : {}),
         },
       });

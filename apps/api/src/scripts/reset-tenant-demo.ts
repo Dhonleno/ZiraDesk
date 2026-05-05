@@ -32,6 +32,17 @@ async function main() {
 
   await exec(`SET search_path TO "${SCHEMA}", public`);
 
+  await exec(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS bio TEXT,
+    ADD COLUMN IF NOT EXISTS phone VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'pt-BR',
+    ADD COLUMN IF NOT EXISTS notification_sound BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS notification_desktop BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
   // Limpar em ordem para respeitar FKs
   await exec(`DELETE FROM audit_logs`);
   await exec(`

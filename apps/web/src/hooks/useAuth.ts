@@ -13,11 +13,12 @@ interface LoginResponseData {
     email: string;
     role: string;
     tenantId?: string;
+    avatar_url?: string | null;
   };
 }
 
 export function useAuth() {
-  const { user, token, isAuthenticated, setAuth, logout } = useAuthStore();
+  const { user, token, isAuthenticated, setAuth, setUser, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const loginMutation = useMutation({
@@ -46,6 +47,7 @@ export function useAuth() {
     user,
     token,
     isAuthenticated,
+    setUser,
     login: loginMutation.mutate,
     loginAsync: loginMutation.mutateAsync,
     isLoggingIn: loginMutation.isPending,
