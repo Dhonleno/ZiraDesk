@@ -1,0 +1,41 @@
+{
+  "title": "Centro de Soporte",
+  "login": {
+    "title": "Centro de Soporte",
+    "subtitle": "Accede para seguir tus tickets",
+    "email": "Correo",
+    "password": "Contraseña",
+    "submit": "Entrar",
+    "loading": "Entrando..."
+  },
+  "dashboard": {
+    "greeting": "Hola, {{name}}! 👋",
+    "subtitle": "Sigue tus tickets de soporte",
+    "newTicket": "+ Nuevo ticket",
+    "recent": "Tickets recientes"
+  },
+  "stats": {
+    "open": "Abiertos",
+    "inProgress": "En progreso",
+    "resolved": "Resueltos"
+  },
+  "ticket": {
+    "new": "Nuevo ticket",
+    "title": "Título",
+    "type": "Tipo",
+    "description": "Descripción",
+    "submit": "Enviar ticket",
+    "addComment": "Agregar comentario",
+    "noComments": "Aún no hay comentarios"
+  },
+  "access": {
+    "title": "Acceso al Portal",
+    "active": "Activo",
+    "inactive": "Sin acceso",
+    "create": "Crear acceso al portal",
+    "revoke": "Revocar acceso",
+    "created": "¡Acceso creado con éxito!",
+    "emailRequired": "El contacto debe tener correo",
+    "lastLogin": "Último acceso: {{date}}"
+  }
+}

@@ -1,5 +1,6 @@
 import { prisma } from '../../../config/database.js';
 import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contacts.schema.js';
+import bcrypt from 'bcryptjs';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -29,6 +30,9 @@ interface ContactRow {
   department: string | null;
   is_primary: boolean;
   avatar_url: string | null;
+  portal_enabled: boolean;
+  portal_last_login: Date | null;
+  portal_invited_at: Date | null;
   tags: string[];
   custom_fields: unknown;
   notes: string | null;
@@ -43,6 +47,10 @@ interface ContactStatsRow {
   open_tickets: bigint;
 }
 
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
@@ -52,6 +60,7 @@ const BASE_SELECT = `
   SELECT
     ct.id, ct.organization_id, ct.name, ct.email, ct.phone, ct.whatsapp,
     ct.document, ct.role, ct.department, ct.is_primary, ct.avatar_url,
+    ct.portal_enabled, ct.portal_last_login, ct.portal_invited_at,
     ct.tags, ct.custom_fields, ct.notes, ct.created_at, ct.updated_at,
     o.name   AS organization_name,
     o.status AS organization_status
@@ -102,25 +111,31 @@ export async function getContact(id: string) {
 }
 
 /* ── getContactStats ─────────────────────────────────────────────────────── */
-export async function getContactStats(id: string) {
+export async function getContactStats(id: string, schemaName: string) {
+  const schema = quoteIdent(schemaName);
+  const contactsRef = `${schema}.contacts`;
+  const conversationsRef = `${schema}.conversations`;
+  const messagesRef = `${schema}.messages`;
+  const ticketsRef = `${schema}.tickets`;
+
   const [stats] = await prisma.$queryRawUnsafe<ContactStatsRow[]>(
     `WITH contact_row AS (
-       SELECT id FROM contacts WHERE id = $1::uuid
+       SELECT id FROM ${contactsRef} WHERE id = $1::uuid
      ),
      conv_stats AS (
        SELECT COUNT(*) AS total_conversations
-       FROM conversations
+       FROM ${conversationsRef}
        WHERE contact_id = $1::uuid
      ),
      msg_stats AS (
        SELECT COUNT(m.*) AS total_messages
-       FROM messages m
-       JOIN conversations c ON c.id = m.conversation_id
+       FROM ${messagesRef} m
+       JOIN ${conversationsRef} c ON c.id = m.conversation_id
        WHERE c.contact_id = $1::uuid
      ),
      ticket_stats AS (
        SELECT COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) AS open_tickets
-       FROM tickets
+       FROM ${ticketsRef}
        WHERE contact_id = $1::uuid
      )
      SELECT
@@ -280,4 +295,75 @@ export async function linkToOrganization(contactId: string, organizationId: stri
   );
 
   return getContact(contactId);
+}
+
+function generateTemporaryPassword(length = 8): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let password = '';
+  for (let i = 0; i < length; i += 1) {
+    password += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return password;
+}
+
+export async function createPortalAccess(contactId: string, tenantId: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    name: string;
+    email: string | null;
+  }>>(
+    `SELECT id, name, email
+     FROM contacts
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    contactId,
+  );
+
+  const contact = rows[0];
+  if (!contact) throw new NotFoundError('Contato');
+  if (!contact.email) {
+    throw new ConflictError('Contato precisa ter e-mail para acessar o portal');
+  }
+
+  const tempPassword = generateTemporaryPassword();
+  const hash = await bcrypt.hash(tempPassword, 10);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE contacts
+     SET portal_enabled = true,
+         portal_password_hash = $1,
+         portal_invited_at = NOW()
+     WHERE id = $2::uuid`,
+    hash,
+    contactId,
+  );
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { slug: true },
+  });
+
+  const portalUrl = process.env['NODE_ENV'] === 'production'
+    ? `https://suporte.${tenant?.slug}.ziradesk.com.br`
+    : 'http://localhost:5173/portal';
+
+  return {
+    contact,
+    portalUrl,
+    tempPassword,
+  };
+}
+
+export async function revokePortalAccess(contactId: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `UPDATE contacts
+     SET portal_enabled = false,
+         portal_password_hash = NULL
+     WHERE id = $1::uuid
+     RETURNING id`,
+    contactId,
+  );
+
+  if (!rows[0]) throw new NotFoundError('Contato');
+  return { revoked: true };
 }

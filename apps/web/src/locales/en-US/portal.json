@@ -1,0 +1,41 @@
+{
+  "title": "Support Center",
+  "login": {
+    "title": "Support Center",
+    "subtitle": "Sign in to track your tickets",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "loading": "Signing in..."
+  },
+  "dashboard": {
+    "greeting": "Hi, {{name}}! 👋",
+    "subtitle": "Track your support tickets",
+    "newTicket": "+ New ticket",
+    "recent": "Recent tickets"
+  },
+  "stats": {
+    "open": "Open",
+    "inProgress": "In progress",
+    "resolved": "Resolved"
+  },
+  "ticket": {
+    "new": "New ticket",
+    "title": "Title",
+    "type": "Type",
+    "description": "Description",
+    "submit": "Submit ticket",
+    "addComment": "Add comment",
+    "noComments": "No comments yet"
+  },
+  "access": {
+    "title": "Portal Access",
+    "active": "Active",
+    "inactive": "No access",
+    "create": "Create portal access",
+    "revoke": "Revoke access",
+    "created": "Access created successfully!",
+    "emailRequired": "Contact must have an email",
+    "lastLogin": "Last login: {{date}}"
+  }
+}

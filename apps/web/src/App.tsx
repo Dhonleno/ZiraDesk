@@ -7,6 +7,7 @@ import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { TenantLayout } from './layouts/TenantLayout';
 import { SuperAdminLayout } from './layouts/SuperAdminLayout';
 import { AuthLayout } from './layouts/AuthLayout';
+import { PortalLayout } from './layouts/PortalLayout';
 import { Dashboard } from './pages/super-admin/Dashboard';
 import { Tenants } from './pages/super-admin/Tenants';
 import { TenantDetail } from './pages/super-admin/TenantDetail';
@@ -35,6 +36,12 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Upgrade } from './pages/settings/Upgrade';
 import { ProfilePage } from './pages/profile/Profile';
 import { NotFound } from './pages/NotFound';
+import { PortalGuard } from './components/portal/PortalGuard';
+import { PortalLogin } from './pages/portal/PortalLogin';
+import { PortalDashboard } from './pages/portal/PortalDashboard';
+import { PortalTickets } from './pages/portal/PortalTickets';
+import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
+import { PortalCreateTicket } from './pages/portal/PortalCreateTicket';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +74,14 @@ export function App() {
         }}
       >
         <Routes>
+          <Route path="/portal" element={<PortalLayout />}>
+            <Route index element={<PortalLogin />} />
+            <Route path="dashboard" element={<PortalGuard><PortalDashboard /></PortalGuard>} />
+            <Route path="tickets" element={<PortalGuard><PortalTickets /></PortalGuard>} />
+            <Route path="tickets/:id" element={<PortalGuard><PortalTicketDetail /></PortalGuard>} />
+            <Route path="tickets/new" element={<PortalGuard><PortalCreateTicket /></PortalGuard>} />
+          </Route>
+
           {/* Rotas públicas de autenticação */}
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<Login />} />

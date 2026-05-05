@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/auth.store';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -448,6 +448,9 @@ export interface CrmContact {
   department: string | null;
   is_primary: boolean;
   avatar_url: string | null;
+  portal_enabled?: boolean;
+  portal_last_login?: string | null;
+  portal_invited_at?: string | null;
   tags: string[];
   custom_fields: Record<string, unknown>;
   notes: string | null;
@@ -557,6 +560,25 @@ export const contactsApi = {
   delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
   linkOrganization: async (id: string, organization_id: string) =>
     api.post(`/crm/contacts/${id}/link-organization`, { organization_id }),
+  portalAccess: {
+    create: async (contactId: string): Promise<{
+      temp_password: string;
+      portal_url: string;
+      email: string | null;
+    }> => {
+      const res = await api.post<{
+        success: boolean;
+        data: { temp_password: string; portal_url: string; email: string | null };
+      }>(`/crm/contacts/${contactId}/portal-access`);
+      return res.data.data;
+    },
+    revoke: async (contactId: string): Promise<{ revoked: boolean }> => {
+      const res = await api.delete<{ success: boolean; data: { revoked: boolean } }>(
+        `/crm/contacts/${contactId}/portal-access`,
+      );
+      return res.data.data;
+    },
+  },
 };
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
@@ -978,7 +1000,9 @@ export interface Ticket {
 export interface TicketComment {
   id:            string;
   ticket_id:     string;
-  user_id:       string;
+  user_id:       string | null;
+  contact_id?:   string | null;
+  source?:       string;
   content:       string;
   is_internal:   boolean;
   created_at:    string;
@@ -1757,4 +1781,145 @@ export const ticketTime = {
   add: (ticketId: string, data: { minutes: number; description?: string; worked_at?: string }) =>
     api.post(`/tickets/${ticketId}/time`, data),
   delete: (ticketId: string, entryId: string) => api.delete(`/tickets/${ticketId}/time/${entryId}`),
+};
+
+export interface PortalUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface PortalMe {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  role: string | null;
+  department: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+}
+
+export interface PortalTicket {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: TicketStatus;
+  priority: TicketPriority;
+  type_id?: string | null;
+  type_name?: string | null;
+  type_icon?: string | null;
+  type_color?: string | null;
+  assigned_name?: string | null;
+  contact_name?: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+export interface PortalTicketComment {
+  id: string;
+  content: string;
+  created_at: string;
+  user_name: string | null;
+  role: string | null;
+  source?: string | null;
+}
+
+export interface PortalTicketDetail extends PortalTicket {
+  comments: PortalTicketComment[];
+}
+
+function resolvePortalTenantSlug(): string {
+  if (typeof window === 'undefined') return 'demo';
+  const host = window.location.hostname.toLowerCase();
+  const parts = host.split('.');
+  if (parts[0] === 'suporte' && parts[1]) return parts[1];
+  if (host === 'localhost' || host === '127.0.0.1') return 'demo';
+  return 'demo';
+}
+
+const portalHttp = axios.create({
+  baseURL: '/api/portal',
+  withCredentials: false,
+});
+
+function getPortalToken(): string | null {
+  return localStorage.getItem('portal_token');
+}
+
+function withPortalAuth(config: AxiosRequestConfig = {}): AxiosRequestConfig {
+  const token = getPortalToken();
+  if (!token) return config;
+  return {
+    ...config,
+    headers: {
+      ...(config.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
+export const portalApi = {
+  login: async (email: string, password: string): Promise<{ token: string; contact: PortalUser }> => {
+    const res = await portalHttp.post<{ success: boolean; token: string; contact: PortalUser }>('/auth/login', {
+      email,
+      password,
+      tenant_slug: resolvePortalTenantSlug(),
+    });
+    return { token: res.data.token, contact: res.data.contact };
+  },
+
+  forgotPassword: async (email: string): Promise<void> => {
+    await portalHttp.post('/auth/forgot-password', { email });
+  },
+
+  getMe: async (): Promise<PortalMe> => {
+    const res = await portalHttp.get<{ success: boolean; data: PortalMe }>('/me', withPortalAuth());
+    return res.data.data;
+  },
+
+  getTicketTypes: async (): Promise<Array<{ id: string; name: string; icon: string; color: string }>> => {
+    const res = await portalHttp.get<{ success: boolean; data: Array<{ id: string; name: string; icon: string; color: string }> }>(
+      '/ticket-types',
+      withPortalAuth(),
+    );
+    return res.data.data;
+  },
+
+  getTickets: async (params?: { status?: TicketStatus; page?: number; per_page?: number }): Promise<{
+    data: PortalTicket[];
+    total: number;
+    page: number;
+    per_page: number;
+  }> => {
+    const res = await portalHttp.get<{
+      success: boolean;
+      data: PortalTicket[];
+      total: number;
+      page: number;
+      per_page: number;
+    }>('/tickets', withPortalAuth({ ...(params ? { params } : {}) }));
+    return {
+      data: res.data.data,
+      total: res.data.total,
+      page: res.data.page,
+      per_page: res.data.per_page,
+    };
+  },
+
+  getTicket: async (id: string): Promise<PortalTicketDetail> => {
+    const res = await portalHttp.get<{ success: boolean; data: PortalTicketDetail }>(`/tickets/${id}`, withPortalAuth());
+    return res.data.data;
+  },
+
+  createTicket: async (payload: { title: string; description?: string; type_id?: string }): Promise<PortalTicket> => {
+    const res = await portalHttp.post<{ success: boolean; data: PortalTicket }>('/tickets', payload, withPortalAuth());
+    return res.data.data;
+  },
+
+  addComment: async (ticketId: string, content: string): Promise<void> => {
+    await portalHttp.post(`/tickets/${ticketId}/comments`, { content }, withPortalAuth());
+  },
 };

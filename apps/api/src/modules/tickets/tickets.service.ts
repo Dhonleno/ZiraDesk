@@ -59,7 +59,9 @@ interface TicketRow {
 interface CommentRow {
   id:          string;
   ticket_id:   string;
-  user_id:     string;
+  user_id:     string | null;
+  contact_id:  string | null;
+  source:      string;
   content:     string;
   is_internal: boolean;
   created_at:  Date;
@@ -243,6 +245,17 @@ async function ensureTicketInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
     ON ticket_attachments(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ticket_comments
+    ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'agent'
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ticket_comments
+    ALTER COLUMN user_id DROP NOT NULL
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -665,11 +678,12 @@ export async function listComments(ticketId: string) {
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `SELECT
-       tc.id, tc.ticket_id, tc.user_id, tc.content, tc.is_internal, tc.created_at,
-       u.name       AS author_name,
-       u.avatar_url AS author_avatar
+       tc.id, tc.ticket_id, tc.user_id, tc.contact_id, tc.source, tc.content, tc.is_internal, tc.created_at,
+       COALESCE(c.name, u.name) AS author_name,
+       COALESCE(c.avatar_url, u.avatar_url) AS author_avatar
      FROM ticket_comments tc
      LEFT JOIN users u ON u.id = tc.user_id
+     LEFT JOIN contacts c ON c.id = tc.contact_id
      WHERE tc.ticket_id = $1::uuid
      ORDER BY tc.created_at ASC`,
     ticketId,
@@ -683,10 +697,10 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
   const ticket = await getTicket(ticketId);
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
-    `INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
-     VALUES ($1::uuid, $2::uuid, $3, $4)
+    `INSERT INTO ticket_comments (ticket_id, user_id, contact_id, source, content, is_internal)
+     VALUES ($1::uuid, $2::uuid, NULL, 'agent', $3, $4)
      RETURNING
-       id, ticket_id, user_id, content, is_internal, created_at,
+       id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
        NULL AS author_name, NULL AS author_avatar`,
     ticketId, userId, data.content, data.is_internal,
   );
@@ -729,7 +743,7 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
 /* ── deleteComment ───────────────────────────────────────────────────────── */
 export async function deleteComment(commentId: string, userId: string, tenantId: string) {
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
-    `SELECT id, ticket_id, user_id, content, is_internal, created_at,
+    `SELECT id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
             NULL AS author_name, NULL AS author_avatar
      FROM ticket_comments
      WHERE id = $1::uuid LIMIT 1`,

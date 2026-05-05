@@ -8,6 +8,7 @@ import { ContactAvatar } from './ContactAvatar';
 import { EditContactModal } from './EditContactModal';
 import { LinkOrganizationModal } from './LinkOrganizationModal';
 import { SelectChannelModal } from './SelectChannelModal';
+import { Modal } from '../ui/Modal';
 
 type Tab = 'data' | 'conversations' | 'tickets' | 'notes';
 
@@ -48,6 +49,32 @@ function InfoField({ label, value, link }: { label: string; value?: string | nul
   );
 }
 
+function ChannelTypeIcon({ channelType }: { channelType: string }) {
+  if (channelType === 'whatsapp') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+        <rect x="4" y="2.5" width="10" height="13" rx="2.2" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M7 5.2h4M7 12.8h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (channelType === 'email') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+        <rect x="2.5" y="4" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M4.5 6l4.5 3.5L13.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path d="M4 4.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H8l-3.5 2v-2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function ContactDetail({ contactId }: Props) {
   const { t } = useTranslation('crm');
   const navigate = useNavigate();
@@ -57,6 +84,7 @@ export function ContactDetail({ contactId }: Props) {
   const [showEdit, setShowEdit] = useState(false);
   const [showLinkOrg, setShowLinkOrg] = useState(false);
   const [showSelectChannel, setShowSelectChannel] = useState(false);
+  const [accessInfo, setAccessInfo] = useState<{ portalUrl: string; tempPassword: string; email: string | null } | null>(null);
   const [notes, setNotes] = useState('');
   const [notesDirty, setNotesDirty] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
@@ -97,6 +125,35 @@ export function ContactDetail({ contactId }: Props) {
       setNotesDirty(false);
     },
     onError: () => toast.error('Erro ao salvar notas'),
+  });
+
+  const createPortalAccessMutation = useMutation({
+    mutationFn: () => contactsApi.portalAccess.create(contactId),
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ['crm-contact', contactId] });
+      await queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      setAccessInfo({
+        portalUrl: data.portal_url,
+        tempPassword: data.temp_password,
+        email: data.email,
+      });
+      toast.success('Acesso ao portal criado');
+    },
+    onError: (error: unknown) => {
+      const message = (error as { response?: { data?: { error?: { message?: string } } } })
+        .response?.data?.error?.message ?? 'Erro ao criar acesso ao portal';
+      toast.error(message);
+    },
+  });
+
+  const revokePortalAccessMutation = useMutation({
+    mutationFn: () => contactsApi.portalAccess.revoke(contactId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['crm-contact', contactId] });
+      await queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      toast.success('Acesso ao portal revogado');
+    },
+    onError: () => toast.error('Erro ao revogar acesso ao portal'),
   });
 
   useEffect(() => {
@@ -166,8 +223,12 @@ export function ContactDetail({ contactId }: Props) {
               ) : null}
               <div style={{ marginTop: 8 }}>
                 {contact.organization_name && contact.organization_id ? (
-                  <Link to={`/crm/organizations?id=${contact.organization_id}`} style={{ fontSize: 12, color: 'var(--teal)' }}>
-                    🏢 {contact.organization_name}
+                  <Link to={`/crm/organizations?id=${contact.organization_id}`} style={{ fontSize: 12, color: 'var(--teal)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                      <rect x="1.5" y="3.5" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5 3.5V2.6a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                    {contact.organization_name}
                   </Link>
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--txt-3)', border: '1px solid var(--line)', borderRadius: 'var(--r-pill)', padding: '2px 8px' }}>
@@ -179,21 +240,22 @@ export function ContactDetail({ contactId }: Props) {
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setShowEdit(true)}
-                style={{ padding: '5px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer' }}
+                className="zd-btn"
               >
                 {t('contacts.actions.edit')}
               </button>
               <button
                 onClick={() => void handleStartConversation()}
                 disabled={creatingConversation}
-                style={{ padding: '5px 10px', borderRadius: 'var(--r)', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontSize: 12, cursor: 'pointer', opacity: creatingConversation ? 0.6 : 1 }}
+                className="zd-btn zd-btn-primary"
+                style={{ opacity: creatingConversation ? 0.6 : 1 }}
               >
                 {t('contacts.startConversation')}
               </button>
               {!contact.organization_id ? (
                 <button
                   onClick={() => setShowLinkOrg(true)}
-                  style={{ padding: '5px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer' }}
+                  className="zd-btn"
                 >
                   {t('contacts.actions.link')}
                 </button>
@@ -239,6 +301,49 @@ export function ContactDetail({ contactId }: Props) {
                 {...(contact.organization_id ? { link: `/crm/organizations?id=${contact.organization_id}` } : {})}
               />
               <InfoField label={t('contacts.table.createdAt')} value={new Date(contact.created_at).toLocaleDateString('pt-BR')} />
+
+              <div className="portal-access-section" style={{ gridColumn: '1 / -1' }}>
+                <div className="portal-access-header">
+                  <span>Acesso ao Portal</span>
+                  {contact.portal_enabled ? (
+                    <span className="comment-visibility-badge public">Ativo</span>
+                  ) : (
+                    <span className="comment-visibility-badge">Sem acesso</span>
+                  )}
+                </div>
+
+                {contact.portal_enabled ? (
+                  <div>
+                    <p className="portal-access-hint">
+                      Último acesso: {contact.portal_last_login ? formatRelativeDate(contact.portal_last_login) : 'Nunca'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => revokePortalAccessMutation.mutate()}
+                      disabled={revokePortalAccessMutation.isPending}
+                      className="zd-btn"
+                      style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
+                    >
+                      Revogar acesso
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="portal-access-hint">
+                      O contato precisa ter e-mail cadastrado.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => createPortalAccessMutation.mutate()}
+                      disabled={!contact.email || createPortalAccessMutation.isPending}
+                      className="zd-btn zd-btn-primary"
+                    >
+                      Criar acesso ao portal
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {contact.tags.length > 0 ? (
                 <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
@@ -260,7 +365,17 @@ export function ContactDetail({ contactId }: Props) {
             conversationsLoading ? (
               <div style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('contacts.loading')}</div>
             ) : conversations.length === 0 ? (
-              <div style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('organizations.conversations.empty')}</div>
+              <div style={{ minHeight: 220 }}>
+                <div className="zd-empty-state">
+                  <div className="zd-empty-icon" aria-hidden>
+                    <svg width="21" height="21" viewBox="0 0 21 21" fill="none">
+                      <path d="M4 4.5h13a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-3.5 2V14.5H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('organizations.conversations.empty')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.selectContactHint')}</div>
+                </div>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {conversations.map((conv) => (
@@ -269,7 +384,9 @@ export function ContactDetail({ contactId }: Props) {
                     to={`/omnichannel/conversations?conversation=${conv.id}`}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', textDecoration: 'none' }}
                   >
-                    <span style={{ fontSize: 18 }}>{conv.channel_type === 'whatsapp' ? '📱' : conv.channel_type === 'email' ? '📧' : '💬'}</span>
+                    <span style={{ color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ChannelTypeIcon channelType={conv.channel_type} />
+                    </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 600 }}>
                         {conv.protocol_number ?? conv.id.slice(-8).toUpperCase()}
@@ -294,7 +411,17 @@ export function ContactDetail({ contactId }: Props) {
             ticketsLoading ? (
               <div style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('contacts.loading')}</div>
             ) : ticketRows.length === 0 ? (
-              <div style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('organizations.tickets.empty')}</div>
+              <div style={{ minHeight: 220 }}>
+                <div className="zd-empty-state">
+                  <div className="zd-empty-icon" aria-hidden>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M4 5h12a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 16 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('organizations.tickets.empty')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.selectContactHint')}</div>
+                </div>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {ticketRows.map((ticket) => (
@@ -303,7 +430,11 @@ export function ContactDetail({ contactId }: Props) {
                     to={`/tickets/${ticket.id}`}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', textDecoration: 'none' }}
                   >
-                    <span style={{ fontSize: 16 }}>🎫</span>
+                    <span style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path d="M3.5 4.5h9a1.3 1.3 0 0 1 1.3 1.3v1a1 1 0 0 0-.8 1 1 1 0 0 0 .8 1v1.1a1.3 1.3 0 0 1-1.3 1.3h-9a1.3 1.3 0 0 1-1.3-1.3V9a1 1 0 0 0 .8-1 1 1 0 0 0-.8-1v-1a1.3 1.3 0 0 1 1.3-1.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                      </svg>
+                    </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {ticket.title}
@@ -327,25 +458,16 @@ export function ContactDetail({ contactId }: Props) {
                   setNotesDirty(true);
                 }}
                 placeholder={t('contacts.notes.placeholder')}
-                style={{
-                  width: '100%',
-                  borderRadius: 'var(--r)',
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg-3)',
-                  color: 'var(--txt)',
-                  padding: '10px 12px',
-                  resize: 'vertical',
-                  minHeight: 180,
-                  fontSize: 13,
-                  fontFamily: 'var(--font)',
-                }}
+                className="zd-textarea"
+                style={{ resize: 'vertical', minHeight: 180 }}
               />
               {notesDirty ? (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => saveNotesMutation.mutate()}
                     disabled={saveNotesMutation.isPending}
-                    style={{ padding: '6px 12px', borderRadius: 'var(--r)', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontWeight: 600, cursor: 'pointer', opacity: saveNotesMutation.isPending ? 0.6 : 1 }}
+                    className="zd-btn zd-btn-primary"
+                    style={{ opacity: saveNotesMutation.isPending ? 0.6 : 1 }}
                   >
                     {saveNotesMutation.isPending ? t('organizations.actions.savingNotes') : t('contacts.notes.save')}
                   </button>
@@ -371,6 +493,34 @@ export function ContactDetail({ contactId }: Props) {
         onClose={() => setShowSelectChannel(false)}
         onSelect={(channelId) => { void createOutboundConversation(channelId); }}
       />
+
+      <Modal
+        open={!!accessInfo}
+        onClose={() => setAccessInfo(null)}
+        title="Acesso criado!"
+        maxWidth="sm"
+      >
+        {accessInfo ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-2)' }}>
+              As credenciais foram enviadas por e-mail para {accessInfo.email ?? 'o contato'}.
+            </p>
+            <div className="portal-credentials-display">
+              <div>
+                <label>URL do portal:</label>
+                <code>{accessInfo.portalUrl}</code>
+              </div>
+              <div>
+                <label>Senha temporária:</label>
+                <code>{accessInfo.tempPassword}</code>
+              </div>
+            </div>
+            <p className="portal-access-hint" style={{ marginBottom: 0 }}>
+              Anote a senha temporária. Ela não será exibida novamente.
+            </p>
+          </div>
+        ) : null}
+      </Modal>
     </>
   );
 }

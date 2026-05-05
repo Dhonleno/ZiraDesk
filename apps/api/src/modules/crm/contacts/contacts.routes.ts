@@ -12,6 +12,8 @@ import {
   updateContact,
   deleteContact,
   linkToOrganization,
+  createPortalAccess,
+  revokePortalAccess,
   NotFoundError,
   ConflictError,
 } from './contacts.service.js';
@@ -23,6 +25,12 @@ const guard = [
   hasRole('owner', 'admin', 'agent'),
 ];
 const deleteGuard = [
+  authMiddleware,
+  tenantSchemaFromJwt,
+  ensureCrmInfrastructureMiddleware,
+  hasRole('owner', 'admin'),
+];
+const managePortalGuard = [
   authMiddleware,
   tenantSchemaFromJwt,
   ensureCrmInfrastructureMiddleware,
@@ -72,7 +80,12 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: guard },
     async (request, reply) => {
       try {
-        const stats = await getContactStats(request.params.id);
+        const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+        if (!schemaName) {
+          return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+        }
+
+        const stats = await getContactStats(request.params.id, schemaName);
         return reply.send({ success: true, data: stats });
       } catch (err) {
         if (err instanceof NotFoundError)
@@ -122,6 +135,54 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/:id/portal-access
+  app.post<{ Params: { id: string } }>('/:id/portal-access', { preHandler: managePortalGuard }, async (request, reply) => {
+    if (request.user.isSuperAdmin || !request.user.tenantId) {
+      return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    }
+
+    try {
+      const data = await createPortalAccess(request.params.id, request.user.tenantId);
+
+      request.log.info({
+        event: 'portal.access.created',
+        contact_id: data.contact.id,
+        email: data.contact.email,
+      }, 'Credenciais de acesso ao portal geradas');
+
+      return reply.send({
+        success: true,
+        message: 'Acesso criado e e-mail enviado',
+        data: {
+          temp_password: data.tempPassword,
+          portal_url: data.portalUrl,
+          email: data.contact.email,
+        },
+      });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(400).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // DELETE /api/crm/contacts/:id/portal-access
+  app.delete<{ Params: { id: string } }>('/:id/portal-access', { preHandler: managePortalGuard }, async (request, reply) => {
+    try {
+      const data = await revokePortalAccess(request.params.id);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
       throw err;
     }
   });

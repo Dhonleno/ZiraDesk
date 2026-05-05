@@ -58,6 +58,10 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
         department      VARCHAR(100),
         is_primary      BOOLEAN      NOT NULL DEFAULT false,
         avatar_url      VARCHAR(500),
+        portal_enabled  BOOLEAN      NOT NULL DEFAULT false,
+        portal_password_hash VARCHAR(255),
+        portal_last_login TIMESTAMPTZ,
+        portal_invited_at TIMESTAMPTZ,
         tags            TEXT[]       NOT NULL DEFAULT '{}',
         custom_fields   JSONB        NOT NULL DEFAULT '{}',
         notes           TEXT,
@@ -75,6 +79,14 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
     await prisma.$executeRawUnsafe(
       `CREATE INDEX IF NOT EXISTS idx_contacts_phone ON ${schema}.contacts(phone)`,
     );
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${schema}.contacts
+      ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS portal_password_hash VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS portal_last_login TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
+    `);
 
     await prisma.$executeRawUnsafe(`
       ALTER TABLE ${schema}.conversations
@@ -113,4 +125,3 @@ export async function ensureCrmInfrastructureMiddleware(
 
   await ensureCrmInfrastructure(schemaName);
 }
-

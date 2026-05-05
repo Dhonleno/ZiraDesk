@@ -123,6 +123,10 @@ async function main() {
       department      VARCHAR(100),
       is_primary      BOOLEAN      NOT NULL DEFAULT false,
       avatar_url      VARCHAR(500),
+      portal_enabled  BOOLEAN      NOT NULL DEFAULT false,
+      portal_password_hash VARCHAR(255),
+      portal_last_login TIMESTAMPTZ,
+      portal_invited_at TIMESTAMPTZ,
       tags            TEXT[]       NOT NULL DEFAULT '{}',
       custom_fields   JSONB        NOT NULL DEFAULT '{}',
       notes           TEXT,
@@ -134,6 +138,14 @@ async function main() {
   await exec(`CREATE INDEX IF NOT EXISTS idx_contacts_organization ON contacts(organization_id)`);
   await exec(`CREATE INDEX IF NOT EXISTS idx_contacts_whatsapp ON contacts(whatsapp)`);
   await exec(`CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone)`);
+
+  await exec(`
+    ALTER TABLE contacts
+    ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS portal_password_hash VARCHAR(255),
+    ADD COLUMN IF NOT EXISTS portal_last_login TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
+  `);
 
   // Atualizar conversations: remover client_id, adicionar contact_id + organization_id
   await exec(`ALTER TABLE conversations DROP COLUMN IF EXISTS client_id`);
@@ -221,6 +233,17 @@ async function main() {
   `);
 
   await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id)`);
+
+  await exec(`
+    ALTER TABLE ticket_comments
+    ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'agent'
+  `);
+
+  await exec(`
+    ALTER TABLE ticket_comments
+    ALTER COLUMN user_id DROP NOT NULL
+  `);
 
   // Recriar canal WhatsApp com credenciais do env (se definido)
   const credentials = buildWhatsappChannelCredentials();

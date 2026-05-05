@@ -143,6 +143,10 @@ async function createTenantTables(schemaName: string): Promise<void> {
       department      VARCHAR(100),
       is_primary      BOOLEAN      NOT NULL DEFAULT false,
       avatar_url      VARCHAR(500),
+      portal_enabled  BOOLEAN      NOT NULL DEFAULT false,
+      portal_password_hash VARCHAR(255),
+      portal_last_login TIMESTAMPTZ,
+      portal_invited_at TIMESTAMPTZ,
       tags            TEXT[]       NOT NULL DEFAULT '{}',
       custom_fields   JSONB        NOT NULL DEFAULT '{}',
       notes           TEXT,
@@ -494,7 +498,9 @@ async function createTenantTables(schemaName: string): Promise<void> {
     CREATE TABLE "${schemaName}".ticket_comments (
       id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id   UUID         NOT NULL REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
-      user_id     UUID         NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      user_id     UUID         REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      contact_id  UUID         REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
+      source      VARCHAR(20)  NOT NULL DEFAULT 'agent',
       content     TEXT         NOT NULL,
       is_internal BOOLEAN      NOT NULL DEFAULT FALSE,
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
