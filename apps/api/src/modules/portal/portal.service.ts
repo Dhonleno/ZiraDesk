@@ -71,6 +71,18 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.tickets
+    ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
+    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
+    ON ${schema}.tickets(email_message_id)
+    WHERE email_message_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.ticket_comments
     ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'agent'
@@ -202,6 +214,7 @@ export async function listPortalTickets(portalUser: PortalJwtPayload, query: Por
     title: string;
     status: string;
     priority: string;
+    source: string | null;
     created_at: Date;
     updated_at: Date;
     resolved_at: Date | null;
@@ -215,6 +228,7 @@ export async function listPortalTickets(portalUser: PortalJwtPayload, query: Por
        t.title,
        t.status,
        t.priority,
+       t.source,
        t.created_at,
        t.updated_at,
        t.resolved_at,
@@ -269,6 +283,7 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
     description: string | null;
     status: string;
     priority: string;
+    source: string | null;
     type_id: string | null;
     type_name: string | null;
     type_icon: string | null;
@@ -285,6 +300,7 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
        t.description,
        t.status,
        t.priority,
+       t.source,
        t.type_id,
        tt.name AS type_name,
        tt.icon AS type_icon,
@@ -365,11 +381,13 @@ export async function createPortalTicket(portalUser: PortalJwtPayload, payload: 
     id: string;
     title: string;
     status: string;
+    source: string;
     created_at: Date;
   }>>(
     `INSERT INTO ${schema}.tickets (
        title,
        description,
+       source,
        status,
        priority,
        contact_id,
@@ -380,6 +398,7 @@ export async function createPortalTicket(portalUser: PortalJwtPayload, payload: 
      ) VALUES (
        $1,
        $2,
+       'portal',
        'open',
        'medium',
        $3::uuid,
@@ -388,7 +407,7 @@ export async function createPortalTicket(portalUser: PortalJwtPayload, payload: 
        NOW(),
        NOW()
      )
-     RETURNING id, title, status, created_at`,
+     RETURNING id, title, status, source, created_at`,
     payload.title,
     payload.description ?? null,
     portalUser.contactId,
@@ -405,10 +424,18 @@ export async function createPortalTicket(portalUser: PortalJwtPayload, payload: 
     ticket.id,
   );
 
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+    `SELECT name FROM ${schema}.contacts WHERE id = $1::uuid LIMIT 1`,
+    portalUser.contactId,
+  );
+  const contactName = contactRows[0]?.name ?? null;
+
   try {
     getSocketServer().to(`tenant:${portalUser.tenantId}`).emit('ticket:created', {
-      ticket: { id: ticket.id, title: ticket.title, status: ticket.status },
+      ticket: { id: ticket.id, title: ticket.title, status: ticket.status, source: ticket.source },
       source: 'portal',
+      contactName,
+      subject: ticket.title,
     });
   } catch {
     // socket pode não estar disponível em testes

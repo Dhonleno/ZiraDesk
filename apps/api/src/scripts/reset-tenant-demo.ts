@@ -167,7 +167,15 @@ async function main() {
     ADD COLUMN IF NOT EXISTS contact_id      UUID REFERENCES contacts(id)      ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
-    ADD COLUMN IF NOT EXISTS type_id UUID
+    ADD COLUMN IF NOT EXISTS type_id UUID,
+    ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
+    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+  `);
+
+  await exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
+    ON tickets(email_message_id)
+    WHERE email_message_id IS NOT NULL
   `);
 
   await exec(`

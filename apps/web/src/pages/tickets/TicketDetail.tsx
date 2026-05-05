@@ -11,6 +11,7 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { AssignTicketModal } from '../../components/tickets/AssignTicketModal';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
 import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
+import { SourceBadge } from '../../components/tickets/SourceBadge';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { subscribeToEvent } from '../../services/socket';
 
@@ -410,6 +411,9 @@ export function TicketDetail({ ticketId }: Props) {
             >
               {ticket.type_icon ?? '🎫'} {ticket.type_name}
             </span>
+          ) : null}
+          {ticket.source && ticket.source !== 'manual' ? (
+            <SourceBadge source={ticket.source} />
           ) : null}
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', marginLeft: 4 }}>
             #{ticket.id.slice(-6).toUpperCase()}

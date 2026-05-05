@@ -91,6 +91,16 @@
     },
     "organization": "Organization",
     "sourceConversation": "Originated from conversation {{protocol}}",
+    "source": {
+      "manual": "Manual",
+      "portal": "Portal",
+      "email": "E-mail",
+      "whatsapp": "WhatsApp",
+      "api": "API"
+    },
+    "filterBySource": "All sources",
+    "newFromEmail": "New ticket by email",
+    "newFromPortal": "New ticket from portal",
     "filterByAgent": "All agents",
     "realtime": {
       "newTicket": "New ticket created",

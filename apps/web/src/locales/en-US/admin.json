@@ -7,6 +7,7 @@
       "back": "Back",
       "edit": "Edit",
       "remove": "Remove",
+      "copy": "Copy",
       "deactivate": "Deactivate",
       "activate": "Activate",
       "reactivate": "Reactivate",
@@ -130,6 +131,12 @@
       "bot": {
         "assignedMessage": "Message when assigned to agent",
         "assignedMessageHint": "Sent to customer when an agent takes over the conversation"
+      },
+      "emailInbound": {
+        "title": "Support Email",
+        "address": "Email address",
+        "hint": "Tickets are created automatically when emails are received",
+        "confirmation": "Send confirmation to customer"
       },
       "messages": {
         "saved": "Settings saved successfully"

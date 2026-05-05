@@ -15,6 +15,7 @@ const settingsSchema = z.object({
   timezone: z.string().min(1),
   csat_enabled: z.boolean().default(true),
   csat_message: z.string().max(2000).optional(),
+  email_confirmation: z.boolean().default(true),
   inactivity_enabled: z.boolean().default(true),
   inactivity_warning_minutes: z.number().int().min(1).max(1440),
   inactivity_close_minutes: z.number().int().min(1).max(1440),
@@ -78,12 +79,12 @@ export function Settings() {
       inactivity_warning_message:
         'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
       inactivity_close_message:
-        'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
+        'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
       bot_assigned_message: [
-        '✅ Seu atendimento foi aceito!',
+        'Seu atendimento foi aceito.',
         '',
         'Você está sendo atendido por *{{agent}}*.',
-        'Em breve entraremos em contato. 😊',
+        'Em breve entraremos em contato.',
       ].join('\n'),
     },
   });
@@ -96,6 +97,7 @@ export function Settings() {
         timezone: data.timezone ?? 'America/Sao_Paulo',
         csat_enabled: data.csat_enabled ?? true,
         csat_message: data.csat_message ?? '',
+        email_confirmation: data.email_confirmation ?? true,
         inactivity_enabled: data.inactivity_enabled ?? true,
         inactivity_warning_minutes: data.inactivity_warning_minutes ?? 30,
         inactivity_close_minutes: data.inactivity_close_minutes ?? 60,
@@ -104,12 +106,12 @@ export function Settings() {
           ?? 'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
         inactivity_close_message:
           data.inactivity_close_message
-          ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊',
+          ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
         bot_assigned_message: data.bot_assigned_message ?? [
-          '✅ Seu atendimento foi aceito!',
+          'Seu atendimento foi aceito.',
           '',
           'Você está sendo atendido por *{{agent}}*.',
-          'Em breve entraremos em contato. 😊',
+          'Em breve entraremos em contato.',
         ].join('\n'),
       });
     }
@@ -120,6 +122,7 @@ export function Settings() {
       adminApi.updateSettings({
         ...values,
         csat_message: values.csat_message ?? null,
+        email_confirmation: values.email_confirmation ?? true,
         inactivity_warning_message: values.inactivity_warning_message ?? '',
         inactivity_close_message: values.inactivity_close_message ?? '',
         bot_assigned_message: values.bot_assigned_message ?? '',
@@ -167,47 +170,64 @@ export function Settings() {
 
   const selectStyle: React.CSSProperties = {
     background: 'var(--bg-3)',
-    border: '1px solid var(--line)',
+    border: '1px solid var(--line-2)',
     color: 'var(--txt)',
-    height: '2.5rem',
-    borderRadius: '0.5rem',
+    height: 40,
+    borderRadius: 'var(--r)',
     padding: '0 0.75rem',
-    fontSize: '0.875rem',
+    fontSize: 13,
     width: '100%',
     outline: 'none',
+    fontFamily: 'var(--font)',
   };
   const inactivityEnabled = watch('inactivity_enabled');
+  const portalAddress = `suporte@${data?.slug ?? 'demo'}.ziradesk.com.br`;
+
+  const copySupportAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(portalAddress);
+      toast.success('Endereço copiado');
+    } catch {
+      toast.error('Não foi possível copiar o endereço');
+    }
+  };
 
   return (
-    <div className="space-y-6 max-w-xl p-6">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
+    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="space-y-6 p-6" style={{ maxWidth: 900 }}>
+          <div>
+            <h1 className="text-2xl" style={{ color: 'var(--txt)', fontWeight: 600 }}>
           {t('tenantAdmin.settings.title')}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-          {t('tenantAdmin.settings.subtitle')}
-        </p>
-      </div>
-
-      <div
-        className="rounded-xl p-6"
-        style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
-      >
-        {isLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-lg bg-bg-3" />
-            ))}
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
+              {t('tenantAdmin.settings.subtitle')}
+            </p>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit((v) => {
-            if (v.inactivity_close_minutes <= v.inactivity_warning_minutes) {
-              toast.error(t('tenantAdmin.settings.inactivity.validation.closeGreaterThanWarning'));
-              return;
-            }
-            mutation.mutate(v);
-          })} className="space-y-5">
-            <div
+
+          <div
+            className="rounded-xl"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+          >
+            {isLoading ? (
+              <div className="space-y-4 p-6">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-10 animate-pulse rounded-lg bg-bg-3" />
+                ))}
+              </div>
+            ) : (
+              <form
+                onSubmit={handleSubmit((v) => {
+                  if (v.inactivity_close_minutes <= v.inactivity_warning_minutes) {
+                    toast.error(t('tenantAdmin.settings.inactivity.validation.closeGreaterThanWarning'));
+                    return;
+                  }
+                  mutation.mutate(v);
+                })}
+                style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
+              >
+                <div className="space-y-5 p-6">
+                  <div
               style={{
                 border: '1px solid var(--line)',
                 borderRadius: '0.75rem',
@@ -215,11 +235,11 @@ export function Settings() {
                 background: 'var(--bg-3)',
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 10 }}>
-                Identidade Visual
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div
+                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)', marginBottom: 10 }}>
+                      Identidade visual
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div
                   style={{
                     width: 64,
                     height: 64,
@@ -232,20 +252,20 @@ export function Settings() {
                     overflow: 'hidden',
                     flexShrink: 0,
                   }}
-                >
-                  {data?.logo_url ? (
-                    <img
-                      src={data.logo_url}
-                      alt="Logo"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--txt-3)' }}>Z</span>
-                  )}
-                </div>
+                      >
+                        {data?.logo_url ? (
+                          <img
+                            src={data.logo_url}
+                            alt="Logo"
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 24, fontWeight: 600, color: 'var(--txt-3)' }}>Z</span>
+                        )}
+                      </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                  <label
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                        <label
                     htmlFor="logo-input"
                     style={{
                       width: 'fit-content',
@@ -257,19 +277,19 @@ export function Settings() {
                       fontSize: 12,
                       cursor: uploadLogoMutation.isPending ? 'wait' : 'pointer',
                     }}
-                  >
-                    {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
-                  </label>
-                  <input
+                        >
+                          {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
+                        </label>
+                        <input
                     id="logo-input"
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/svg+xml"
                     onChange={(event) => handleLogoUpload(event.target.files?.[0] ?? null)}
                     style={{ display: 'none' }}
-                  />
+                        />
 
-                  {data?.logo_url && (
-                    <button
+                        {data?.logo_url && (
+                          <button
                       type="button"
                       onClick={() => removeLogoMutation.mutate()}
                       disabled={removeLogoMutation.isPending}
@@ -282,29 +302,33 @@ export function Settings() {
                         cursor: 'pointer',
                         padding: 0,
                       }}
-                    >
-                      {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
-                    </button>
-                  )}
+                          >
+                            {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
+                          </button>
+                        )}
 
-                  <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
-                    PNG, JPG, WEBP ou SVG. Máximo 2MB.
-                  </span>
+                        <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                          PNG, JPG, WEBP ou SVG. Máximo 2MB.
+                        </span>
+                      </div>
+                    </div>
                 </div>
-              </div>
-            </div>
 
-            <Input
+                <Input
               label={t('tenantAdmin.settings.fields.name')}
               error={errors.name?.message}
               {...register('name')}
-            />
+                />
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
                 {t('tenantAdmin.settings.fields.language')}
               </label>
-              <select style={selectStyle} {...register('language')}>
+              <select
+                style={selectStyle}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
+                {...register('language')}
+              >
                 {LANGUAGES.map((l) => (
                   <option key={l.value} value={l.value}>
                     {l.label}
@@ -317,7 +341,11 @@ export function Settings() {
               <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
                 {t('tenantAdmin.settings.fields.timezone')}
               </label>
-              <select style={selectStyle} {...register('timezone')}>
+              <select
+                style={selectStyle}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
+                {...register('timezone')}
+              >
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
@@ -353,12 +381,82 @@ export function Settings() {
               />
             </div>
 
+            <div
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: '0.75rem',
+                padding: '0.85rem 0.9rem',
+                background: 'var(--bg-3)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
+                {t('tenantAdmin.settings.emailInbound.title')}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {t('tenantAdmin.settings.emailInbound.address')}
+                </span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 8,
+                    borderRadius: 'var(--r)',
+                    border: '1px solid var(--line-2)',
+                    background: 'var(--bg-2)',
+                  }}
+                >
+                  <code style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--txt)', flex: 1, overflowX: 'auto' }}>
+                    {portalAddress}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void copySupportAddress()}
+                    className="zd-btn"
+                    style={{ flexShrink: 0 }}
+                  >
+                    {t('tenantAdmin.common.copy')}
+                  </button>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--txt-3)' }}>
+                  {t('tenantAdmin.settings.emailInbound.hint')}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  border: '1px solid var(--line)',
+                  borderRadius: '0.75rem',
+                  padding: '0.85rem 0.9rem',
+                  background: 'var(--bg-2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
+                  {t('tenantAdmin.settings.emailInbound.confirmation')}
+                </div>
+                <input
+                  type="checkbox"
+                  {...register('email_confirmation')}
+                  style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--teal)' }}
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
                 {t('tenantAdmin.settings.csat.message')}
               </label>
               <textarea
                 rows={6}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
                 {...register('csat_message')}
                 placeholder={t('tenantAdmin.settings.csat.messagePlaceholder')}
                 style={{
@@ -432,6 +530,7 @@ export function Settings() {
                   </label>
                   <textarea
                     rows={3}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
                     {...register('inactivity_warning_message')}
                     placeholder={t('tenantAdmin.settings.inactivity.warningMessageHint')}
                     style={{
@@ -455,6 +554,7 @@ export function Settings() {
                   </label>
                   <textarea
                     rows={3}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
                     {...register('inactivity_close_message')}
                     style={{
                       width: '100%',
@@ -479,6 +579,7 @@ export function Settings() {
               </label>
               <textarea
                 rows={4}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
                 {...register('bot_assigned_message')}
                 placeholder="{{agent}}"
                 style={{
@@ -499,13 +600,25 @@ export function Settings() {
               </p>
             </div>
 
-            <div className="flex justify-end pt-2">
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
-              </Button>
-            </div>
-          </form>
-        )}
+                </div>
+
+                <div
+                  style={{
+                    borderTop: '1px solid var(--line)',
+                    padding: '12px 24px',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    background: 'var(--bg-2)',
+                  }}
+                >
+                  <Button type="submit" disabled={mutation.isPending}>
+                    {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

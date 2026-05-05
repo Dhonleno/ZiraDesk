@@ -7,6 +7,7 @@
       "back": "Voltar",
       "edit": "Editar",
       "remove": "Remover",
+      "copy": "Copiar",
       "deactivate": "Desativar",
       "activate": "Ativar",
       "reactivate": "Reativar",
@@ -130,6 +131,12 @@
       "bot": {
         "assignedMessage": "Mensagem ao transferir para agente",
         "assignedMessageHint": "Enviada ao cliente quando um agente assume o atendimento"
+      },
+      "emailInbound": {
+        "title": "E-mail de Suporte",
+        "address": "Endereço de e-mail",
+        "hint": "Tickets criados automaticamente ao receber e-mails",
+        "confirmation": "Enviar confirmação ao cliente"
       },
       "messages": {
         "saved": "Configurações salvas com sucesso"

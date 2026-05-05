@@ -458,6 +458,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       type_id         UUID REFERENCES "${schemaName}".ticket_types(id) ON DELETE SET NULL,
       title           VARCHAR(255) NOT NULL,
       description     TEXT,
+      source          VARCHAR(30)  NOT NULL DEFAULT 'manual',
+      email_message_id VARCHAR(500),
       status          VARCHAR(30)  NOT NULL DEFAULT 'open',
       priority        VARCHAR(20)  NOT NULL DEFAULT 'medium',
       category        VARCHAR(100),
@@ -474,6 +476,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX "${schemaName}_idx_tickets_type_id"
     ON "${schemaName}".tickets(type_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX "${schemaName}_idx_tickets_email_message_id"
+    ON "${schemaName}".tickets(email_message_id)
+    WHERE email_message_id IS NOT NULL
   `);
 
   await prisma.$executeRawUnsafe(`

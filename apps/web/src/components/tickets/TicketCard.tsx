@@ -1,6 +1,7 @@
 import type { Ticket } from '../../services/api';
 import { TicketStatusBadge } from './TicketStatusBadge';
 import { TicketPriorityBadge } from './TicketPriorityBadge';
+import { SourceBadge } from './SourceBadge';
 
 interface Props {
   ticket:     Ticket;
@@ -84,6 +85,9 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
           >
             {ticket.type_icon ?? '🎫'} {ticket.type_name}
           </span>
+        ) : null}
+        {ticket.source && ticket.source !== 'manual' ? (
+          <SourceBadge source={ticket.source} />
         ) : null}
       </div>
 

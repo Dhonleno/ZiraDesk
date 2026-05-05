@@ -74,6 +74,7 @@ export async function getSettings(tenantId: string) {
     where: { id: tenantId },
     select: {
       id: true,
+      slug: true,
       name: true,
       settings: true,
       createdAt: true,
@@ -84,6 +85,7 @@ export async function getSettings(tenantId: string) {
   const s = (tenant.settings as Record<string, unknown>) ?? {};
   return {
     id: tenant.id,
+    slug: tenant.slug,
     name: tenant.name,
     logo_url: (s.logo_url as string | undefined) ?? null,
     primary_color: (s.primary_color as string | undefined) ?? null,
@@ -95,6 +97,7 @@ export async function getSettings(tenantId: string) {
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    email_confirmation: (s.email_confirmation as boolean | undefined) ?? true,
     inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
     inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,
     inactivity_close_minutes: (s.inactivity_close_minutes as number | undefined) ?? 60,
@@ -112,7 +115,7 @@ export async function getSettings(tenantId: string) {
 export async function updateSettings(tenantId: string, data: UpdateSettingsInput) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { name: true, settings: true },
+    select: { slug: true, name: true, settings: true },
   });
   if (!tenant) throw new Error('Tenant não encontrado');
 
@@ -129,6 +132,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       : {}),
     ...(data.csat_enabled !== undefined ? { csat_enabled: data.csat_enabled } : {}),
     ...(data.csat_message !== undefined ? { csat_message: data.csat_message } : {}),
+    ...(data.email_confirmation !== undefined ? { email_confirmation: data.email_confirmation } : {}),
     ...(data.inactivity_enabled !== undefined ? { inactivity_enabled: data.inactivity_enabled } : {}),
     ...(data.inactivity_warning_minutes !== undefined
       ? { inactivity_warning_minutes: data.inactivity_warning_minutes }
@@ -153,12 +157,13 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       name: data.name ?? tenant.name,
       settings: merged,
     },
-    select: { id: true, name: true, settings: true },
+    select: { id: true, slug: true, name: true, settings: true },
   });
 
   const s = (updated.settings as Record<string, unknown>) ?? {};
   return {
     id: updated.id,
+    slug: updated.slug,
     name: updated.name,
     logo_url: (s.logo_url as string | undefined) ?? null,
     primary_color: (s.primary_color as string | undefined) ?? null,
@@ -170,6 +175,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    email_confirmation: (s.email_confirmation as boolean | undefined) ?? true,
     inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
     inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,
     inactivity_close_minutes: (s.inactivity_close_minutes as number | undefined) ?? 60,

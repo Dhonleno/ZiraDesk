@@ -27,7 +27,7 @@ function KpiCard({ label, value, color, loading }: { label: string; value: numbe
       background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 4,
     }}>
       <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--txt-3)' }}>{label}</span>
-      <span style={{ fontSize: 22, fontWeight: 700, color, fontFamily: 'var(--mono)', lineHeight: 1 }}>
+      <span style={{ fontSize: 22, fontWeight: 600, color, fontFamily: 'var(--mono)', lineHeight: 1 }}>
         {loading ? '—' : (value ?? 0)}
       </span>
     </div>
@@ -36,7 +36,7 @@ function KpiCard({ label, value, color, loading }: { label: string; value: numbe
 
 /* ── Select style ─────────────────────────────────────────────────────────── */
 const selectStyle: React.CSSProperties = {
-  background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--txt)',
+  background: 'var(--bg-3)', border: '1px solid var(--line-2)', color: 'var(--txt)',
   height: '2rem', borderRadius: 'var(--r)', padding: '0 0.625rem',
   fontSize: 12, outline: 'none', fontFamily: 'var(--font)', cursor: 'pointer',
 };
@@ -55,6 +55,7 @@ export function TicketsPage() {
   const [statusTab, setStatusTab]     = useState<StatusTab>('all');
   const [priority, setPriority]       = useState<TicketPriority | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
+  const [filterSource, setFilterSource] = useState<'' | 'manual' | 'portal' | 'email' | 'whatsapp' | 'api'>('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const debouncedSearch = useDebounce(search, 300);
@@ -73,7 +74,7 @@ export function TicketsPage() {
 
   /* ── Queries ── */
   const { data: ticketsData, isPending: listLoading } = useQuery({
-    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, contactFilter],
+    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, filterSource, contactFilter],
     queryFn: () => {
       const params: import('../../services/api').ListTicketsParams = {
         per_page:   50,
@@ -84,6 +85,7 @@ export function TicketsPage() {
       if (statusTab !== 'all')  params.status   = statusTab;
       if (priority)             params.priority  = priority;
       if (filterAgent)          params.assigned_to = filterAgent;
+      if (filterSource)         params.source = filterSource;
       if (contactFilter)        params.contact_id = contactFilter;
       return ticketsApi.list(params);
     },
@@ -104,9 +106,21 @@ export function TicketsPage() {
 
   /* ── Realtime ── */
   useEffect(() => {
-    const unsub1 = subscribeToEvent<{ ticket: Ticket }>('ticket:created', () => {
+    const unsub1 = subscribeToEvent<{ ticket?: Ticket; source?: string; contactName?: string | null; subject?: string | null }>('ticket:created', (data) => {
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
       void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
+      const source = data?.source ?? data?.ticket?.source ?? 'manual';
+      if (source === 'email') {
+        const contact = data?.contactName ?? 'Cliente';
+        const subject = data?.subject ?? data?.ticket?.title ?? 'Sem assunto';
+        toast.info(`📧 ${t('tickets.newFromEmail')}: ${contact} — "${subject}"`);
+        return;
+      }
+      if (source === 'portal') {
+        const contact = data?.contactName ?? 'Contato';
+        toast.info(`🌐 ${t('tickets.newFromPortal')}: ${contact}`);
+        return;
+      }
       toast.info(t('tickets.realtime.newTicket'));
     });
 
@@ -157,21 +171,16 @@ export function TicketsPage() {
         {/* Header */}
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--txt)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)', display: 'flex', alignItems: 'center', gap: 8 }}>
               {t('tickets.title')}
               <span style={{ fontSize: 11, fontWeight: 500, padding: '1px 7px', borderRadius: 'var(--r-pill)',
-                background: 'var(--bg-5)', color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                background: 'var(--bg-5)', color: 'var(--txt-3)', fontFamily: 'var(--mono)', border: '1px solid var(--line-2)' }}>
                 {total}
               </span>
             </h1>
             <button
               onClick={() => setIsCreateOpen(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-                borderRadius: 'var(--r)', border: 'none', background: 'var(--teal)',
-                color: 'var(--on-teal)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                fontFamily: 'var(--font)', whiteSpace: 'nowrap',
-              }}
+              className="zd-btn zd-btn-primary"
             >
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
                 <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -190,20 +199,21 @@ export function TicketsPage() {
             <input
               type="text"
               placeholder="Buscar tickets..."
+              aria-label="Buscar tickets"
+              className="zd-input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
                 width: '100%', boxSizing: 'border-box', height: '2rem',
                 paddingLeft: 30, paddingRight: 10, borderRadius: 'var(--r)',
-                fontSize: 12, background: 'var(--bg-3)', border: '1px solid var(--line)',
-                color: 'var(--txt)', outline: 'none', fontFamily: 'var(--font)',
+                fontSize: 12,
               }}
             />
           </div>
 
           {/* Filters row */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select style={{ ...selectStyle, flex: 1 }} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority | '')}>
+            <select aria-label="Filtrar por prioridade" style={{ ...selectStyle, flex: 1 }} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority | '')}>
               <option value="">{t('tickets.priority.all')}</option>
               <option value="low">{t('tickets.priority.low')}</option>
               <option value="medium">{t('tickets.priority.medium')}</option>
@@ -211,6 +221,7 @@ export function TicketsPage() {
               <option value="urgent">{t('tickets.priority.urgent')}</option>
             </select>
             <select
+              aria-label="Filtrar por agente"
               style={{ ...selectStyle, flex: 1 }}
               value={filterAgent}
               onChange={(e) => setFilterAgent(e.target.value)}
@@ -219,6 +230,19 @@ export function TicketsPage() {
               {(agentsData?.data ?? []).map((agent) => (
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
               ))}
+            </select>
+            <select
+              aria-label="Filtrar por origem"
+              style={{ ...selectStyle, flex: 1 }}
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value as typeof filterSource)}
+            >
+              <option value="">{t('tickets.filterBySource')}</option>
+              <option value="manual">✏️ {t('tickets.source.manual')}</option>
+              <option value="portal">🌐 {t('tickets.source.portal')}</option>
+              <option value="email">📧 {t('tickets.source.email')}</option>
+              <option value="whatsapp">📱 {t('tickets.source.whatsapp')}</option>
+              <option value="api">🔗 API</option>
             </select>
           </div>
         </div>
@@ -249,8 +273,17 @@ export function TicketsPage() {
             <div style={{ padding: 20, textAlign: 'center', color: 'var(--txt-3)', fontSize: 13 }}>Carregando...</div>
           )}
           {!listLoading && tickets.length === 0 && (
-            <div style={{ padding: 32, textAlign: 'center', color: 'var(--txt-3)', fontSize: 13 }}>
-              {t('tickets.noResults')}
+            <div style={{ padding: 16, minHeight: 260 }}>
+              <div className="zd-empty-state">
+                <div className="zd-empty-icon" aria-hidden>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                    <rect x="3.5" y="4" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M7 8h8M7 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tickets.noResults')}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste os filtros ou crie um novo ticket.</div>
+              </div>
             </div>
           )}
           {tickets.map((ticket) => (

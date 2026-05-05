@@ -35,6 +35,8 @@ interface TicketRow {
   conversation_id:  string | null;
   source_conversation_id: string | null;
   type_id:          string | null;
+  source:           string;
+  email_message_id: string | null;
   title:            string;
   description:      string | null;
   status:           string;
@@ -202,6 +204,18 @@ async function ensureTicketInfrastructure(): Promise<void> {
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
+    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
+    ON tickets(email_message_id)
+    WHERE email_message_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS type_id UUID REFERENCES ticket_types(id) ON DELETE SET NULL
   `);
 
@@ -348,7 +362,7 @@ const SORT_COLUMNS: Record<string, string> = {
 
 const BASE_SELECT = `
   SELECT
-    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.title, t.description,
+    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
     t.status, t.priority, t.category, t.assigned_to, t.resolved_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
@@ -367,13 +381,14 @@ const BASE_SELECT = `
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery) {
   await ensureTicketInfrastructure();
-  const { page, per_page, search, status, priority, assigned_to, contact_id, organization_id, category, sort_by, sort_order } = query;
+  const { page, per_page, search, status, priority, assigned_to, source, contact_id, organization_id, category, sort_by, sort_order } = query;
   const offset = (page - 1) * per_page;
 
   const searchParam       = search          ?? null;
   const statusParam       = status          ?? null;
   const priorityParam     = priority        ?? null;
   const assignedParam     = assigned_to     ?? null;
+  const sourceParam       = source          ?? null;
   const contactParam      = contact_id      ?? null;
   const organizationParam = organization_id ?? null;
   const categoryParam     = category        ?? null;
@@ -386,22 +401,23 @@ export async function listTickets(query: ListTicketsQuery) {
       AND ($2::text IS NULL OR t.status         = $2)
       AND ($3::text IS NULL OR t.priority       = $3)
       AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
-      AND ($5::uuid IS NULL OR t.contact_id     = $5::uuid)
-      AND ($6::uuid IS NULL OR t.organization_id = $6::uuid)
-      AND ($7::text IS NULL OR t.category       = $7)`;
+      AND ($5::text IS NULL OR t.source         = $5)
+      AND ($6::uuid IS NULL OR t.contact_id     = $6::uuid)
+      AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
+      AND ($8::text IS NULL OR t.category       = $8)`;
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `${BASE_SELECT}${where}
      ORDER BY ${sortCol} ${sortDir}
-     LIMIT $8 OFFSET $9`,
-    searchParam, statusParam, priorityParam, assignedParam, contactParam, organizationParam, categoryParam,
+     LIMIT $9 OFFSET $10`,
+    searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
     per_page, offset,
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count
      FROM tickets t${where}`,
-    searchParam, statusParam, priorityParam, assignedParam, contactParam, organizationParam, categoryParam,
+    searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -431,12 +447,12 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `INSERT INTO tickets
-       (contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
+       (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
         assigned_to, due_date, tags)
      VALUES
-       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
+       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,
@@ -510,7 +526,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        updated_at      = NOW()
      WHERE id = $11::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,
@@ -624,7 +640,7 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, title, description, status, priority, category,
+       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,

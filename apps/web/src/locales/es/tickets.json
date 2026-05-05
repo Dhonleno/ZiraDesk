@@ -91,6 +91,16 @@
     },
     "organization": "Organización",
     "sourceConversation": "Originado de la atención {{protocol}}",
+    "source": {
+      "manual": "Manual",
+      "portal": "Portal",
+      "email": "E-mail",
+      "whatsapp": "WhatsApp",
+      "api": "API"
+    },
+    "filterBySource": "Todos los orígenes",
+    "newFromEmail": "Nuevo ticket por e-mail",
+    "newFromPortal": "Nuevo ticket desde el portal",
     "filterByAgent": "Todos los agentes",
     "realtime": {
       "newTicket": "Nuevo ticket creado",

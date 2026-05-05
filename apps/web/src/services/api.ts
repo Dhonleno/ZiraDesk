@@ -5,11 +5,13 @@ import { useAuthStore } from '../stores/auth.store';
 
 interface TenantSettings {
   id: string;
+  slug?: string;
   name: string;
   logo_url: string | null;
   primary_color: string | null;
   timezone: string;
   language: string;
+  email_confirmation?: boolean;
   away_message?: string;
   away_message_enabled?: boolean;
   csat_enabled?: boolean;
@@ -974,6 +976,8 @@ export interface Ticket {
   conversation_id: string | null;
   source_conversation_id?: string | null;
   type_id?: string | null;
+  source?: string | null;
+  email_message_id?: string | null;
   type_name?: string | null;
   type_icon?: string | null;
   type_color?: string | null;
@@ -1082,6 +1086,7 @@ export interface ListTicketsParams {
   status?:      TicketStatus;
   priority?:    TicketPriority;
   assigned_to?: string;
+  source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
   client_id?:   string;
   contact_id?:  string;
   organization_id?: string;
