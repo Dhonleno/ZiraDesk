@@ -39,7 +39,7 @@ import {
 } from '../../../jobs/inactivity.job.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
-import { sendCsatMessage } from './csat.service.js';
+import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
@@ -239,23 +239,103 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const assignedConversation = await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
         const tenantUser = request.user as AuthUser;
+        const conversationId = request.params.id;
+
+        try {
+          const convRows = await prisma.$queryRawUnsafe<Array<{
+            id: string;
+            channel_type: string | null;
+            whatsapp: string | null;
+            phone: string | null;
+            credentials: string | object | null;
+            agent_name: string | null;
+          }>>(
+            `SELECT
+               c.id,
+               c.channel_type,
+               ct.whatsapp,
+               ct.phone,
+               ch.credentials,
+               u.name AS agent_name
+             FROM conversations c
+             LEFT JOIN contacts ct ON ct.id = c.contact_id
+             LEFT JOIN channels ch ON ch.id = c.channel_id
+             LEFT JOIN users u ON u.id = $2::uuid
+             WHERE c.id = $1::uuid
+             LIMIT 1`,
+            conversationId,
+            parsed.data.user_id,
+          );
+
+          const conv = convRows[0];
+          if (conv?.channel_type === 'whatsapp') {
+            const credentials = conv.credentials ? decryptCredentials(conv.credentials) : {};
+            const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
+            const accessToken = credentials.accessToken ?? credentials.access_token;
+            const clientPhone = (conv.whatsapp ?? conv.phone ?? '').replace(/\D/g, '');
+
+            if (clientPhone && phoneNumberId && accessToken) {
+              let configuredTemplate = '';
+
+              if (tenantUser.tenantId) {
+                const tenant = await prisma.tenant.findUnique({
+                  where: { id: tenantUser.tenantId },
+                  select: { settings: true },
+                });
+                const settings = (tenant?.settings as Record<string, unknown> | null) ?? {};
+                configuredTemplate = typeof settings.bot_assigned_message === 'string'
+                  ? settings.bot_assigned_message.trim()
+                  : '';
+              }
+
+              const agentName = conv.agent_name ?? 'Agente';
+              const assignMessage = (configuredTemplate || [
+                '✅ Seu atendimento foi aceito!',
+                '',
+                `Você está sendo atendido por *${agentName}*.`,
+                'Em breve entraremos em contato. 😊',
+              ].join('\n')).replace(/\{\{\s*agent\s*\}\}/gi, agentName);
+
+              const sent = await sendWhatsAppTextMessage({
+                text: assignMessage,
+                to: clientPhone,
+                phoneNumberId,
+                accessToken,
+              });
+
+              if (sent) {
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+                   VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
+                  conversationId,
+                  assignMessage,
+                );
+              }
+            }
+          }
+        } catch (error) {
+          request.log.error(
+            { error, conversationId, assignedTo: parsed.data.user_id },
+            '[Omnichannel] Falha ao notificar cliente após assumir conversa manualmente',
+          );
+        }
 
         // Retorna conversa completa com JOINs para o frontend usar diretamente no cache
-        const { conversation } = await getConversationWithMessages(request.params.id, tenantUser.tenantId);
+        const { conversation } = await getConversationWithMessages(conversationId, tenantUser.tenantId);
 
         const io = getSocketServer();
         io.to(`agent:${parsed.data.user_id}`).emit('conversation:assigned', {
-          conversationId: request.params.id,
+          conversationId,
         });
         io.to(`agent:${parsed.data.user_id}`).emit('notification:new', {
-          id: request.params.id,
+          id: conversationId,
           type: 'conversation_assigned',
           title: 'Conversa atribuída',
           message: 'Você recebeu uma nova conversa.',
-          href: `/omnichannel/conversations?conversation=${request.params.id}`,
+          href: `/omnichannel/conversations?conversation=${conversationId}`,
         });
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
-          conversationId: request.params.id,
+          conversationId,
           assigned_to: assignedConversation.assigned_to,
           status: 'open',
           conversation,
