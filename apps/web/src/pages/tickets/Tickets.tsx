@@ -8,7 +8,6 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
 import { TicketCard } from '../../components/tickets/TicketCard';
-import { CreateTicketModal } from '../../components/tickets/CreateTicketModal';
 import { TicketDetail } from './TicketDetail';
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -56,7 +55,6 @@ export function TicketsPage() {
   const [priority, setPriority]       = useState<TicketPriority | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
   const [filterSource, setFilterSource] = useState<'' | 'manual' | 'portal' | 'email' | 'whatsapp' | 'api'>('');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const debouncedSearch = useDebounce(search, 300);
   const selectedId = paramId ?? null;
@@ -179,7 +177,7 @@ export function TicketsPage() {
               </span>
             </h1>
             <button
-              onClick={() => setIsCreateOpen(true)}
+              onClick={() => navigate('/tickets/new')}
               className="zd-btn zd-btn-primary"
             >
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
@@ -304,7 +302,6 @@ export function TicketsPage() {
 
       </div>
 
-      <CreateTicketModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </div>
   );
 }
