@@ -13,7 +13,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium" style={{ color: '#9DA3AE' }}>
+          <label htmlFor={inputId} className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
             {label}
           </label>
         )}
@@ -25,24 +25,24 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className,
           ].join(' ')}
           style={{
-            background: '#1A1C20',
+            background: 'var(--bg-3)',
             border: error
               ? '1px solid rgba(248,113,113,.5)'
-              : '1px solid rgba(255,255,255,.07)',
-            color: '#F0F1F3',
+              : '1px solid var(--line-2)',
+            color: 'var(--txt)',
             ...style,
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = error ? '#F87171' : '#00C9A7';
+            e.currentTarget.style.borderColor = error ? 'var(--red)' : 'var(--teal)';
             e.currentTarget.style.boxShadow = error
               ? '0 0 0 3px rgba(248,113,113,.15)'
-              : '0 0 0 3px rgba(0,201,167,.15)';
+              : '0 0 0 3px var(--teal-dim)';
             props.onFocus?.(e);
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = error
               ? 'rgba(248,113,113,.5)'
-              : 'rgba(255,255,255,.07)';
+              : 'var(--line-2)';
             e.currentTarget.style.boxShadow = 'none';
             props.onBlur?.(e);
           }}
@@ -50,12 +50,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {hint && !error && (
-          <p className="text-xs" style={{ color: '#5C6370' }}>
+          <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
             {hint}
           </p>
         )}
         {error && (
-          <p className="text-xs" style={{ color: '#F87171' }}>
+          <p className="text-xs" style={{ color: 'var(--red)' }}>
             {error}
           </p>
         )}

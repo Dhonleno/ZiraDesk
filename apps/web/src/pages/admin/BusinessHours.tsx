@@ -59,6 +59,7 @@ function DayRow({ day, label, isActive, openTime, closeTime, onChange }: DayRowP
         <input
           type="checkbox"
           checked={isActive}
+          aria-label={`Ativar ${label}`}
           onChange={(event) => onChange(day, { is_active: event.target.checked })}
         />
         <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{label}</span>
@@ -69,6 +70,7 @@ function DayRow({ day, label, isActive, openTime, closeTime, onChange }: DayRowP
           <input
             type="time"
             value={openTime}
+            aria-label={`Horário inicial de ${label}`}
             onChange={(event) => onChange(day, { open_time: event.target.value })}
             style={timeInputStyle}
           />
@@ -76,6 +78,7 @@ function DayRow({ day, label, isActive, openTime, closeTime, onChange }: DayRowP
           <input
             type="time"
             value={closeTime}
+            aria-label={`Horário final de ${label}`}
             onChange={(event) => onChange(day, { close_time: event.target.value })}
             style={timeInputStyle}
           />
@@ -121,7 +124,7 @@ export function BusinessHours() {
   const [timezone, setTimezone] = useState('America/Sao_Paulo');
   const [awayMessageEnabled, setAwayMessageEnabled] = useState(true);
   const [awayMessage, setAwayMessage] = useState(
-    'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
+    'Olá, no momento estamos fora do horário de atendimento. Retornaremos em breve.',
   );
   const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingByDay = useRef<Record<number, BusinessHourPatch>>({});
@@ -152,7 +155,7 @@ export function BusinessHours() {
     setAwayMessageEnabled(settings.away_message_enabled ?? true);
     setAwayMessage(
       settings.away_message ??
-        'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve. 🕐',
+        'Olá, no momento estamos fora do horário de atendimento. Retornaremos em breve.',
     );
   }, [settings]);
 
@@ -222,12 +225,12 @@ export function BusinessHours() {
   }, [status, t]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 820, overflow: 'auto' }}>
+    <div style={{ padding: 24, maxWidth: 820, overflowY: 'auto', height: '100%' }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: 'var(--txt)', fontSize: 24, fontWeight: 700, margin: 0 }}>
+        <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
           {t('tenantAdmin.businessHours.title')}
         </h1>
-        <p style={{ color: 'var(--txt-2)', fontSize: 14, margin: '6px 0 0' }}>
+        <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
           {t('tenantAdmin.businessHours.subtitle')}
         </p>
       </div>
@@ -235,7 +238,7 @@ export function BusinessHours() {
       <div
         style={{
           background: 'var(--bg-2)',
-          border: '1px solid var(--line)',
+          border: '1px solid var(--line-2)',
           borderRadius: 'var(--r-lg)',
           padding: 20,
         }}
@@ -245,7 +248,7 @@ export function BusinessHours() {
             <span style={{ color: 'var(--txt-2)', fontSize: 13, fontWeight: 600 }}>
               {t('tenantAdmin.businessHours.timezone')}
             </span>
-            <select value={timezone} onChange={(event) => setTimezone(event.target.value)} style={selectStyle}>
+            <select aria-label={t('tenantAdmin.businessHours.timezone')} value={timezone} onChange={(event) => setTimezone(event.target.value)} style={selectStyle}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
@@ -300,6 +303,7 @@ export function BusinessHours() {
                 <input
                   type="checkbox"
                   checked={awayMessageEnabled}
+                  aria-label={t('tenantAdmin.businessHours.awayMessageLabel')}
                   onChange={(event) => setAwayMessageEnabled(event.target.checked)}
                 />
                 {t('tenantAdmin.businessHours.awayMessageLabel')}
@@ -310,18 +314,14 @@ export function BusinessHours() {
               value={awayMessage}
               onChange={(event) => setAwayMessage(event.target.value)}
               placeholder={t('tenantAdmin.businessHours.awayMessagePlaceholder')}
+              aria-label={t('tenantAdmin.businessHours.awayMessage')}
+              className="zd-textarea"
               rows={4}
               style={{
                 resize: 'vertical',
                 minHeight: 104,
-                background: 'var(--bg-3)',
-                border: '1px solid var(--line-2)',
-                borderRadius: 'var(--r)',
-                color: 'var(--txt)',
                 fontSize: 13,
                 lineHeight: 1.5,
-                padding: 12,
-                outline: 'none',
               }}
             />
           </div>

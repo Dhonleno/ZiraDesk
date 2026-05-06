@@ -113,6 +113,8 @@ function OptionModal({
               type="number"
               min={0}
               value={number}
+              aria-label={t('tenantAdmin.bot.option.number')}
+              className="zd-input"
               onChange={(event) => setNumber(Number(event.target.value))}
               style={inputStyle}
               required
@@ -122,6 +124,8 @@ function OptionModal({
             <span style={labelStyle}>{t('tenantAdmin.bot.option.label')}</span>
             <input
               value={label}
+              aria-label={t('tenantAdmin.bot.option.label')}
+              className="zd-input"
               onChange={(event) => setLabel(event.target.value)}
               style={inputStyle}
               maxLength={100}
@@ -132,7 +136,14 @@ function OptionModal({
 
         <label style={{ display: 'grid', gap: 6 }}>
           <span style={labelStyle}>{t('tenantAdmin.bot.option.tag')}</span>
-          <input value={tag} onChange={(event) => setTag(event.target.value)} style={inputStyle} maxLength={50} />
+          <input
+            value={tag}
+            aria-label={t('tenantAdmin.bot.option.tag')}
+            className="zd-input"
+            onChange={(event) => setTag(event.target.value)}
+            style={inputStyle}
+            maxLength={50}
+          />
           <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{t('tenantAdmin.bot.option.tagHint')}</span>
         </label>
 
@@ -149,6 +160,7 @@ function OptionModal({
           <input
             type="checkbox"
             checked={hasSubmenu}
+            aria-label={t('tenantAdmin.bot.submenu')}
             onChange={(event) => setHasSubmenu(event.target.checked)}
           />
           {t('tenantAdmin.bot.submenu')}
@@ -159,6 +171,8 @@ function OptionModal({
             <span style={labelStyle}>{t('tenantAdmin.bot.submenuGreeting')}</span>
             <textarea
               value={submenuGreeting}
+              aria-label={t('tenantAdmin.bot.submenuGreeting')}
+              className="zd-textarea"
               onChange={(event) => setSubmenuGreeting(event.target.value)}
               rows={3}
               style={textareaStyle}
@@ -170,6 +184,8 @@ function OptionModal({
             <span style={labelStyle}>{t('tenantAdmin.bot.option.response')}</span>
             <textarea
               value={response}
+              aria-label={t('tenantAdmin.bot.option.response')}
+              className="zd-textarea"
               onChange={(event) => setResponse(event.target.value)}
               rows={4}
               style={textareaStyle}
@@ -241,7 +257,7 @@ function OptionNode({
                 fontSize: 10,
                 color: option.has_submenu ? 'var(--amber)' : 'var(--txt-3)',
                 background: option.has_submenu ? 'var(--amber-dim)' : 'var(--bg-4)',
-                border: '1px solid var(--line)',
+                border: '1px solid var(--line-2)',
                 borderRadius: 'var(--r-pill)',
                 padding: '1px 7px',
               }}
@@ -256,7 +272,7 @@ function OptionNode({
                 fontSize: 10,
                 color: 'var(--txt-3)',
                 background: 'var(--bg-4)',
-                border: '1px solid var(--line)',
+                border: '1px solid var(--line-2)',
                 borderRadius: 'var(--r-pill)',
                 padding: '1px 7px',
               }}
@@ -473,8 +489,8 @@ export function BotMenu() {
       id: option.id,
       payload: {
         has_submenu: true,
-        submenu_greeting:
-          option.submenu_greeting || `Voce selecionou *${option.label}*. Escolha uma opcao:`,
+            submenu_greeting:
+              option.submenu_greeting || `Você selecionou *${option.label}*. Escolha uma opção:`,
       },
     });
   };
@@ -483,12 +499,12 @@ export function BotMenu() {
     addOptionMutation.isPending || addSubOptionMutation.isPending || updateOptionMutation.isPending;
 
   return (
-    <div style={{ padding: 24, maxWidth: 980, overflow: 'auto' }}>
+    <div style={{ padding: 24, maxWidth: 980, overflowY: 'auto', height: '100%' }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: 'var(--txt)', fontSize: 24, fontWeight: 700, margin: 0 }}>
+        <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
           {t('tenantAdmin.bot.title')}
         </h1>
-        <p style={{ color: 'var(--txt-2)', fontSize: 14, margin: '6px 0 0' }}>
+        <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
           {t('tenantAdmin.bot.subtitle')}
         </p>
       </div>
@@ -496,7 +512,7 @@ export function BotMenu() {
       <div
         style={{
           background: 'var(--bg-2)',
-          border: '1px solid var(--line)',
+          border: '1px solid var(--line-2)',
           borderRadius: 'var(--r-lg)',
           padding: 20,
         }}
@@ -522,7 +538,7 @@ export function BotMenu() {
                 alignItems: 'center',
                 gap: 10,
                 background: isActive ? 'var(--teal-dim)' : 'var(--bg-3)',
-                border: `1px solid ${isActive ? 'rgba(0,201,167,.25)' : 'var(--line)'}`,
+                border: `1px solid ${isActive ? 'rgba(0,201,167,.25)' : 'var(--line-2)'}`,
                 borderRadius: 'var(--r-pill)',
                 padding: '8px 12px',
                 cursor: 'pointer',
@@ -564,10 +580,17 @@ export function BotMenu() {
 
             <label style={{ display: 'grid', gap: 8 }}>
               <span style={labelStyle}>{t('tenantAdmin.bot.greeting')}</span>
-              <textarea value={greeting} onChange={(event) => setGreeting(event.target.value)} rows={4} style={textareaStyle} />
+              <textarea
+                value={greeting}
+                onChange={(event) => setGreeting(event.target.value)}
+                rows={4}
+                className="zd-textarea"
+                aria-label={t('tenantAdmin.bot.greeting')}
+                style={textareaStyle}
+              />
             </label>
 
-            <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--line-2)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
               <div
                 style={{
                   display: 'flex',
@@ -578,7 +601,7 @@ export function BotMenu() {
                   borderBottom: '1px solid var(--line)',
                 }}
               >
-                <h2 style={{ color: 'var(--txt)', fontSize: 15, fontWeight: 700, margin: 0 }}>
+                <h2 style={{ color: 'var(--txt)', fontSize: 15, fontWeight: 600, margin: 0 }}>
                   {t('tenantAdmin.bot.options')}
                 </h2>
                 <Button type="button" size="sm" variant="secondary" onClick={handleOpenNewRoot}>
@@ -587,8 +610,16 @@ export function BotMenu() {
               </div>
 
               {options.length === 0 ? (
-                <div style={{ padding: 18, color: 'var(--txt-3)', fontSize: 13 }}>
-                  {t('tenantAdmin.bot.noOptions')}
+                <div style={{ padding: 16, minHeight: 180 }}>
+                  <div className="zd-empty-state">
+                    <div className="zd-empty-icon" aria-hidden>
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M3.5 10h13M10 3.5v13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.bot.noOptions')}</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Adicione opções para iniciar o fluxo do bot.</div>
+                  </div>
                 </div>
               ) : (
                 options
@@ -623,12 +654,26 @@ export function BotMenu() {
 
             <label style={{ display: 'grid', gap: 8 }}>
               <span style={labelStyle}>{t('tenantAdmin.bot.invalidMsg')}</span>
-              <textarea value={invalidMsg} onChange={(event) => setInvalidMsg(event.target.value)} rows={3} style={textareaStyle} />
+              <textarea
+                value={invalidMsg}
+                onChange={(event) => setInvalidMsg(event.target.value)}
+                rows={3}
+                className="zd-textarea"
+                aria-label={t('tenantAdmin.bot.invalidMsg')}
+                style={textareaStyle}
+              />
             </label>
 
             <label style={{ display: 'grid', gap: 8 }}>
               <span style={labelStyle}>{t('tenantAdmin.bot.footer')}</span>
-              <textarea value={footer} onChange={(event) => setFooter(event.target.value)} rows={2} style={textareaStyle} />
+              <textarea
+                value={footer}
+                onChange={(event) => setFooter(event.target.value)}
+                rows={2}
+                className="zd-textarea"
+                aria-label={t('tenantAdmin.bot.footer')}
+                style={textareaStyle}
+              />
             </label>
 
             <div style={{ display: 'grid', gap: 8 }}>
@@ -638,8 +683,8 @@ export function BotMenu() {
                   margin: 0,
                   whiteSpace: 'pre-wrap',
                   color: 'var(--txt)',
-                  background: '#102420',
-                  border: '1px solid rgba(37,211,102,.2)',
+                  background: 'var(--bg-3)',
+                  border: '1px solid rgba(0,201,167,.25)',
                   borderRadius: 'var(--r-lg)',
                   padding: 16,
                   fontSize: 13,
@@ -691,7 +736,7 @@ export function BotMenu() {
                     has_submenu: true,
                     submenu_greeting:
                       parentForNewOption.submenu_greeting ||
-                      `Voce selecionou *${parentForNewOption.label}*. Escolha uma opcao:`,
+                      `Você selecionou *${parentForNewOption.label}*. Escolha uma opção:`,
                   },
                 },
                 { onSuccess: applyCreate },
@@ -717,15 +762,9 @@ const labelStyle: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
-  background: 'var(--bg-3)',
-  border: '1px solid var(--line-2)',
-  color: 'var(--txt)',
   height: 40,
-  borderRadius: 'var(--r)',
-  padding: '0 12px',
   fontSize: 13,
   width: '100%',
-  outline: 'none',
 };
 
 const textareaStyle: CSSProperties = {
@@ -742,7 +781,7 @@ const iconButtonStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  border: '1px solid var(--line)',
+  border: '1px solid var(--line-2)',
   borderRadius: 'var(--r)',
   background: 'var(--bg-3)',
   color: 'var(--txt-2)',

@@ -119,15 +119,16 @@ export function AddChannelModal({ open, onClose }: Props) {
           {CHANNEL_TYPES.map((ct) => (
             <button
               key={ct.type}
+              type="button"
               onClick={() => handleTypeSelect(ct.type)}
               className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
-              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)' }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = ct.color + '66';
                 e.currentTarget.style.background = 'var(--bg-3)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.borderColor = 'var(--line-2)';
                 e.currentTarget.style.background = 'var(--bg-2)';
               }}
             >
@@ -224,7 +225,7 @@ function WhatsAppMetaFields({ register }: WhatsAppMetaFieldsProps) {
         <div className="flex items-center gap-2">
           <div
             className="flex-1 h-10 rounded-lg px-3 flex items-center text-sm font-mono overflow-hidden"
-            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--txt-3)' }}
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)', color: 'var(--txt-3)' }}
           >
             <span className="truncate">{webhookUrl}</span>
           </div>

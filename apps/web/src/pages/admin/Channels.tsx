@@ -124,10 +124,10 @@ export function Channels() {
   const channels = data ?? [];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" style={{ height: '100%', overflowY: 'auto' }}>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)' }}>
             {t('tenantAdmin.channels.title')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
@@ -153,6 +153,7 @@ export function Channels() {
           {Object.entries(TYPE_META).map(([type, meta]) => (
             <button
               key={type}
+              type="button"
               onClick={() => setAddOpen(true)}
               className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
               style={{ background: 'var(--bg-2)', border: `1px dashed ${meta.color}40` }}
@@ -188,7 +189,7 @@ export function Channels() {
               <div
                 key={channel.id}
                 className="rounded-xl p-5"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)' }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -208,36 +209,39 @@ export function Channels() {
 
                 <div className="mt-4 flex gap-2">
                   <button
+                    type="button"
                     onClick={() => testMutation.mutate(channel.id)}
                     disabled={testMutation.isPending}
-                    className="flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: 'var(--bg-4)', color: 'var(--txt-2)', border: '1px solid var(--line)' }}
+                    className="zd-btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
                   >
                     {t('tenantAdmin.common.test')}
                   </button>
                   <button
+                    type="button"
                     onClick={() => setEditChannelId(channel.id)}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: 'var(--bg-4)', color: 'var(--txt-2)', border: '1px solid var(--line)' }}
+                    className="zd-btn"
                     onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
                   >
                     Configurar
                   </button>
                   <button
+                    type="button"
                     onClick={() => toggleMutation.mutate(channel)}
                     disabled={toggleMutation.isPending}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(96,165,250,.2)' }}
+                    className="zd-btn"
+                    style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}
                   >
                     {channel.status === 'active' ? 'Desativar' : 'Ativar'}
                   </button>
                   <button
+                    type="button"
                     onClick={() => deleteMutation.mutate(channel.id)}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-                    style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(248,113,113,.2)' }}
+                    className="zd-btn"
+                    style={{ borderColor: 'var(--red)', background: 'var(--red-dim)', color: 'var(--red)' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.25)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--red-dim)'; }}
                   >

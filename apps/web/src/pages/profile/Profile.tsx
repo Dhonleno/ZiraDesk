@@ -167,6 +167,11 @@ function PasswordTab({ isSaving, onSave }: PasswordTabProps) {
   const colors = ['', 'var(--red)', 'var(--red)', 'var(--amber)', 'var(--green)', 'var(--green)'] as const;
 
   const handleSubmit = async () => {
+    if (!form.current_password) {
+      toast.error('Informe a senha atual');
+      return;
+    }
+
     if (form.new_password !== form.confirm_password) {
       toast.error('As senhas não coincidem');
       return;

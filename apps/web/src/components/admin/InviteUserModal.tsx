@@ -69,7 +69,7 @@ export function InviteUserModal({ open, onClose }: Props) {
 
   const selectStyle: React.CSSProperties = {
     background: 'var(--bg-3)',
-    border: '1px solid var(--line)',
+    border: '1px solid var(--line-2)',
     color: 'var(--txt)',
     height: '2.5rem',
     borderRadius: '0.5rem',
@@ -99,10 +99,10 @@ export function InviteUserModal({ open, onClose }: Props) {
               style={{
                 background: copied ? 'rgba(0,201,167,.2)' : 'rgba(255,255,255,.05)',
                 color: copied ? 'var(--teal)' : 'var(--txt-2)',
-                border: '1px solid var(--line)',
+                border: '1px solid var(--line-2)',
               }}
             >
-              {copied ? '✓' : 'Copy'}
+              {copied ? 'Copiado' : 'Copiar'}
             </button>
           </div>
           <div className="flex justify-end pt-2">
@@ -126,7 +126,7 @@ export function InviteUserModal({ open, onClose }: Props) {
             <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
               {t('tenantAdmin.users.fields.role')}
             </label>
-            <select style={selectStyle} {...register('role')}>
+            <select aria-label={t('tenantAdmin.users.fields.role')} style={selectStyle} {...register('role')}>
               <option value="admin">{t('tenantAdmin.users.roles.admin')}</option>
               <option value="agent">{t('tenantAdmin.users.roles.agent')}</option>
               <option value="viewer">{t('tenantAdmin.users.roles.viewer')}</option>

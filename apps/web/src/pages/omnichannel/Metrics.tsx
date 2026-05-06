@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -106,7 +106,7 @@ interface MetricCardProps {
   title: string;
   value: string;
   subtitle?: string;
-  icon: string;
+  icon: ReactNode;
   color: string;
 }
 
@@ -122,6 +122,44 @@ function MetricCard({ title, value, subtitle, icon, color }: MetricCardProps) {
       <div className="metric-value">{value}</div>
       {subtitle ? <div className="metric-subtitle">{subtitle}</div> : null}
     </div>
+  );
+}
+
+function MetricIcon({ kind }: { kind: 'total' | 'tma' | 'csat' | 'resolved' | 'firstResponse' }) {
+  if (kind === 'total') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path d="M3 4h10a2 2 0 0 1 2 2v4.8a2 2 0 0 1-2 2H8.6L5.4 15v-2.2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (kind === 'tma') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M8 4.5v3.8l2.5 1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (kind === 'csat') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path d="M8 2.2l1.7 3.4 3.7.5-2.7 2.6.6 3.7L8 10.7 4.7 12.4l.6-3.7L2.6 6.1l3.7-.5L8 2.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (kind === 'resolved') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M5.2 8.1 7 9.9l3.8-3.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M8 2.2 3.2 8h3.2L5.8 13.8 12.8 7H9.6L10.1 2.2H8Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -301,7 +339,7 @@ function CsatChart({
       <h3 className="chart-title">{title}</h3>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={data}>
-          <XAxis dataKey="score" tickFormatter={(score: number) => '⭐'.repeat(Number(score))} tick={{ fontSize: 12 }} />
+          <XAxis dataKey="score" tickFormatter={(score: number) => String(score)} tick={{ fill: 'var(--txt-3)', fontSize: 12 }} />
           <YAxis tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
           <Tooltip
             formatter={(value, _name, point) => {
@@ -355,7 +393,7 @@ function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: strin
               <td>{agent.total}</td>
               <td>{agent.resolved}</td>
               <td>{agent.avg_minutes ? `${agent.avg_minutes}min` : '—'}</td>
-              <td>{agent.avg_csat ? `${agent.avg_csat} ⭐` : '—'}</td>
+              <td>{agent.avg_csat ?? '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -490,7 +528,10 @@ export function MetricsPage() {
         <div>
           <h1>{t('metrics.title')}</h1>
         </div>
-        <button className="topbar-primary-btn" onClick={exportCsv} type="button">
+        <button className="zd-btn zd-btn-primary" onClick={exportCsv} type="button">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
           {t('metrics.export')}
         </button>
       </div>
@@ -514,6 +555,7 @@ export function MetricsPage() {
             <input
               type="date"
               className="filter-select"
+              aria-label="Data inicial"
               value={customFrom}
               onChange={(event) => {
                 const value = event.target.value;
@@ -537,6 +579,7 @@ export function MetricsPage() {
             <input
               type="date"
               className="filter-select"
+              aria-label="Data final"
               value={customTo}
               onChange={(event) => {
                 const value = event.target.value;
@@ -559,7 +602,7 @@ export function MetricsPage() {
           </>
         ) : null}
 
-        <select className="filter-select" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+        <select className="filter-select" aria-label="Filtrar por agente" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
           <option value="">{t('metrics.filters.allAgents')}</option>
           {(monitorData?.agents ?? []).map((agent) => (
             <option key={agent.id} value={agent.id}>
@@ -568,7 +611,7 @@ export function MetricsPage() {
           ))}
         </select>
 
-        <select className="filter-select" value={channelType} onChange={(event) => setChannelType(event.target.value)}>
+        <select className="filter-select" aria-label="Filtrar por canal" value={channelType} onChange={(event) => setChannelType(event.target.value)}>
           <option value="">{t('metrics.filters.allChannels')}</option>
           <option value="whatsapp">WhatsApp</option>
           <option value="instagram">Instagram</option>
@@ -577,7 +620,7 @@ export function MetricsPage() {
           <option value="live_chat">Live Chat</option>
         </select>
 
-        <select className="filter-select" value={department} onChange={(event) => setDepartment(event.target.value)}>
+        <select className="filter-select" aria-label="Filtrar por departamento" value={department} onChange={(event) => setDepartment(event.target.value)}>
           <option value="">{t('metrics.filters.allDepartments')}</option>
           {(data?.byDepartment ?? []).map((item) => (
             <option key={item.department} value={item.department}>
@@ -592,42 +635,50 @@ export function MetricsPage() {
           title={t('metrics.cards.total')}
           value={String(data?.overview.total.total ?? 0)}
           subtitle={`${data?.overview.total.open ?? 0} em aberto`}
-          icon="💬"
+          icon={<MetricIcon kind="total" />}
           color="var(--teal)"
         />
         <MetricCard
           title={t('metrics.cards.tma')}
           value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
           subtitle="Tempo médio de atendimento"
-          icon="⏱️"
+          icon={<MetricIcon kind="tma" />}
           color="var(--blue)"
         />
         <MetricCard
           title={t('metrics.cards.csat')}
-          value={csatAverage !== null && csatAverage !== undefined ? `${csatAverage}⭐` : '—'}
+          value={csatAverage !== null && csatAverage !== undefined ? String(csatAverage) : '—'}
           subtitle={`${data?.overview.csat.total_responses ?? 0} respostas`}
-          icon="⭐"
+          icon={<MetricIcon kind="csat" />}
           color="var(--amber)"
         />
         <MetricCard
           title={t('metrics.cards.resolved')}
           value={formatPercent(resolvedRate)}
           subtitle={`${data?.overview.total.resolved ?? 0} resolvidos`}
-          icon="✅"
+          icon={<MetricIcon kind="resolved" />}
           color="var(--green)"
         />
         <MetricCard
           title={t('metrics.cards.firstResponse')}
           value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
           subtitle="Tempo médio de primeira resposta"
-          icon="⚡"
+          icon={<MetricIcon kind="firstResponse" />}
           color="var(--purple)"
         />
       </div>
 
       {noData ? (
         <div className="chart-card">
-          <p className="monitor-empty">{t('metrics.noData')}</p>
+          <div className="zd-empty-state" style={{ minHeight: 220 }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <path d="M3 4h16v11H9l-4 3v-3H3V4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('metrics.noData')}</div>
+            <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste o período ou os filtros para visualizar dados.</div>
+          </div>
         </div>
       ) : (
         <>

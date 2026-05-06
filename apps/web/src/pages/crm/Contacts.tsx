@@ -106,7 +106,7 @@ export function ContactsPage() {
             <div style={{ flex: 1 }} />
             <button
               onClick={() => setIsCreateOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 'var(--r)', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              className="zd-btn zd-btn-primary"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
               {t('contacts.new')}
@@ -121,7 +121,7 @@ export function ContactsPage() {
             value={searchRaw}
             onChange={(event) => setSearchRaw(event.target.value)}
             placeholder={t('contacts.search')}
-            style={{ width: '100%', height: 32, borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--txt)', padding: '0 10px', fontSize: 12, fontFamily: 'var(--font)' }}
+            className="zd-input"
           />
         </div>
 
@@ -129,7 +129,18 @@ export function ContactsPage() {
           {isLoading ? (
             <div style={{ padding: 16, color: 'var(--txt-3)', fontSize: 12 }}>{t('contacts.loading')}</div>
           ) : contacts.length === 0 ? (
-            <div style={{ padding: 16, color: 'var(--txt-3)', fontSize: 12 }}>{t('contacts.noResults')}</div>
+            <div style={{ padding: 16, minHeight: 220 }}>
+              <div className="zd-empty-state">
+                <div className="zd-empty-icon" aria-hidden>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                    <circle cx="10" cy="10" r="6" stroke="currentColor" strokeWidth="1.4" />
+                    <path d="M15 15L20 20" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('contacts.noResults')}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.selectContactHint')}</div>
+              </div>
+            </div>
           ) : (
             contacts.map((contact) => {
               const selected = selectedId === contact.id;
@@ -161,10 +172,10 @@ export function ContactsPage() {
                     </div>
                   </button>
                   <div style={{ display: 'flex', gap: 2 }}>
-                    <button className="tb-icon-btn" onClick={() => setEditContact(contact)} title={t('contacts.actions.edit')} style={{ width: 26, height: 26 }}>
+                    <button className="tb-icon-btn" onClick={() => setEditContact(contact)} title={t('contacts.actions.edit')} aria-label={t('contacts.actions.edit')} style={{ width: 26, height: 26 }}>
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
                     </button>
-                    <button className="tb-icon-btn" onClick={() => setLinkContact(contact)} title={t('contacts.actions.link')} style={{ width: 26, height: 26 }}>
+                    <button className="tb-icon-btn" onClick={() => setLinkContact(contact)} title={t('contacts.actions.link')} aria-label={t('contacts.actions.link')} style={{ width: 26, height: 26 }}>
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
                         <rect x="1.5" y="3" width="4" height="5" rx="1" stroke="currentColor" strokeWidth="1.1"/>
                         <rect x="5.5" y="3" width="4" height="5" rx="1" stroke="currentColor" strokeWidth="1.1"/>
@@ -174,6 +185,7 @@ export function ContactsPage() {
                       className="tb-icon-btn"
                       onClick={() => setDeleteConfirm(contact)}
                       title={t('contacts.actions.delete')}
+                      aria-label={t('contacts.actions.delete')}
                       style={{ width: 26, height: 26, color: 'var(--red)' }}
                     >
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 3h8M4.5 3V2a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8v1M3.3 3l.4 6a.8.8 0 00.8.7h2.9a.8.8 0 00.8-.7l.4-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -190,8 +202,13 @@ export function ContactsPage() {
         {selectedId ? (
           <ContactDetail contactId={selectedId} />
         ) : (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', gap: 8 }}>
-            <div style={{ fontSize: 32 }}>👤</div>
+          <div className="zd-empty-state" style={{ color: 'var(--txt-3)' }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M5 19c0-3.3 2.9-5.2 7-5.2S19 15.7 19 19" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </div>
             <div style={{ fontSize: 14, color: 'var(--txt-2)' }}>{t('contacts.selectContact')}</div>
             <div style={{ fontSize: 12 }}>{t('contacts.selectContactHint')}</div>
           </div>

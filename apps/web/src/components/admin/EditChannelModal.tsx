@@ -111,11 +111,12 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
               Status
             </label>
             <select
+              aria-label="Status do canal"
               value={form.status}
               onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as FormState['status'] }))}
               style={{
                 background: 'var(--bg-3)',
-                border: '1px solid var(--line)',
+                border: '1px solid var(--line-2)',
                 color: 'var(--txt)',
                 height: '2.5rem',
                 borderRadius: '0.5rem',
@@ -162,12 +163,10 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
                   <input
                     readOnly
                     value={webhookUrl}
+                    className="zd-input"
                     style={{
                       flex: 1,
                       height: 40,
-                      borderRadius: 8,
-                      border: '1px solid var(--line)',
-                      background: 'var(--bg-2)',
                       color: 'var(--txt-3)',
                       padding: '0 10px',
                       fontSize: 12,

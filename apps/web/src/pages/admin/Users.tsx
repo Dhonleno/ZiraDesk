@@ -88,10 +88,11 @@ function FilterTabs<T extends string>({
   labelFn: (v: T) => string;
 }) {
   return (
-    <div className="flex gap-1" style={{ background: 'var(--bg-2)', borderRadius: '0.5rem', padding: '3px' }}>
+    <div className="flex gap-1" style={{ background: 'var(--bg-3)', borderRadius: '0.5rem', padding: '3px', border: '1px solid var(--line-2)' }}>
       {tabs.map((tab) => (
         <button
           key={tab}
+          type="button"
           onClick={() => onChange(tab)}
           className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
           style={{
@@ -198,7 +199,7 @@ export function Users() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)' }}>
             {t('tenantAdmin.users.title')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
@@ -219,6 +220,7 @@ export function Users() {
           <div className="w-full sm:w-72">
             <Input
               placeholder={t('tenantAdmin.users.search')}
+              aria-label={t('tenantAdmin.users.search')}
               value={search}
               onChange={(e) => resetFilters({ search: e.target.value })}
             />
@@ -247,7 +249,7 @@ export function Users() {
                 <th
                   key={i}
                   className="px-4 py-3 text-left text-xs font-medium"
-                  style={{ color: 'var(--txt-3)' }}
+                  style={{ color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontSize: 10, fontWeight: 600 }}
                 >
                   {h}
                 </th>
@@ -339,8 +341,17 @@ export function Users() {
         </table>
 
         {!isLoading && users.length === 0 && (
-          <div className="py-12 text-center text-sm" style={{ color: 'var(--txt-3)' }}>
-            {t('tenantAdmin.users.noUsers')}
+          <div style={{ padding: 16, minHeight: 260 }}>
+            <div className="zd-empty-state">
+              <div className="zd-empty-icon" aria-hidden>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <circle cx="11" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M4.8 18c0-3 2.5-4.8 6.2-4.8S17.2 15 17.2 18" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.users.noUsers')}</div>
+              <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste os filtros ou convide um novo usuário.</div>
+            </div>
           </div>
         )}
       </div>
@@ -353,6 +364,7 @@ export function Users() {
           </span>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setPage((p) => p - 1)}
               disabled={page === 1}
               className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
@@ -369,6 +381,7 @@ export function Users() {
               Página {page} de {meta.total_pages}
             </span>
             <button
+              type="button"
               onClick={() => setPage((p) => p + 1)}
               disabled={page === meta.total_pages}
               className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
@@ -405,6 +418,7 @@ function ActionButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className="rounded px-2 py-1 text-xs transition-colors"
       style={{ color, background: 'transparent' }}
