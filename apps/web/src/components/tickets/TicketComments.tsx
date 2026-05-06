@@ -13,23 +13,33 @@ interface Props {
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  if (m < 1)  return 'agora';
-  if (m < 60) return `${m}min atrás`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h atrás`;
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `${minutes}min atrás`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h atrás`;
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function Avatar({ name }: { name: string }) {
-  const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const initials = name.split(' ').slice(0, 2).map((word) => word[0]).join('').toUpperCase();
   return (
-    <span style={{
-      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-      background: 'linear-gradient(135deg, var(--teal), var(--purple))',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 10, fontWeight: 700, color: '#fff',
-    }}>
+    <span
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: 'var(--bg-4)',
+        border: '1px solid var(--line-2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 10,
+        fontWeight: 600,
+        color: 'var(--txt-2)',
+      }}
+    >
       {initials}
     </span>
   );
@@ -39,11 +49,13 @@ export function TicketComments({ ticketId }: Props) {
   const { t } = useTranslation('tickets');
   const toast = useToast();
   const queryClient = useQueryClient();
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthStore((state) => state.user);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
 
   const { data: comments = [], isPending } = useQuery({
     queryKey: ['ticket-comments', ticketId],
@@ -52,14 +64,12 @@ export function TicketComments({ ticketId }: Props) {
   });
 
   useEffect(() => {
-    const unsub = subscribeToEvent<{ comment: TicketComment; ticketId: string }>(
-      'ticket:comment_added',
-      (data) => {
-        if (data.comment.ticket_id === ticketId) {
-          void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
-        }
-      },
-    );
+    const unsub = subscribeToEvent<{ comment?: TicketComment; ticketId?: string }>('ticket:comment_added', (data) => {
+      const receivedTicketId = data.ticketId ?? data.comment?.ticket_id;
+      if (receivedTicketId === ticketId) {
+        void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+      }
+    });
     return unsub;
   }, [ticketId, queryClient]);
 
@@ -77,6 +87,17 @@ export function TicketComments({ ticketId }: Props) {
     onError: () => toast.error('Erro ao enviar comentário'),
   });
 
+  const editMutation = useMutation({
+    mutationFn: ({ id, nextContent }: { id: string; nextContent: string }) => ticketsApi.updateComment(ticketId, id, nextContent),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+      setEditingId(null);
+      setEditContent('');
+      toast.success('Comentário atualizado');
+    },
+    onError: () => toast.error('Erro ao atualizar comentário'),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (commentId: string) => ticketsApi.deleteComment(ticketId, commentId),
     onSuccess: () => {
@@ -86,68 +107,138 @@ export function TicketComments({ ticketId }: Props) {
     onError: () => toast.error('Erro ao excluir comentário'),
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     if (!content.trim()) return;
     addMutation.mutate();
   }
 
+  const canDeleteAsAdmin = user?.role === 'owner' || user?.role === 'admin';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <h4 style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)',
-        textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <h4
+        style={{
+          margin: '0 0 12px',
+          fontSize: 12,
+          fontWeight: 600,
+          color: 'var(--txt-2)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
         {t('tickets.comments.title')}
       </h4>
 
-      {/* Comment list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-        {isPending && (
+        {isPending ? (
           <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center' }}>Carregando...</p>
-        )}
-        {!isPending && comments.length === 0 && (
+        ) : null}
+
+        {!isPending && comments.length === 0 ? (
           <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center', fontStyle: 'italic' }}>
             {t('tickets.comments.noComments')}
           </p>
-        )}
-        {comments.map((c) => (
-          <div key={c.id} className={`ticket-comment ${c.is_internal ? 'internal' : 'public'}`}>
-            <Avatar name={c.author_name ?? 'U'} />
+        ) : null}
+
+        {comments.map((comment) => (
+          <div key={comment.id} className={`ticket-comment ${comment.is_internal ? 'internal' : 'public'}`}>
+            <Avatar name={comment.author_name ?? 'U'} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
-                  {c.author_name ?? 'Usuário'}
+                  {comment.author_name ?? 'Usuário'}
                 </span>
-                <span className={`comment-visibility-badge ${c.is_internal ? 'internal' : 'public'}`}>
-                  {c.is_internal ? '🔒 Interno' : '🌐 Público'}
+                <span className={`comment-visibility-badge ${comment.is_internal ? 'internal' : 'public'}`}>
+                  {comment.is_internal ? 'Interno' : 'Público'}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>{formatRelative(c.created_at)}</span>
-                {c.user_id === user?.id && (
-                  <button
-                    onClick={() => deleteMutation.mutate(c.id)}
-                    disabled={deleteMutation.isPending}
-                    title={t('tickets.comments.delete')}
-                    aria-label={t('tickets.comments.delete')}
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--txt-3)', display: 'flex', alignItems: 'center', padding: 2,
-                      borderRadius: 4, lineHeight: 1 }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                      <path d="M2 3h8M5 3V2h2v1M4 3v6h4V3H4z" stroke="currentColor" strokeWidth="1.2"
-                        strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                )}
+                <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                  {formatRelative(comment.created_at)}
+                </span>
+
+                <div className="row-actions">
+                  {comment.user_id === user?.id ? (
+                    <button
+                      type="button"
+                      className="tb-icon-btn"
+                      onClick={() => {
+                        setEditingId(comment.id);
+                        setEditContent(comment.content);
+                      }}
+                      title="Editar comentário"
+                      aria-label="Editar comentário"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <path d="M8.5 1.5L10.5 3.5 3.5 10.5H1.5V8.5L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : null}
+
+                  {comment.user_id === user?.id || canDeleteAsAdmin ? (
+                    <button
+                      type="button"
+                      className="tb-icon-btn danger"
+                      onClick={() => deleteMutation.mutate(comment.id)}
+                      disabled={deleteMutation.isPending}
+                      title={t('tickets.comments.delete')}
+                      aria-label={t('tickets.comments.delete')}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <path d="M2 3.5h8M4.5 3.5V2h3v1.5M9.5 3.5L9 10H3L2.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--txt)', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {c.content}
-              </p>
+
+              {editingId === comment.id ? (
+                <div className="comment-edit-wrapper">
+                  <textarea
+                    autoFocus
+                    value={editContent}
+                    onChange={(event) => setEditContent(event.target.value)}
+                    className="comment-edit-textarea"
+                    rows={3}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        setEditingId(null);
+                        setEditContent('');
+                      }
+                    }}
+                  />
+                  <div className="comment-edit-actions">
+                    <button
+                      type="button"
+                      className="tb-btn"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditContent('');
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="tb-btn tb-btn-primary"
+                      disabled={editMutation.isPending || !editContent.trim()}
+                      onClick={() => editMutation.mutate({ id: comment.id, nextContent: editContent.trim() })}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--txt)', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {comment.content}
+                </p>
+              )}
             </div>
           </div>
         ))}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
       <form onSubmit={handleSubmit}>
         <div className={`comment-composer ${isInternal ? 'internal' : 'public'}`}>
           <div className="comment-type-toggle">
@@ -156,7 +247,7 @@ export function TicketComments({ ticketId }: Props) {
               className={!isInternal ? 'active' : ''}
               onClick={() => setIsInternal(false)}
             >
-              🌐 Público
+              Público
               <span className="toggle-hint">Visível ao cliente</span>
             </button>
             <button
@@ -164,31 +255,32 @@ export function TicketComments({ ticketId }: Props) {
               className={isInternal ? 'active' : ''}
               onClick={() => setIsInternal(true)}
             >
-              🔒 Interno
+              Interno
               <span className="toggle-hint">Apenas equipe</span>
             </button>
           </div>
 
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={isInternal ? 'Nota interna — não visível ao cliente...' : 'Comentário público — visível ao cliente...'}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={isInternal ? 'Nota interna' : 'Comentário público'}
             className="zd-textarea comment-textarea"
             rows={3}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(e); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) handleSubmit(event);
+            }}
             style={{
-              width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 72,
+              width: '100%',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+              minHeight: 72,
               lineHeight: 1.5,
             }}
           />
 
           <div className="comment-footer">
             <Button type="submit" loading={addMutation.isPending} disabled={!content.trim()}>
-              {addMutation.isPending
-                ? t('tickets.comments.sending')
-                : isInternal
-                  ? '🔒 Adicionar nota'
-                  : '💬 Comentar'}
+              {addMutation.isPending ? t('tickets.comments.sending') : 'Comentar'}
             </Button>
           </div>
         </div>

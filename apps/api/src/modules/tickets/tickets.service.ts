@@ -8,6 +8,7 @@ import type {
   UpdateTicketInput,
   ListTicketsQuery,
   CreateCommentInput,
+  UpdateCommentInput,
   UpdateChecklistItemInput,
   CreateTimeEntryInput,
 } from './tickets.schema.js';
@@ -741,7 +742,14 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
 
   try {
     const io = getSocketServer();
-    io.to(`tenant:${tenantId}`).emit('ticket:comment_added', { comment });
+    io.to(`tenant:${tenantId}`).emit('ticket:comment_added', {
+      ticketId,
+      commentId: comment.id,
+      authorId: userId,
+      authorName: comment.author_name,
+      isInternal: comment.is_internal,
+      comment,
+    });
     if (ticket.assigned_to && ticket.assigned_to !== userId) {
       io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
         id: comment.id,
@@ -757,7 +765,64 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
 }
 
 /* ── deleteComment ───────────────────────────────────────────────────────── */
-export async function deleteComment(commentId: string, userId: string, tenantId: string) {
+export async function updateComment(
+  ticketId: string,
+  commentId: string,
+  data: UpdateCommentInput,
+  userId: string,
+  role: string,
+  tenantId: string,
+) {
+  const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
+    `SELECT id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
+            COALESCE(c.name, u.name) AS author_name,
+            COALESCE(c.avatar_url, u.avatar_url) AS author_avatar
+     FROM ticket_comments tc
+     LEFT JOIN users u ON u.id = tc.user_id
+     LEFT JOIN contacts c ON c.id = tc.contact_id
+     WHERE tc.id = $1::uuid AND tc.ticket_id = $2::uuid
+     LIMIT 1`,
+    commentId,
+    ticketId,
+  );
+
+  if (!rows[0]) throw new NotFoundError('Comentário');
+  const comment = rows[0];
+  const isAuthor = comment.user_id === userId;
+  const isAdmin = role === 'owner' || role === 'admin';
+  if (!isAuthor && !isAdmin) {
+    throw new ForbiddenError('Você não pode editar este comentário');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ticket_comments
+     SET content = $1, updated_at = NOW()
+     WHERE id = $2::uuid`,
+    data.content.trim(),
+    commentId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+     VALUES ($1::uuid, 'ticket.comment_updated', 'ticket_comment', $2::uuid, $3::jsonb, $4::jsonb)`,
+    userId,
+    commentId,
+    JSON.stringify(comment),
+    JSON.stringify({ content: data.content.trim() }),
+  );
+
+  try {
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:comment_updated', {
+      ticketId,
+      commentId,
+    });
+  } catch { /* socket não inicializado em testes */ }
+
+  return { success: true };
+}
+
+/* ── deleteComment ───────────────────────────────────────────────────────── */
+export async function deleteComment(commentId: string, userId: string, role: string, tenantId: string) {
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `SELECT id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
             NULL AS author_name, NULL AS author_avatar
@@ -769,7 +834,9 @@ export async function deleteComment(commentId: string, userId: string, tenantId:
   if (!rows[0]) throw new NotFoundError('Comentário');
   const comment = rows[0];
 
-  if (comment.user_id !== userId) throw new ForbiddenError('Você não pode excluir este comentário');
+  const isAuthor = comment.user_id === userId;
+  const isAdmin = role === 'owner' || role === 'admin';
+  if (!isAuthor && !isAdmin) throw new ForbiddenError('Você não pode excluir este comentário');
 
   await prisma.$executeRawUnsafe(
     `DELETE FROM ticket_comments WHERE id = $1::uuid`,

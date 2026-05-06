@@ -1683,6 +1683,11 @@ export const ticketsApi = {
     return res.data;
   },
 
+  updateComment: async (ticketId: string, commentId: string, content: string): Promise<{ success: boolean }> => {
+    const res = await api.patch<{ success: boolean }>(`/tickets/${ticketId}/comments/${commentId}`, { content });
+    return res.data;
+  },
+
   listAttachments: async (ticketId: string): Promise<TicketAttachment[]> => {
     const res = await api.get<{ success: boolean; data: TicketAttachment[] }>(`/tickets/${ticketId}/attachments`);
     return res.data.data;

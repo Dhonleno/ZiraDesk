@@ -47,6 +47,8 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
   const dueCol = due === 'overdue' ? 'var(--red)' : due === 'soon' ? 'var(--amber)' : 'var(--txt-3)';
   const ticketKey = ticket.id.slice(-6).toUpperCase();
   const ticketContactName = ticket.contact_name ?? ticket.client_name;
+  const lastSeen = localStorage.getItem(`zd_ticket_seen_${ticket.id}`);
+  const hasUnread = !lastSeen || new Date(ticket.updated_at).getTime() > new Date(lastSeen).getTime();
 
   return (
     <div
@@ -69,6 +71,9 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
     >
       {/* Row 1: id + badges */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {hasUnread ? (
+          <span className="ticket-unread-dot" title="Atividade recente" aria-label="Atividade recente" />
+        ) : null}
         <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', letterSpacing: 0.5 }}>
           #{ticketKey}
         </span>
@@ -83,7 +88,7 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
               borderColor: `${ticket.type_color}44`,
             }}
           >
-            {ticket.type_icon ?? '🎫'} {ticket.type_name}
+            {ticket.type_name}
           </span>
         ) : null}
         {ticket.source && ticket.source !== 'manual' ? (

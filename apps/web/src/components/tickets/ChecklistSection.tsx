@@ -53,7 +53,7 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
   return (
     <div className="ticket-section">
       <div className="ticket-section-header">
-        <span className="ticket-section-title">☑️ Checklist</span>
+        <span className="ticket-section-title">Checklist</span>
         {items.length > 0 ? (
           <span className="checklist-progress-text">{doneCount}/{items.length} ({progress}%)</span>
         ) : null}

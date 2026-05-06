@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { adminApi, ticketsApi, type Ticket, type TicketTimelineEvent } from '../../services/api';
+import {
+  adminApi,
+  ticketsApi,
+  type Ticket,
+  type TicketPriority,
+  type TicketTimelineEvent,
+} from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
-import { TicketStatusBadge } from '../../components/tickets/TicketStatusBadge';
-import { TicketPriorityBadge } from '../../components/tickets/TicketPriorityBadge';
 import { TicketComments } from '../../components/tickets/TicketComments';
 import { AssignTicketModal } from '../../components/tickets/AssignTicketModal';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
@@ -15,23 +19,23 @@ import { SourceBadge } from '../../components/tickets/SourceBadge';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { subscribeToEvent } from '../../services/socket';
 
-
 interface Props {
   ticketId: string | null;
 }
 
-const selectStyle: React.CSSProperties = {
-  background:   'var(--bg-3)',
-  border:       '1px solid var(--line-2)',
-  color:        'var(--txt)',
-  height:       '1.875rem',
-  borderRadius: 'var(--r)',
-  padding:      '0 0.5rem',
-  fontSize:     12,
-  outline:      'none',
-  fontFamily:   'var(--font)',
-  cursor:       'pointer',
-};
+interface SbFieldProps {
+  label: string;
+  children: React.ReactNode;
+}
+
+function SbField({ label, children }: SbFieldProps) {
+  return (
+    <div className="sb-field">
+      <span className="sb-label">{label}</span>
+      <div className="sb-value">{children}</div>
+    </div>
+  );
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -52,37 +56,198 @@ function formatRelativeDate(iso: string): string {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</span>
-      <div style={{ fontSize: 12, color: 'var(--txt)' }}>{children}</div>
-    </div>
-  );
-}
-
 function Avatar({ name }: { name: string }) {
-  const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const initials = name.split(' ').slice(0, 2).map((word) => word[0]).join('').toUpperCase();
   return (
-    <span style={{
-      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-      background: 'linear-gradient(135deg, var(--purple), #8B5CF6)',
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 9, fontWeight: 700, color: '#fff',
-    }}>
+    <span
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: 'var(--bg-4)',
+        border: '1px solid var(--line-2)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 9,
+        fontWeight: 600,
+        color: 'var(--txt-2)',
+      }}
+    >
       {initials}
     </span>
   );
 }
 
-function TimelineEvent({
-  event,
-  showLine,
+function PriorityIcon({ value }: { value: TicketPriority }) {
+  if (value === 'low') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (value === 'medium') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <path d="M2 6h8M2 3.5h8M2 8.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (value === 'high') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M6 2v5M6 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StatusBadgeDropdown({
+  status,
+  onUpdate,
 }: {
-  event: TicketTimelineEvent;
-  showLine: boolean;
+  status: Ticket['status'];
+  onUpdate: (data: { status: Ticket['status'] }) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const statuses: Array<{ value: Ticket['status']; label: string; color: string }> = [
+    { value: 'open', label: 'Aberto', color: 'var(--teal)' },
+    { value: 'in_progress', label: 'Em andamento', color: 'var(--amber)' },
+    { value: 'waiting', label: 'Aguardando', color: 'var(--txt-2)' },
+    { value: 'resolved', label: 'Resolvido', color: 'var(--green)' },
+    { value: 'closed', label: 'Fechado', color: 'var(--txt-3)' },
+  ];
+
+  const current = statuses.find((item) => item.value === status) ?? statuses[0]!;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        type="button"
+        className="badge-btn"
+        style={{
+          background: current.value === 'closed' ? 'var(--bg-4)' : 'var(--teal-dim)',
+          color: current.color,
+          border: `1px solid ${current.value === 'closed' ? 'var(--line-2)' : 'var(--line)'}`,
+        }}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {current.label}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open ? (
+        <div className="inline-dropdown">
+          {statuses.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`inline-dropdown-item ${item.value === status ? 'active' : ''}`}
+              onClick={() => {
+                onUpdate({ status: item.value });
+                setOpen(false);
+              }}
+            >
+              <span className="dropdown-dot" style={{ background: item.color }} />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PriorityBadgeDropdown({
+  priority,
+  onUpdate,
+}: {
+  priority: TicketPriority;
+  onUpdate: (data: { priority: TicketPriority }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const priorities: Array<{ value: TicketPriority; label: string; color: string }> = [
+    { value: 'low', label: 'Baixa', color: 'var(--green)' },
+    { value: 'medium', label: 'Média', color: 'var(--amber)' },
+    { value: 'high', label: 'Alta', color: 'var(--red)' },
+    { value: 'urgent', label: 'Urgente', color: 'var(--red)' },
+  ];
+
+  const current = priorities.find((item) => item.value === priority) ?? priorities[1]!;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        type="button"
+        className="badge-btn"
+        style={{
+          background: current.value === 'low' ? 'var(--green-dim)' : current.value === 'medium' ? 'var(--amber-dim)' : 'var(--red-dim)',
+          color: current.color,
+          border: '1px solid var(--line)',
+        }}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <PriorityIcon value={current.value} />
+        {current.label}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open ? (
+        <div className="inline-dropdown">
+          {priorities.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`inline-dropdown-item ${item.value === priority ? 'active' : ''}`}
+              onClick={() => {
+                onUpdate({ priority: item.value });
+                setOpen(false);
+              }}
+            >
+              <PriorityIcon value={item.value} />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TimelineEvent({ event, showLine }: { event: TicketTimelineEvent; showLine: boolean }) {
   const { t } = useTranslation('tickets');
+
   const icon = (() => {
     if (event.event_type === 'created') {
       return (
@@ -160,36 +325,40 @@ function TimelineEvent({
 
   return (
     <div style={{ display: 'flex', gap: 12, padding: '10px 0', position: 'relative' }}>
-      <div style={{
-        width: 28,
-        height: 28,
-        borderRadius: '50%',
-        background: 'var(--bg-3)',
-        border: '1px solid var(--line-2)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 13,
-        flexShrink: 0,
-        zIndex: 1,
-      }}>
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          background: 'var(--bg-3)',
+          border: '1px solid var(--line-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          flexShrink: 0,
+          zIndex: 1,
+        }}
+      >
         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-2)' }}>{icon}</span>
       </div>
       {showLine ? (
-        <div style={{
-          position: 'absolute',
-          left: 14,
-          top: 32,
-          bottom: -10,
-          width: 1,
-          background: 'var(--line)',
-        }} />
+        <div
+          style={{
+            position: 'absolute',
+            left: 14,
+            top: 32,
+            bottom: -10,
+            width: 1,
+            background: 'var(--line)',
+          }}
+        />
       ) : null}
       <div style={{ flex: 1, paddingTop: 4, position: 'relative' }}>
         <div style={{ fontSize: 13, color: 'var(--txt)' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 2, fontSize: 11, color: 'var(--txt-3)' }}>
           <span style={{ fontWeight: 500 }}>{event.user_name ?? 'Sistema'}</span>
-          <span>{formatRelativeDate(event.created_at)}</span>
+          <span style={{ fontFamily: 'var(--mono)' }}>{formatRelativeDate(event.created_at)}</span>
         </div>
       </div>
     </div>
@@ -200,12 +369,22 @@ export function TicketDetail({ ticketId }: Props) {
   const { t } = useTranslation('tickets');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descValue, setDescValue] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'comments' | 'timeline'>('comments');
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const user = useAuthStore((state) => state.user);
+  const [showMore, setShowMore] = useState(false);
+  const [editCat, setEditCat] = useState(false);
+  const [catVal, setCatVal] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [showTagInput, setShowTagInput] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   const { data: ticket, isPending } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -235,6 +414,25 @@ export function TicketDetail({ ticketId }: Props) {
     staleTime: 10_000,
   });
 
+  const { data: agentsData } = useQuery({
+    queryKey: ['ticket-detail-agents'],
+    queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
+    staleTime: 60_000,
+    enabled: !!ticketId,
+  });
+
+  useEffect(() => {
+    if (!ticket) return;
+    setDescValue(ticket.description ?? '');
+    setCatVal(ticket.category ?? '');
+  }, [ticket?.id, ticket?.description, ticket?.category]);
+
+  useEffect(() => {
+    if (!ticket?.id) return;
+    localStorage.setItem(`zd_ticket_seen_${ticket.id}`, new Date().toISOString());
+    void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+  }, [queryClient, ticket?.id]);
+
   useEffect(() => {
     if (!ticketId) return undefined;
     return subscribeToEvent<{ ticketId: string }>('ticket:event', (data) => {
@@ -244,9 +442,39 @@ export function TicketDetail({ ticketId }: Props) {
     });
   }, [queryClient, ticketId]);
 
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setShowMore(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!ticket?.id) return undefined;
+    const unsub = subscribeToEvent<{
+      ticketId: string;
+      authorId?: string;
+      authorName?: string | null;
+      isInternal?: boolean;
+      comment?: { ticket_id?: string; user_id?: string | null; author_name?: string | null; is_internal?: boolean };
+    }>('ticket:comment_added', (data) => {
+      const receivedTicketId = data.ticketId ?? data.comment?.ticket_id;
+      if (receivedTicketId !== ticket.id) return;
+      const authorId = data.authorId ?? data.comment?.user_id ?? null;
+      if (authorId === user?.id) return;
+      void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticket.id] });
+      const isInternal = data.isInternal ?? data.comment?.is_internal ?? false;
+      if (!isInternal) {
+        const author = data.authorName ?? data.comment?.author_name ?? 'agente';
+        toast.info(`Novo comentário de ${author}`);
+      }
+    });
+    return unsub;
+  }, [ticket?.id, queryClient, toast, user?.id]);
+
   const updateMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof ticketsApi.update>[1]) =>
-      ticketsApi.update(ticketId!, patch),
+    mutationFn: (patch: Parameters<typeof ticketsApi.update>[1]) => ticketsApi.update(ticketId!, patch),
     onSuccess: (updated) => {
       queryClient.setQueryData(['ticket', ticketId], updated);
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -271,6 +499,42 @@ export function TicketDetail({ ticketId }: Props) {
       toast.success('Anexo excluído');
     },
     onError: () => toast.error('Você não pode excluir este anexo'),
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      if (!ticket) throw new Error('Ticket não encontrado');
+      const payload: import('../../services/api').CreateTicketPayload = {
+        title: `[Cópia] ${ticket.title}`,
+        priority: ticket.priority,
+        tags: ticket.tags,
+      };
+      if (ticket.description) payload.description = ticket.description;
+      if (ticket.type_id) payload.type_id = ticket.type_id;
+      if (ticket.contact_id) payload.contact_id = ticket.contact_id;
+      if (ticket.organization_id) payload.organization_id = ticket.organization_id;
+      if (ticket.category) payload.category = ticket.category;
+      return ticketsApi.create(payload);
+    },
+    onSuccess: (created) => {
+      toast.success('Ticket duplicado');
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      navigate(`/tickets/${created.id}`);
+    },
+    onError: () => toast.error('Erro ao duplicar ticket'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!ticket) throw new Error('Ticket não encontrado');
+      await ticketsApi.delete(ticket.id);
+    },
+    onSuccess: () => {
+      toast.success('Ticket excluído');
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      navigate('/tickets');
+    },
+    onError: () => toast.error('Erro ao excluir ticket'),
   });
 
   if (!ticketId) {
@@ -299,21 +563,25 @@ export function TicketDetail({ ticketId }: Props) {
 
   const isResolved = ticket.status === 'resolved' || ticket.status === 'closed';
   const ticketContactName = ticket.contact_name ?? ticket.client_name;
+  const tags = ticket.tags ?? [];
+  const isOverdue = Boolean(
+    ticket.due_date
+    && new Date(ticket.due_date) < new Date()
+    && ticket.status !== 'resolved'
+    && ticket.status !== 'closed',
+  );
+
+  const updateTicket = (patch: Parameters<typeof ticketsApi.update>[1], successMessage?: string) => {
+    updateMutation.mutate(patch);
+    if (successMessage) toast.success(successMessage);
+  };
 
   function handleTitleSave() {
-    if (titleDraft.trim().length >= 3 && titleDraft !== ticket!.title) {
-      updateMutation.mutate({ title: titleDraft.trim() });
+    if (!ticket) return;
+    if (titleDraft.trim().length >= 3 && titleDraft.trim() !== ticket.title) {
+      updateTicket({ title: titleDraft.trim() }, t('tickets.form.updated'));
     }
     setEditingTitle(false);
-  }
-
-  function quickUpdate(patch: Parameters<typeof ticketsApi.update>[1]) {
-    updateMutation.mutate(patch);
-    const msg =
-      'status' in patch && patch.status === 'resolved' ? t('tickets.form.resolved') :
-      'status' in patch && patch.status === 'closed'   ? t('tickets.form.closed')   :
-      t('tickets.form.updated');
-    toast.success(msg);
   }
 
   function formatAttachmentSize(bytes: number | null): string {
@@ -327,12 +595,12 @@ export function TicketDetail({ ticketId }: Props) {
     try {
       const blob = await ticketsApi.downloadAttachment(attachmentId);
       const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       URL.revokeObjectURL(objectUrl);
     } catch {
       toast.error('Erro ao baixar anexo');
@@ -341,65 +609,177 @@ export function TicketDetail({ ticketId }: Props) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-      {/* ── Header ── */}
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)' }}>
-        {/* Title row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
           {editingTitle ? (
             <input
               autoFocus
               value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
+              onChange={(event) => setTitleDraft(event.target.value)}
               onBlur={handleTitleSave}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleTitleSave(); if (e.key === 'Escape') setEditingTitle(false); }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleTitleSave();
+                if (event.key === 'Escape') setEditingTitle(false);
+              }}
               style={{
-                flex: 1, fontSize: 16, fontWeight: 600, background: 'var(--bg-3)',
-                border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '4px 8px',
-                color: 'var(--txt)', outline: 'none', fontFamily: 'var(--font)',
+                flex: 1,
+                fontSize: 16,
+                fontWeight: 600,
+                background: 'var(--bg-3)',
+                border: '1px solid var(--line-2)',
+                borderRadius: 'var(--r)',
+                padding: '4px 8px',
+                color: 'var(--txt)',
+                outline: 'none',
+                fontFamily: 'var(--font)',
                 boxShadow: '0 0 0 3px var(--teal-dim)',
               }}
             />
           ) : (
             <h2
-              onClick={() => { setTitleDraft(ticket.title); setEditingTitle(true); }}
-              style={{ flex: 1, margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)',
-                cursor: 'text', lineHeight: 1.4 }}
+              onClick={() => {
+                setTitleDraft(ticket.title);
+                setEditingTitle(true);
+              }}
+              style={{
+                flex: 1,
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 600,
+                color: 'var(--txt)',
+                cursor: 'text',
+                lineHeight: 1.4,
+              }}
               title="Clique para editar"
             >
               {ticket.title}
             </h2>
           )}
 
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <button onClick={() => setAssignOpen(true)} className="zd-btn">
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+            <div style={{ position: 'relative' }} ref={moreRef}>
+              <button
+                type="button"
+                className="tb-icon-btn"
+                onClick={() => setShowMore((prev) => !prev)}
+                title="Mais ações"
+                aria-label="Mais ações"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <circle cx="8" cy="4" r="1.2" fill="currentColor" />
+                  <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+                  <circle cx="8" cy="12" r="1.2" fill="currentColor" />
+                </svg>
+              </button>
+
+              {showMore ? (
+                <div className="more-menu">
+                  <button
+                    type="button"
+                    className="more-menu-item"
+                    disabled={duplicateMutation.isPending}
+                    onClick={() => {
+                      setShowMore(false);
+                      duplicateMutation.mutate();
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                      <rect x="1" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+                      <path d="M4 4V2.5A1.5 1.5 0 0 1 5.5 1h5A1.5 1.5 0 0 1 12 2.5v5A1.5 1.5 0 0 1 10.5 9H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                    Duplicar ticket
+                  </button>
+
+                  {(user?.role === 'owner' || user?.role === 'admin') ? (
+                    <>
+                      <div className="more-menu-divider" />
+                      <button
+                        type="button"
+                        className="more-menu-item danger"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          setShowMore(false);
+                          const confirmed = window.confirm('Excluir este ticket? Esta ação não pode ser desfeita.');
+                          if (confirmed) deleteMutation.mutate();
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                          <path d="M2 3.5h9M5 3.5V2h3v1.5M10.5 3.5L10 11H3L2.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M5.5 6v3M7.5 6v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        </svg>
+                        Excluir ticket
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <button type="button" onClick={() => setAssignOpen(true)} className="tb-btn">
               {t('tickets.actions.assign')}
             </button>
 
-            {!isResolved && (
-              <button onClick={() => quickUpdate({ status: 'resolved' })} className="zd-btn" style={{ borderColor: 'var(--green)', background: 'var(--green-dim)', color: 'var(--green)' }}>
+            {ticket.assigned_to !== user?.id ? (
+              <button
+                type="button"
+                className="tb-btn"
+                onClick={() => {
+                  if (user?.id) updateTicket({ assigned_to: user.id }, t('tickets.form.assigned'));
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                  <circle cx="6.5" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M1.5 12c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                A mim
+              </button>
+            ) : null}
+
+            {!isResolved ? (
+              <button
+                type="button"
+                onClick={() => updateTicket({ status: 'resolved' }, t('tickets.form.resolved'))}
+                className="tb-btn"
+                style={{ borderColor: 'var(--green)', background: 'var(--green-dim)', color: 'var(--green)' }}
+              >
                 {t('tickets.actions.resolve')}
               </button>
-            )}
+            ) : null}
 
-            {ticket.status !== 'closed' && (
-              <button onClick={() => quickUpdate({ status: 'closed' })} className="zd-btn">
+            {ticket.status !== 'closed' ? (
+              <button
+                type="button"
+                onClick={() => updateTicket({ status: 'closed' }, t('tickets.form.closed'))}
+                className="tb-btn"
+              >
                 {t('tickets.actions.close')}
               </button>
-            )}
+            ) : null}
 
-            {isResolved && (
-              <button onClick={() => quickUpdate({ status: 'open' })} className="zd-btn" style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}>
+            {isResolved ? (
+              <button
+                type="button"
+                onClick={() => updateTicket({ status: 'open' }, t('tickets.form.updated'))}
+                className="tb-btn"
+                style={{ borderColor: 'var(--teal)', background: 'var(--teal-dim)', color: 'var(--teal)' }}
+              >
                 {t('tickets.actions.reopen')}
               </button>
-            )}
+            ) : null}
           </div>
         </div>
 
-        {/* Badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <TicketStatusBadge status={ticket.status} />
-          <TicketPriorityBadge priority={ticket.priority} />
+          <StatusBadgeDropdown
+            status={ticket.status}
+            onUpdate={(data) => updateTicket({ status: data.status }, t('tickets.form.updated'))}
+          />
+
+          <PriorityBadgeDropdown
+            priority={ticket.priority}
+            onUpdate={(data) => updateTicket({ priority: data.priority }, t('tickets.form.updated'))}
+          />
+
           {ticket.type_name && ticket.type_color ? (
             <span
               className="ticket-type-badge"
@@ -409,84 +789,109 @@ export function TicketDetail({ ticketId }: Props) {
                 borderColor: `${ticket.type_color}44`,
               }}
             >
-              {ticket.type_icon ?? '🎫'} {ticket.type_name}
+              {ticket.type_name}
             </span>
           ) : null}
-          {ticket.source && ticket.source !== 'manual' ? (
-            <SourceBadge source={ticket.source} />
-          ) : null}
+
+          <SourceBadge source={ticket.source ?? 'manual'} />
+
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)', marginLeft: 4 }}>
             #{ticket.id.slice(-6).toUpperCase()}
           </span>
         </div>
       </div>
 
-      {/* ── Body: sidebar + main ── */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-
-        {/* Sidebar */}
-        <div style={{
-          width: 220, flexShrink: 0, borderRight: '1px solid var(--line)',
-          padding: '16px 14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16,
-          background: 'var(--bg-2)',
-        }}>
-          <Field label={t('tickets.fields.status')}>
-            <select aria-label="Status do ticket" style={selectStyle} value={ticket.status}
-              onChange={(e) => quickUpdate({ status: e.target.value as Ticket['status'] })}>
+        <div
+          style={{
+            width: 250,
+            flexShrink: 0,
+            borderRight: '1px solid var(--line)',
+            padding: '14px 12px',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'var(--bg-2)',
+          }}
+        >
+          <SbField label={t('tickets.fields.status')}>
+            <select
+              aria-label="Status do ticket"
+              className="sb-select"
+              value={ticket.status}
+              onChange={(event) => updateTicket({ status: event.target.value as Ticket['status'] }, t('tickets.form.updated'))}
+            >
               <option value="open">{t('tickets.status.open')}</option>
               <option value="in_progress">{t('tickets.status.in_progress')}</option>
               <option value="waiting">{t('tickets.status.waiting')}</option>
               <option value="resolved">{t('tickets.status.resolved')}</option>
               <option value="closed">{t('tickets.status.closed')}</option>
             </select>
-          </Field>
+          </SbField>
 
-          <Field label={t('tickets.fields.priority')}>
-            <select aria-label="Prioridade do ticket" style={selectStyle} value={ticket.priority}
-              onChange={(e) => quickUpdate({ priority: e.target.value as Ticket['priority'] })}>
+          <SbField label={t('tickets.fields.priority')}>
+            <select
+              aria-label="Prioridade do ticket"
+              className="sb-select"
+              value={ticket.priority}
+              onChange={(event) => updateTicket({ priority: event.target.value as Ticket['priority'] }, t('tickets.form.updated'))}
+            >
               <option value="low">{t('tickets.priority.low')}</option>
               <option value="medium">{t('tickets.priority.medium')}</option>
               <option value="high">{t('tickets.priority.high')}</option>
               <option value="urgent">{t('tickets.priority.urgent')}</option>
             </select>
-          </Field>
+          </SbField>
 
-          <Field label={t('tickets.fields.type', { defaultValue: 'Tipo' })}>
+          <SbField label={t('tickets.fields.type', { defaultValue: 'Tipo' })}>
             <select
               aria-label="Tipo do ticket"
-              style={selectStyle}
+              className="sb-select"
               value={ticket.type_id ?? ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                quickUpdate(value ? { type_id: value } : { type_id: null });
+              onChange={(event) => {
+                const value = event.target.value;
+                updateTicket(value ? { type_id: value } : { type_id: null }, t('tickets.form.updated'));
               }}
             >
               <option value="">{t('tickets.form.selectType', { defaultValue: 'Selecione o tipo' })}</option>
-              {ticketTypes.filter((type) => type.is_active).map((type) => (
-                <option key={type.id} value={type.id}>
-                  {type.icon} {type.name}
+              {ticketTypes.filter((item) => item.is_active).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
               ))}
             </select>
-          </Field>
+          </SbField>
 
-          <Field label={t('tickets.fields.assignedTo')}>
-            {ticket.assignee_name
-              ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Avatar name={ticket.assignee_name} />
-                  {ticket.assignee_name}
-                </span>
-              : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>
-                  {t('tickets.fields.noResponsible')}
-                </span>
-            }
-          </Field>
+          <SbField label="ATRIBUÍDO A">
+            <select
+              className="sb-select"
+              value={ticket.assigned_to ?? ''}
+              onChange={(event) => {
+                const nextAssignee = event.target.value;
+                if (!nextAssignee) return;
+                updateTicket({ assigned_to: nextAssignee }, t('tickets.form.assigned'));
+              }}
+            >
+              <option value="">Sem atribuição</option>
+              {(agentsData?.data ?? []).map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+            {ticket.assignee_name ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <Avatar name={ticket.assignee_name} />
+                <span style={{ fontSize: 12, color: 'var(--txt)' }}>{ticket.assignee_name}</span>
+              </span>
+            ) : null}
+          </SbField>
 
-          <Field label={t('tickets.fields.client')}>
-            {ticketContactName && ticket.contact_id
-              ? (
-                <Link to={`/crm/contacts/${ticket.contact_id ?? ''}?id=${ticket.contact_id ?? ''}`} style={{ textDecoration: 'none' }}>
-                  <span style={{
+          <SbField label={t('tickets.fields.client')}>
+            {ticketContactName && ticket.contact_id ? (
+              <Link to={`/crm/contacts/${ticket.contact_id}?id=${ticket.contact_id}`} style={{ textDecoration: 'none' }}>
+                <span
+                  style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
@@ -495,23 +900,24 @@ export function TicketDetail({ ticketId }: Props) {
                     border: '1px solid var(--line)',
                     background: 'var(--bg-3)',
                     color: 'var(--teal)',
-                  }}>
-                    <ContactAvatar id={ticket.contact_id ?? undefined} name={ticketContactName} size={20} />
-                    {ticketContactName}
-                  </span>
-                </Link>
-              )
-              : ticketContactName
-                ? <span style={{ color: 'var(--teal)' }}>{ticketContactName}</span>
-              : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noClient')}</span>
-            }
-          </Field>
+                  }}
+                >
+                  <ContactAvatar id={ticket.contact_id} name={ticketContactName} size={20} />
+                  {ticketContactName}
+                </span>
+              </Link>
+            ) : ticketContactName ? (
+              <span style={{ color: 'var(--teal)' }}>{ticketContactName}</span>
+            ) : (
+              <span className="sb-empty">{t('tickets.fields.noClient')}</span>
+            )}
+          </SbField>
 
-          <Field label={t('tickets.organization', { defaultValue: 'Organização' })}>
-            {ticket.organization_name && ticket.organization_id
-              ? (
-                <Link to={`/crm/organizations/${ticket.organization_id ?? ''}?id=${ticket.organization_id ?? ''}`} style={{ textDecoration: 'none' }}>
-                  <span style={{
+          <SbField label={t('tickets.organization', { defaultValue: 'Organização' })}>
+            {ticket.organization_name && ticket.organization_id ? (
+              <Link to={`/crm/organizations/${ticket.organization_id}?id=${ticket.organization_id}`} style={{ textDecoration: 'none' }}>
+                <span
+                  style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
@@ -520,74 +926,252 @@ export function TicketDetail({ ticketId }: Props) {
                     border: '1px solid var(--line)',
                     background: 'var(--bg-3)',
                     color: 'var(--txt)',
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                      <rect x="1.5" y="3.2" width="9" height="7.3" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
-                      <path d="M4.5 3.2V2.4a.9.9 0 0 1 .9-.9h1.2a.9.9 0 0 1 .9.9v.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-                    </svg>
-                    {ticket.organization_name}
-                  </span>
-                </Link>
-              )
-              : ticket.organization_name
-                ? <span>{ticket.organization_name}</span>
-              : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noOrganization', { defaultValue: 'Não vinculada' })}</span>
-            }
-          </Field>
-
-          {ticket.category && (
-            <Field label={t('tickets.fields.category')}>
-              {ticket.category}
-            </Field>
-          )}
-
-          <Field label={t('tickets.fields.dueDate')}>
-            {ticket.due_date
-              ? <span style={{ color: new Date(ticket.due_date) < new Date() ? 'var(--red)' : 'var(--txt)' }}>
-                  {formatDate(ticket.due_date)}
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <rect x="1.5" y="3.2" width="9" height="7.3" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
+                    <path d="M4.5 3.2V2.4a.9.9 0 0 1 .9-.9h1.2a.9.9 0 0 1 .9.9v.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                  </svg>
+                  {ticket.organization_name}
                 </span>
-              : <span style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('tickets.fields.noDueDate')}</span>
-            }
-          </Field>
+              </Link>
+            ) : ticket.organization_name ? (
+              <span>{ticket.organization_name}</span>
+            ) : (
+              <span className="sb-empty">{t('tickets.fields.noOrganization', { defaultValue: 'Não vinculada' })}</span>
+            )}
+          </SbField>
 
-          {ticket.tags.length > 0 && (
-            <Field label={t('tickets.fields.tags')}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                {ticket.tags.map((tag) => (
-                  <span key={tag} style={{
-                    padding: '1px 6px', borderRadius: 'var(--r-pill)', fontSize: 10,
-                    background: 'var(--teal-dim)', color: 'var(--teal)',
-                    border: '1px solid rgba(0,201,167,.2)',
-                  }}>
-                    {tag}
-                  </span>
-                ))}
+          <SbField label="PRAZO">
+            <input
+              type="date"
+              className={`sb-date ${isOverdue ? 'overdue' : ''}`}
+              value={ticket.due_date ? new Date(ticket.due_date).toISOString().split('T')[0] ?? '' : ''}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (!value) return;
+                updateTicket({ due_date: `${value}T00:00:00.000Z` }, t('tickets.form.updated'));
+              }}
+            />
+            {isOverdue ? (
+              <div className="overdue-tag">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                  <circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" strokeWidth="1.2" />
+                  <path d="M5.5 3v3M5.5 8v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                Prazo vencido
               </div>
-            </Field>
-          )}
+            ) : null}
+          </SbField>
 
-          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <Field label={t('tickets.fields.createdAt')}>{formatDate(ticket.created_at)}</Field>
-            <Field label={t('tickets.fields.updatedAt')}>{formatDate(ticket.updated_at)}</Field>
+          <SbField label="CATEGORIA">
+            {editCat ? (
+              <input
+                autoFocus
+                value={catVal}
+                onChange={(event) => setCatVal(event.target.value)}
+                onBlur={() => {
+                  updateTicket({ category: catVal || '' }, t('tickets.form.updated'));
+                  setEditCat(false);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    updateTicket({ category: catVal || '' }, t('tickets.form.updated'));
+                    setEditCat(false);
+                  }
+                  if (event.key === 'Escape') {
+                    setCatVal(ticket.category ?? '');
+                    setEditCat(false);
+                  }
+                }}
+                className="sb-inline-input"
+                placeholder="Ex: Infraestrutura"
+              />
+            ) : (
+              <button type="button" className="sb-editable" onClick={() => setEditCat(true)}>
+                {ticket.category ?? <span className="sb-empty">+ Adicionar</span>}
+              </button>
+            )}
+          </SbField>
+
+          <SbField label="TAGS">
+            <div className="sb-tags">
+              {tags.map((tag) => (
+                <span key={tag} className="sb-tag">
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => updateTicket({ tags: tags.filter((item) => item !== tag) }, t('tickets.form.updated'))}
+                    aria-label={`Remover tag ${tag}`}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+                      <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
+
+              {showTagInput ? (
+                <input
+                  autoFocus
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && tagInput.trim()) {
+                      if (!tags.includes(tagInput.trim())) {
+                        updateTicket({ tags: [...tags, tagInput.trim()] }, t('tickets.form.updated'));
+                      }
+                      setTagInput('');
+                      setShowTagInput(false);
+                    }
+                    if (event.key === 'Escape') {
+                      setTagInput('');
+                      setShowTagInput(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTagInput('');
+                    setShowTagInput(false);
+                  }}
+                  className="sb-tag-input"
+                  placeholder="Nova tag"
+                />
+              ) : (
+                <button type="button" className="sb-add-tag" onClick={() => setShowTagInput(true)}>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+                    <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                  Tag
+                </button>
+              )}
+            </div>
+          </SbField>
+
+          {ticket.resolved_at ? (
+            <SbField label="RESOLVIDO EM">
+              <span className="sb-mono">
+                {new Date(ticket.resolved_at).toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </SbField>
+          ) : null}
+
+          <SbField label="ORIGEM">
+            <SourceBadge source={ticket.source ?? 'manual'} />
+          </SbField>
+
+          <div style={{ marginTop: 'auto' }}>
+            <SbField label={t('tickets.fields.createdAt')}>
+              <span className="sb-mono">{formatDate(ticket.created_at)}</span>
+            </SbField>
+            <SbField label={t('tickets.fields.updatedAt')}>
+              <span className="sb-mono">{formatDate(ticket.updated_at)}</span>
+            </SbField>
           </div>
         </div>
 
-        {/* Main content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {ticket.description && (
-            <div>
-              <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)',
-                textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                {t('tickets.fields.description')}
-              </h4>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--txt)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                {ticket.description}
-              </p>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="ticket-description-section">
+            <div className="detail-section-head" style={{ marginBottom: 0 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--txt-3)',
+                  letterSpacing: '.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Descrição
+              </span>
+              {!editingDescription ? (
+                <button
+                  type="button"
+                  className="tb-icon-btn"
+                  onClick={() => setEditingDescription(true)}
+                  title="Editar descrição"
+                  aria-label="Editar descrição"
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                    <path d="M9.5 1.5L11.5 3.5 4.5 10.5H2.5V8.5L9.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
-          )}
+
+            {editingDescription ? (
+              <div className="description-edit">
+                <textarea
+                  autoFocus
+                  value={descValue}
+                  onChange={(event) => setDescValue(event.target.value)}
+                  className="description-edit-textarea"
+                  rows={8}
+                  placeholder="Adicione uma descrição detalhada"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setDescValue(ticket.description ?? '');
+                      setEditingDescription(false);
+                    }
+                  }}
+                />
+                <div className="description-edit-footer">
+                  <span className="description-hint">Pressione Esc para cancelar</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="tb-btn"
+                      onClick={() => {
+                        setDescValue(ticket.description ?? '');
+                        setEditingDescription(false);
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="tb-btn tb-btn-primary"
+                      onClick={() => {
+                        updateTicket({ description: descValue || '' }, t('tickets.form.updated'));
+                        setEditingDescription(false);
+                      }}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="description-display"
+                onClick={() => setEditingDescription(true)}
+                title="Clique para editar"
+              >
+                {ticket.description ? (
+                  <p className="description-body">{ticket.description}</p>
+                ) : (
+                  <p className="description-placeholder">Clique para adicionar uma descrição</p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div>
-            <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <h4
+              style={{
+                margin: '0 0 8px',
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--txt-3)',
+                textTransform: 'uppercase',
+                letterSpacing: 0.08,
+              }}
+            >
               Anexos
             </h4>
 
@@ -595,13 +1179,15 @@ export function TicketDetail({ ticketId }: Props) {
               <input
                 type="file"
                 onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
-                style={{ color: 'var(--txt-2)', fontSize: 12 }}
+                style={{ color: 'var(--txt-2)', fontSize: 12, fontFamily: 'var(--font)' }}
               />
               <button
                 type="button"
                 className="zd-btn"
                 disabled={!attachmentFile || uploadAttachmentMutation.isPending}
-                onClick={() => attachmentFile && uploadAttachmentMutation.mutate(attachmentFile)}
+                onClick={() => {
+                  if (attachmentFile) uploadAttachmentMutation.mutate(attachmentFile);
+                }}
               >
                 {uploadAttachmentMutation.isPending ? 'Enviando...' : 'Enviar anexo'}
               </button>
@@ -635,11 +1221,12 @@ export function TicketDetail({ ticketId }: Props) {
                         background: 'none',
                         cursor: 'pointer',
                         padding: 0,
+                        fontFamily: 'var(--font)',
                       }}
                     >
                       {attachment.filename}
                     </button>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-3)' }}>
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
                       {formatAttachmentSize(attachment.file_size)}
                     </span>
                     {attachment.user_id === user?.id ? (
@@ -652,6 +1239,7 @@ export function TicketDetail({ ticketId }: Props) {
                           color: 'var(--red)',
                           cursor: 'pointer',
                           fontSize: 12,
+                          fontFamily: 'var(--font)',
                         }}
                       >
                         Excluir
@@ -721,11 +1309,7 @@ export function TicketDetail({ ticketId }: Props) {
                   </div>
                 ) : (
                   timeline.map((event, index) => (
-                    <TimelineEvent
-                      key={event.id}
-                      event={event}
-                      showLine={index < timeline.length - 1}
-                    />
+                    <TimelineEvent key={event.id} event={event} showLine={index < timeline.length - 1} />
                   ))
                 )}
               </div>
@@ -734,10 +1318,7 @@ export function TicketDetail({ ticketId }: Props) {
         </div>
       </div>
 
-      <AssignTicketModal
-        ticketId={assignOpen ? ticket.id : null}
-        onClose={() => setAssignOpen(false)}
-      />
+      <AssignTicketModal ticketId={assignOpen ? ticket.id : null} onClose={() => setAssignOpen(false)} />
     </div>
   );
 }

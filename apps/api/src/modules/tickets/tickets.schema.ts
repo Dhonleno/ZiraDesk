@@ -38,6 +38,10 @@ export const createCommentSchema = z.object({
   is_internal: z.boolean().default(false),
 });
 
+export const updateCommentSchema = z.object({
+  content: z.string().trim().min(1),
+});
+
 export const assignTicketSchema = z.object({
   user_id: z.string().uuid(),
 });
@@ -63,6 +67,7 @@ export type CreateTicketInput  = z.infer<typeof createTicketSchema>;
 export type UpdateTicketInput  = z.infer<typeof updateTicketSchema>;
 export type ListTicketsQuery   = z.infer<typeof listTicketsQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;
 export type CreateChecklistItemInput = z.infer<typeof createChecklistItemSchema>;
 export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;

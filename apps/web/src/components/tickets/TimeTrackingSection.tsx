@@ -77,7 +77,7 @@ export default function TimeTrackingSection({ ticketId }: TimeTrackingSectionPro
   return (
     <div className="ticket-section">
       <div className="ticket-section-header">
-        <span className="ticket-section-title">⏱️ Tempo trabalhado</span>
+        <span className="ticket-section-title">Tempo trabalhado</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {totalMinutes > 0 ? (
             <span className="time-total-badge">{formatMinutes(totalMinutes)}</span>
