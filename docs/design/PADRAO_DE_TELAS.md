@@ -110,6 +110,13 @@ body { display: flex; flex-direction: column; }
 
 A página **nunca** rola como um todo — a topbar e nav-rail ficam fixos, e a rolagem acontece dentro de uma área de conteúdo específica (`.table-wrap`, `.agents-scroll`, `.detail-scroll`, etc.).
 
+### Largura de conteúdo (páginas autenticadas)
+- Em páginas dentro do shell autenticado (`topbar + nav rail`), o conteúdo deve **aproveitar toda a largura disponível** do container `.content`.
+- Não centralize o wrapper principal com `max-width` + `margin: 0 auto` (ex.: `max-width: 900px`) nessas páginas.
+- Use divisão interna por colunas/painéis para legibilidade (ex.: `260px 1fr`, `1fr 380px`) sem “encaixotar” a página inteira.
+- `max-width` é permitido apenas em componentes locais (modais, dropdowns, chips, cards específicos), não no container raiz da tela autenticada.
+- No frontend React, prefira usar `components/layout/PageShell.tsx` como wrapper base dessas páginas.
+
 ### Topbar (52px de altura)
 Da esquerda para a direita:
 1. **Logo** (com `border-right: 1px solid var(--line)`)
@@ -355,6 +362,7 @@ Exemplo: `.q-empty` no `Monitor.html`.
 ❌ Ícones preenchidos (usamos stroke-only por padrão)
 ❌ Densidade muito baixa — ZiraDesk é uma ferramenta de trabalho, espaços enormes parecem amador
 ❌ Página rolando como um todo (sempre rolar dentro de uma área específica)
+❌ Container principal centralizado com `max-width` em páginas autenticadas
 ❌ Botões com mais de 2 ícones, ou cards com mais de 3 ações primárias
 ❌ Background com `linear-gradient` colorido em hero (use radial sutil em `--hero-glow` se precisar)
 ❌ Ações "Editar / Excluir / Duplicar" sempre visíveis — use `.row-actions` com `opacity: 0` que aparecem em hover
@@ -372,6 +380,7 @@ Antes de entregar, confirme:
 - [ ] `lang="pt-BR"`, título da aba `ZiraDesk — Nome da página`
 - [ ] Fontes IBM Plex Sans + IBM Plex Mono carregadas
 - [ ] `html, body { overflow: hidden }` e rolagem só em áreas internas
+- [ ] Wrapper principal da página autenticada ocupa 100% da largura útil (sem `max-width` + `margin: 0 auto`)
 - [ ] Toggle de tema funcional + sincronização entre abas
 - [ ] Estados vazios desenhados (não apenas "sem dados")
 - [ ] Estados de hover/focus em todos os interativos
