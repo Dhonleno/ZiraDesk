@@ -12,6 +12,7 @@ import {
   type TicketPriority,
   type TicketStatus,
 } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
 
 interface CreateTicketForm {
@@ -154,34 +155,35 @@ export default function CreateTicket() {
   };
 
   return (
-    <form className="create-ticket-page" onSubmit={handleSubmit}>
-      <div className="create-ticket-header">
-        <button type="button" className="back-btn" onClick={() => navigate('/tickets')}>
-          Voltar
-        </button>
-
-        <h1>Criar ticket</h1>
-
-        <div className="header-actions">
-          <button
-            type="button"
-            className="create-ticket-btn create-ticket-btn-ghost"
-            onClick={() => navigate('/tickets')}
-          >
-            Cancelar
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <form className="create-ticket-page" onSubmit={handleSubmit}>
+        <div className="create-ticket-header">
+          <button type="button" className="back-btn" onClick={() => navigate('/tickets')}>
+            Voltar
           </button>
-          <button
-            type="submit"
-            className="create-ticket-btn create-ticket-btn-primary"
-            disabled={createMutation.isPending || !form.title.trim()}
-          >
-            {createMutation.isPending ? 'Salvando...' : 'Criar ticket'}
-          </button>
+
+          <h1>Criar ticket</h1>
+
+          <div className="header-actions">
+            <button
+              type="button"
+              className="create-ticket-btn create-ticket-btn-ghost"
+              onClick={() => navigate('/tickets')}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="create-ticket-btn create-ticket-btn-primary"
+              disabled={createMutation.isPending || !form.title.trim()}
+            >
+              {createMutation.isPending ? 'Salvando...' : 'Criar ticket'}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="create-ticket-layout">
-        <div className="create-ticket-main">
+        <div className="create-ticket-layout">
+          <div className="create-ticket-main">
           <div className="ct-field">
             <label className="ct-label" htmlFor="ct-title">
               Título <span className="required">*</span>
@@ -231,7 +233,7 @@ export default function CreateTicket() {
           </div>
         </div>
 
-        <aside className="create-ticket-sidebar">
+          <aside className="create-ticket-sidebar">
           <div className="ct-field">
             <label className="ct-label" htmlFor="ct-type">Tipo</label>
             <select
@@ -410,8 +412,9 @@ export default function CreateTicket() {
               className="ct-input"
             />
           </div>
-        </aside>
-      </div>
-    </form>
+          </aside>
+        </div>
+      </form>
+    </PageShell>
   );
 }

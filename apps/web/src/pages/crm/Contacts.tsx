@@ -12,6 +12,7 @@ import { CreateContactModal } from '../../components/crm/CreateContactModal';
 import { EditContactModal } from '../../components/crm/EditContactModal';
 import { LinkOrganizationModal } from '../../components/crm/LinkOrganizationModal';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { PageShell } from '../../components/layout/PageShell';
 
 export function ContactsPage() {
   const { t } = useTranslation('crm');
@@ -93,7 +94,8 @@ export function ContactsPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
       <div style={{ borderRight: '1px solid var(--line)', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '18px 14px 12px', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -215,30 +217,31 @@ export function ContactsPage() {
         )}
       </div>
 
-      <CreateContactModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
-      <EditContactModal contact={editContact} onClose={() => setEditContact(null)} />
-      {linkContact ? (
-        <LinkOrganizationModal
-          open={Boolean(linkContact)}
-          onClose={() => setLinkContact(null)}
-          contactId={linkContact.id}
-          contactName={linkContact.name}
+        <CreateContactModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+        <EditContactModal contact={editContact} onClose={() => setEditContact(null)} />
+        {linkContact ? (
+          <LinkOrganizationModal
+            open={Boolean(linkContact)}
+            onClose={() => setLinkContact(null)}
+            contactId={linkContact.id}
+            contactName={linkContact.name}
+          />
+        ) : null}
+        <ConfirmModal
+          open={Boolean(deleteConfirm)}
+          title="Excluir contato"
+          message={
+            deleteConfirm
+              ? `${t('contacts.deleteConfirm', { name: deleteConfirm.name })} ${t('contacts.deleteWarning')}`
+              : ''
+          }
+          confirmLabel="Excluir"
+          confirmVariant="danger"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteConfirm(null)}
         />
-      ) : null}
-      <ConfirmModal
-        open={Boolean(deleteConfirm)}
-        title="Excluir contato"
-        message={
-          deleteConfirm
-            ? `${t('contacts.deleteConfirm', { name: deleteConfirm.name })} ${t('contacts.deleteWarning')}`
-            : ''
-        }
-        confirmLabel="Excluir"
-        confirmVariant="danger"
-        loading={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteConfirm(null)}
-      />
-    </div>
+      </div>
+    </PageShell>
   );
 }

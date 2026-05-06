@@ -8,6 +8,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
 import { TicketCard } from '../../components/tickets/TicketCard';
+import { PageShell } from '../../components/layout/PageShell';
 import { TicketDetail } from './TicketDetail';
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
@@ -143,7 +144,8 @@ export function TicketsPage() {
   const total   = ticketsData?.meta.total ?? 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── KPI bar — full width ── */}
       <div style={{
@@ -301,7 +303,7 @@ export function TicketsPage() {
       </div>
 
       </div>
-
-    </div>
+      </div>
+    </PageShell>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { profileApi, type MyProfile } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import './Profile.css';
@@ -357,10 +358,18 @@ export function ProfilePage() {
   const queryClient = useQueryClient();
   const { user, setUser } = useAuthStore();
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, refetch } = useQuery({
     queryKey: ['my-profile'],
     queryFn: profileApi.get,
   });
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'ZiraDesk — Meu perfil';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
 
   const profileMutation = useMutation({
     mutationFn: (payload: Parameters<typeof profileApi.update>[0]) => profileApi.update(payload),
@@ -426,115 +435,150 @@ export function ProfilePage() {
     event.target.value = '';
   };
 
-  if (isLoading || !profile) {
+  if (isLoading) {
     return (
-      <div className="profile-page">
-        <div className="profile-content" style={{ minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: 'var(--txt-3)', fontSize: 13 }}>Carregando perfil...</span>
+      <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+        <div className="profile-page">
+          <div className="profile-content profile-state-wrap">
+            <span className="profile-state-text">Carregando perfil...</span>
+          </div>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
-  return (
-    <div className="profile-page">
-      <div className="profile-header">
-        <h1>Meu perfil</h1>
-        <p>Gerencie suas informações pessoais e preferências</p>
-      </div>
-
-      <div className="profile-layout">
-        <aside className="profile-sidebar">
-          <div className="avatar-section">
-            <div className="avatar-wrapper">
-              {currentAvatar ? (
-                <img src={currentAvatar} alt={currentName} className="profile-avatar-img" />
-              ) : (
-                <div className="profile-avatar-placeholder">{currentInitial}</div>
-              )}
-
-              <button
-                className="avatar-edit-btn"
-                onClick={() => fileInputRef.current?.click()}
-                title="Alterar foto"
-                disabled={avatarMutation.isPending}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+  if (isError || !profile) {
+    return (
+      <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+        <div className="profile-page">
+          <div className="profile-content">
+            <div className="zd-empty-state" style={{ minHeight: 240 }}>
+              <div className="zd-empty-icon" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path
-                    d="M9.5 2L12 4.5 5 11.5H2.5V9L9.5 2z"
+                    d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z"
                     stroke="currentColor"
-                    strokeWidth="1.3"
+                    strokeWidth="1.4"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                 </svg>
+              </div>
+              <strong>Não foi possível carregar seu perfil</strong>
+              <span>Tente novamente para continuar editando suas informações.</span>
+              <button className="tb-btn" onClick={() => void refetch()}>
+                Tentar novamente
               </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={handleAvatarUpload}
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            <div className="profile-user-info">
-              <span className="profile-user-name">{currentName}</span>
-              <span className="profile-user-role">{currentRole}</span>
-              <span className="profile-user-email">{currentEmail}</span>
             </div>
           </div>
+        </div>
+      </PageShell>
+    );
+  }
 
-          <nav className="profile-nav">
-            {PROFILE_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                className={`profile-nav-item ${activeTab === tab.key ? 'active' : ''}`}
-                onClick={() => setSearchParams({ tab: tab.key })}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+  return (
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div className="profile-page">
+        <div className="profile-header">
+          <h1>Meu perfil</h1>
+          <p>Gerencie suas informações pessoais e preferências</p>
+        </div>
 
-        <div className="profile-content">
-          {activeTab === 'profile' ? (
-            <ProfileTab
-              profile={profile}
-              isSaving={profileMutation.isPending}
-              onSave={async (payload) => {
-                await profileMutation.mutateAsync(payload);
-              }}
-            />
-          ) : null}
+        <div className="profile-layout">
+          <aside className="profile-sidebar">
+            <div className="avatar-section">
+              <div className="avatar-wrapper">
+                {currentAvatar ? (
+                  <img src={currentAvatar} alt={currentName} className="profile-avatar-img" />
+                ) : (
+                  <div className="profile-avatar-placeholder">{currentInitial}</div>
+                )}
 
-          {activeTab === 'password' ? (
-            <PasswordTab
-              isSaving={passwordMutation.isPending}
-              onSave={async (payload) => {
-                try {
-                  await passwordMutation.mutateAsync(payload);
-                  return true;
-                } catch {
-                  return false;
-                }
-              }}
-            />
-          ) : null}
+                <button
+                  className="avatar-edit-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Alterar foto"
+                  aria-label="Alterar foto de perfil"
+                  disabled={avatarMutation.isPending}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path
+                      d="M9.5 2L12 4.5 5 11.5H2.5V9L9.5 2z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
 
-          {activeTab === 'notifications' ? (
-            <NotificationsTab
-              profile={profile}
-              isSaving={profileMutation.isPending}
-              onSave={async (payload) => {
-                await profileMutation.mutateAsync(payload);
-              }}
-            />
-          ) : null}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleAvatarUpload}
+                  style={{ display: 'none' }}
+                />
+              </div>
+
+              <div className="profile-user-info">
+                <span className="profile-user-name">{currentName}</span>
+                <span className="profile-user-role">{currentRole}</span>
+                <span className="profile-user-email">{currentEmail}</span>
+              </div>
+            </div>
+
+            <nav className="profile-nav">
+              {PROFILE_TABS.map((tab) => (
+                <button
+                  type="button"
+                  key={tab.key}
+                  className={`profile-nav-item ${activeTab === tab.key ? 'active' : ''}`}
+                  onClick={() => setSearchParams({ tab: tab.key })}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          <div className="profile-content">
+            {activeTab === 'profile' ? (
+              <ProfileTab
+                profile={profile}
+                isSaving={profileMutation.isPending}
+                onSave={async (payload) => {
+                  await profileMutation.mutateAsync(payload);
+                }}
+              />
+            ) : null}
+
+            {activeTab === 'password' ? (
+              <PasswordTab
+                isSaving={passwordMutation.isPending}
+                onSave={async (payload) => {
+                  try {
+                    await passwordMutation.mutateAsync(payload);
+                    return true;
+                  } catch {
+                    return false;
+                  }
+                }}
+              />
+            ) : null}
+
+            {activeTab === 'notifications' ? (
+              <NotificationsTab
+                profile={profile}
+                isSaving={profileMutation.isPending}
+                onSave={async (payload) => {
+                  await profileMutation.mutateAsync(payload);
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

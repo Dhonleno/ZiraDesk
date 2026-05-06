@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { TransferModal } from '../../components/omnichannel/TransferModal';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
+import { PageShell } from '../../components/layout/PageShell';
 import { api, omnichannelApi, type AgentWithSkills } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
@@ -290,8 +291,9 @@ export function MonitorPage() {
   const queueEntries = Object.entries(data?.queue.by_department ?? {});
 
   return (
-    <div className="monitor-page">
-      <div className="monitor-header">
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div className="monitor-page">
+        <div className="monitor-header">
         <div>
           <h1>{t('monitor.title')}</h1>
           <p>{t('monitor.subtitle')}</p>
@@ -414,6 +416,7 @@ export function MonitorPage() {
           }}
         />
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }

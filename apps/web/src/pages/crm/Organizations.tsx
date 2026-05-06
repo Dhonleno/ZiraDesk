@@ -8,6 +8,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { OrganizationCard } from '../../components/crm/OrganizationCard';
 import { OrganizationDetail } from '../../components/crm/OrganizationDetail';
 import { CreateOrganizationModal } from '../../components/crm/CreateOrganizationModal';
+import { PageShell } from '../../components/layout/PageShell';
 
 type StatusFilter = 'all' | 'lead' | 'prospect' | 'client' | 'inactive';
 
@@ -64,7 +65,8 @@ export function OrganizationsPage() {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', height: '100%', overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Left panel: list ── */}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--line)', background: 'var(--bg)' }}>
@@ -178,7 +180,8 @@ export function OrganizationsPage() {
         ) : null}
       </div>
 
-      <CreateOrganizationModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
-    </div>
+        <CreateOrganizationModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      </div>
+    </PageShell>
   );
 }

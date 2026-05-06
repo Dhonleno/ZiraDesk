@@ -89,6 +89,7 @@ function Breadcrumb() {
   const isConversations = pathname.startsWith('/omnichannel');
   const isAdmin   = pathname.startsWith('/admin');
   const isTickets = pathname.startsWith('/tickets');
+  const isProfile = pathname.startsWith('/profile');
 
   const routeLabels: Record<string, string> = {
     '/omnichannel/monitor': 'Monitor',
@@ -96,6 +97,7 @@ function Breadcrumb() {
     '/crm/organizations': 'Organizações',
     '/crm/contacts':      'Contatos',
     '/tickets':           'Tickets',
+    '/profile':           'Meu perfil',
     '/admin/dashboard':   t('tenantAdmin.nav.dashboard'),
     '/admin/users':       t('tenantAdmin.nav.users'),
     '/admin/channels':    t('tenantAdmin.nav.channels'),
@@ -122,8 +124,18 @@ function Breadcrumb() {
             ? 'Contatos'
             : isTickets
               ? 'Tickets'
+              : isProfile
+                ? 'Meu perfil'
               : '');
-  const section = isAdmin ? 'Administração' : isCRM ? 'CRM' : isTickets ? 'Tickets' : 'Omnichannel';
+  const section = isAdmin
+    ? 'Administração'
+    : isCRM
+      ? 'CRM'
+      : isTickets
+        ? 'Tickets'
+        : isProfile
+          ? 'Configurações'
+          : 'Omnichannel';
   if (!staticLabel) return null;
 
   const iconEl = isCRM ? (
@@ -135,6 +147,16 @@ function Breadcrumb() {
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
       <rect x="1.5" y="2" width="11" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
       <path d="M4 5.5h6M4 8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ) : isProfile ? (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M7 1.8v1.1M7 11.1v1.1M12.2 7h-1.1M2.9 7H1.8M10.8 3.2l-.8.8M4 10l-.8.8M10.8 10.8l-.8-.8M4 4l-.8-.8"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
     </svg>
   ) : (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -617,8 +639,8 @@ export function TenantLayout() {
         <nav
           aria-label="Main navigation"
           style={{
-            width: 72,
-            minWidth: 72,
+            width: 68,
+            minWidth: 68,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',

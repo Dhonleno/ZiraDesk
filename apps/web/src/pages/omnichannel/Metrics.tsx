@@ -26,6 +26,7 @@ import {
   type MetricsVolumePoint,
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { PageShell } from '../../components/layout/PageShell';
 
 type PeriodKey = 'today' | '7' | '30' | '90' | 'custom';
 
@@ -523,8 +524,9 @@ export function MetricsPage() {
   const noData = !isLoading && (data?.overview.total.total ?? 0) === 0;
 
   return (
-    <div className="monitor-page">
-      <div className="monitor-header">
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div className="monitor-page">
+        <div className="monitor-header">
         <div>
           <h1>{t('metrics.title')}</h1>
         </div>
@@ -695,6 +697,7 @@ export function MetricsPage() {
           <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />
         </>
       )}
-    </div>
+      </div>
+    </PageShell>
   );
 }
