@@ -503,6 +503,29 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ticket_relations (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id     UUID NOT NULL REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      related_id    UUID NOT NULL REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,
+      relation_type VARCHAR(30) NOT NULL,
+      created_by    UUID REFERENCES "${schemaName}".users(id),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(ticket_id, related_id),
+      CHECK(ticket_id <> related_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_ticket_relations_ticket"
+    ON "${schemaName}".ticket_relations(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_ticket_relations_related"
+    ON "${schemaName}".ticket_relations(related_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".ticket_comments (
       id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id   UUID         NOT NULL REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,

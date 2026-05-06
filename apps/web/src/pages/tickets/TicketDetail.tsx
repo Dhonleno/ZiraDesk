@@ -15,6 +15,7 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { AssignTicketModal } from '../../components/tickets/AssignTicketModal';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
 import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
+import TicketRelations from '../../components/tickets/TicketRelations';
 import { SourceBadge } from '../../components/tickets/SourceBadge';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { subscribeToEvent } from '../../services/socket';
@@ -301,6 +302,15 @@ function TimelineEvent({ event, showLine }: { event: TicketTimelineEvent; showLi
         </svg>
       );
     }
+    if (event.event_type === 'relation_added') {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+          <path d="M4.1 5.3a2.1 2.1 0 0 1 0-3l.2-.2a2.1 2.1 0 0 1 3 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M9.9 8.7a2.1 2.1 0 0 1 0 3l-.2.2a2.1 2.1 0 0 1-3 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="m5.3 8.7 3.4-3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    }
     return <span style={{ lineHeight: 1 }}>•</span>;
   })();
 
@@ -320,6 +330,10 @@ function TimelineEvent({ event, showLine }: { event: TicketTimelineEvent; showLi
     if (event.event_type === 'tag_removed') return t('tickets.timeline.tag_removed', { tag: event.old_value ?? '—' });
     if (event.event_type === 'comment_added') return t('tickets.timeline.comment_added');
     if (event.event_type === 'resolved') return t('tickets.timeline.resolved');
+    if (event.event_type === 'relation_added') {
+      const meta = event.metadata as { related_title?: string };
+      return `Ticket vinculado: "${meta?.related_title ?? 'Desconhecido'}"`;
+    }
     return event.event_type;
   })();
 
@@ -427,6 +441,11 @@ export function TicketDetail({ ticketId }: Props) {
     setDescValue(ticket.description ?? '');
     setCatVal(ticket.category ?? '');
   }, [ticket?.id, ticket?.description, ticket?.category]);
+
+  useEffect(() => {
+    if (!ticket?.id) return;
+    setEditingDescription(false);
+  }, [ticket?.id]);
 
   useEffect(() => {
     if (!ticket?.id) return;
@@ -1236,6 +1255,7 @@ export function TicketDetail({ ticketId }: Props) {
 
           <ChecklistSection ticketId={ticket.id} />
           <TimeTrackingSection ticketId={ticket.id} />
+          <TicketRelations ticketId={ticket.id} />
 
           <div>
             <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--line)', marginBottom: 12 }}>

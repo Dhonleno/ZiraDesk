@@ -1,5 +1,6 @@
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
+import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { hasRole } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
@@ -43,6 +44,32 @@ import {
 } from './tickets.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
+
+async function ensureTicketRelationsInfrastructure(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ticket_relations (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id     UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      related_id    UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      relation_type VARCHAR(30) NOT NULL,
+      created_by    UUID REFERENCES users(id),
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(ticket_id, related_id),
+      CHECK(ticket_id <> related_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_ticket_relations_ticket
+    ON ticket_relations(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_ticket_relations_related
+    ON ticket_relations(related_id)
+  `);
+}
 
 export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   await app.register(multipart, {
@@ -71,6 +98,35 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ success: true, data: stats });
   });
 
+  // GET /api/tickets/search?q=termo&exclude=id
+  app.get('/search', { preHandler: guard }, async (request, reply) => {
+    await ensureTicketRelationsInfrastructure();
+
+    const { q, exclude } = request.query as { q?: string; exclude?: string };
+    const term = q?.trim() ?? '';
+    if (term.length < 2) {
+      return reply.send({ success: true, data: [] });
+    }
+
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      id: string;
+      title: string;
+      status: string;
+      priority: string;
+    }>>(
+      `SELECT id, title, status, priority
+       FROM tickets
+       WHERE (title ILIKE '%' || $1 || '%' OR id::text ILIKE '%' || $1 || '%')
+         AND ($2::text IS NULL OR id::text <> $2::text)
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      term,
+      exclude?.trim() || null,
+    );
+
+    return reply.send({ success: true, data: rows });
+  });
+
   // POST /api/tickets
   app.post('/', { preHandler: guard }, async (request, reply) => {
     const parsed = createTicketSchema.safeParse(request.body);
@@ -83,6 +139,197 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!);
     return reply.code(201).send({ success: true, data: ticket });
   });
+
+  // GET /api/tickets/:id/relations
+  app.get<{ Params: { id: string } }>('/:id/relations', { preHandler: guard }, async (request, reply) => {
+    await ensureTicketRelationsInfrastructure();
+    const { id } = request.params;
+
+    const rows = await prisma.$queryRawUnsafe<Array<{
+      relation_id: string;
+      relation_type: string;
+      created_at: Date;
+      related_ticket_id: string;
+      related_title: string;
+      related_status: string;
+      related_priority: string;
+      direction: 'outgoing' | 'incoming';
+    }>>(
+      `SELECT 
+         tr.id AS relation_id,
+         tr.relation_type,
+         tr.created_at,
+         CASE 
+           WHEN tr.ticket_id = $1::uuid THEN tr.related_id
+           ELSE tr.ticket_id
+         END AS related_ticket_id,
+         CASE 
+           WHEN tr.ticket_id = $1::uuid THEN t2.title
+           ELSE t1.title
+         END AS related_title,
+         CASE 
+           WHEN tr.ticket_id = $1::uuid THEN t2.status
+           ELSE t1.status
+         END AS related_status,
+         CASE 
+           WHEN tr.ticket_id = $1::uuid THEN t2.priority
+           ELSE t1.priority
+         END AS related_priority,
+         CASE
+           WHEN tr.ticket_id = $1::uuid THEN 'outgoing'
+           ELSE 'incoming'
+         END AS direction
+       FROM ticket_relations tr
+       JOIN tickets t1 ON t1.id = tr.ticket_id
+       JOIN tickets t2 ON t2.id = tr.related_id
+       WHERE tr.ticket_id = $1::uuid
+          OR tr.related_id = $1::uuid
+       ORDER BY tr.created_at DESC`,
+      id,
+    );
+
+    return reply.send({ success: true, data: rows });
+  });
+
+  // POST /api/tickets/:id/relations
+  app.post<{ Params: { id: string } }>('/:id/relations', { preHandler: guard }, async (request, reply) => {
+    await ensureTicketRelationsInfrastructure();
+    const { id } = request.params;
+    const { related_id, relation_type } = request.body as {
+      related_id?: string;
+      relation_type?: string;
+    };
+
+    if (!related_id || !relation_type) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos' } });
+    }
+
+    if (!RELATION_TYPES.has(relation_type)) {
+      return reply.code(400).send({ success: false, error: { message: 'Tipo de relação inválido' } });
+    }
+
+    if (id === related_id) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Não é possível vincular um ticket a si mesmo' },
+      });
+    }
+
+    const tickets = await prisma.$queryRawUnsafe<Array<{ id: string; title: string }>>(
+      `SELECT id, title
+       FROM tickets
+       WHERE id IN ($1::uuid, $2::uuid)`,
+      id,
+      related_id,
+    );
+
+    if (tickets.length !== 2) {
+      return reply.code(404).send({ success: false, error: { message: 'Ticket não encontrado' } });
+    }
+
+    const existing = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM ticket_relations
+       WHERE (ticket_id = $1::uuid AND related_id = $2::uuid)
+          OR (ticket_id = $2::uuid AND related_id = $1::uuid)
+       LIMIT 1`,
+      id,
+      related_id,
+    );
+
+    if (existing.length > 0) {
+      return reply.code(409).send({
+        success: false,
+        error: { message: 'Estes tickets já estão vinculados' },
+      });
+    }
+
+    let ticketId = id;
+    let relatedId = related_id;
+    let normalizedType = relation_type;
+    if (relation_type === 'is_blocked_by') {
+      ticketId = related_id;
+      relatedId = id;
+      normalizedType = 'blocks';
+    }
+
+    const inserted = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO ticket_relations (ticket_id, related_id, relation_type, created_by)
+       VALUES ($1::uuid, $2::uuid, $3, $4::uuid)
+       ON CONFLICT (ticket_id, related_id) DO NOTHING
+       RETURNING id`,
+      ticketId,
+      relatedId,
+      normalizedType,
+      request.user.id,
+    );
+
+    if (inserted.length === 0) {
+      return reply.code(409).send({
+        success: false,
+        error: { message: 'Estes tickets já estão vinculados' },
+      });
+    }
+
+    const byId = new Map(tickets.map((ticket) => [ticket.id, ticket.title]));
+    const sourceTitle = byId.get(id) ?? 'Desconhecido';
+    const targetTitle = byId.get(related_id) ?? 'Desconhecido';
+
+    const sourceRelationType = relation_type;
+    const targetRelationType =
+      relation_type === 'blocks'
+        ? 'is_blocked_by'
+        : relation_type === 'is_blocked_by'
+          ? 'blocks'
+          : relation_type;
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO ticket_events (ticket_id, user_id, event_type, new_value, metadata)
+       VALUES
+         ($1::uuid, $2::uuid, 'relation_added', $3, $4::jsonb),
+         ($5::uuid, $2::uuid, 'relation_added', $6, $7::jsonb)`,
+      id,
+      request.user.id,
+      sourceRelationType,
+      JSON.stringify({
+        related_id,
+        related_title: targetTitle,
+      }),
+      related_id,
+      targetRelationType,
+      JSON.stringify({
+        related_id: id,
+        related_title: sourceTitle,
+      }),
+    );
+
+    return reply.code(201).send({ success: true });
+  });
+
+  // DELETE /api/tickets/:id/relations/:relationId
+  app.delete<{ Params: { id: string; relationId: string } }>(
+    '/:id/relations/:relationId',
+    { preHandler: guard },
+    async (request, reply) => {
+      await ensureTicketRelationsInfrastructure();
+      const { id, relationId } = request.params;
+
+      const deleted = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `DELETE FROM ticket_relations
+         WHERE id = $1::uuid
+           AND (ticket_id = $2::uuid OR related_id = $2::uuid)
+         RETURNING id`,
+        relationId,
+        id,
+      );
+
+      if (deleted.length === 0) {
+        return reply.code(404).send({ success: false, error: { message: 'Vínculo não encontrado' } });
+      }
+
+      return reply.send({ success: true });
+    },
+  );
 
   // GET /api/tickets/:id/timeline
   app.get<{ Params: { id: string } }>('/:id/timeline', { preHandler: guard }, async (request, reply) => {

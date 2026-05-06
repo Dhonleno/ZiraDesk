@@ -1063,6 +1063,29 @@ export interface TicketTimeEntry {
   user_name: string | null;
 }
 
+export interface TicketRelation {
+  relation_id: string;
+  relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by' | string;
+  created_at: string;
+  related_ticket_id: string;
+  related_title: string;
+  related_status: TicketStatus | string;
+  related_priority: TicketPriority | string;
+  direction: 'incoming' | 'outgoing';
+}
+
+export interface TicketSearchResult {
+  id: string;
+  title: string;
+  status: TicketStatus | string;
+  priority: TicketPriority | string;
+}
+
+export interface AddTicketRelationPayload {
+  related_id: string;
+  relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by';
+}
+
 export interface TicketStats {
   total_tickets:            number;
   open_tickets:             number;
@@ -1678,6 +1701,26 @@ export const ticketsApi = {
     return res.data.data;
   },
 
+  listRelations: async (ticketId: string): Promise<TicketRelation[]> => {
+    const res = await api.get<{ success: boolean; data: TicketRelation[] }>(`/tickets/${ticketId}/relations`);
+    return res.data.data;
+  },
+
+  addRelation: async (ticketId: string, data: AddTicketRelationPayload): Promise<void> => {
+    await api.post(`/tickets/${ticketId}/relations`, data);
+  },
+
+  removeRelation: async (ticketId: string, relationId: string): Promise<void> => {
+    await api.delete(`/tickets/${ticketId}/relations/${relationId}`);
+  },
+
+  search: async (q: string, exclude?: string): Promise<TicketSearchResult[]> => {
+    const res = await api.get<{ success: boolean; data: TicketSearchResult[] }>('/tickets/search', {
+      params: { q, ...(exclude ? { exclude } : {}) },
+    });
+    return res.data.data;
+  },
+
   addComment: async (ticketId: string, payload: CreateCommentPayload): Promise<TicketComment> => {
     const res = await api.post<{ success: boolean; data: TicketComment }>(`/tickets/${ticketId}/comments`, payload);
     return res.data.data;
@@ -1811,6 +1854,17 @@ export const ticketTime = {
     api.post(`/tickets/${ticketId}/time`, data),
   delete: (ticketId: string, entryId: string) => api.delete(`/tickets/${ticketId}/time/${entryId}`),
 };
+
+export const ticketRelations = {
+  list: (ticketId: string) => api.get(`/tickets/${ticketId}/relations`),
+  add: (ticketId: string, data: AddTicketRelationPayload) =>
+    api.post(`/tickets/${ticketId}/relations`, data),
+  remove: (ticketId: string, relationId: string) =>
+    api.delete(`/tickets/${ticketId}/relations/${relationId}`),
+};
+
+export const ticketsSearch = (q: string, exclude?: string) =>
+  api.get('/tickets/search', { params: { q, ...(exclude ? { exclude } : {}) } });
 
 export interface PortalUser {
   id: string;

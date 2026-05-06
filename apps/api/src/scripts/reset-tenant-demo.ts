@@ -51,6 +51,9 @@ async function main() {
       IF to_regclass('ticket_events') IS NOT NULL THEN
         DELETE FROM ticket_events;
       END IF;
+      IF to_regclass('ticket_relations') IS NOT NULL THEN
+        DELETE FROM ticket_relations;
+      END IF;
       IF to_regclass('ticket_attachments') IS NOT NULL THEN
         DELETE FROM ticket_attachments;
       END IF;
@@ -225,6 +228,22 @@ async function main() {
   `);
 
   await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events(ticket_id)`);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS ticket_relations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      related_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      relation_type VARCHAR(30) NOT NULL,
+      created_by UUID REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(ticket_id, related_id),
+      CHECK(ticket_id <> related_id)
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_relations_ticket ON ticket_relations(ticket_id)`);
+  await exec(`CREATE INDEX IF NOT EXISTS idx_ticket_relations_related ON ticket_relations(related_id)`);
 
   await exec(`
     CREATE TABLE IF NOT EXISTS ticket_attachments (
