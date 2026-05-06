@@ -301,26 +301,27 @@
 }
 
 .comment-composer.internal {
-  background: rgba(245, 158, 11, .05);
-  border: 1px solid rgba(245, 158, 11, .2);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
-  padding: 12px;
+  padding: 10px;
 }
 
 .comment-composer.public {
-  background: var(--bg-3);
+  background: var(--bg-2);
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
-  padding: 12px;
+  padding: 10px;
 }
 
 .comment-type-toggle {
   display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
-  background: var(--bg-4);
+  gap: 2px;
+  margin-bottom: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
   border-radius: var(--r);
-  padding: 3px;
+  padding: 2px;
 }
 
 .comment-type-toggle button {
@@ -328,22 +329,22 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px;
+  gap: 1px;
+  padding: 5px 6px;
   border: none;
   background: none;
   border-radius: var(--r);
   color: var(--txt-3);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all .15s;
   font-family: var(--font);
 }
 
 .comment-type-toggle button.active {
-  background: var(--bg-1, var(--bg));
+  background: var(--bg);
   color: var(--txt);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .toggle-hint {
@@ -352,7 +353,9 @@
 }
 
 .comment-textarea {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
 }
 
 .comment-footer {
@@ -708,6 +711,29 @@
   background: var(--teal);
   flex-shrink: 0;
   box-shadow: 0 0 0 2px var(--teal-dim);
+}
+
+.ticket-attachments-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ticket-file-input {
+  display: none;
+}
+
+.ticket-file-name {
+  flex: 1;
+  min-width: 140px;
+  max-width: 340px;
+  color: var(--txt-3);
+  font-size: 11px;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes zd-fade-in {

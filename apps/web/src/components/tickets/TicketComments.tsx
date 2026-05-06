@@ -209,7 +209,7 @@ export function TicketComments({ ticketId }: Props) {
                   <div className="comment-edit-actions">
                     <button
                       type="button"
-                      className="tb-btn"
+                      className="zd-btn"
                       onClick={() => {
                         setEditingId(null);
                         setEditContent('');
@@ -219,7 +219,7 @@ export function TicketComments({ ticketId }: Props) {
                     </button>
                     <button
                       type="button"
-                      className="tb-btn tb-btn-primary"
+                      className="zd-btn zd-btn-primary"
                       disabled={editMutation.isPending || !editContent.trim()}
                       onClick={() => editMutation.mutate({ id: comment.id, nextContent: editContent.trim() })}
                     >
@@ -288,3 +288,4 @@ export function TicketComments({ ticketId }: Props) {
     </div>
   );
 }
+

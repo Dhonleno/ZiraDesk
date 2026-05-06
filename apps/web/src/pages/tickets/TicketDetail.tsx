@@ -385,6 +385,7 @@ export function TicketDetail({ ticketId }: Props) {
   const [tagInput, setTagInput] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const { data: ticket, isPending } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -486,6 +487,7 @@ export function TicketDetail({ ticketId }: Props) {
     mutationFn: (file: File) => ticketsApi.uploadAttachment(ticketId!, file),
     onSuccess: async () => {
       setAttachmentFile(null);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       await queryClient.invalidateQueries({ queryKey: ['ticket-attachments', ticketId] });
       toast.success('Anexo enviado');
     },
@@ -656,7 +658,7 @@ export function TicketDetail({ ticketId }: Props) {
             </h2>
           )}
 
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
             <div style={{ position: 'relative' }} ref={moreRef}>
               <button
                 type="button"
@@ -715,14 +717,14 @@ export function TicketDetail({ ticketId }: Props) {
               ) : null}
             </div>
 
-            <button type="button" onClick={() => setAssignOpen(true)} className="tb-btn">
+            <button type="button" onClick={() => setAssignOpen(true)} className="zd-btn">
               {t('tickets.actions.assign')}
             </button>
 
             {ticket.assigned_to !== user?.id ? (
               <button
                 type="button"
-                className="tb-btn"
+                className="zd-btn"
                 onClick={() => {
                   if (user?.id) updateTicket({ assigned_to: user.id }, t('tickets.form.assigned'));
                 }}
@@ -739,7 +741,7 @@ export function TicketDetail({ ticketId }: Props) {
               <button
                 type="button"
                 onClick={() => updateTicket({ status: 'resolved' }, t('tickets.form.resolved'))}
-                className="tb-btn"
+                className="zd-btn"
                 style={{ borderColor: 'var(--green)', background: 'var(--green-dim)', color: 'var(--green)' }}
               >
                 {t('tickets.actions.resolve')}
@@ -750,7 +752,7 @@ export function TicketDetail({ ticketId }: Props) {
               <button
                 type="button"
                 onClick={() => updateTicket({ status: 'closed' }, t('tickets.form.closed'))}
-                className="tb-btn"
+                className="zd-btn"
               >
                 {t('tickets.actions.close')}
               </button>
@@ -760,7 +762,7 @@ export function TicketDetail({ ticketId }: Props) {
               <button
                 type="button"
                 onClick={() => updateTicket({ status: 'open' }, t('tickets.form.updated'))}
-                className="tb-btn"
+                className="zd-btn"
                 style={{ borderColor: 'var(--teal)', background: 'var(--teal-dim)', color: 'var(--teal)' }}
               >
                 {t('tickets.actions.reopen')}
@@ -1125,7 +1127,7 @@ export function TicketDetail({ ticketId }: Props) {
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
-                      className="tb-btn"
+                      className="zd-btn"
                       onClick={() => {
                         setDescValue(ticket.description ?? '');
                         setEditingDescription(false);
@@ -1135,7 +1137,7 @@ export function TicketDetail({ ticketId }: Props) {
                     </button>
                     <button
                       type="button"
-                      className="tb-btn tb-btn-primary"
+                      className="zd-btn zd-btn-primary"
                       onClick={() => {
                         updateTicket({ description: descValue || '' }, t('tickets.form.updated'));
                         setEditingDescription(false);
@@ -1175,12 +1177,23 @@ export function TicketDetail({ ticketId }: Props) {
               Anexos
             </h4>
 
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+            <div className="ticket-attachments-toolbar">
               <input
+                ref={attachmentInputRef}
                 type="file"
+                className="ticket-file-input"
                 onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)}
-                style={{ color: 'var(--txt-2)', fontSize: 12, fontFamily: 'var(--font)' }}
               />
+              <button
+                type="button"
+                className="zd-btn"
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                Escolher arquivo
+              </button>
+              <span className="ticket-file-name" title={attachmentFile?.name ?? 'Nenhum arquivo selecionado'}>
+                {attachmentFile?.name ?? 'Nenhum arquivo selecionado'}
+              </span>
               <button
                 type="button"
                 className="zd-btn"
@@ -1322,3 +1335,4 @@ export function TicketDetail({ ticketId }: Props) {
     </div>
   );
 }
+
