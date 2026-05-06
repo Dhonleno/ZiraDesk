@@ -236,9 +236,38 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
   }, []);
 
   useEffect(() => {
+    const onAssumed = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
+      setAssignedToMe(true);
+      setActiveTab('active');
+      setSubStatus(null);
+      if (detail?.conversationId) {
+        onSelect(detail.conversationId);
+      }
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
+    };
+
+    window.addEventListener('omnichannel:conversation-assumed', onAssumed);
+    return () => window.removeEventListener('omnichannel:conversation-assumed', onAssumed);
+  }, [onSelect, qc]);
+
+  useEffect(() => {
     const invalidateConversationData = () => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
+    };
+
+    const syncToActiveTabForCurrentUser = (conversationId?: string) => {
+      const shouldMoveToActive = activeTab === 'queue' || selectedId === conversationId;
+      if (!shouldMoveToActive) return;
+
+      setAssignedToMe(true);
+      setActiveTab('active');
+      setSubStatus(null);
+      if (conversationId) {
+        onSelect(conversationId);
+      }
     };
 
     const handleMessage = (data: { conversationId?: string }) => {
@@ -259,9 +288,38 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       playNotificationSound();
     };
 
+    const handleAssigned = (data: { conversationId?: string }) => {
+      invalidateConversationData();
+      const conversationId = data.conversationId;
+      if (conversationId) {
+        markNewConversation(conversationId);
+      }
+      syncToActiveTabForCurrentUser(conversationId);
+      playNotificationSound();
+    };
+
+    const handleUpdated = (data: {
+      conversationId?: string;
+      assigned_to?: string | null;
+      conversation?: { id?: string; assigned_to?: string | null };
+    }) => {
+      invalidateConversationData();
+
+      const conversationId = data.conversationId ?? data.conversation?.id;
+      const assignedTo = data.assigned_to ?? data.conversation?.assigned_to;
+      if (assignedTo && assignedTo === currentUserId) {
+        syncToActiveTabForCurrentUser(conversationId);
+      }
+    };
+
     const unsubMessage = subscribeToEvent<{ conversationId?: string }>('conversation:new_message', handleMessage);
     const unsubIncoming = subscribeToEvent<{ conversationId?: string }>('conversation:message', handleMessage);
-    const unsubUpdated = subscribeToEvent('conversation:updated', invalidateConversationData);
+    const unsubAssigned = subscribeToEvent<{ conversationId?: string }>('conversation:assigned', handleAssigned);
+    const unsubUpdated = subscribeToEvent<{
+      conversationId?: string;
+      assigned_to?: string | null;
+      conversation?: { id?: string; assigned_to?: string | null };
+    }>('conversation:updated', handleUpdated);
     const unsubCreated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
       'conversation:created',
       handleCreated,
@@ -280,6 +338,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     return () => {
       unsubMessage();
       unsubIncoming();
+      unsubAssigned();
       unsubUpdated();
       unsubCreated();
       unsubTagAdded();
@@ -295,7 +354,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       activityTimeoutsRef.current.clear();
       newConversationTimeoutsRef.current.clear();
     };
-  }, [markConversationActivity, markNewConversation, playNotificationSound, qc]);
+  }, [activeTab, currentUserId, markConversationActivity, markNewConversation, onSelect, playNotificationSound, qc, selectedId]);
 
   const TABS: Array<{ key: TabKey; labelKey: string }> = [
     { key: 'active', labelKey: 'tabs.active' },

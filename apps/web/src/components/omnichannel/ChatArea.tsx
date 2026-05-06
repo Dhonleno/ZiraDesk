@@ -678,9 +678,14 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     });
 
-    const unsubUpdated = subscribeToEvent<{ conversationId: string }>('conversation:updated', (event) => {
-      if (event.conversationId !== conversationId) return;
+    const unsubUpdated = subscribeToEvent<{
+      conversationId?: string;
+      conversation?: { id?: string };
+    }>('conversation:updated', (event) => {
+      const updatedConversationId = event.conversationId ?? event.conversation?.id;
+      if (updatedConversationId !== conversationId) return;
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
     const unsubCsatUpdated = subscribeToEvent<{ conversationId: string }>('conversation:csat_updated', (event) => {
       if (event.conversationId !== conversationId) return;
@@ -996,6 +1001,10 @@ export function ChatArea({ conversationId }: Props) {
       );
 
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
+      window.dispatchEvent(new CustomEvent('omnichannel:conversation-assumed', {
+        detail: { conversationId },
+      }));
       toast.success('Atendimento assumido!');
     } catch {
       toast.error('Erro ao assumir atendimento');
