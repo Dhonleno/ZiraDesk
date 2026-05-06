@@ -62,7 +62,18 @@ Monitoramento: Sentry (erros) + Umami (analytics)
 
 ## 3. DESIGN SYSTEM — REFERÊNCIA OBRIGATÓRIA
 
-> As telas `Omnichannel - Modais.html` e `Clientes.html` são a **referência canônica de UI**. Toda nova página DEVE reutilizar esses tokens, componentes e padrões. Não inventar paletas, espaçamentos ou tipografia novas.
+> Fonte de verdade oficial: [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md)
+> As telas `Omnichannel - Modais.html`, `Clientes.html` e `Monitor.html` são referências canônicas de UI.
+> Toda nova página DEVE reutilizar tokens, componentes e padrões existentes. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
+
+### 3.0 Gate Obrigatório Para Alterações de UI (Agente IA e Humanos)
+
+Antes de qualquer alteração em UI (`apps/web/**`), executar este pre-check:
+
+- Ler [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md) por completo.
+- Confirmar conformidade com topbar, nav rail, tokens de tema, tipografia IBM Plex e padrão de rolagem interna.
+- Escolher uma tela de referência canônica para espelhar estrutura base (não começar do zero).
+- Validar checklist final do padrão de telas (seção "Checklist para nova tela").
 
 ### 3.1 Marca
 

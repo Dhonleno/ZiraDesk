@@ -1,7 +1,25 @@
 # ZiraDesk — Design System
 
-> Referência canônica de design. Toda nova tela deve seguir estes padrões.
-> Fonte de verdade: `docs/design/omnichannel_chat.html` (protótipo de referência).
+> Referência canônica de design para telas do produto.
+> Fonte de verdade atual: [PADRAO_DE_TELAS.md](./PADRAO_DE_TELAS.md)
+
+---
+
+## Uso Obrigatório
+
+- Antes de criar/alterar qualquer tela, modal ou componente visual, leia integralmente [PADRAO_DE_TELAS.md](./PADRAO_DE_TELAS.md).
+- Não invente tokens, cores, tipografia, espaçamento ou estrutura fora do padrão canônico.
+- Se houver divergência entre este arquivo e o padrão canônico, prevalece [PADRAO_DE_TELAS.md](./PADRAO_DE_TELAS.md).
+
+## Referências Canônicas de Tela
+
+- `Omnichannel - Modais.html`
+- `Clientes.html`
+- `Monitor.html`
+
+## Compatibilidade
+
+Este arquivo permanece como entrada de descoberta para o design system, mas as regras detalhadas foram centralizadas no padrão de telas canônico.
 
 ---
 
