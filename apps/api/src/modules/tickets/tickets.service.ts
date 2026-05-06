@@ -70,6 +70,7 @@ interface CommentRow {
   created_at:  Date;
   author_name:   string | null;
   author_avatar: string | null;
+  attachments: TicketCommentAttachmentRow[];
 }
 
 interface TicketAttachmentRow {
@@ -82,6 +83,13 @@ interface TicketAttachmentRow {
   file_size: number | null;
   mime_type: string | null;
   created_at: Date;
+}
+
+interface TicketCommentAttachmentRow {
+  id: string;
+  filename: string;
+  file_url: string;
+  mime_type: string | null;
 }
 
 interface TicketChecklistRow {
@@ -152,7 +160,7 @@ const ALLOWED_ATTACHMENT_MIME = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
-const MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 
 function sanitizeFileName(fileName: string): string {
   const base = path.basename(fileName).trim();
@@ -260,6 +268,11 @@ async function ensureTicketInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
     ON ticket_attachments(ticket_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ticket_attachments
+    ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES ticket_comments(id) ON DELETE CASCADE
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -697,7 +710,20 @@ export async function listComments(ticketId: string) {
     `SELECT
        tc.id, tc.ticket_id, tc.user_id, tc.contact_id, tc.source, tc.content, tc.is_internal, tc.created_at,
        COALESCE(c.name, u.name) AS author_name,
-       COALESCE(c.avatar_url, u.avatar_url) AS author_avatar
+       COALESCE(c.avatar_url, u.avatar_url) AS author_avatar,
+       COALESCE((
+         SELECT json_agg(
+           json_build_object(
+             'id', ta.id,
+             'filename', ta.filename,
+             'file_url', ta.file_url,
+             'mime_type', ta.mime_type
+           )
+           ORDER BY ta.created_at ASC
+         )
+         FROM ticket_attachments ta
+         WHERE ta.comment_id = tc.id
+       ), '[]'::json) AS attachments
      FROM ticket_comments tc
      LEFT JOIN users u ON u.id = tc.user_id
      LEFT JOIN contacts c ON c.id = tc.contact_id
@@ -706,7 +732,10 @@ export async function listComments(ticketId: string) {
     ticketId,
   );
 
-  return rows;
+  return rows.map((row) => ({
+    ...row,
+    attachments: Array.isArray(row.attachments) ? row.attachments : [],
+  }));
 }
 
 /* ── addComment ──────────────────────────────────────────────────────────── */
@@ -718,7 +747,8 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
      VALUES ($1::uuid, $2::uuid, NULL, 'agent', $3, $4)
      RETURNING
        id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
-       NULL AS author_name, NULL AS author_avatar`,
+       NULL AS author_name, NULL AS author_avatar,
+       '[]'::json AS attachments`,
     ticketId, userId, data.content, data.is_internal,
   );
 
@@ -776,7 +806,8 @@ export async function updateComment(
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `SELECT id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
             COALESCE(c.name, u.name) AS author_name,
-            COALESCE(c.avatar_url, u.avatar_url) AS author_avatar
+            COALESCE(c.avatar_url, u.avatar_url) AS author_avatar,
+            '[]'::json AS attachments
      FROM ticket_comments tc
      LEFT JOIN users u ON u.id = tc.user_id
      LEFT JOIN contacts c ON c.id = tc.contact_id
@@ -825,7 +856,8 @@ export async function updateComment(
 export async function deleteComment(commentId: string, userId: string, role: string, tenantId: string) {
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `SELECT id, ticket_id, user_id, contact_id, source, content, is_internal, created_at,
-            NULL AS author_name, NULL AS author_avatar
+            NULL AS author_name, NULL AS author_avatar,
+            '[]'::json AS attachments
      FROM ticket_comments
      WHERE id = $1::uuid LIMIT 1`,
     commentId,
@@ -888,7 +920,7 @@ export async function addAttachment(params: {
   }
 
   if (params.buffer.length > MAX_ATTACHMENT_SIZE) {
-    throw new ForbiddenError('Arquivo excede o limite de 15MB');
+    throw new ForbiddenError('Arquivo excede o limite de 10MB');
   }
 
   if (params.commentId) {

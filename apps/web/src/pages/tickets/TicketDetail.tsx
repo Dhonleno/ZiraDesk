@@ -806,7 +806,7 @@ export function TicketDetail({ ticketId }: Props) {
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         <div
           style={{
-            width: 250,
+            width: 280,
             flexShrink: 0,
             borderRight: '1px solid var(--line)',
             padding: '14px 12px',
@@ -816,35 +816,6 @@ export function TicketDetail({ ticketId }: Props) {
             background: 'var(--bg-2)',
           }}
         >
-          <SbField label={t('tickets.fields.status')}>
-            <select
-              aria-label="Status do ticket"
-              className="sb-select"
-              value={ticket.status}
-              onChange={(event) => updateTicket({ status: event.target.value as Ticket['status'] }, t('tickets.form.updated'))}
-            >
-              <option value="open">{t('tickets.status.open')}</option>
-              <option value="in_progress">{t('tickets.status.in_progress')}</option>
-              <option value="waiting">{t('tickets.status.waiting')}</option>
-              <option value="resolved">{t('tickets.status.resolved')}</option>
-              <option value="closed">{t('tickets.status.closed')}</option>
-            </select>
-          </SbField>
-
-          <SbField label={t('tickets.fields.priority')}>
-            <select
-              aria-label="Prioridade do ticket"
-              className="sb-select"
-              value={ticket.priority}
-              onChange={(event) => updateTicket({ priority: event.target.value as Ticket['priority'] }, t('tickets.form.updated'))}
-            >
-              <option value="low">{t('tickets.priority.low')}</option>
-              <option value="medium">{t('tickets.priority.medium')}</option>
-              <option value="high">{t('tickets.priority.high')}</option>
-              <option value="urgent">{t('tickets.priority.urgent')}</option>
-            </select>
-          </SbField>
-
           <SbField label={t('tickets.fields.type', { defaultValue: 'Tipo' })}>
             <select
               aria-label="Tipo do ticket"
@@ -1049,20 +1020,6 @@ export function TicketDetail({ ticketId }: Props) {
             </div>
           </SbField>
 
-          {ticket.resolved_at ? (
-            <SbField label="RESOLVIDO EM">
-              <span className="sb-mono">
-                {new Date(ticket.resolved_at).toLocaleString('pt-BR', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-            </SbField>
-          ) : null}
-
           <SbField label="ORIGEM">
             <SourceBadge source={ticket.source ?? 'manual'} />
           </SbField>
@@ -1073,6 +1030,19 @@ export function TicketDetail({ ticketId }: Props) {
             </SbField>
             <SbField label={t('tickets.fields.updatedAt')}>
               <span className="sb-mono">{formatDate(ticket.updated_at)}</span>
+            </SbField>
+            <SbField label="RESOLVIDO EM">
+              <span className="sb-mono">
+                {ticket.resolved_at
+                  ? new Date(ticket.resolved_at).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                  : '—'}
+              </span>
             </SbField>
           </div>
         </div>

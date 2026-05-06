@@ -55,7 +55,6 @@ export function TicketsPage() {
   const [statusTab, setStatusTab]     = useState<StatusTab>('all');
   const [priority, setPriority]       = useState<TicketPriority | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
-  const [filterSource, setFilterSource] = useState<'' | 'manual' | 'portal' | 'email' | 'whatsapp' | 'api'>('');
 
   const debouncedSearch = useDebounce(search, 300);
   const selectedId = paramId ?? null;
@@ -73,7 +72,7 @@ export function TicketsPage() {
 
   /* ── Queries ── */
   const { data: ticketsData, isPending: listLoading } = useQuery({
-    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, filterSource, contactFilter],
+    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, contactFilter],
     queryFn: () => {
       const params: import('../../services/api').ListTicketsParams = {
         per_page:   50,
@@ -84,7 +83,6 @@ export function TicketsPage() {
       if (statusTab !== 'all')  params.status   = statusTab;
       if (priority)             params.priority  = priority;
       if (filterAgent)          params.assigned_to = filterAgent;
-      if (filterSource)         params.source = filterSource;
       if (contactFilter)        params.contact_id = contactFilter;
       return ticketsApi.list(params);
     },
@@ -212,8 +210,8 @@ export function TicketsPage() {
           </div>
 
           {/* Filters row */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select aria-label="Filtrar por prioridade" style={{ ...selectStyle, flex: 1 }} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority | '')}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, alignItems: 'center' }}>
+            <select aria-label="Filtrar por prioridade" style={{ ...selectStyle, width: '100%', minWidth: 0 }} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority | '')}>
               <option value="">{t('tickets.priority.all')}</option>
               <option value="low">{t('tickets.priority.low')}</option>
               <option value="medium">{t('tickets.priority.medium')}</option>
@@ -222,7 +220,7 @@ export function TicketsPage() {
             </select>
             <select
               aria-label="Filtrar por agente"
-              style={{ ...selectStyle, flex: 1 }}
+              style={{ ...selectStyle, width: '100%', minWidth: 0 }}
               value={filterAgent}
               onChange={(e) => setFilterAgent(e.target.value)}
             >
@@ -230,19 +228,6 @@ export function TicketsPage() {
               {(agentsData?.data ?? []).map((agent) => (
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
               ))}
-            </select>
-            <select
-              aria-label="Filtrar por origem"
-              style={{ ...selectStyle, flex: 1 }}
-              value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value as typeof filterSource)}
-            >
-              <option value="">{t('tickets.filterBySource')}</option>
-              <option value="manual">✏️ {t('tickets.source.manual')}</option>
-              <option value="portal">🌐 {t('tickets.source.portal')}</option>
-              <option value="email">📧 {t('tickets.source.email')}</option>
-              <option value="whatsapp">📱 {t('tickets.source.whatsapp')}</option>
-              <option value="api">🔗 API</option>
             </select>
           </div>
         </div>

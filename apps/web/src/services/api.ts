@@ -1012,6 +1012,7 @@ export interface TicketComment {
   created_at:    string;
   author_name:   string | null;
   author_avatar: string | null;
+  attachments?:  TicketAttachment[];
 }
 
 export interface TicketAttachment {
@@ -1114,6 +1115,10 @@ export interface CreateTicketPayload {
 export interface CreateCommentPayload {
   content:     string;
   is_internal: boolean;
+}
+
+export interface UpdateCommentPayload {
+  content: string;
 }
 
 export interface CreateTicketTimePayload {
@@ -1776,6 +1781,20 @@ export const ticketsApi = {
     );
     return res.data.data;
   },
+};
+
+export const ticketComments = {
+  list: (ticketId: string) =>
+    api.get<{ success: boolean; data: TicketComment[] }>(`/tickets/${ticketId}/comments`),
+
+  create: (ticketId: string, data: CreateCommentPayload) =>
+    api.post<{ success: boolean; data: TicketComment }>(`/tickets/${ticketId}/comments`, data),
+
+  update: (ticketId: string, commentId: string, data: UpdateCommentPayload) =>
+    api.patch<{ success: boolean }>(`/tickets/${ticketId}/comments/${commentId}`, data),
+
+  delete: (ticketId: string, commentId: string) =>
+    api.delete<{ success: boolean; data: { deleted: boolean } }>(`/tickets/${ticketId}/comments/${commentId}`),
 };
 
 export const ticketChecklist = {

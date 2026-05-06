@@ -353,7 +353,7 @@
 }
 
 .comment-textarea {
-  margin-bottom: 8px;
+  margin-bottom: 0;
   background: var(--bg-3);
   border: 1px solid var(--line-2);
 }
@@ -361,6 +361,89 @@
 .comment-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+.comment-composer-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0;
+}
+
+.composer-tab {
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--txt-3);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: var(--font);
+  margin-bottom: -1px;
+}
+
+.composer-tab:hover { color: var(--txt-2); }
+
+.composer-tab.active {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+.format-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--bg-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.format-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--r);
+  color: var(--txt-3);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.format-btn:hover {
+  background: var(--bg-3);
+  color: var(--txt);
+}
+
+.format-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+  margin: 0 4px;
+}
+
+.format-hint {
+  font-size: 10px;
+  color: var(--txt-3);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.comment-preview {
+  min-height: 80px;
+  padding: 10px 12px;
+  background: var(--bg-3);
+  border-radius: var(--r);
+}
+
+.preview-empty {
+  font-size: 13px;
+  color: var(--txt-3);
+  font-style: italic;
 }
 
 .ticket-comment {
@@ -434,6 +517,167 @@
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.comment-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--txt);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.comment-body strong {
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.comment-body em {
+  font-style: italic;
+}
+
+.comment-body del {
+  text-decoration: line-through;
+  color: var(--txt-3);
+}
+
+.comment-body code {
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--teal);
+}
+
+.comment-body.preview {
+  font-size: 13px;
+  color: var(--txt-2);
+  line-height: 1.65;
+}
+
+.comment-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.comment-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt-2);
+  font-size: 11px;
+  text-decoration: none;
+  transition: all .15s;
+  max-width: 200px;
+}
+
+.comment-attachment-chip:hover {
+  background: var(--bg-4);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.att-filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font);
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  gap: 8px;
+}
+
+.composer-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.composer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.composer-action-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--r);
+  color: var(--txt-3);
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+
+.composer-action-btn:hover {
+  background: var(--bg-3);
+  color: var(--txt);
+}
+
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.composer-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--txt-2);
+  max-width: 140px;
+  font-family: var(--font);
+}
+
+.composer-file-chip button {
+  background: none;
+  border: none;
+  color: var(--txt-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+
+.composer-file-chip button:hover { color: var(--red); }
+
+.composer-shortcut {
+  font-size: 11px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  font-family: var(--mono);
 }
 
 .tb-icon-btn.danger {
