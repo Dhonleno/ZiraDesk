@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { adminApi, type TicketType } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { PageShell } from '../../components/layout/PageShell';
 
 const COLOR_PRESETS = [
   '#00C9A7', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444',
@@ -133,7 +134,8 @@ export function TicketTypes() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-5 p-6" style={{ overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div className="flex h-full flex-col gap-5 p-6" style={{ overflow: 'hidden' }}>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
@@ -325,7 +327,8 @@ export function TicketTypes() {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

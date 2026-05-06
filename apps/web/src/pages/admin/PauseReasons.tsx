@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { adminApi, type PauseReason } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
+import { PageShell } from '../../components/layout/PageShell';
 
 interface DraftReason {
   label: string;
@@ -78,7 +79,8 @@ export function PauseReasons() {
   });
 
   return (
-    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
           {t('tenantAdmin.pauseReasons.title')}
@@ -289,7 +291,8 @@ export function PauseReasons() {
           })
         )}
       </div>
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

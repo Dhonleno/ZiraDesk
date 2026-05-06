@@ -6,6 +6,7 @@ import { useToast } from '../../stores/toast.store';
 import { Button } from '../../components/ui/Button';
 import { AddChannelModal } from '../../components/admin/AddChannelModal';
 import { EditChannelModal } from '../../components/admin/EditChannelModal';
+import { PageShell } from '../../components/layout/PageShell';
 
 interface Channel {
   id: string;
@@ -124,8 +125,9 @@ export function Channels() {
   const channels = data ?? [];
 
   return (
-    <div className="space-y-6 p-6" style={{ height: '100%', overflowY: 'auto' }}>
-      <div className="flex items-start justify-between">
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
+        <div className="flex items-start justify-between">
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)' }}>
             {t('tenantAdmin.channels.title')}
@@ -140,126 +142,127 @@ export function Channels() {
           </svg>
           {t('tenantAdmin.channels.add')}
         </Button>
-      </div>
+        </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-40 animate-pulse rounded-xl bg-bg-3" />
-          ))}
-        </div>
-      ) : channels.length === 0 ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {Object.entries(TYPE_META).map(([type, meta]) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
-              style={{ background: 'var(--bg-2)', border: `1px dashed ${meta.color}40` }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = meta.color + '80';
-                e.currentTarget.style.background = 'var(--bg-3)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = meta.color + '40';
-                e.currentTarget.style.background = 'var(--bg-2)';
-              }}
-            >
-              <div
-                className="flex h-12 w-12 items-center justify-center rounded-xl"
-                style={{ background: meta.color + '1A', color: meta.color }}
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-40 animate-pulse rounded-xl bg-bg-3" />
+            ))}
+          </div>
+        ) : channels.length === 0 ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {Object.entries(TYPE_META).map(([type, meta]) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="flex flex-col items-center gap-3 rounded-xl p-6 transition-all"
+                style={{ background: 'var(--bg-2)', border: `1px dashed ${meta.color}40` }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = meta.color + '80';
+                  e.currentTarget.style.background = 'var(--bg-3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = meta.color + '40';
+                  e.currentTarget.style.background = 'var(--bg-2)';
+                }}
               >
-                {meta.icon}
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>{meta.label}</p>
-                <p className="mt-0.5 text-xs" style={{ color: 'var(--txt-3)' }}>
-                  {t('tenantAdmin.channels.clickToAdd')}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(channels as Channel[]).map((channel) => {
-            const meta = TYPE_META[channel.type] ?? { label: 'Canal', color: 'var(--txt-2)', icon: null };
-            return (
-              <div
-                key={channel.id}
-                className="rounded-xl p-5"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)' }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="flex h-10 w-10 items-center justify-center rounded-lg"
-                      style={{ background: meta.color + '1A', color: meta.color }}
-                    >
-                      {meta.icon}
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl"
+                  style={{ background: meta.color + '1A', color: meta.color }}
+                >
+                  {meta.icon}
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>{meta.label}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: 'var(--txt-3)' }}>
+                    {t('tenantAdmin.channels.clickToAdd')}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {(channels as Channel[]).map((channel) => {
+              const meta = TYPE_META[channel.type] ?? { label: 'Canal', color: 'var(--txt-2)', icon: null };
+              return (
+                <div
+                  key={channel.id}
+                  className="rounded-xl p-5"
+                  style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)' }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-lg"
+                        style={{ background: meta.color + '1A', color: meta.color }}
+                      >
+                        {meta.icon}
+                      </div>
+                      <div>
+                        <p className="font-medium" style={{ color: 'var(--txt)' }}>{channel.name}</p>
+                        <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{meta.label}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--txt)' }}>{channel.name}</p>
-                      <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{meta.label}</p>
-                    </div>
+                    <StatusBadge status={channel.status} t={t} />
                   </div>
-                  <StatusBadge status={channel.status} t={t} />
-                </div>
 
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => testMutation.mutate(channel.id)}
-                    disabled={testMutation.isPending}
-                    className="zd-btn"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
-                  >
-                    {t('tenantAdmin.common.test')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditChannelId(channel.id)}
-                    className="zd-btn"
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
-                  >
-                    Configurar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleMutation.mutate(channel)}
-                    disabled={toggleMutation.isPending}
-                    className="zd-btn"
-                    style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}
-                  >
-                    {channel.status === 'active' ? 'Desativar' : 'Ativar'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteMutation.mutate(channel.id)}
-                    className="zd-btn"
-                    style={{ borderColor: 'var(--red)', background: 'var(--red-dim)', color: 'var(--red)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.25)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--red-dim)'; }}
-                  >
-                    {t('tenantAdmin.common.remove')}
-                  </button>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => testMutation.mutate(channel.id)}
+                      disabled={testMutation.isPending}
+                      className="zd-btn"
+                      style={{ flex: 1, justifyContent: 'center' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
+                    >
+                      {t('tenantAdmin.common.test')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditChannelId(channel.id)}
+                      className="zd-btn"
+                      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
+                    >
+                      Configurar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleMutation.mutate(channel)}
+                      disabled={toggleMutation.isPending}
+                      className="zd-btn"
+                      style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}
+                    >
+                      {channel.status === 'active' ? 'Desativar' : 'Ativar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteMutation.mutate(channel.id)}
+                      className="zd-btn"
+                      style={{ borderColor: 'var(--red)', background: 'var(--red-dim)', color: 'var(--red)' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(248,113,113,.25)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--red-dim)'; }}
+                    >
+                      {t('tenantAdmin.common.remove')}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
 
-      <AddChannelModal open={addOpen} onClose={() => setAddOpen(false)} />
-      <EditChannelModal
-        open={Boolean(editChannelId)}
-        channelId={editChannelId}
-        onClose={() => setEditChannelId(null)}
-      />
-    </div>
+        <AddChannelModal open={addOpen} onClose={() => setAddOpen(false)} />
+        <EditChannelModal
+          open={Boolean(editChannelId)}
+          channelId={editChannelId}
+          onClose={() => setEditChannelId(null)}
+        />
+      </div>
+    </PageShell>
   );
 }

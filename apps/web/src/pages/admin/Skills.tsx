@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { Modal } from '../../components/ui/Modal';
 import { adminApi, type AgentWithSkills, type Skill } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { PageShell } from '../../components/layout/PageShell';
 
 type SkillLevel = 'junior' | 'intermediate' | 'senior';
 
@@ -221,7 +222,8 @@ export function Skills() {
   };
 
   return (
-    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>{t('tenantAdmin.skills.title')}</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>{t('tenantAdmin.skills.subtitle')}</p>
@@ -380,6 +382,7 @@ export function Skills() {
           </button>
         </div>
       </Modal>
-    </div>
+      </div>
+    </PageShell>
   );
 }

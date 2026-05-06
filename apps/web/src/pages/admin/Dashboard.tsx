@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 
 interface StatCardProps {
   label: string;
@@ -41,18 +42,20 @@ export function Dashboard() {
 
   if (isError) {
     return (
-      <div className="p-6">
-        <div
-          className="rounded-xl p-6 text-center text-sm"
-          style={{
-            background: 'var(--red-dim)',
-            border: '1px solid rgba(248,113,113,.25)',
-            color: 'var(--red)',
-          }}
-        >
-          {t('tenantAdmin.common.errorLoad')}
+      <PageShell padding={0}>
+        <div className="p-6">
+          <div
+            className="rounded-xl p-6 text-center text-sm"
+            style={{
+              background: 'var(--red-dim)',
+              border: '1px solid rgba(248,113,113,.25)',
+              color: 'var(--red)',
+            }}
+          >
+            {t('tenantAdmin.common.errorLoad')}
+          </div>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
@@ -104,54 +107,56 @@ export function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
-          {t('tenantAdmin.dashboard.title')}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-          {t('tenantAdmin.dashboard.subtitle')}
-        </p>
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-bg-3" />
-          ))}
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
+            {t('tenantAdmin.dashboard.title')}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
+            {t('tenantAdmin.dashboard.subtitle')}
+          </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {stats.map((s) => (
-            <StatCard key={s.label} {...s} />
-          ))}
-        </div>
-      )}
 
-      {!isLoading && (
-        <div
-          className="rounded-xl p-5"
-          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
-        >
-          <h2 className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-            {t('tenantAdmin.dashboard.summary')}
-          </h2>
-          <div className="mt-3 grid grid-cols-3 gap-4 text-center">
-            {[
-              { label: t('tenantAdmin.dashboard.stats.totalConversations'), value: data?.total_conversations ?? 0 },
-              { label: t('tenantAdmin.dashboard.stats.totalTickets'), value: data?.total_tickets ?? 0 },
-              { label: t('tenantAdmin.dashboard.stats.totalMessages'), value: data?.total_messages ?? 0 },
-            ].map((item) => (
-              <div key={item.label}>
-                <p className="text-xl font-semibold tabular-nums" style={{ color: 'var(--txt)' }}>
-                  {item.value}
-                </p>
-                <p className="mt-1 text-xs" style={{ color: 'var(--txt-3)' }}>{item.label}</p>
-              </div>
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-xl bg-bg-3" />
             ))}
           </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {stats.map((s) => (
+              <StatCard key={s.label} {...s} />
+            ))}
+          </div>
+        )}
+
+        {!isLoading && (
+          <div
+            className="rounded-xl p-5"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}
+          >
+            <h2 className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+              {t('tenantAdmin.dashboard.summary')}
+            </h2>
+            <div className="mt-3 grid grid-cols-3 gap-4 text-center">
+              {[
+                { label: t('tenantAdmin.dashboard.stats.totalConversations'), value: data?.total_conversations ?? 0 },
+                { label: t('tenantAdmin.dashboard.stats.totalTickets'), value: data?.total_tickets ?? 0 },
+                { label: t('tenantAdmin.dashboard.stats.totalMessages'), value: data?.total_messages ?? 0 },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-xl font-semibold tabular-nums" style={{ color: 'var(--txt)' }}>
+                    {item.value}
+                  </p>
+                  <p className="mt-1 text-xs" style={{ color: 'var(--txt-3)' }}>{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </PageShell>
   );
 }

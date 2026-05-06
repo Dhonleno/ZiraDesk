@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, type BusinessHour } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
 
@@ -225,25 +226,25 @@ export function BusinessHours() {
   }, [status, t]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 820, overflowY: 'auto', height: '100%' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
-          {t('tenantAdmin.businessHours.title')}
-        </h1>
-        <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
-          {t('tenantAdmin.businessHours.subtitle')}
-        </p>
-      </div>
+    <PageShell>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
+            {t('tenantAdmin.businessHours.title')}
+          </h1>
+          <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
+            {t('tenantAdmin.businessHours.subtitle')}
+          </p>
+        </div>
 
-      <div
-        style={{
-          background: 'var(--bg-2)',
-          border: '1px solid var(--line-2)',
-          borderRadius: 'var(--r-lg)',
-          padding: 20,
-        }}
-      >
-        <div style={{ display: 'grid', gap: 18 }}>
+        <div
+          style={{
+            background: 'var(--bg-2)',
+            border: '1px solid var(--line-2)',
+            borderRadius: 'var(--r-lg)',
+            padding: 20,
+          }}
+        >
+          <div style={{ display: 'grid', gap: 18 }}>
           <label style={{ display: 'grid', gap: 8 }}>
             <span style={{ color: 'var(--txt-2)', fontSize: 13, fontWeight: 600 }}>
               {t('tenantAdmin.businessHours.timezone')}
@@ -358,19 +359,19 @@ export function BusinessHours() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="button"
-              onClick={() => settingsMutation.mutate()}
-              loading={settingsMutation.isPending}
-            >
-              {settingsMutation.isPending
-                ? t('tenantAdmin.common.saving')
-                : t('tenantAdmin.businessHours.save')}
-            </Button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                type="button"
+                onClick={() => settingsMutation.mutate()}
+                loading={settingsMutation.isPending}
+              >
+                {settingsMutation.isPending
+                  ? t('tenantAdmin.common.saving')
+                  : t('tenantAdmin.businessHours.save')}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { adminApi } from '../../services/api';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
 
 const settingsSchema = z.object({
@@ -193,9 +194,8 @@ export function Settings() {
   };
 
   return (
-    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div className="space-y-6 p-6" style={{ maxWidth: 900 }}>
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
           <div>
             <h1 className="text-2xl" style={{ color: 'var(--txt)', fontWeight: 600 }}>
           {t('tenantAdmin.settings.title')}
@@ -618,8 +618,7 @@ export function Settings() {
               </form>
             )}
           </div>
-        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

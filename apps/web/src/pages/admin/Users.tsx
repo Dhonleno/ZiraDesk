@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { InviteUserModal } from '../../components/admin/InviteUserModal';
 import { EditUserModal } from '../../components/admin/EditUserModal';
 import { ResetPasswordModal } from '../../components/admin/ResetPasswordModal';
+import { PageShell } from '../../components/layout/PageShell';
 
 interface TenantUser {
   id: string;
@@ -195,7 +196,8 @@ export function Users() {
   ];
 
   return (
-    <div className="space-y-5 p-6" style={{ overflowY: 'auto', height: '100%' }}>
+    <PageShell padding={0}>
+      <div className="space-y-5 p-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -401,7 +403,8 @@ export function Users() {
       <InviteUserModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
       <EditUserModal open={!!editUser} onClose={() => setEditUser(null)} user={editUser} />
       <ResetPasswordModal open={!!resetUser} onClose={() => setResetUser(null)} user={resetUser} />
-    </div>
+      </div>
+    </PageShell>
   );
 }
 

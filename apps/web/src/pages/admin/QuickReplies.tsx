@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import { PageShell } from '../../components/layout/PageShell';
 
 const CATEGORY_ORDER: QuickReplyCategory[] = [
   'greeting',
@@ -179,7 +180,8 @@ export function QuickReplies() {
     selectedReply.category !== form.category;
 
   return (
-    <div className="flex h-full flex-col gap-5 p-6" style={{ overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
+      <div className="flex h-full flex-col gap-5 p-6" style={{ overflow: 'hidden' }}>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
@@ -466,6 +468,7 @@ export function QuickReplies() {
           </aside>
         </section>
       </div>
-    </div>
+      </div>
+    </PageShell>
   );
 }

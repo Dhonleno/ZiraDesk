@@ -5,6 +5,7 @@ import { adminApi, type AutoAssignAgent } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
+import { PageShell } from '../../components/layout/PageShell';
 
 function formatRelative(dateIso: string, locale: string): string {
   const date = new Date(dateIso);
@@ -121,58 +122,59 @@ export function AutoAssign() {
   );
 
   return (
-    <div className="space-y-6 p-6" style={{ overflowY: 'auto', height: '100%' }}>
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
-          {t('tenantAdmin.autoAssign.title')}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-          {t('tenantAdmin.autoAssign.subtitle')}
-        </p>
-      </div>
+    <PageShell padding={0}>
+      <div className="space-y-6 p-6">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
+            {t('tenantAdmin.autoAssign.title')}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
+            {t('tenantAdmin.autoAssign.subtitle')}
+          </p>
+        </div>
 
-      <div className="rounded-xl p-6 space-y-6" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
-            ))}
-          </div>
-        ) : (
-          <>
-            <label className="flex items-center justify-between gap-4 rounded-lg px-4 py-3" style={{ background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
-              <span className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
-                {t('tenantAdmin.autoAssign.active')}
-              </span>
-              <input
-                type="checkbox"
-                checked={autoAssignEnabled}
-                onChange={(event) => setAutoAssignEnabled(event.target.checked)}
-              />
-            </label>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
-                {t('tenantAdmin.autoAssign.algorithm')}
-              </label>
-              <select
-                value={algorithm}
-                onChange={(event) => setAlgorithm(event.target.value as 'round_robin')}
-                style={{
-                  background: 'var(--bg-3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--txt)',
-                  height: '2.5rem',
-                  borderRadius: '0.5rem',
-                  padding: '0 0.75rem',
-                  fontSize: '0.875rem',
-                  width: '220px',
-                  outline: 'none',
-                }}
-              >
-                <option value="round_robin">{t('tenantAdmin.autoAssign.roundRobin')}</option>
-              </select>
+        <div className="rounded-xl p-6 space-y-6" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+          {isLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-12 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
+              ))}
             </div>
+          ) : (
+            <>
+              <label className="flex items-center justify-between gap-4 rounded-lg px-4 py-3" style={{ background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+                <span className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
+                  {t('tenantAdmin.autoAssign.active')}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={autoAssignEnabled}
+                  onChange={(event) => setAutoAssignEnabled(event.target.checked)}
+                />
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                  {t('tenantAdmin.autoAssign.algorithm')}
+                </label>
+                <select
+                  value={algorithm}
+                  onChange={(event) => setAlgorithm(event.target.value as 'round_robin')}
+                  style={{
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--line)',
+                    color: 'var(--txt)',
+                    height: '2.5rem',
+                    borderRadius: '0.5rem',
+                    padding: '0 0.75rem',
+                    fontSize: '0.875rem',
+                    width: '220px',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="round_robin">{t('tenantAdmin.autoAssign.roundRobin')}</option>
+                </select>
+              </div>
 
             <div className="space-y-3">
               <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
@@ -293,9 +295,10 @@ export function AutoAssign() {
                 {saveMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.common.save')}
               </Button>
             </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

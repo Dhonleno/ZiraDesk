@@ -7,6 +7,7 @@ import {
   type BotOption,
   type BotOptionPayload,
 } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../stores/toast.store';
@@ -499,32 +500,32 @@ export function BotMenu() {
     addOptionMutation.isPending || addSubOptionMutation.isPending || updateOptionMutation.isPending;
 
   return (
-    <div style={{ padding: 24, maxWidth: 980, overflowY: 'auto', height: '100%' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
-          {t('tenantAdmin.bot.title')}
-        </h1>
-        <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
-          {t('tenantAdmin.bot.subtitle')}
-        </p>
-      </div>
+    <PageShell>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', margin: 0 }}>
+            {t('tenantAdmin.bot.title')}
+          </h1>
+          <p style={{ color: 'var(--txt-2)', fontSize: 12, margin: '6px 0 0' }}>
+            {t('tenantAdmin.bot.subtitle')}
+          </p>
+        </div>
 
-      <div
-        style={{
-          background: 'var(--bg-2)',
-          border: '1px solid var(--line-2)',
-          borderRadius: 'var(--r-lg)',
-          padding: 20,
-        }}
-      >
-        {isLoading ? (
-          <div style={{ display: 'grid', gap: 12 }}>
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} style={{ height: 42, background: 'var(--bg-3)', borderRadius: 'var(--r)', opacity: 0.55 }} />
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 18 }}>
+        <div
+          style={{
+            background: 'var(--bg-2)',
+            border: '1px solid var(--line-2)',
+            borderRadius: 'var(--r-lg)',
+            padding: 20,
+          }}
+        >
+          {isLoading ? (
+            <div style={{ display: 'grid', gap: 12 }}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} style={{ height: 42, background: 'var(--bg-3)', borderRadius: 'var(--r)', opacity: 0.55 }} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 18 }}>
             <button
               type="button"
               onClick={() => {
@@ -703,9 +704,9 @@ export function BotMenu() {
                   : t('tenantAdmin.settings.saveSettings')}
               </Button>
             </div>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
 
       <OptionModal
         open={isOptionModalOpen}
@@ -751,7 +752,7 @@ export function BotMenu() {
           addOptionMutation.mutate(payload);
         }}
       />
-    </div>
+    </PageShell>
   );
 }
 
