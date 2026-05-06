@@ -37,7 +37,7 @@ export async function listChannels() {
 
 export async function getChannel(id: string) {
   const rows = await prisma.$queryRawUnsafe<ChannelRow[]>(
-    `SELECT id, type, name, credentials, status, settings, created_at FROM channels WHERE id = $1 LIMIT 1`,
+    `SELECT id, type, name, credentials, status, settings, created_at FROM channels WHERE id = $1::uuid LIMIT 1`,
     id,
   );
   if (!rows[0]) throw new NotFoundError('Canal');
@@ -67,7 +67,7 @@ export async function createChannel(data: CreateChannelInput) {
 
 export async function updateChannel(id: string, data: UpdateChannelInput) {
   const existingRows = await prisma.$queryRawUnsafe<ChannelRow[]>(
-    `SELECT id, credentials, settings FROM channels WHERE id = $1 LIMIT 1`,
+    `SELECT id, credentials, settings FROM channels WHERE id = $1::uuid LIMIT 1`,
     id,
   );
   if (!existingRows[0]) throw new NotFoundError('Canal');
@@ -98,9 +98,8 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
      SET name        = COALESCE($1, name),
          credentials = $2::jsonb,
          settings    = $3::jsonb,
-         status      = COALESCE($4, status),
-         updated_at  = NOW()
-     WHERE id = $5
+         status      = COALESCE($4, status)
+     WHERE id = $5::uuid
      RETURNING id, type, name, status, settings, created_at`,
     data.name ?? null,
     credentialsJson,
@@ -113,7 +112,7 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
 
 export async function deleteChannel(id: string) {
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `UPDATE channels SET status = 'inactive' WHERE id = $1
+    `UPDATE channels SET status = 'inactive' WHERE id = $1::uuid
      RETURNING id, type, name, status, settings, created_at`,
     id,
   );
@@ -123,7 +122,7 @@ export async function deleteChannel(id: string) {
 
 export async function testChannel(id: string) {
   const rows = await prisma.$queryRawUnsafe<[{ id: string; status: string }]>(
-    `SELECT id, status FROM channels WHERE id = $1 LIMIT 1`,
+    `SELECT id, status FROM channels WHERE id = $1::uuid LIMIT 1`,
     id,
   );
   if (!rows[0]) throw new NotFoundError('Canal');

@@ -22,10 +22,17 @@ const profileUpdateSchema = z.object({
   notification_desktop: z.boolean().optional(),
 });
 
-const passwordUpdateSchema = z.object({
-  current_password: z.string().min(1),
-  new_password: z.string().min(8).max(200),
-});
+const passwordUpdateSchema = z
+  .object({
+    current_password: z.string().optional(),
+    new_password: z.string().optional(),
+    currentPassword: z.string().optional(),
+    newPassword: z.string().optional(),
+  })
+  .transform((value) => ({
+    current_password: value.current_password ?? value.currentPassword ?? '',
+    new_password: value.new_password ?? value.newPassword ?? '',
+  }));
 
 function avatarExtFromMime(mimeType: string): 'jpg' | 'png' | 'webp' {
   if (mimeType === 'image/png') return 'png';
@@ -234,8 +241,29 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    await ensureUserProfileColumns(schemaName);
     const { current_password, new_password } = parsed.data;
+    if (!current_password) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Informe a senha atual' },
+      });
+    }
+
+    if (new_password.length < 8) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'A nova senha deve ter pelo menos 8 caracteres' },
+      });
+    }
+
+    if (new_password.length > 200) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'A nova senha excede o limite permitido' },
+      });
+    }
+
+    await ensureUserProfileColumns(schemaName);
 
     const userRows = await prisma.$queryRawUnsafe<Array<{ password_hash: string }>>(
       `SELECT password_hash
@@ -334,4 +362,3 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ success: true, data: { avatar_url: avatarUrl } });
   });
 }
-

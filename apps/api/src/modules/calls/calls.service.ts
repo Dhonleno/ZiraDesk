@@ -11,7 +11,7 @@ type PrismaLike = {
 
 interface SaveCallRecordInput {
   conversationId: string;
-  agentId: string;
+  agentId: string | null;
   callSid: string;
   toPhone: string;
   fromPhone: string;
@@ -127,6 +127,14 @@ export async function ensureCallRecordsInfrastructure(
   await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS ${quoteIdent(`${schemaName}_idx_call_records_conversation`)}
     ON ${tableRef}(conversation_id)
+  `);
+
+  // Browser-originated calls can include identifiers like "client:<uuid>".
+  // Keep enough room to persist those values without truncation errors.
+  await db.$executeRawUnsafe(`
+    ALTER TABLE ${tableRef}
+    ALTER COLUMN to_phone TYPE VARCHAR(60),
+    ALTER COLUMN from_phone TYPE VARCHAR(120)
   `);
 }
 

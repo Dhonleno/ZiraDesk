@@ -1,6 +1,6 @@
 import { prisma } from '../../config/database.js';
 
-interface SearchClientRow {
+interface SearchContactRow {
   id: string;
   name: string;
   email: string | null;
@@ -16,19 +16,62 @@ interface SearchTicketRow {
 interface SearchConversationRow {
   id: string;
   last_message: string | null;
-  client_name: string | null;
+  contact_name: string | null;
 }
 
-export async function globalSearch(q: string, limit: number) {
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function isLegacySchemaError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    (message.includes('column') && message.includes('does not exist')) ||
+    (message.includes('relation') && message.includes('does not exist'))
+  );
+}
+
+export async function globalSearch(q: string, limit: number, schemaName: string) {
   const term = q.trim();
   if (!term) {
-    return { clients: [], tickets: [], conversations: [] };
+    return { contacts: [], tickets: [], conversations: [] };
   }
+  const schemaPrefix = `${quoteIdent(schemaName)}.`;
 
-  const [clients, tickets, conversations] = await Promise.all([
-    prisma.$queryRawUnsafe<SearchClientRow[]>(
+  let contacts: SearchContactRow[] = [];
+  let conversations: SearchConversationRow[] = [];
+
+  try {
+    contacts = await prisma.$queryRawUnsafe<SearchContactRow[]>(
       `SELECT id, name, email, phone
-       FROM clients
+       FROM ${schemaPrefix}contacts
+       WHERE name ILIKE '%' || $1 || '%'
+          OR email ILIKE '%' || $1 || '%'
+          OR phone ILIKE '%' || $1 || '%'
+          OR whatsapp ILIKE '%' || $1 || '%'
+       ORDER BY updated_at DESC
+       LIMIT $2`,
+      term,
+      limit,
+    );
+
+    conversations = await prisma.$queryRawUnsafe<SearchConversationRow[]>(
+      `SELECT c.id, c.last_message, ct.name AS contact_name
+       FROM ${schemaPrefix}conversations c
+       LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
+       WHERE c.last_message ILIKE '%' || $1 || '%'
+       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
+       LIMIT $2`,
+      term,
+      limit,
+    );
+  } catch (error) {
+    if (!isLegacySchemaError(error)) throw error;
+
+    contacts = await prisma.$queryRawUnsafe<SearchContactRow[]>(
+      `SELECT id, name, email, phone
+       FROM ${schemaPrefix}clients
        WHERE name ILIKE '%' || $1 || '%'
           OR email ILIKE '%' || $1 || '%'
           OR phone ILIKE '%' || $1 || '%'
@@ -36,27 +79,34 @@ export async function globalSearch(q: string, limit: number) {
        LIMIT $2`,
       term,
       limit,
-    ),
-    prisma.$queryRawUnsafe<SearchTicketRow[]>(
-      `SELECT id, title, status
-       FROM tickets
-       WHERE title ILIKE '%' || $1 || '%'
-       ORDER BY updated_at DESC
-       LIMIT $2`,
-      term,
-      limit,
-    ),
-    prisma.$queryRawUnsafe<SearchConversationRow[]>(
-      `SELECT c.id, c.last_message, cl.name AS client_name
-       FROM conversations c
-       LEFT JOIN clients cl ON cl.id = c.client_id
+    );
+
+    conversations = await prisma.$queryRawUnsafe<SearchConversationRow[]>(
+      `SELECT c.id, c.last_message, cl.name AS contact_name
+       FROM ${schemaPrefix}conversations c
+       LEFT JOIN ${schemaPrefix}clients cl ON cl.id = c.client_id
        WHERE c.last_message ILIKE '%' || $1 || '%'
        ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
        LIMIT $2`,
       term,
       limit,
-    ),
-  ]);
+    );
+  }
 
-  return { clients, tickets, conversations };
+  let tickets: SearchTicketRow[] = [];
+  try {
+    tickets = await prisma.$queryRawUnsafe<SearchTicketRow[]>(
+      `SELECT id, title, status
+       FROM ${schemaPrefix}tickets
+       WHERE title ILIKE '%' || $1 || '%'
+       ORDER BY updated_at DESC
+       LIMIT $2`,
+      term,
+      limit,
+    );
+  } catch (error) {
+    if (!isLegacySchemaError(error)) throw error;
+  }
+
+  return { contacts, tickets, conversations };
 }
