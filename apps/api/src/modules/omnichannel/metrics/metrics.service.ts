@@ -62,6 +62,11 @@ function toNumber(value: unknown): number {
   return Number(value);
 }
 
+function toPercentage(count: number, total: number): number {
+  if (total <= 0) return 0;
+  return Number(((count / total) * 100).toFixed(2));
+}
+
 export async function getOverview(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
@@ -144,6 +149,55 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 
     const total = totalRows[0];
     const csat = csatRows[0];
+    const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status IN ('resolved', 'closed')`];
+    const byTypeParams: unknown[] = [];
+    addCommonFilters(byTypeWhere, byTypeParams, filters, 'c');
+    const byTypeWhereSql = byTypeWhere.length ? `WHERE ${byTypeWhere.join(' AND ')}` : '';
+
+    const byTypeRows = await tx.$queryRawUnsafe<Array<{
+      type_id: string;
+      label: string;
+      total: bigint;
+    }>>(
+      `SELECT
+         c.close_type_id AS type_id,
+         COALESCE(ct.label, c.close_type_id) AS label,
+         COUNT(*) AS total
+       FROM conversations c
+       LEFT JOIN conversation_close_types ct
+         ON ct.id = c.close_type_id
+       ${byTypeWhereSql}
+       GROUP BY c.close_type_id, ct.label
+       ORDER BY total DESC`,
+      ...byTypeParams,
+    );
+
+    const byOutcomeWhere: string[] = ['c.close_outcome_id IS NOT NULL'];
+    const byOutcomeParams: unknown[] = [];
+    addCommonFilters(byOutcomeWhere, byOutcomeParams, filters, 'c');
+    const byOutcomeWhereSql = byOutcomeWhere.length ? `WHERE ${byOutcomeWhere.join(' AND ')}` : '';
+
+    const byOutcomeRows = await tx.$queryRawUnsafe<Array<{
+      outcome_id: string;
+      label: string;
+      total: bigint;
+    }>>(
+      `SELECT
+         c.close_outcome_id AS outcome_id,
+         COALESCE(co.label, c.close_outcome_id) AS label,
+         COUNT(*) AS total
+       FROM conversations c
+       LEFT JOIN conversation_close_outcomes co
+         ON co.id = c.close_outcome_id
+       ${byOutcomeWhereSql}
+       GROUP BY c.close_outcome_id, co.label
+       ORDER BY total DESC`,
+      ...byOutcomeParams,
+    );
+
+    const byTypeTotal = byTypeRows.reduce((sum, row) => sum + toNumber(row.total), 0);
+    const byOutcomeTotal = byOutcomeRows.reduce((sum, row) => sum + toNumber(row.total), 0);
+
     return {
       total: {
         total: toNumber(total?.total),
@@ -158,6 +212,24 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
         total_responses: toNumber(csat?.total_responses),
         positive: toNumber(csat?.positive),
       },
+      byType: byTypeRows.map((row) => {
+        const count = toNumber(row.total);
+        return {
+          typeId: row.type_id,
+          label: row.label,
+          count,
+          percentage: toPercentage(count, byTypeTotal),
+        };
+      }),
+      byOutcome: byOutcomeRows.map((row) => {
+        const count = toNumber(row.total);
+        return {
+          outcomeId: row.outcome_id,
+          label: row.label,
+          count,
+          percentage: toPercentage(count, byOutcomeTotal),
+        };
+      }),
     };
   });
 }

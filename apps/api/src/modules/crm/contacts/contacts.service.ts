@@ -69,7 +69,7 @@ const BASE_SELECT = `
 
 /* ── listContacts ────────────────────────────────────────────────────────── */
 export async function listContacts(query: ListContactsQuery) {
-  const { page, per_page, organization_id, search } = query;
+  const { page, per_page, organization_id, search, standalone_only } = query;
   const offset = (page - 1) * per_page;
 
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
@@ -79,9 +79,10 @@ export async function listContacts(query: ListContactsQuery) {
                              OR ct.email ILIKE '%' || $2 || '%'
                              OR ct.phone ILIKE '%' || $2 || '%'
                              OR ct.whatsapp ILIKE '%' || $2 || '%')
+       AND ($3::boolean = false OR ct.organization_id IS NULL)
      ORDER BY ct.is_primary DESC, ct.name ASC
-     LIMIT $3 OFFSET $4`,
-    organization_id ?? null, search ?? null, per_page, offset,
+     LIMIT $4 OFFSET $5`,
+    organization_id ?? null, search ?? null, standalone_only, per_page, offset,
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
@@ -90,8 +91,9 @@ export async function listContacts(query: ListContactsQuery) {
        AND ($2::text IS NULL OR ct.name ILIKE '%' || $2 || '%'
                              OR ct.email ILIKE '%' || $2 || '%'
                              OR ct.phone ILIKE '%' || $2 || '%'
-                             OR ct.whatsapp ILIKE '%' || $2 || '%')`,
-    organization_id ?? null, search ?? null,
+                             OR ct.whatsapp ILIKE '%' || $2 || '%')
+       AND ($3::boolean = false OR ct.organization_id IS NULL)`,
+    organization_id ?? null, search ?? null, standalone_only,
   );
 
   const total = Number(countRows[0]?.count ?? 0);

@@ -326,6 +326,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       csat_sent_at    TIMESTAMPTZ,
       csat_responded_at TIMESTAMPTZ,
       csat_stage      VARCHAR(20),
+      csat_expires_at TIMESTAMPTZ,
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )

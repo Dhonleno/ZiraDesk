@@ -160,7 +160,8 @@ async function main() {
     ADD COLUMN IF NOT EXISTS csat_comment TEXT,
     ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS csat_stage VARCHAR(20)
+    ADD COLUMN IF NOT EXISTS csat_stage VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ
   `);
 
   // Atualizar tickets: remover client_id, adicionar contact_id + organization_id

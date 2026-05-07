@@ -22,6 +22,7 @@ export const listContactsQuerySchema = z.object({
   per_page:        z.coerce.number().int().positive().max(100).default(20),
   organization_id: z.string().uuid().optional(),
   search:          z.string().optional(),
+  standalone_only: z.coerce.boolean().default(false),
 });
 
 export const linkOrganizationSchema = z.object({
