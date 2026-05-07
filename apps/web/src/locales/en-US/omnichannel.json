@@ -135,9 +135,12 @@
   "resolve": {
     "title": "Resolve conversation",
     "subtitle": "How was the customer experience?",
+    "closeTypeLabel": "Service type",
+    "closeOutcomeLabel": "Outcome",
     "csatLabel": "Rating (optional)",
     "commentLabel": "Internal note",
     "commentPlaceholder": "Add an internal note about this conversation...",
+    "closeConfigEmpty": "No active type/outcome options available.",
     "confirm": "Resolve conversation",
     "cancel": "Cancel",
     "resolved": "Conversation resolved",

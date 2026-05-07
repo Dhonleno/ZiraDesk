@@ -10,6 +10,21 @@ type CallStatus =
   | 'completed'
   | 'failed';
 
+type TwilioLogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
+const isTwilioDebugEnabled = import.meta.env.VITE_TWILIO_DEBUG === 'true';
+
+function resolveTwilioLogLevel(): TwilioLogLevel {
+  const rawLogLevel = import.meta.env.VITE_TWILIO_LOG_LEVEL;
+  const normalized = String(rawLogLevel ?? '').trim().toLowerCase();
+  const allowedLevels: TwilioLogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'silent'];
+
+  if (allowedLevels.includes(normalized as TwilioLogLevel)) {
+    return normalized as TwilioLogLevel;
+  }
+
+  return import.meta.env.DEV ? 'error' : 'silent';
+}
+
 export function useTwilioCall() {
   const deviceRef = useRef<Device | null>(null);
   const callRef = useRef<TwilioCall | null>(null);
@@ -43,14 +58,17 @@ export function useTwilioCall() {
     const initDevice = async () => {
       try {
         const { token } = await callsApi.getToken();
+        const twilioLogLevel = resolveTwilioLogLevel();
 
         const device = new Device(token, {
-          logLevel: 1,
+          logLevel: twilioLogLevel,
           codecPreferences: [TwilioCall.Codec.Opus, TwilioCall.Codec.PCMU],
         });
 
         device.on('registered', () => {
-          console.log('[Twilio] Device registered');
+          if (import.meta.env.DEV && isTwilioDebugEnabled) {
+            console.log('[Twilio] Device registered');
+          }
         });
 
         device.on('error', (error) => {

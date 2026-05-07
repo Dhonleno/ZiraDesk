@@ -11,7 +11,7 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
-import { ResolveModal } from './ResolveModal';
+import { ResolveModal, type ResolvePayload } from './ResolveModal';
 import { TransferModal } from './TransferModal';
 import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
@@ -748,24 +748,17 @@ export function ChatArea({ conversationId }: Props) {
     onError: () => toast.error(t('chat.send') + ' — erro'),
   });
 
-  const resolveMutation = useMutation({
-    mutationFn: () => omnichannelApi.resolve(conversationId),
+  const endMutation = useMutation({
+    mutationFn: async (payload: ResolvePayload) => {
+      return omnichannelApi.resolveConversation(conversationId, payload);
+    },
     onSuccess: () => {
       setShowResolveModal(false);
-      toast.success(t('resolve.resolved'));
+      toast.success(t('chat.endSuccess', { defaultValue: 'Atendimento encerrado' }));
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => toast.error(t('resolve.error', { defaultValue: 'Erro ao resolver atendimento' })),
-  });
-
-  const closeMutation = useMutation({
-    mutationFn: () => omnichannelApi.close(conversationId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
-    onError: () => toast.error(t('chat.closeError', { defaultValue: 'Erro ao fechar atendimento' })),
+    onError: () => toast.error(t('chat.endError', { defaultValue: 'Erro ao encerrar atendimento' })),
   });
 
   const reopenMutation = useMutation({
@@ -1319,7 +1312,7 @@ export function ChatArea({ conversationId }: Props) {
               {isAssignedToMe && !isResolved && (
                 <button
                   onClick={() => setShowResolveModal(true)}
-                  disabled={resolveMutation.isPending}
+                  disabled={endMutation.isPending}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1332,32 +1325,10 @@ export function ChatArea({ conversationId }: Props) {
                     border: '1px solid var(--teal)',
                     background: 'var(--teal)',
                     color: '#0E1A18',
-                    opacity: resolveMutation.isPending ? 0.55 : 1,
+                    opacity: endMutation.isPending ? 0.55 : 1,
                   }}
                 >
-                  {t('chat.resolve')}
-                </button>
-              )}
-
-              {isAssignedToMe && !isResolved && (
-                <button
-                  onClick={() => closeMutation.mutate()}
-                  disabled={closeMutation.isPending}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '5px 11px',
-                    borderRadius: 'var(--r)',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: '1px solid var(--line-2)',
-                    background: 'var(--bg-4)',
-                    color: 'var(--txt-2)',
-                    opacity: closeMutation.isPending ? 0.55 : 1,
-                  }}
-                >
-                  {t('chat.close', { defaultValue: 'Fechar' })}
+                  {t('chat.end', { defaultValue: 'Encerrar' })}
                 </button>
               )}
             </>
@@ -2445,9 +2416,9 @@ export function ChatArea({ conversationId }: Props) {
       <ResolveModal
         open={showResolveModal}
         onClose={() => setShowResolveModal(false)}
-        isSubmitting={resolveMutation.isPending}
-        onConfirm={async () => {
-          await resolveMutation.mutateAsync();
+        isSubmitting={endMutation.isPending}
+        onConfirm={async (payload) => {
+          await endMutation.mutateAsync(payload);
         }}
       />
 

@@ -135,9 +135,12 @@
   "resolve": {
     "title": "Resolver atendimento",
     "subtitle": "Como foi a experiência do cliente?",
+    "closeTypeLabel": "Tipo de atendimento",
+    "closeOutcomeLabel": "Desfecho",
     "csatLabel": "Avaliação (opcional)",
     "commentLabel": "Observação interna",
     "commentPlaceholder": "Adicione uma observação sobre este atendimento...",
+    "closeConfigEmpty": "Nenhuma opção ativa de tipo/desfecho disponível.",
     "confirm": "Resolver atendimento",
     "cancel": "Cancelar",
     "resolved": "Atendimento resolvido",
