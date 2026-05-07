@@ -36,6 +36,7 @@ export function ContactsPage() {
     queryKey: ['crm-contacts', search, 'sidebar'],
     queryFn: () => contactsApi.list({
       per_page: 80,
+      standalone_only: true,
       ...(search ? { search } : {}),
     }),
   });

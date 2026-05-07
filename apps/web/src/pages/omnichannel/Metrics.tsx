@@ -21,6 +21,8 @@ import {
   type MetricsByAgentPoint,
   type MetricsByChannelPoint,
   type MetricsByDepartmentPoint,
+  type MetricsByOutcomePoint,
+  type MetricsByTypePoint,
   type MetricsCsatPoint,
   type MetricsPeakHoursPoint,
   type MetricsVolumePoint,
@@ -403,6 +405,42 @@ function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: strin
   );
 }
 
+interface BreakdownSectionProps {
+  eyebrow: string;
+  data: Array<{
+    id: string;
+    label: string;
+    count: number;
+    percentage: number;
+  }>;
+  emptyLabel: string;
+  unitLabel: string;
+}
+
+function BreakdownSection({ eyebrow, data, emptyLabel, unitLabel }: BreakdownSectionProps) {
+  return (
+    <section className="metrics-breakdown-card">
+      <h3 className="metrics-breakdown-eyebrow">{eyebrow}</h3>
+      {data.length ? (
+        <div className="metrics-breakdown-list">
+          {data.map((item) => (
+            <div className="metrics-breakdown-item" key={item.id}>
+              <div className="metrics-breakdown-label">{item.label}</div>
+              <div className="metrics-breakdown-bar" aria-hidden>
+                <div className="metrics-breakdown-fill" style={{ width: `${Math.max(0, Math.min(100, item.percentage))}%` }} />
+              </div>
+              <div className="metrics-breakdown-count">{item.count} {unitLabel}</div>
+              <div className="metrics-breakdown-percentage">{formatPercent(item.percentage)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="metrics-breakdown-empty">{emptyLabel}</p>
+      )}
+    </section>
+  );
+}
+
 export function MetricsPage() {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
@@ -465,6 +503,24 @@ export function MetricsPage() {
   }, [data?.overview.total.resolved, data?.overview.total.total]);
 
   const csatAverage = data?.overview.csat.avg_score;
+  const byTypeData = useMemo(
+    () => (data?.overview.byType ?? []).map((item: MetricsByTypePoint) => ({
+      id: item.typeId,
+      label: item.label,
+      count: item.count,
+      percentage: item.percentage,
+    })),
+    [data?.overview.byType],
+  );
+  const byOutcomeData = useMemo(
+    () => (data?.overview.byOutcome ?? []).map((item: MetricsByOutcomePoint) => ({
+      id: item.outcomeId,
+      label: item.label,
+      count: item.count,
+      percentage: item.percentage,
+    })),
+    [data?.overview.byOutcome],
+  );
 
   const exportCsv = async () => {
     try {
@@ -697,6 +753,22 @@ export function MetricsPage() {
           <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />
         </>
       )}
+      {!isLoading ? (
+        <div className="metrics-breakdown-grid">
+          <BreakdownSection
+            eyebrow={t('metrics.byType')}
+            data={byTypeData}
+            emptyLabel={t('metrics.noDataPeriod')}
+            unitLabel={t('metrics.conversations')}
+          />
+          <BreakdownSection
+            eyebrow={t('metrics.byOutcome')}
+            data={byOutcomeData}
+            emptyLabel={t('metrics.noDataPeriod')}
+            unitLabel={t('metrics.conversations')}
+          />
+        </div>
+      ) : null}
       </div>
     </PageShell>
   );

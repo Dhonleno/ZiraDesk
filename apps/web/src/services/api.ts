@@ -516,6 +516,7 @@ interface ListContactsParams {
   per_page?: number;
   organization_id?: string;
   search?: string;
+  standalone_only?: boolean;
 }
 
 // ── CRM API ───────────────────────────────────────────────────────────────────
@@ -1388,6 +1389,8 @@ export interface MetricsOverviewData {
     total_responses: number;
     positive: number;
   };
+  byType: MetricsByTypePoint[];
+  byOutcome: MetricsByOutcomePoint[];
 }
 
 export interface MetricsVolumePoint {
@@ -1425,6 +1428,20 @@ export interface MetricsPeakHoursPoint {
 export interface MetricsCsatPoint {
   score: number;
   total: number;
+}
+
+export interface MetricsByTypePoint {
+  typeId: string;
+  label: string;
+  count: number;
+  percentage: number;
+}
+
+export interface MetricsByOutcomePoint {
+  outcomeId: string;
+  label: string;
+  count: number;
+  percentage: number;
 }
 
 export interface OmnichannelMessagesPage {
