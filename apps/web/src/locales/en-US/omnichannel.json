@@ -33,6 +33,10 @@
       "csatDistribution": "CSAT distribution",
       "agentPerformance": "Agent performance"
     },
+    "byType": "Service Types",
+    "byOutcome": "Outcomes",
+    "noDataPeriod": "No data in selected period",
+    "conversations": "conversations",
     "tmaUnit": "min",
     "noData": "No data for the selected period"
   },
@@ -67,6 +71,12 @@
     "assume": "Take over",
     "empty": "No attendances in queue",
     "emptyHint": "New customer contacts will appear here"
+  },
+  "notifications": {
+    "newMessage": "New message",
+    "newQueue": "New conversation in queue",
+    "waiting": "is waiting for service",
+    "permissionDenied": "Enable browser notifications to be alerted about new attendances"
   },
   "outboundBadge": "↗ Follow-up",
   "botBadge": "🤖 Bot",

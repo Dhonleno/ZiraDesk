@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, conversationTags, type ConversationTag } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useNotification } from '../../hooks/useNotification';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
@@ -25,11 +26,51 @@ interface ConversationItem {
   organization_name?: string | null;
   client_name: string | null;
   client_email: string | null;
+  assigned_to?: string | null;
   assigned_name: string | null;
   channel_name: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
   tags?: ConversationTag[];
+}
+
+interface SocketContactPayload {
+  id?: string;
+  name?: string | null;
+}
+
+interface SocketMessagePayload {
+  sender_type?: string;
+  senderType?: string;
+  sender_id?: string | null;
+  senderId?: string | null;
+  content?: string | null;
+}
+
+interface SocketConversationPayload {
+  id?: string;
+  assigned_to?: string | null;
+  assignedTo?: string | null;
+  assignedAgentId?: string | null;
+  status?: string | null;
+  contact_name?: string | null;
+  contactName?: string | null;
+  client_name?: string | null;
+  clientName?: string | null;
+}
+
+interface ConversationMessageEventPayload {
+  conversationId?: string;
+  message?: SocketMessagePayload;
+  conversation?: SocketConversationPayload;
+  contact?: SocketContactPayload;
+  contactName?: string | null;
+}
+
+interface ConversationCreatedEventPayload {
+  conversationId?: string;
+  conversation?: SocketConversationPayload;
+  contactName?: string | null;
 }
 
 type TabKey = 'active' | 'queue' | 'closed';
@@ -66,6 +107,14 @@ function relativeTime(dateStr: string | null): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
   return `${Math.floor(hrs / 24)}d`;
+}
+
+function getMessageSenderType(message?: SocketMessagePayload): string | null {
+  return message?.sender_type ?? message?.senderType ?? null;
+}
+
+function getMessageSenderId(message?: SocketMessagePayload): string | null {
+  return message?.sender_id ?? message?.senderId ?? null;
 }
 
 /* channel badge */
@@ -124,6 +173,7 @@ interface Props {
 export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
+  const { showNotification } = useNotification();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('active');
@@ -136,6 +186,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
   const newConversationTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const desktopPermissionDeniedRef = useRef(false);
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
@@ -257,6 +308,23 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     newConversationTimeoutsRef.current.set(conversationId, timer);
   }, [clearConversationHighlight, clearTimer, markConversationActivity, selectedId]);
 
+  const getConversationFromCache = useCallback((conversationId?: string): ConversationItem | null => {
+    if (!conversationId) return null;
+    const cached = qc.getQueriesData<ConversationItem[]>({ queryKey: ['conversations'] });
+    for (const [, conversations] of cached) {
+      if (!conversations) continue;
+      const found = conversations.find((item) => item.id === conversationId);
+      if (found) return found;
+    }
+    return null;
+  }, [qc]);
+
+  const notifyPermissionDeniedOnce = useCallback(() => {
+    if (desktopPermissionDeniedRef.current) return;
+    desktopPermissionDeniedRef.current = true;
+    toast.info(t('notifications.permissionDenied'));
+  }, [t, toast]);
+
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
       if (!tagFilterRef.current) return;
@@ -309,22 +377,115 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       }
     };
 
-    const handleMessage = (data: { conversationId?: string }) => {
+    const isBrowserTabHidden = (): boolean => typeof document !== 'undefined' && document.hidden === true;
+
+    const handleMessage = (data: ConversationMessageEventPayload) => {
       invalidateConversationData();
       const conversationId = data.conversationId;
+      const message = data.message;
+      const senderType = getMessageSenderType(message);
+      const senderId = getMessageSenderId(message);
+      const cachedConversation = getConversationFromCache(conversationId);
+      const assignedAgentId =
+        data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? cachedConversation?.assigned_to
+        ?? null;
+      const conversationStatus = data.conversation?.status ?? cachedConversation?.status ?? null;
+
       if (conversationId) {
         markConversationActivity(conversationId);
       }
-      playNotificationSound();
+
+      // Regra 1: não tocar som se a conversa está no bot e sem agente atribuído.
+      if (senderType === 'bot' && conversationStatus === 'bot' && !assignedAgentId) {
+        return;
+      }
+
+      // Regra 2: não tocar som se a mensagem é do próprio agente logado.
+      if (senderType === 'agent' && senderId && currentUserId && senderId === currentUserId) {
+        return;
+      }
+
+      const isClientMessage = senderType === 'client';
+      const isAssignedToCurrentUser = Boolean(currentUserId) && assignedAgentId === currentUserId;
+      const isQueueConversation = assignedAgentId === null;
+
+      // Regra final de som:
+      // - mensagem do cliente
+      // - conversa atribuída a mim OU em fila
+      // - aba em foco (document.hidden === false)
+      if (isClientMessage && (isAssignedToCurrentUser || isQueueConversation) && !isBrowserTabHidden()) {
+        playNotificationSound();
+      }
+
+      // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
+      if (isClientMessage && isAssignedToCurrentUser && isBrowserTabHidden()) {
+        if (typeof Notification === 'undefined') return;
+        if (Notification.permission !== 'granted') {
+          if (Notification.permission === 'denied') {
+            notifyPermissionDeniedOnce();
+          }
+          return;
+        }
+
+        const contactName =
+          data.contact?.name
+          ?? data.contactName
+          ?? data.conversation?.contact_name
+          ?? data.conversation?.contactName
+          ?? data.conversation?.client_name
+          ?? data.conversation?.clientName
+          ?? cachedConversation?.contact_name
+          ?? cachedConversation?.client_name
+          ?? t('notifications.newMessage');
+        const content = message?.content?.trim() || t('notifications.newMessage');
+
+        showNotification(contactName, content, '/icon-192.png');
+      }
     };
 
-    const handleCreated = (data: { conversationId?: string; conversation?: { id: string } }) => {
+    const handleCreated = (data: ConversationCreatedEventPayload) => {
       invalidateConversationData();
       const conversationId = data.conversationId ?? data.conversation?.id;
+      const cachedConversation = getConversationFromCache(conversationId);
+      const assignedAgentId =
+        data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? cachedConversation?.assigned_to
+        ?? null;
+
       if (conversationId) {
         markNewConversation(conversationId);
       }
-      playNotificationSound();
+
+      // Notificação de browser para nova conversa em fila (sem agente atribuído) com aba fora de foco.
+      if (isBrowserTabHidden() && assignedAgentId === null) {
+        if (typeof Notification === 'undefined') return;
+        if (Notification.permission !== 'granted') {
+          if (Notification.permission === 'denied') {
+            notifyPermissionDeniedOnce();
+          }
+          return;
+        }
+
+        const contactName =
+          data.contactName
+          ?? data.conversation?.contact_name
+          ?? data.conversation?.contactName
+          ?? data.conversation?.client_name
+          ?? data.conversation?.clientName
+          ?? cachedConversation?.contact_name
+          ?? cachedConversation?.client_name
+          ?? t('notifications.newMessage');
+        showNotification(
+          t('notifications.newQueue'),
+          `${contactName} ${t('notifications.waiting')}`,
+          '/icon-192.png',
+        );
+      }
     };
 
     const handleAssigned = (data: { conversationId?: string }) => {
@@ -334,7 +495,6 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
         markNewConversation(conversationId);
       }
       syncToActiveTabForCurrentUser(conversationId);
-      playNotificationSound();
     };
 
     const handleUpdated = (data: {
@@ -351,15 +511,15 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       }
     };
 
-    const unsubMessage = subscribeToEvent<{ conversationId?: string }>('conversation:new_message', handleMessage);
-    const unsubIncoming = subscribeToEvent<{ conversationId?: string }>('conversation:message', handleMessage);
+    const unsubMessage = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleMessage);
+    const unsubIncoming = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleMessage);
     const unsubAssigned = subscribeToEvent<{ conversationId?: string }>('conversation:assigned', handleAssigned);
     const unsubUpdated = subscribeToEvent<{
       conversationId?: string;
       assigned_to?: string | null;
       conversation?: { id?: string; assigned_to?: string | null };
     }>('conversation:updated', handleUpdated);
-    const unsubCreated = subscribeToEvent<{ conversationId?: string; conversation?: { id: string } }>(
+    const unsubCreated = subscribeToEvent<ConversationCreatedEventPayload>(
       'conversation:created',
       handleCreated,
     );
@@ -393,7 +553,20 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       activityTimeoutsRef.current.clear();
       newConversationTimeoutsRef.current.clear();
     };
-  }, [activeTab, currentUserId, handleSelectConversation, markConversationActivity, markNewConversation, playNotificationSound, qc, selectedId]);
+  }, [
+    activeTab,
+    currentUserId,
+    getConversationFromCache,
+    handleSelectConversation,
+    markConversationActivity,
+    markNewConversation,
+    notifyPermissionDeniedOnce,
+    playNotificationSound,
+    qc,
+    selectedId,
+    showNotification,
+    t,
+  ]);
 
   const TABS: Array<{ key: TabKey; labelKey: string }> = [
     { key: 'active', labelKey: 'tabs.active' },

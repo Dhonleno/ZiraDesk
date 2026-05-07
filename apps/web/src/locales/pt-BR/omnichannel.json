@@ -33,6 +33,10 @@
       "csatDistribution": "Distribuição do CSAT",
       "agentPerformance": "Desempenho por agente"
     },
+    "byType": "Tipos de Atendimento",
+    "byOutcome": "Desfechos",
+    "noDataPeriod": "Nenhum dado no período",
+    "conversations": "atendimentos",
     "tmaUnit": "min",
     "noData": "Sem dados para o período selecionado"
   },
@@ -67,6 +71,12 @@
     "assume": "Assumir",
     "empty": "Nenhum atendimento na fila",
     "emptyHint": "Quando clientes entrarem em contato aparecerão aqui"
+  },
+  "notifications": {
+    "newMessage": "Nova mensagem",
+    "newQueue": "Nova conversa na fila",
+    "waiting": "está aguardando atendimento",
+    "permissionDenied": "Ative as notificações do navegador para ser avisado de novos atendimentos"
   },
   "outboundBadge": "↗ Retorno",
   "botBadge": "🤖 Bot",

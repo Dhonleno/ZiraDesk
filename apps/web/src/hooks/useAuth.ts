@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuthStore } from '../stores/auth.store';
 import type { LoginInput } from '@ziradesk/shared';
 import { disconnectSocket } from '../services/socket';
+import { requestBrowserNotificationPermission } from './useNotification';
 
 interface LoginResponseData {
   accessToken: string;
@@ -28,6 +29,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       setAuth({ user: data.user, token: data.accessToken });
+      void requestBrowserNotificationPermission();
       navigate(data.user.role === 'super_admin' ? '/super-admin' : '/');
     },
   });
