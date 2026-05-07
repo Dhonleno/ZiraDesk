@@ -241,6 +241,20 @@ export interface TicketType {
   updated_at: string;
 }
 
+export interface ConversationCloseConfigItem {
+  id: string;
+  label: string;
+  isDefault: boolean;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+}
+
+export interface ConversationCloseConfigPreview {
+  types: Array<{ id: string; label: string }>;
+  outcomes: Array<{ id: string; label: string }>;
+}
+
 export interface Skill {
   id: string;
   number: number;
@@ -822,6 +836,90 @@ export const adminApi = {
     },
   },
 
+  closeConfig: {
+    listTypes: async (): Promise<ConversationCloseConfigItem[]> => {
+      const res = await api.get<{ success: boolean; data: ConversationCloseConfigItem[] }>(
+        '/admin/close-config/types',
+      );
+      return res.data.data;
+    },
+
+    createType: async (data: { label: string; isActive?: boolean; order?: number }): Promise<ConversationCloseConfigItem> => {
+      const res = await api.post<{ success: boolean; data: ConversationCloseConfigItem }>(
+        '/admin/close-config/types',
+        data,
+      );
+      return res.data.data;
+    },
+
+    updateType: async (
+      id: string,
+      data: Partial<{ label: string; isActive: boolean; order: number }>,
+    ): Promise<ConversationCloseConfigItem> => {
+      const res = await api.patch<{ success: boolean; data: ConversationCloseConfigItem }>(
+        `/admin/close-config/types/${id}`,
+        data,
+      );
+      return res.data.data;
+    },
+
+    deleteType: async (id: string): Promise<ConversationCloseConfigItem> => {
+      const res = await api.delete<{ success: boolean; data: ConversationCloseConfigItem }>(
+        `/admin/close-config/types/${id}`,
+      );
+      return res.data.data;
+    },
+
+    reorderTypes: async (ids: string[]): Promise<ConversationCloseConfigItem[]> => {
+      const res = await api.patch<{ success: boolean; data: ConversationCloseConfigItem[] }>(
+        '/admin/close-config/types/reorder',
+        { ids },
+      );
+      return res.data.data;
+    },
+
+    listOutcomes: async (): Promise<ConversationCloseConfigItem[]> => {
+      const res = await api.get<{ success: boolean; data: ConversationCloseConfigItem[] }>(
+        '/admin/close-config/outcomes',
+      );
+      return res.data.data;
+    },
+
+    createOutcome: async (data: { label: string; isActive?: boolean; order?: number }): Promise<ConversationCloseConfigItem> => {
+      const res = await api.post<{ success: boolean; data: ConversationCloseConfigItem }>(
+        '/admin/close-config/outcomes',
+        data,
+      );
+      return res.data.data;
+    },
+
+    updateOutcome: async (
+      id: string,
+      data: Partial<{ label: string; isActive: boolean; order: number }>,
+    ): Promise<ConversationCloseConfigItem> => {
+      const res = await api.patch<{ success: boolean; data: ConversationCloseConfigItem }>(
+        `/admin/close-config/outcomes/${id}`,
+        data,
+      );
+      return res.data.data;
+    },
+
+    deleteOutcome: async (id: string): Promise<ConversationCloseConfigItem> => {
+      const res = await api.delete<{ success: boolean; data: ConversationCloseConfigItem }>(
+        `/admin/close-config/outcomes/${id}`,
+      );
+      return res.data.data;
+    },
+
+    reorderOutcomes: async (ids: string[]): Promise<ConversationCloseConfigItem[]> => {
+      const res = await api.patch<{ success: boolean; data: ConversationCloseConfigItem[] }>(
+        '/admin/close-config/outcomes/reorder',
+        { ids },
+      );
+      return res.data.data;
+    },
+  },
+
   skills: {
     list: async (): Promise<Skill[]> => {
       const res = await api.get<{ success: boolean; data: Skill[] }>('/admin/skills');
@@ -1165,6 +1263,9 @@ export interface OmnichannelConversation {
   last_message_at: string | null;
   created_at: string;
   resolved_at: string | null;
+  closed_at?: string | null;
+  close_type_id?: string | null;
+  close_outcome_id?: string | null;
   csat_score?: number | null;
   csat_comment?: string | null;
   csat_sent_at?: string | null;
@@ -1405,6 +1506,13 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
+  getCloseConfig: async (): Promise<ConversationCloseConfigPreview> => {
+    const res = await api.get<{ success: boolean; data: ConversationCloseConfigPreview }>(
+      '/omnichannel/close-config',
+    );
+    return res.data.data;
+  },
+
   getConversation: async (id: string): Promise<{ conversation: OmnichannelConversation; messages: OmnichannelMessage[] }> => {
     const res = await api.get<{ success: boolean; data: { conversation: OmnichannelConversation; messages: OmnichannelMessage[] } }>(
       `/omnichannel/conversations/${id}`,
@@ -1504,6 +1612,22 @@ export const omnichannelApi = {
     if (payload?.csat_score !== undefined) body.csat_score = payload.csat_score;
     if (payload?.csat_comment !== undefined) body.csat_comment = payload.csat_comment;
     return omnichannelApi.updateConversation(conversationId, body);
+  },
+
+  resolveConversation: async (
+    conversationId: string,
+    payload: {
+      closeTypeId: string;
+      closeOutcomeId: string;
+      csatMode: 'resolve' | 'close';
+      internalNote?: string;
+    },
+  ): Promise<OmnichannelConversation> => {
+    const res = await api.patch<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/conversations/${conversationId}/resolve`,
+      payload,
+    );
+    return res.data.data;
   },
 
   close: async (conversationId: string): Promise<OmnichannelConversation> => {

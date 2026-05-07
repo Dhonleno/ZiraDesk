@@ -141,6 +141,17 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
+        {canManageUsers && (
+          <AdminNavItem to="/admin/close-config" label={t('tenantAdmin.nav.closeConfig')}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+              <path d="M3 4h9M3 7.5h9M3 11h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <circle cx="5.1" cy="4" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <circle cx="9.9" cy="7.5" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <circle cx="6.8" cy="11" r="1.2" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </AdminNavItem>
+        )}
+
         <AdminNavItem to="/admin/settings" label={t('tenantAdmin.nav.settings')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />

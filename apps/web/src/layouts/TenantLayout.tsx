@@ -108,6 +108,7 @@ function Breadcrumb() {
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
+    '/admin/close-config': t('tenantAdmin.closeConfig.title'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 
@@ -128,7 +129,9 @@ function Breadcrumb() {
                 ? 'Meu perfil'
               : '');
   const section = isAdmin
-    ? 'Administração'
+    ? pathname === '/admin/close-config'
+      ? 'Admin / Configurações'
+      : 'Administração'
     : isCRM
       ? 'CRM'
       : isTickets

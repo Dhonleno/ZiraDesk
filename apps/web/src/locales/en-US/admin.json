@@ -33,6 +33,7 @@
       "quickReplies": "Quick Replies",
       "ticketTypes": "Ticket Types",
       "conversationTags": "Tags",
+      "closeConfig": "Conversation Closing",
       "settings": "Settings"
     },
     "autoAssign": {
@@ -330,6 +331,34 @@
         "deleted": "Tag removed",
         "added": "Tag applied",
         "removed": "Tag removed from conversation"
+      }
+    },
+    "closeConfig": {
+      "title": "Conversation Closing",
+      "subtitle": "Configure conversation types and outcomes for closing",
+      "types": "Service Types",
+      "outcomes": "Outcomes",
+      "eyebrowTypes": "Classification",
+      "eyebrowOutcomes": "Result",
+      "addType": "Add type",
+      "addOutcome": "Add outcome",
+      "editType": "Edit type",
+      "editOutcome": "Edit outcome",
+      "label": "Label",
+      "labelPlaceholder": "Item name",
+      "defaultBadge": "Default",
+      "active": "Active",
+      "inactive": "Inactive",
+      "dragHandle": "Drag to reorder",
+      "deleteBlocked": "Cannot delete: there are linked conversations",
+      "empty": "No items registered",
+      "previewLabel": "Active preview",
+      "previewTypes": "{{count}} types",
+      "previewOutcomes": "{{count}} outcomes",
+      "messages": {
+        "created": "Item created successfully",
+        "updated": "Item updated successfully",
+        "deleted": "Item deactivated successfully"
       }
     },
     "dashboard": {

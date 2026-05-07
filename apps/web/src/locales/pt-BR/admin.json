@@ -33,6 +33,7 @@
       "quickReplies": "Respostas Rápidas",
       "ticketTypes": "Tipos de Ticket",
       "conversationTags": "Etiquetas",
+      "closeConfig": "Encerramento de Atendimento",
       "settings": "Configurações"
     },
     "autoAssign": {
@@ -347,6 +348,34 @@
         "deleted": "Etiqueta removida",
         "added": "Etiqueta aplicada",
         "removed": "Etiqueta removida da conversa"
+      }
+    },
+    "closeConfig": {
+      "title": "Encerramento de Atendimento",
+      "subtitle": "Configure tipos de atendimento e desfechos para encerramento",
+      "types": "Tipos de Atendimento",
+      "outcomes": "Desfechos",
+      "eyebrowTypes": "Classificação",
+      "eyebrowOutcomes": "Resultado",
+      "addType": "Adicionar tipo",
+      "addOutcome": "Adicionar desfecho",
+      "editType": "Editar tipo",
+      "editOutcome": "Editar desfecho",
+      "label": "Label",
+      "labelPlaceholder": "Nome do item",
+      "defaultBadge": "Padrão",
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "dragHandle": "Arrastar para reordenar",
+      "deleteBlocked": "Não é possível excluir: existem conversas vinculadas",
+      "empty": "Nenhum item cadastrado",
+      "previewLabel": "Preview ativo",
+      "previewTypes": "{{count}} tipos",
+      "previewOutcomes": "{{count}} desfechos",
+      "messages": {
+        "created": "Item criado com sucesso",
+        "updated": "Item atualizado com sucesso",
+        "deleted": "Item desativado com sucesso"
       }
     },
     "dashboard": {
