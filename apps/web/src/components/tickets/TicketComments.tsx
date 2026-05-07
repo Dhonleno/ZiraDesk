@@ -74,36 +74,250 @@ function AttachmentIcon({ mimeType }: { mimeType: string }) {
   );
 }
 
-function FormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaElement | null> }) {
-  const applyFormat = (prefix: string, suffix: string) => {
-    const el = textareaRef.current;
-    if (!el) return;
+function normalizeEditorHtml(value: string): string {
+  return value
+    .replace(/<div><br><\/div>/gi, '<br>')
+    .replace(/<\/div><div>/gi, '<br>')
+    .replace(/<div>/gi, '')
+    .replace(/<\/div>/gi, '')
+    .replace(/&nbsp;/gi, ' ');
+}
 
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = el.value.substring(start, end);
-    const before = el.value.substring(0, start);
-    const after = el.value.substring(end);
+function extractPlainTextFromHtml(value: string): string {
+  if (typeof window === 'undefined') {
+    return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
 
-    if (selected.startsWith(prefix) && selected.endsWith(suffix) && selected.length >= prefix.length + suffix.length) {
-      const newVal = before + selected.slice(prefix.length, -suffix.length) + after;
-      el.value = newVal;
-      el.setSelectionRange(start, Math.max(start, end - prefix.length - suffix.length));
-    } else {
-      const newVal = before + prefix + selected + suffix + after;
-      el.value = newVal;
-      el.setSelectionRange(start + prefix.length, end + prefix.length);
-    }
+  const container = document.createElement('div');
+  container.innerHTML = value;
+  return (container.textContent ?? '').replace(/\u00a0/g, ' ').trim();
+}
 
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.focus();
+function serializeChildrenToMarkdown(node: Node): string {
+  return Array.from(node.childNodes).map(serializeNodeToMarkdown).join('');
+}
+
+function serializeNodeToMarkdown(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return (node.textContent ?? '').replace(/\u00a0/g, ' ');
+  }
+
+  if (!(node instanceof HTMLElement)) return '';
+
+  const content = serializeChildrenToMarkdown(node);
+  const tagName = node.tagName.toLowerCase();
+
+  if (tagName === 'strong' || tagName === 'b') return `**${content}**`;
+  if (tagName === 'em' || tagName === 'i') return `_${content}_`;
+  if (tagName === 'del' || tagName === 'strike' || tagName === 's') return `~~${content}~~`;
+  if (tagName === 'code') return `\`${content}\``;
+  if (tagName === 'a') {
+    const href = node.getAttribute('href')?.trim();
+    return href ? `[${content}](${href})` : content;
+  }
+  if (tagName === 'blockquote') {
+    const quoted = content
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => `> ${line}`)
+      .join('\n');
+    return quoted ? `${quoted}\n` : '';
+  }
+  if (tagName === 'ul') {
+    const items = Array.from(node.children)
+      .filter((child) => child.tagName.toLowerCase() === 'li')
+      .map((child) => `- ${serializeChildrenToMarkdown(child).trim()}`);
+    return items.length ? `${items.join('\n')}\n` : '';
+  }
+  if (tagName === 'ol') {
+    const items = Array.from(node.children)
+      .filter((child) => child.tagName.toLowerCase() === 'li')
+      .map((child, index) => `${index + 1}. ${serializeChildrenToMarkdown(child).trim()}`);
+    return items.length ? `${items.join('\n')}\n` : '';
+  }
+  if (tagName === 'li') return content;
+  if (tagName === 'br') return '\n';
+  if (tagName === 'div' || tagName === 'p') return `${content}\n`;
+
+  return content;
+}
+
+function editorHtmlToMarkdown(value: string): string {
+  if (!value.trim()) return '';
+  if (typeof window === 'undefined') return value;
+
+  const container = document.createElement('div');
+  container.innerHTML = value;
+
+  return Array.from(container.childNodes)
+    .map(serializeNodeToMarkdown)
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function unwrapElement(element: HTMLElement) {
+  const parent = element.parentNode;
+  if (!parent) return;
+
+  while (element.firstChild) {
+    parent.insertBefore(element.firstChild, element);
+  }
+  parent.removeChild(element);
+}
+
+function FormatToolbar({
+  editorRef,
+  onChange,
+  floating = false,
+}: {
+  editorRef: RefObject<HTMLDivElement | null>;
+  onChange: (value: string) => void;
+  floating?: boolean;
+}) {
+  const syncEditor = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    onChange(normalizeEditorHtml(editor.innerHTML));
+    editor.focus();
   };
 
-  const tools: Array<{ label: string; prefix: string; suffix: string; icon: ReactNode }> = [
+  const applyExecCommand = (command: 'bold' | 'italic' | 'strikeThrough') => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (document.activeElement !== editor) editor.focus();
+    document.execCommand(command, false);
+    syncEditor();
+  };
+
+  const applyListCommand = (command: 'insertUnorderedList' | 'insertOrderedList') => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (document.activeElement !== editor) editor.focus();
+    document.execCommand(command, false);
+    syncEditor();
+  };
+
+  const applyBlockquote = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      editor.focus();
+      return;
+    }
+
+    const anchorElement = selection.anchorNode instanceof HTMLElement
+      ? selection.anchorNode
+      : selection.anchorNode?.parentElement ?? null;
+    const focusElement = selection.focusNode instanceof HTMLElement
+      ? selection.focusNode
+      : selection.focusNode?.parentElement ?? null;
+    const sharedQuote = anchorElement?.closest('blockquote');
+
+    if (sharedQuote && sharedQuote === focusElement?.closest('blockquote')) {
+      unwrapElement(sharedQuote);
+      syncEditor();
+      return;
+    }
+
+    document.execCommand('formatBlock', false, 'blockquote');
+    syncEditor();
+  };
+
+  const applyLink = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      editor.focus();
+      return;
+    }
+
+    const anchorElement = selection.anchorNode instanceof HTMLElement
+      ? selection.anchorNode
+      : selection.anchorNode?.parentElement ?? null;
+    const focusElement = selection.focusNode instanceof HTMLElement
+      ? selection.focusNode
+      : selection.focusNode?.parentElement ?? null;
+    const sharedLink = anchorElement?.closest('a');
+
+    if (sharedLink && sharedLink === focusElement?.closest('a')) {
+      document.execCommand('unlink', false);
+      syncEditor();
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText) {
+      editor.focus();
+      return;
+    }
+
+    const hrefInput = window.prompt('Informe a URL do link', 'https://');
+    if (!hrefInput) {
+      editor.focus();
+      return;
+    }
+
+    const href = hrefInput.trim();
+    if (!href) {
+      editor.focus();
+      return;
+    }
+
+    document.execCommand('createLink', false, href);
+    syncEditor();
+  };
+
+  const applyCodeFormat = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      editor.focus();
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const anchorElement = selection.anchorNode instanceof HTMLElement
+      ? selection.anchorNode
+      : selection.anchorNode?.parentElement ?? null;
+    const focusElement = selection.focusNode instanceof HTMLElement
+      ? selection.focusNode
+      : selection.focusNode?.parentElement ?? null;
+    const sharedCode = anchorElement?.closest('code');
+
+    if (sharedCode && sharedCode === focusElement?.closest('code')) {
+      unwrapElement(sharedCode);
+      syncEditor();
+      return;
+    }
+
+    const extracted = range.extractContents();
+    if (!extracted.textContent?.trim()) {
+      range.insertNode(extracted);
+      editor.focus();
+      return;
+    }
+
+    const code = document.createElement('code');
+    code.appendChild(extracted);
+    range.insertNode(code);
+    selection.removeAllRanges();
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(code);
+    selection.addRange(nextRange);
+    syncEditor();
+  };
+
+  const tools: Array<{ label: string; action: 'bold' | 'italic' | 'code' | 'strike' | 'bullet' | 'number' | 'quote' | 'link'; icon: ReactNode }> = [
     {
       label: 'Negrito',
-      prefix: '**',
-      suffix: '**',
+      action: 'bold',
       icon: (
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
           <path d="M3.5 2.5H7a2 2 0 010 4H3.5V2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -113,8 +327,7 @@ function FormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaEle
     },
     {
       label: 'Itálico',
-      prefix: '_',
-      suffix: '_',
+      action: 'italic',
       icon: (
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
           <path d="M5 2.5h5M3 10.5h5M7.5 2.5L5.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -123,8 +336,7 @@ function FormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaEle
     },
     {
       label: 'Código',
-      prefix: '`',
-      suffix: '`',
+      action: 'code',
       icon: (
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
           <path d="M4.5 4L1.5 6.5 4.5 9M8.5 4L11.5 6.5 8.5 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -133,8 +345,7 @@ function FormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaEle
     },
     {
       label: 'Tachado',
-      prefix: '~~',
-      suffix: '~~',
+      action: 'strike',
       icon: (
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
           <path d="M2 6.5h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -143,24 +354,78 @@ function FormatToolbar({ textareaRef }: { textareaRef: RefObject<HTMLTextAreaEle
         </svg>
       ),
     },
+    {
+      label: 'Lista',
+      action: 'bullet',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+          <circle cx="2.5" cy="3.2" r=".8" fill="currentColor" />
+          <circle cx="2.5" cy="6.5" r=".8" fill="currentColor" />
+          <circle cx="2.5" cy="9.8" r=".8" fill="currentColor" />
+          <path d="M5 3.2h5.5M5 6.5h5.5M5 9.8h5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Lista numerada',
+      action: 'number',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+          <path d="M1.8 2.8h1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M1.6 6.1c.2-.4.6-.7 1.1-.7.7 0 1.2.4 1.2 1 0 .4-.2.7-.6 1L1.8 8.6h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M1.8 10.2h1c.5 0 .8-.2.8-.6s-.3-.7-.8-.7h-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5.2 3.2h5.2M5.2 6.5h5.2M5.2 9.8h5.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Citação',
+      action: 'quote',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+          <path d="M4.8 4.2H3.3c-.7 0-1.2.5-1.2 1.2v1.3c0 .7.5 1.2 1.2 1.2h1.5c.7 0 1.2-.5 1.2-1.2V5.4c0-.7-.5-1.2-1.2-1.2Z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M10 4.2H8.5c-.7 0-1.2.5-1.2 1.2v1.3c0 .7.5 1.2 1.2 1.2H10c.7 0 1.2-.5 1.2-1.2V5.4c0-.7-.5-1.2-1.2-1.2Z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M4.2 4.2V3.6c0-.7.5-1.3 1.2-1.4M9.4 4.2V3.6c0-.7.5-1.3 1.2-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Link',
+      action: 'link',
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+          <path d="M5.2 7.8 7.8 5.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M4.2 8.8H3.5A2 2 0 1 1 3.5 4h1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M8.8 4.2h.7A2 2 0 1 1 9.5 9H8.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      ),
+    },
   ];
 
   return (
-    <div className="format-toolbar">
+    <div className={`format-toolbar${floating ? ' floating' : ''}`}>
       {tools.map((tool) => (
         <button
           key={tool.label}
           type="button"
           className="format-btn"
-          onClick={() => applyFormat(tool.prefix, tool.suffix)}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (tool.action === 'bold') applyExecCommand('bold');
+            if (tool.action === 'italic') applyExecCommand('italic');
+            if (tool.action === 'strike') applyExecCommand('strikeThrough');
+            if (tool.action === 'code') applyCodeFormat();
+            if (tool.action === 'bullet') applyListCommand('insertUnorderedList');
+            if (tool.action === 'number') applyListCommand('insertOrderedList');
+            if (tool.action === 'quote') applyBlockquote();
+            if (tool.action === 'link') applyLink();
+          }}
           title={tool.label}
           aria-label={tool.label}
         >
           {tool.icon}
         </button>
       ))}
-      <div className="format-divider" />
-      <span className="format-hint">Selecione texto e clique para formatar</span>
     </div>
   );
 }
@@ -171,15 +436,21 @@ export function TicketComments({ ticketId }: Props) {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [comment, setComment] = useState('');
+  const [editorHtml, setEditorHtml] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [commentFiles, setCommentFiles] = useState<File[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [selectionToolbar, setSelectionToolbar] = useState<{ visible: boolean; top: number; left: number }>({
+    visible: false,
+    top: 0,
+    left: 0,
+  });
+  const comment = editorHtmlToMarkdown(editorHtml);
+  const hasCommentContent = extractPlainTextFromHtml(editorHtml).length > 0;
 
   const { data: comments = [], isPending } = useQuery({
     queryKey: ['ticket-comments', ticketId],
@@ -201,6 +472,49 @@ export function TicketComments({ ticketId }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments.length]);
 
+  useEffect(() => {
+    const updateSelectionToolbar = () => {
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        setSelectionToolbar((current) => (current.visible ? { ...current, visible: false } : current));
+        return;
+      }
+
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+      if (!anchorNode || !focusNode || !editor.contains(anchorNode) || !editor.contains(focusNode)) {
+        setSelectionToolbar((current) => (current.visible ? { ...current, visible: false } : current));
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        setSelectionToolbar((current) => (current.visible ? { ...current, visible: false } : current));
+        return;
+      }
+
+      setSelectionToolbar({
+        visible: true,
+        top: Math.max(16, rect.top - 46),
+        left: rect.left + (rect.width / 2),
+      });
+    };
+
+    document.addEventListener('selectionchange', updateSelectionToolbar);
+    window.addEventListener('resize', updateSelectionToolbar);
+    window.addEventListener('scroll', updateSelectionToolbar, true);
+
+    return () => {
+      document.removeEventListener('selectionchange', updateSelectionToolbar);
+      window.removeEventListener('resize', updateSelectionToolbar);
+      window.removeEventListener('scroll', updateSelectionToolbar, true);
+    };
+  }, []);
+
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!comment.trim() && commentFiles.length === 0) return;
@@ -217,10 +531,11 @@ export function TicketComments({ ticketId }: Props) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
       void queryClient.invalidateQueries({ queryKey: ['ticket-attachments', ticketId] });
-      setComment('');
+      setEditorHtml('');
       setIsInternal(false);
-      setShowPreview(false);
       setCommentFiles([]);
+      setSelectionToolbar({ visible: false, top: 0, left: 0 });
+      if (editorRef.current) editorRef.current.innerHTML = '';
     },
     onError: () => toast.error('Erro ao enviar comentário'),
   });
@@ -428,61 +743,61 @@ export function TicketComments({ ticketId }: Props) {
             </button>
           </div>
 
-          <div className="comment-composer-tabs">
-            <button
-              type="button"
-              className={`composer-tab ${!showPreview ? 'active' : ''}`}
-              onClick={() => setShowPreview(false)}
-            >
-              Escrever
-            </button>
-            <button
-              type="button"
-              className={`composer-tab ${showPreview ? 'active' : ''}`}
-              onClick={() => setShowPreview(true)}
-            >
-              Pré-visualizar
-            </button>
-          </div>
-
-          {showPreview ? (
-            <div className="comment-preview">
-              {comment.trim() ? (
-                <div
-                  className="comment-body preview"
-                  dangerouslySetInnerHTML={{ __html: parseMarkdown(comment) }}
-                />
-              ) : (
-                <p className="preview-empty">Nada para pré-visualizar</p>
-              )}
+          <div className="comment-editor-shell">
+            <div className="comment-editor-head">
+              <span className="comment-editor-title">{isInternal ? 'Nota interna' : 'Comentário público'}</span>
+              <span className={`comment-editor-visibility ${isInternal ? 'internal' : 'public'}`}>
+                {isInternal ? 'Apenas equipe' : 'Visível ao cliente'}
+              </span>
             </div>
-          ) : (
-            <>
-              <FormatToolbar textareaRef={textareaRef} />
-              <textarea
-                ref={textareaRef}
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder={isInternal ? 'Nota interna - não visível ao cliente...' : 'Comentário público - visível ao cliente...'}
-                className="zd-textarea comment-textarea"
-                rows={4}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    void handleSubmit();
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  resize: 'vertical',
-                  minHeight: 72,
-                  lineHeight: 1.5,
-                  marginBottom: 0,
-                }}
-              />
-            </>
-          )}
+
+            {selectionToolbar.visible ? (
+              <div
+                className="comment-selection-toolbar"
+                style={{ top: selectionToolbar.top, left: selectionToolbar.left }}
+              >
+                <FormatToolbar editorRef={editorRef} onChange={setEditorHtml} floating />
+              </div>
+            ) : null}
+
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder={isInternal ? 'Nota interna - não visível ao cliente...' : 'Comentário público - visível ao cliente...'}
+              className="comment-rich-editor"
+              onInput={(event) => {
+                const value = normalizeEditorHtml(event.currentTarget.innerHTML);
+                if (!extractPlainTextFromHtml(value)) {
+                  event.currentTarget.innerHTML = '';
+                  setEditorHtml('');
+                  setSelectionToolbar({ visible: false, top: 0, left: 0 });
+                  return;
+                }
+                setEditorHtml(value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  void handleSubmit();
+                }
+
+                if (event.key.toLowerCase() === 'b' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  document.execCommand('bold', false);
+                  setEditorHtml(normalizeEditorHtml(event.currentTarget.innerHTML));
+                }
+
+                if (event.key.toLowerCase() === 'i' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  document.execCommand('italic', false);
+                  setEditorHtml(normalizeEditorHtml(event.currentTarget.innerHTML));
+                }
+              }}
+            />
+          </div>
 
           <div className="composer-footer">
             <div className="composer-left">
@@ -539,7 +854,7 @@ export function TicketComments({ ticketId }: Props) {
               <button
                 type="submit"
                 className="zd-btn zd-btn-primary"
-                disabled={submitMutation.isPending || (!comment.trim() && commentFiles.length === 0)}
+                disabled={submitMutation.isPending || (!hasCommentContent && commentFiles.length === 0)}
               >
                 {submitMutation.isPending ? t('tickets.comments.sending') : (isInternal ? 'Adicionar nota' : 'Comentar')}
               </button>
@@ -550,4 +865,3 @@ export function TicketComments({ ticketId }: Props) {
     </div>
   );
 }
-

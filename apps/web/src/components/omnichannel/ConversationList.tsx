@@ -155,6 +155,30 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     }
   }, []);
 
+  const clearConversationHighlight = useCallback((conversationId: string) => {
+    clearTimer(activityTimeoutsRef.current, conversationId);
+    clearTimer(newConversationTimeoutsRef.current, conversationId);
+
+    setNewActivity((prev) => {
+      if (!prev.has(conversationId)) return prev;
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+
+    setNewConversations((prev) => {
+      if (!prev.has(conversationId)) return prev;
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+  }, [clearTimer]);
+
+  const handleSelectConversation = useCallback((conversationId: string) => {
+    clearConversationHighlight(conversationId);
+    onSelect(conversationId);
+  }, [clearConversationHighlight, onSelect]);
+
   const playNotificationSound = useCallback(() => {
     try {
       const ctx = new window.AudioContext();
@@ -178,6 +202,11 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
   }, []);
 
   const markConversationActivity = useCallback((conversationId: string) => {
+    if (selectedId === conversationId) {
+      clearConversationHighlight(conversationId);
+      return;
+    }
+
     setNewActivity((prev) => {
       const next = new Set(prev);
       next.delete(conversationId);
@@ -201,9 +230,14 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       activityTimeoutsRef.current.delete(conversationId);
     }, 5000);
     activityTimeoutsRef.current.set(conversationId, timer);
-  }, [clearTimer]);
+  }, [clearConversationHighlight, clearTimer, selectedId]);
 
   const markNewConversation = useCallback((conversationId: string) => {
+    if (selectedId === conversationId) {
+      clearConversationHighlight(conversationId);
+      return;
+    }
+
     setNewConversations((prev) => {
       const next = new Set(prev);
       next.add(conversationId);
@@ -221,7 +255,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       newConversationTimeoutsRef.current.delete(conversationId);
     }, 10_000);
     newConversationTimeoutsRef.current.set(conversationId, timer);
-  }, [clearTimer, markConversationActivity]);
+  }, [clearConversationHighlight, clearTimer, markConversationActivity, selectedId]);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -242,7 +276,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       setActiveTab('active');
       setSubStatus(null);
       if (detail?.conversationId) {
-        onSelect(detail.conversationId);
+        handleSelectConversation(detail.conversationId);
       }
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
@@ -250,7 +284,12 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
 
     window.addEventListener('omnichannel:conversation-assumed', onAssumed);
     return () => window.removeEventListener('omnichannel:conversation-assumed', onAssumed);
-  }, [onSelect, qc]);
+  }, [handleSelectConversation, qc]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    clearConversationHighlight(selectedId);
+  }, [clearConversationHighlight, selectedId]);
 
   useEffect(() => {
     const invalidateConversationData = () => {
@@ -266,7 +305,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       setActiveTab('active');
       setSubStatus(null);
       if (conversationId) {
-        onSelect(conversationId);
+        handleSelectConversation(conversationId);
       }
     };
 
@@ -354,7 +393,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       activityTimeoutsRef.current.clear();
       newConversationTimeoutsRef.current.clear();
     };
-  }, [activeTab, currentUserId, markConversationActivity, markNewConversation, onSelect, playNotificationSound, qc, selectedId]);
+  }, [activeTab, currentUserId, handleSelectConversation, markConversationActivity, markNewConversation, playNotificationSound, qc, selectedId]);
 
   const TABS: Array<{ key: TabKey; labelKey: string }> = [
     { key: 'active', labelKey: 'tabs.active' },
@@ -423,7 +462,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     onSuccess: (_data, conversationId) => {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
-      onSelect(conversationId);
+      handleSelectConversation(conversationId);
       toast.success(t('chat.assumeSuccess'));
     },
     onError: () => toast.error(t('chat.assumeError')),
@@ -847,11 +886,11 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                   className={itemClassName}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelect(conv.id)}
+                  onClick={() => handleSelectConversation(conv.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      onSelect(conv.id);
+                      handleSelectConversation(conv.id);
                     }
                   }}
                   style={{
