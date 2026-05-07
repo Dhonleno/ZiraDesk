@@ -90,6 +90,19 @@ BEGIN
     );
 
     EXECUTE format(
+      'CREATE TABLE IF NOT EXISTS %I.bot_menus (
+         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         is_active BOOLEAN DEFAULT false,
+         greeting TEXT NOT NULL DEFAULT ''Ola! Bem-vindo ao nosso atendimento. Como posso ajuda-lo?'',
+         footer TEXT DEFAULT ''Digite o numero da opcao desejada.'',
+         invalid_msg TEXT DEFAULT ''Opcao invalida. Por favor, escolha uma das opcoes abaixo:'',
+         created_at TIMESTAMPTZ DEFAULT NOW(),
+         updated_at TIMESTAMPTZ DEFAULT NOW()
+       )',
+      tenant_schema
+    );
+
+    EXECUTE format(
       'CREATE TABLE IF NOT EXISTS %I.bot_options (
          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
          bot_menu_id UUID REFERENCES %I.bot_menus(id) ON DELETE CASCADE,
@@ -127,7 +140,7 @@ BEGIN
       AND rel.relname = 'bot_options'
       AND con.contype = 'u'
       AND (
-        SELECT array_agg(att.attname ORDER BY ord.ordinality)
+        SELECT array_agg(att.attname::text ORDER BY ord.ordinality)
         FROM unnest(con.conkey) WITH ORDINALITY AS ord(attnum, ordinality)
         JOIN pg_attribute att
           ON att.attrelid = rel.oid

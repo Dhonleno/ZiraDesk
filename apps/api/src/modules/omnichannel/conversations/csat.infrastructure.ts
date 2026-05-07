@@ -29,6 +29,10 @@ export async function ensureConversationCsatInfrastructure(
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS csat_stage VARCHAR(20)`,
   );
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ`,
+  );
 
   await db.$executeRawUnsafe(`
     DO $$

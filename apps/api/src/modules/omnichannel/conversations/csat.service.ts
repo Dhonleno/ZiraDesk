@@ -164,10 +164,12 @@ export async function sendCsatMessage(
   await db.$executeRawUnsafe(
     `UPDATE conversations
      SET csat_sent_at = NOW(),
-         csat_stage = 'sent'
+         csat_stage = 'sent',
+         csat_expires_at = NOW() + INTERVAL '48 hours'
      WHERE id = $1::uuid`,
     conversationId,
   );
+  // TODO: mover 48h para settings.csatExpirationHours por tenant.
 
   await db.$executeRawUnsafe(
     `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)

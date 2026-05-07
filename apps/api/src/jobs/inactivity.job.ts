@@ -182,6 +182,16 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
       await insertBotMessage(conversationId, schemaName, warningText);
     }
 
+    const io = getSocketServer();
+    io.to(`tenant:${tenantId}`).emit('conversation:message', {
+      conversationId,
+      message: {
+        content: warningText,
+        senderType: 'bot',
+        createdAt: new Date().toISOString(),
+      },
+    });
+
     await inactivityQueue.add(
       'check-inactivity',
       { conversationId, tenantId, schemaName, type: 'close' },
@@ -203,6 +213,16 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
     await insertBotMessage(conversationId, schemaName, closeText);
   }
 
+  const io = getSocketServer();
+  io.to(`tenant:${tenantId}`).emit('conversation:message', {
+    conversationId,
+    message: {
+      content: closeText,
+      senderType: 'bot',
+      createdAt: new Date().toISOString(),
+    },
+  });
+
   await prisma.$executeRawUnsafe(
     `UPDATE ${quoteIdent(schemaName)}.conversations
      SET status = 'closed',
@@ -212,7 +232,6 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
     conversationId,
   );
 
-  const io = getSocketServer();
   io.to(`tenant:${tenantId}`).emit('conversation:updated', {
     conversationId,
     status: 'closed',
@@ -257,4 +276,3 @@ export async function scheduleInactivityCheck(
     },
   );
 }
-

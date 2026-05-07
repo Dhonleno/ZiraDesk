@@ -122,6 +122,7 @@ interface ConversationRow {
   status?: string;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   csat_score?: number | null;
+  csat_expires_at?: Date | null;
 }
 
 interface MessageRow {
@@ -579,7 +580,7 @@ async function processIncomingMessage(
     console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-      `SELECT id, status, csat_stage, csat_score
+      `SELECT id, status, csat_stage, csat_score, csat_expires_at
               , assigned_to
               , metadata->>'bot_stage' AS bot_stage
        FROM conversations
@@ -632,6 +633,7 @@ async function processIncomingMessage(
     const currentConversation = convRows[0] ?? null;
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
+    const currentCsatExpiresAt = currentConversation?.csat_expires_at ?? null;
 
     let mentionMetadata: Record<string, unknown> | null = null;
     if (quotedExternalId) {
@@ -677,7 +679,26 @@ async function processIncomingMessage(
       ...(mentionMetadata ? { mention: mentionMetadata } : {}),
     };
 
-    if (currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment') {
+    const isCsatPending = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
+    let shouldHandleCsat = isCsatPending;
+
+    if (isCsatPending) {
+      const csatExpired = currentCsatExpiresAt
+        && new Date() > new Date(currentCsatExpiresAt);
+
+      if (csatExpired) {
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET csat_stage = 'done',
+               csat_expires_at = NULL
+           WHERE id = $1::uuid`,
+          conversationId,
+        );
+        shouldHandleCsat = false;
+      }
+    }
+
+    if (shouldHandleCsat) {
       const msgRows = await tx.$queryRawUnsafe<
         [{ id: string; content: string; created_at: Date; sender_type: string }]
       >(

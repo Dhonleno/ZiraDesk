@@ -108,6 +108,7 @@ model Conversation {
   closeTypeId    String?                    @map("close_type_id")
   closeOutcomeId String?                    @map("close_outcome_id")
   closedAt       DateTime?                  @map("closed_at")
+  csatExpiresAt  DateTime?                  @map("csat_expires_at")
   closeType      ConversationCloseType?     @relation("ConversationCloseTypeToConversation", fields: [closeTypeId], references: [id], onDelete: SetNull)
   closeOutcome   ConversationCloseOutcome?  @relation("ConversationCloseOutcomeToConversation", fields: [closeOutcomeId], references: [id], onDelete: SetNull)
 
