@@ -79,6 +79,41 @@ model SuperAdmin {
   @@map("super_admins")
 }
 
+model ConversationCloseType {
+  id         String         @id @default(cuid())
+  label      String         @unique
+  isDefault  Boolean        @default(false) @map("is_default")
+  isActive   Boolean        @default(true) @map("is_active")
+  order      Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  conversations Conversation[] @relation("ConversationCloseTypeToConversation")
+
+  @@map("conversation_close_types")
+}
+
+model ConversationCloseOutcome {
+  id         String         @id @default(cuid())
+  label      String         @unique
+  isDefault  Boolean        @default(false) @map("is_default")
+  isActive   Boolean        @default(true) @map("is_active")
+  order      Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  conversations Conversation[] @relation("ConversationCloseOutcomeToConversation")
+
+  @@map("conversation_close_outcomes")
+}
+
+model Conversation {
+  id             String                     @id @db.Uuid
+  closeTypeId    String?                    @map("close_type_id")
+  closeOutcomeId String?                    @map("close_outcome_id")
+  closedAt       DateTime?                  @map("closed_at")
+  closeType      ConversationCloseType?     @relation("ConversationCloseTypeToConversation", fields: [closeTypeId], references: [id], onDelete: SetNull)
+  closeOutcome   ConversationCloseOutcome?  @relation("ConversationCloseOutcomeToConversation", fields: [closeOutcomeId], references: [id], onDelete: SetNull)
+
+  @@map("conversations")
+}
+
 enum TenantStatus {
   active
   suspended

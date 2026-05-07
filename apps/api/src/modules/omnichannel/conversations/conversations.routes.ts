@@ -8,6 +8,7 @@ import {
   createConversationBodySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
+  resolveConversationBodySchema,
   assignConversationBodySchema,
   transferConversationBodySchema,
   requestHelpBodySchema,
@@ -19,6 +20,7 @@ import {
   listConversationMessages,
   sendMessage,
   updateConversation,
+  resolveConversation,
   createConversation,
   assignConversation,
   transferConversation,
@@ -390,6 +392,59 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // PATCH /api/omnichannel/conversations/:id/resolve
+  app.patch<{ Params: { id: string } }>('/:id/resolve', { preHandler: guard }, async (request, reply) => {
+    const parsed = resolveConversationBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const tenantUser = request.user as AuthUser;
+    const schemaName = tenantUser.schemaName;
+
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    try {
+      const conversation = await resolveConversation(
+        request.params.id,
+        parsed.data,
+        request.user.id,
+        schemaName,
+      );
+
+      const io = getSocketServer();
+
+      if (parsed.data.csatMode === 'resolve') {
+        sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
+          request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
+        });
+
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
+          conversationId: request.params.id,
+        });
+      }
+
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
+      return reply.send({ success: true, data: conversation });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
 
   // PATCH /api/omnichannel/conversations/:id
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {

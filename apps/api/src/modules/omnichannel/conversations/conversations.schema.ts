@@ -92,6 +92,13 @@ export const availabilityBodySchema = z.object({
   is_available: z.boolean(),
 });
 
+export const resolveConversationBodySchema = z.object({
+  closeTypeId: z.string().cuid(),
+  closeOutcomeId: z.string().cuid(),
+  csatMode: z.enum(['resolve', 'close']),
+  internalNote: z.string().trim().max(4000).optional(),
+});
+
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
 export type CreateConversationBody = z.infer<typeof createConversationBodySchema>;
 export type SendMessageBody = z.infer<typeof sendMessageBodySchema>;
@@ -101,3 +108,4 @@ export type AssignConversationBody = z.infer<typeof assignConversationBodySchema
 export type TransferConversationBody = z.infer<typeof transferConversationBodySchema>;
 export type RequestHelpBody = z.infer<typeof requestHelpBodySchema>;
 export type AvailabilityBody = z.infer<typeof availabilityBodySchema>;
+export type ResolveConversationBody = z.infer<typeof resolveConversationBodySchema>;

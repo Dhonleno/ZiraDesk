@@ -7,6 +7,7 @@ import type {
   SendMessageBody,
   UpdateConversationBody,
   CreateConversationBody,
+  ResolveConversationBody,
 } from './conversations.schema.js';
 import {
   buildProtocolMessage,
@@ -15,6 +16,7 @@ import {
   quoteIdent,
 } from './protocols.js';
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
+import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 
 export class NotFoundError extends Error {
@@ -36,6 +38,14 @@ export class ForbiddenError extends Error {
     super(message);
     this.name = 'ForbiddenError';
   }
+}
+
+function validateSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/.test(schemaName)) {
+    throw new ForbiddenError('Schema do tenant inválido');
+  }
+
+  return schemaName;
 }
 
 async function getSchemaName(tenantId?: string): Promise<string | null> {
@@ -1069,6 +1079,104 @@ export async function updateConversation(
   }
 
   return rows[0]!;
+}
+
+export async function resolveConversation(
+  conversationId: string,
+  body: ResolveConversationBody,
+  actorUserId: string,
+  schemaName: string,
+): Promise<ConversationRow> {
+  const safeSchemaName = validateSchemaName(schemaName);
+
+  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
+  await ensureCloseConfigInfrastructure(safeSchemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+
+    const conversationRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM conversations
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+
+    if (!conversationRows[0]) throw new NotFoundError('Conversa não encontrada');
+
+    const closeTypeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM conversation_close_types
+       WHERE id = $1
+         AND is_active = true
+       LIMIT 1`,
+      body.closeTypeId,
+    );
+
+    if (!closeTypeRows[0]) throw new ConflictError('Tipo de encerramento inválido ou inativo');
+
+    const closeOutcomeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM conversation_close_outcomes
+       WHERE id = $1
+         AND is_active = true
+       LIMIT 1`,
+      body.closeOutcomeId,
+    );
+
+    if (!closeOutcomeRows[0]) throw new ConflictError('Desfecho inválido ou inativo');
+
+    const status = body.csatMode === 'resolve' ? 'resolved' : 'closed';
+
+    const rows = await tx.$queryRawUnsafe<ConversationRow[]>(
+      `UPDATE conversations
+       SET status = $1::text,
+           close_type_id = $2::text,
+           close_outcome_id = $3::text,
+           closed_at = NOW(),
+           resolved_at = CASE
+             WHEN $1::text = 'resolved' THEN NOW()
+             ELSE NULL
+           END
+       WHERE id = $4::uuid
+       RETURNING *`,
+      status,
+      body.closeTypeId,
+      body.closeOutcomeId,
+      conversationId,
+    );
+
+    const conversation = rows[0];
+    if (!conversation) throw new NotFoundError('Conversa não encontrada');
+
+    const internalNote = body.internalNote?.trim();
+    if (internalNote) {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, is_internal, created_at)
+         VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text', true, NOW())`,
+        conversationId,
+        actorUserId,
+        internalNote,
+      );
+    }
+
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, $2, 'conversation', $3::uuid, $4::jsonb)`,
+      actorUserId,
+      status === 'resolved' ? 'conversation.resolved' : 'conversation.closed',
+      conversationId,
+      JSON.stringify({
+        status,
+        close_type_id: body.closeTypeId,
+        close_outcome_id: body.closeOutcomeId,
+        csat_mode: body.csatMode,
+      }),
+    );
+
+    return conversation;
+  });
 }
 
 export async function requestHelp(

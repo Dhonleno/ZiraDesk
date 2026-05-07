@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database.js';
+import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
 import type { CreateTenantInput, UpdateTenantInput, ListTenantsQuery } from './tenants.schema.js';
 
 export class NotFoundError extends Error {
@@ -280,6 +281,28 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".conversation_close_types (
+      id         VARCHAR(30)  PRIMARY KEY,
+      label      VARCHAR(120) NOT NULL UNIQUE,
+      is_default BOOLEAN      NOT NULL DEFAULT false,
+      is_active  BOOLEAN      NOT NULL DEFAULT true,
+      sort_order INTEGER      NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".conversation_close_outcomes (
+      id         VARCHAR(30)  PRIMARY KEY,
+      label      VARCHAR(160) NOT NULL UNIQUE,
+      is_default BOOLEAN      NOT NULL DEFAULT false,
+      is_active  BOOLEAN      NOT NULL DEFAULT true,
+      sort_order INTEGER      NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
@@ -291,6 +314,9 @@ async function createTenantTables(schemaName: string): Promise<void> {
       conversation_type VARCHAR(20) NOT NULL DEFAULT 'inbound',
       status          VARCHAR(20)  NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
+      close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
+      close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
+      closed_at       TIMESTAMPTZ,
       subject         VARCHAR(255),
       last_message    TEXT,
       last_message_at TIMESTAMPTZ,
@@ -303,6 +329,16 @@ async function createTenantTables(schemaName: string): Promise<void> {
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_conversations_close_type"
+    ON "${schemaName}".conversations(close_type_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_idx_conversations_close_outcome"
+    ON "${schemaName}".conversations(close_outcome_id)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -641,6 +677,7 @@ export async function createTenant(data: CreateTenantInput): Promise<{
     schemaCreated = true;
 
     await createTenantTables(schemaName);
+    await seedCloseConfig(prisma, schemaName);
 
     // Gera senha temporária (12 chars base64url)
     const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
