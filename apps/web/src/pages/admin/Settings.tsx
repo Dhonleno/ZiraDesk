@@ -22,6 +22,8 @@ const settingsSchema = z.object({
   inactivity_close_minutes: z.number().int().min(1).max(1440),
   inactivity_warning_message: z.string().max(2000).optional(),
   inactivity_close_message: z.string().max(2000).optional(),
+  active_outbound_validity_mode: z.enum(['end_of_day', 'hours']).default('end_of_day'),
+  active_outbound_validity_hours: z.number().int().min(1).max(168),
   bot_assigned_message: z.string().max(1000).optional(),
 });
 
@@ -81,6 +83,8 @@ export function Settings() {
         'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
       inactivity_close_message:
         'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
+      active_outbound_validity_mode: 'end_of_day',
+      active_outbound_validity_hours: 24,
       bot_assigned_message: [
         'Seu atendimento foi aceito.',
         '',
@@ -108,6 +112,9 @@ export function Settings() {
         inactivity_close_message:
           data.inactivity_close_message
           ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
+        active_outbound_validity_mode:
+          (data.active_outbound_validity_mode as SettingsForm['active_outbound_validity_mode']) ?? 'end_of_day',
+        active_outbound_validity_hours: data.active_outbound_validity_hours ?? 24,
         bot_assigned_message: data.bot_assigned_message ?? [
           'Seu atendimento foi aceito.',
           '',
@@ -126,6 +133,8 @@ export function Settings() {
         email_confirmation: values.email_confirmation ?? true,
         inactivity_warning_message: values.inactivity_warning_message ?? '',
         inactivity_close_message: values.inactivity_close_message ?? '',
+        active_outbound_validity_mode: values.active_outbound_validity_mode,
+        active_outbound_validity_hours: values.active_outbound_validity_hours,
         bot_assigned_message: values.bot_assigned_message ?? '',
       }),
     onSuccess: () => {
@@ -182,6 +191,7 @@ export function Settings() {
     fontFamily: 'var(--font)',
   };
   const inactivityEnabled = watch('inactivity_enabled');
+  const activeOutboundValidityMode = watch('active_outbound_validity_mode');
   const portalAddress = `suporte@${data?.slug ?? 'demo'}.ziradesk.com.br`;
 
   const copySupportAddress = async () => {
@@ -572,6 +582,50 @@ export function Settings() {
                 </div>
               </>
             )}
+
+            <div
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: '0.75rem',
+                padding: '0.85rem 0.9rem',
+                background: 'var(--bg-3)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
+                {t('tenantAdmin.settings.activeOutbound.title')}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--txt-3)' }}>
+                {t('tenantAdmin.settings.activeOutbound.hint')}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+                  {t('tenantAdmin.settings.activeOutbound.validityMode')}
+                </label>
+                <select
+                  style={selectStyle}
+                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
+                  {...register('active_outbound_validity_mode')}
+                >
+                  <option value="end_of_day">{t('tenantAdmin.settings.activeOutbound.mode.endOfDay')}</option>
+                  <option value="hours">{t('tenantAdmin.settings.activeOutbound.mode.hours')}</option>
+                </select>
+              </div>
+
+              {activeOutboundValidityMode === 'hours' && (
+                <Input
+                  type="number"
+                  label={t('tenantAdmin.settings.activeOutbound.validityHours')}
+                  min={1}
+                  max={168}
+                  error={errors.active_outbound_validity_hours?.message}
+                  {...register('active_outbound_validity_hours', { valueAsNumber: true })}
+                />
+              )}
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>

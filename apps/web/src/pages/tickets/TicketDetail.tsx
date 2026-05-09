@@ -493,6 +493,16 @@ export function TicketDetail({ ticketId }: Props) {
     return unsub;
   }, [ticket?.id, queryClient, toast, user?.id]);
 
+  useEffect(() => {
+    if (!ticketId) return undefined;
+    return subscribeToEvent<{ ticketId: string }>('ticket:deleted', (data) => {
+      if (data.ticketId !== ticketId) return;
+      toast.info('Este ticket foi excluído');
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      navigate('/tickets');
+    });
+  }, [navigate, queryClient, ticketId, toast]);
+
   const updateMutation = useMutation({
     mutationFn: (patch: Parameters<typeof ticketsApi.update>[1]) => ticketsApi.update(ticketId!, patch),
     onSuccess: (updated) => {
@@ -553,6 +563,7 @@ export function TicketDetail({ ticketId }: Props) {
     onSuccess: () => {
       toast.success('Ticket excluído');
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
       navigate('/tickets');
     },
     onError: () => toast.error('Erro ao excluir ticket'),
@@ -585,6 +596,11 @@ export function TicketDetail({ ticketId }: Props) {
   const isResolved = ticket.status === 'resolved' || ticket.status === 'closed';
   const ticketContactName = ticket.contact_name ?? ticket.client_name;
   const tags = ticket.tags ?? [];
+  const currentType = ticketTypes.find((item) => item.id === ticket.type_id);
+  const activeTypeRules = {
+    requireDueDateForUrgent: currentType?.require_due_date_for_urgent ?? true,
+    requireCategoryForWaiting: currentType?.require_category_for_waiting ?? true,
+  };
   const isOverdue = Boolean(
     ticket.due_date
     && new Date(ticket.due_date) < new Date()
@@ -595,6 +611,40 @@ export function TicketDetail({ ticketId }: Props) {
   const updateTicket = (patch: Parameters<typeof ticketsApi.update>[1], successMessage?: string) => {
     updateMutation.mutate(patch);
     if (successMessage) toast.success(successMessage);
+  };
+
+  const updateTicketWithRules = (patch: Parameters<typeof ticketsApi.update>[1], successMessage?: string): boolean => {
+    const hasTypeChange = Object.prototype.hasOwnProperty.call(patch, 'type_id');
+    const hasDueDateChange = Object.prototype.hasOwnProperty.call(patch, 'due_date');
+    const hasCategoryChange = Object.prototype.hasOwnProperty.call(patch, 'category');
+    const nextTypeId = hasTypeChange
+      ? (patch.type_id ?? null)
+      : (ticket.type_id ?? null);
+
+    const nextType = ticketTypes.find((item) => item.id === nextTypeId);
+    const rules = {
+      requireDueDateForUrgent: nextType?.require_due_date_for_urgent ?? true,
+      requireCategoryForWaiting: nextType?.require_category_for_waiting ?? true,
+    };
+
+    const nextPriority = patch.priority ?? ticket.priority;
+    const nextStatus = patch.status ?? ticket.status;
+    const nextDueDate = hasDueDateChange ? (patch.due_date ?? null) : (ticket.due_date ?? null);
+    const nextCategoryRaw = hasCategoryChange ? (patch.category ?? '') : (ticket.category ?? '');
+    const nextCategory = nextCategoryRaw.trim();
+
+    if (rules.requireDueDateForUrgent && nextPriority === 'urgent' && !nextDueDate) {
+      toast.error('Prazo é obrigatório para prioridade urgente neste tipo de ticket');
+      return false;
+    }
+
+    if (rules.requireCategoryForWaiting && nextStatus === 'waiting' && !nextCategory) {
+      toast.error('Categoria é obrigatória quando o status é "Aguardando" neste tipo de ticket');
+      return false;
+    }
+
+    updateTicket(patch, successMessage);
+    return true;
   };
 
   function handleTitleSave() {
@@ -720,7 +770,7 @@ export function TicketDetail({ ticketId }: Props) {
                         disabled={deleteMutation.isPending}
                         onClick={() => {
                           setShowMore(false);
-                          const confirmed = window.confirm('Excluir este ticket? Esta ação não pode ser desfeita.');
+                          const confirmed = window.confirm('Excluir permanentemente este ticket? Esta ação não pode ser desfeita.');
                           if (confirmed) deleteMutation.mutate();
                         }}
                       >
@@ -728,7 +778,7 @@ export function TicketDetail({ ticketId }: Props) {
                           <path d="M2 3.5h9M5 3.5V2h3v1.5M10.5 3.5L10 11H3L2.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                           <path d="M5.5 6v3M7.5 6v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
                         </svg>
-                        Excluir ticket
+                        Excluir permanentemente
                       </button>
                     </>
                   ) : null}
@@ -759,7 +809,7 @@ export function TicketDetail({ ticketId }: Props) {
             {!isResolved ? (
               <button
                 type="button"
-                onClick={() => updateTicket({ status: 'resolved' }, t('tickets.form.resolved'))}
+                onClick={() => updateTicketWithRules({ status: 'resolved' }, t('tickets.form.resolved'))}
                 className="zd-btn"
                 style={{ borderColor: 'var(--green)', background: 'var(--green-dim)', color: 'var(--green)' }}
               >
@@ -770,7 +820,7 @@ export function TicketDetail({ ticketId }: Props) {
             {ticket.status !== 'closed' ? (
               <button
                 type="button"
-                onClick={() => updateTicket({ status: 'closed' }, t('tickets.form.closed'))}
+                onClick={() => updateTicketWithRules({ status: 'closed' }, t('tickets.form.closed'))}
                 className="zd-btn"
               >
                 {t('tickets.actions.close')}
@@ -780,7 +830,7 @@ export function TicketDetail({ ticketId }: Props) {
             {isResolved ? (
               <button
                 type="button"
-                onClick={() => updateTicket({ status: 'open' }, t('tickets.form.updated'))}
+                onClick={() => updateTicketWithRules({ status: 'open' }, t('tickets.form.updated'))}
                 className="zd-btn"
                 style={{ borderColor: 'var(--teal)', background: 'var(--teal-dim)', color: 'var(--teal)' }}
               >
@@ -793,12 +843,12 @@ export function TicketDetail({ ticketId }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <StatusBadgeDropdown
             status={ticket.status}
-            onUpdate={(data) => updateTicket({ status: data.status }, t('tickets.form.updated'))}
+            onUpdate={(data) => updateTicketWithRules({ status: data.status }, t('tickets.form.updated'))}
           />
 
           <PriorityBadgeDropdown
             priority={ticket.priority}
-            onUpdate={(data) => updateTicket({ priority: data.priority }, t('tickets.form.updated'))}
+            onUpdate={(data) => updateTicketWithRules({ priority: data.priority }, t('tickets.form.updated'))}
           />
 
           {ticket.type_name && ticket.type_color ? (
@@ -842,7 +892,7 @@ export function TicketDetail({ ticketId }: Props) {
               value={ticket.type_id ?? ''}
               onChange={(event) => {
                 const value = event.target.value;
-                updateTicket(value ? { type_id: value } : { type_id: null }, t('tickets.form.updated'));
+                updateTicketWithRules(value ? { type_id: value } : { type_id: null }, t('tickets.form.updated'));
               }}
             >
               <option value="">{t('tickets.form.selectType', { defaultValue: 'Selecione o tipo' })}</option>
@@ -852,6 +902,14 @@ export function TicketDetail({ ticketId }: Props) {
                 </option>
               ))}
             </select>
+            <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
+              <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>
+                Urgente exige prazo: {activeTypeRules.requireDueDateForUrgent ? 'Sim' : 'Não'}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>
+                Aguardando exige categoria: {activeTypeRules.requireCategoryForWaiting ? 'Sim' : 'Não'}
+              </span>
+            </div>
           </SbField>
 
           <SbField label="ATRIBUÍDO A">
@@ -860,8 +918,10 @@ export function TicketDetail({ ticketId }: Props) {
               value={ticket.assigned_to ?? ''}
               onChange={(event) => {
                 const nextAssignee = event.target.value;
-                if (!nextAssignee) return;
-                updateTicket({ assigned_to: nextAssignee }, t('tickets.form.assigned'));
+                updateTicket(
+                  { assigned_to: nextAssignee || null },
+                  nextAssignee ? t('tickets.form.assigned') : 'Ticket desatribuído',
+                );
               }}
             >
               <option value="">Sem atribuição</option>
@@ -941,8 +1001,10 @@ export function TicketDetail({ ticketId }: Props) {
               value={ticket.due_date ? new Date(ticket.due_date).toISOString().split('T')[0] ?? '' : ''}
               onChange={(event) => {
                 const value = event.target.value;
-                if (!value) return;
-                updateTicket({ due_date: `${value}T00:00:00.000Z` }, t('tickets.form.updated'));
+                if (!value) {
+                  return;
+                }
+                updateTicketWithRules({ due_date: `${value}T00:00:00.000Z` }, t('tickets.form.updated'));
               }}
             />
             {isOverdue ? (
@@ -963,13 +1025,15 @@ export function TicketDetail({ ticketId }: Props) {
                 value={catVal}
                 onChange={(event) => setCatVal(event.target.value)}
                 onBlur={() => {
-                  updateTicket({ category: catVal || '' }, t('tickets.form.updated'));
-                  setEditCat(false);
+                  if (updateTicketWithRules({ category: catVal || '' }, t('tickets.form.updated'))) {
+                    setEditCat(false);
+                  }
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
-                    updateTicket({ category: catVal || '' }, t('tickets.form.updated'));
-                    setEditCat(false);
+                    if (updateTicketWithRules({ category: catVal || '' }, t('tickets.form.updated'))) {
+                      setEditCat(false);
+                    }
                   }
                   if (event.key === 'Escape') {
                     setCatVal(ticket.category ?? '');
@@ -1078,7 +1142,7 @@ export function TicketDetail({ ticketId }: Props) {
                   textTransform: 'uppercase',
                 }}
               >
-                Descrição
+                Descrição do ticket
               </span>
               {!editingDescription ? (
                 <button
@@ -1103,7 +1167,7 @@ export function TicketDetail({ ticketId }: Props) {
                   onChange={(event) => setDescValue(event.target.value)}
                   className="description-edit-textarea"
                   rows={8}
-                  placeholder="Adicione uma descrição detalhada"
+                  placeholder="Detalhe o problema, impacto ou solução esperada"
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
                       setDescValue(ticket.description ?? '');
@@ -1146,7 +1210,7 @@ export function TicketDetail({ ticketId }: Props) {
                 {ticket.description ? (
                   <p className="description-body">{ticket.description}</p>
                 ) : (
-                  <p className="description-placeholder">Clique para adicionar uma descrição</p>
+                  <p className="description-placeholder">Clique para adicionar a descrição do ticket</p>
                 )}
               </div>
             )}
@@ -1274,7 +1338,7 @@ export function TicketDetail({ ticketId }: Props) {
                   padding: '8px 0',
                 }}
               >
-                {t('tickets.comments.title')}
+                {t('tickets.comments.updates', { defaultValue: 'Atualizações' })}
               </button>
               <button
                 type="button"

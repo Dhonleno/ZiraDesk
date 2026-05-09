@@ -19,6 +19,8 @@ interface TypeFormState {
   icon: string;
   color: string;
   sort_order: number;
+  require_due_date_for_urgent: boolean;
+  require_category_for_waiting: boolean;
 }
 
 const EMPTY_FORM: TypeFormState = {
@@ -26,6 +28,8 @@ const EMPTY_FORM: TypeFormState = {
   icon: '🎫',
   color: '#00C9A7',
   sort_order: 0,
+  require_due_date_for_urgent: true,
+  require_category_for_waiting: true,
 };
 
 export function TicketTypes() {
@@ -108,6 +112,8 @@ export function TicketTypes() {
       icon: type.icon,
       color: type.color,
       sort_order: type.sort_order,
+      require_due_date_for_urgent: type.require_due_date_for_urgent,
+      require_category_for_waiting: type.require_category_for_waiting,
     });
     setShowModal(true);
   }
@@ -118,6 +124,8 @@ export function TicketTypes() {
       icon: form.icon.trim() || '🎫',
       color: form.color,
       sort_order: Number(form.sort_order) || 0,
+      require_due_date_for_urgent: form.require_due_date_for_urgent,
+      require_category_for_waiting: form.require_category_for_waiting,
     };
 
     if (!payload.name) {
@@ -201,6 +209,28 @@ export function TicketTypes() {
                       Inativo
                     </span>
                   ) : null}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: type.require_due_date_for_urgent ? 'var(--amber)' : 'var(--txt-3)',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 'var(--r-pill)',
+                      padding: '2px 6px',
+                    }}
+                  >
+                    Urgente exige prazo: {type.require_due_date_for_urgent ? 'Sim' : 'Não'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: type.require_category_for_waiting ? 'var(--amber)' : 'var(--txt-3)',
+                      border: '1px solid var(--line-2)',
+                      borderRadius: 'var(--r-pill)',
+                      padding: '2px 6px',
+                    }}
+                  >
+                    Aguardando exige categoria: {type.require_category_for_waiting ? 'Sim' : 'Não'}
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -313,6 +343,24 @@ export function TicketTypes() {
                   value={String(form.sort_order)}
                   onChange={(event) => setForm((prev) => ({ ...prev, sort_order: Number(event.target.value) || 0 }))}
                 />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-2)' }}>
+                <input
+                  type="checkbox"
+                  checked={form.require_due_date_for_urgent}
+                  onChange={(event) => setForm((prev) => ({ ...prev, require_due_date_for_urgent: event.target.checked }))}
+                />
+                Exigir prazo quando prioridade for urgente
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-2)' }}>
+                <input
+                  type="checkbox"
+                  checked={form.require_category_for_waiting}
+                  onChange={(event) => setForm((prev) => ({ ...prev, require_category_for_waiting: event.target.checked }))}
+                />
+                Exigir categoria quando status for aguardando
               </label>
             </div>
 

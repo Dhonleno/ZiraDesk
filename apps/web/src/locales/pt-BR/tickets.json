@@ -45,7 +45,13 @@
     },
     "comments": {
       "title": "Comentários",
+      "updates": "Atualizações",
+      "listTitle": "Comentários e notas",
       "placeholder": "Adicionar comentário...",
+      "publicComposerTitle": "Novo comentário público",
+      "internalComposerTitle": "Nova nota interna",
+      "publicPlaceholder": "Escreva uma atualização visível ao cliente...",
+      "internalPlaceholder": "Registre uma nota interna para a equipe...",
       "internal": "Interno",
       "send": "Enviar",
       "noComments": "Nenhum comentário ainda",

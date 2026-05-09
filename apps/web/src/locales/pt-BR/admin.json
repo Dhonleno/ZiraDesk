@@ -129,6 +129,16 @@
           "closeGreaterThanWarning": "O tempo de encerramento deve ser maior que o tempo de aviso"
         }
       },
+      "activeOutbound": {
+        "title": "Retorno (envio ativo)",
+        "hint": "Define por quanto tempo o cliente volta para a aba de retorno e tenta ser atendido pelo agente de origem.",
+        "validityMode": "Validade do envio ativo",
+        "validityHours": "Validade em horas",
+        "mode": {
+          "endOfDay": "Até o fim do dia",
+          "hours": "Quantidade de horas"
+        }
+      },
       "bot": {
         "assignedMessage": "Mensagem ao transferir para agente",
         "assignedMessageHint": "Enviada ao cliente quando um agente assume o atendimento"

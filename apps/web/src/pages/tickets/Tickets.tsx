@@ -135,8 +135,16 @@ export function TicketsPage() {
       }
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); };
-  }, [queryClient, toast, user?.id, t, selectedId]);
+    const unsub4 = subscribeToEvent<{ ticketId: string }>('ticket:deleted', (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
+      if (selectedId === data.ticketId) {
+        navigate('/tickets');
+      }
+    });
+
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+  }, [navigate, queryClient, toast, user?.id, t, selectedId]);
 
   const tickets = ticketsData?.data ?? [];
   const total   = ticketsData?.meta.total ?? 0;

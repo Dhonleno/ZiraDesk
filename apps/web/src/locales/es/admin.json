@@ -129,6 +129,16 @@
           "closeGreaterThanWarning": "El tiempo de cierre debe ser mayor que el tiempo de aviso"
         }
       },
+      "activeOutbound": {
+        "title": "Retorno (envío activo)",
+        "hint": "Define por cuánto tiempo el cliente mantiene prioridad de retorno e intenta volver al agente de origen.",
+        "validityMode": "Validez del envío activo",
+        "validityHours": "Validez en horas",
+        "mode": {
+          "endOfDay": "Hasta el fin del día",
+          "hours": "Cantidad de horas"
+        }
+      },
       "bot": {
         "assignedMessage": "Mensaje al transferir a un agente",
         "assignedMessageHint": "Se envía al cliente cuando un agente toma la conversación"

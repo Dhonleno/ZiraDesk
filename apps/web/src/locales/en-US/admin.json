@@ -129,6 +129,16 @@
           "closeGreaterThanWarning": "Close time must be greater than warning time"
         }
       },
+      "activeOutbound": {
+        "title": "Return (active outbound)",
+        "hint": "Defines how long the customer keeps return priority and tries to go back to the origin agent.",
+        "validityMode": "Active outbound validity",
+        "validityHours": "Validity in hours",
+        "mode": {
+          "endOfDay": "Until end of day",
+          "hours": "Number of hours"
+        }
+      },
       "bot": {
         "assignedMessage": "Message when assigned to agent",
         "assignedMessageHint": "Sent to customer when an agent takes over the conversation"

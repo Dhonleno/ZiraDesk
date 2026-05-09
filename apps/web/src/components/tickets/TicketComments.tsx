@@ -579,7 +579,7 @@ export function TicketComments({ ticketId }: Props) {
           letterSpacing: 0.5,
         }}
       >
-        {t('tickets.comments.title')}
+        {t('tickets.comments.listTitle', { defaultValue: 'Comentários e notas' })}
       </h4>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
@@ -745,7 +745,11 @@ export function TicketComments({ ticketId }: Props) {
 
           <div className="comment-editor-shell">
             <div className="comment-editor-head">
-              <span className="comment-editor-title">{isInternal ? 'Nota interna' : 'Comentário público'}</span>
+              <span className="comment-editor-title">
+                {isInternal
+                  ? t('tickets.comments.internalComposerTitle', { defaultValue: 'Nova nota interna' })
+                  : t('tickets.comments.publicComposerTitle', { defaultValue: 'Novo comentário público' })}
+              </span>
               <span className={`comment-editor-visibility ${isInternal ? 'internal' : 'public'}`}>
                 {isInternal ? 'Apenas equipe' : 'Visível ao cliente'}
               </span>
@@ -766,7 +770,11 @@ export function TicketComments({ ticketId }: Props) {
               suppressContentEditableWarning
               role="textbox"
               aria-multiline="true"
-              data-placeholder={isInternal ? 'Nota interna - não visível ao cliente...' : 'Comentário público - visível ao cliente...'}
+              data-placeholder={
+                isInternal
+                  ? t('tickets.comments.internalPlaceholder', { defaultValue: 'Registre uma nota interna para a equipe...' })
+                  : t('tickets.comments.publicPlaceholder', { defaultValue: 'Escreva uma atualização visível ao cliente...' })
+              }
               className="comment-rich-editor"
               onInput={(event) => {
                 const value = normalizeEditorHtml(event.currentTarget.innerHTML);

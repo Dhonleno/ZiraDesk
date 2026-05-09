@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,16 +8,24 @@ import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { ticketsApi, contactsApi, organizationsApi, adminApi } from '../../services/api';
-import type { CrmContact, CrmOrganization } from '../../services/api';
+import type { CrmContact, CrmOrganization, FindTicketDuplicatesParams } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import {
+  buildCreateTicketPayload,
+  getTicketConditionalRequirements,
+  readTicketCreatePreferences,
+  saveTicketCreatePreferences,
+  validateTicketCreateDraft,
+  type TicketCreateDraft,
+} from './createTicketShared';
 
 /* ── Schema ──────────────────────────────────────────────────────────────── */
 const schema = z.object({
   title:       z.string().min(3, 'Mínimo 3 caracteres'),
   description: z.string().optional(),
   priority:    z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
-  status:      z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).default('open'),
+  status:      z.enum(['open', 'in_progress', 'waiting']).default('open'),
   category:    z.string().optional(),
   type_id:     z.string().uuid().optional().or(z.literal('')),
   due_date:    z.string().optional(),
@@ -47,6 +55,19 @@ const selectStyle: React.CSSProperties = {
   height: '2.5rem', borderRadius: 'var(--r)', padding: '0 0.75rem',
   fontSize: '0.875rem', width: '100%', outline: 'none', fontFamily: 'var(--font)',
 };
+const STATUS_LABEL: Record<'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed', string> = {
+  open: 'Aberto',
+  in_progress: 'Em andamento',
+  waiting: 'Aguardando',
+  resolved: 'Resolvido',
+  closed: 'Fechado',
+};
+const PRIORITY_LABEL: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
+  low: 'Baixa',
+  medium: 'Média',
+  high: 'Alta',
+  urgent: 'Urgente',
+};
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: Props) {
@@ -66,16 +87,22 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
 
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const initialPrefs = readTicketCreatePreferences();
 
   const debouncedContactSearch = useDebounce(contactSearch, 300);
   const debouncedOrganizationSearch = useDebounce(organizationSearch, 300);
 
   const { register, handleSubmit, watch, setValue, getValues, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { priority: 'medium', status: 'open', tags: [] },
+    defaultValues: { priority: initialPrefs.priority, status: initialPrefs.status, tags: [], type_id: initialPrefs.type_id },
   });
 
+  const debouncedTitle = useDebounce(watch('title') ?? '', 300);
   const tags = watch('tags');
+  const status = watch('status');
+  const priority = watch('priority');
+  const selectedTypeId = watch('type_id');
   const hasSourceConversation = Boolean(defaultValues?.source_conversation_id);
   const contactReadonly = hasSourceConversation;
   const organizationReadonly = hasSourceConversation;
@@ -85,6 +112,10 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
 
     setValue('title', defaultValues?.title ?? '');
     setValue('category', defaultValues?.category ?? '');
+    setValue('priority', initialPrefs.priority);
+    setValue('status', initialPrefs.status);
+    setValue('type_id', initialPrefs.type_id);
+    setAssigneeId(initialPrefs.assigned_to || null);
 
     if (defaultValues?.contact_id) {
       setSelectedContactId(defaultValues.contact_id);
@@ -109,7 +140,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
       setShowOrganizationDropdown(false);
       setOrganizationSearch('');
     }
-  }, [defaultValues, open, setValue]);
+  }, [defaultValues, initialPrefs.assigned_to, initialPrefs.priority, initialPrefs.status, initialPrefs.type_id, open, setValue]);
 
   const { data: contactResults } = useQuery({
     queryKey: ['crm-contacts-search', debouncedContactSearch],
@@ -131,6 +162,20 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     staleTime: 60_000,
     enabled: open,
   });
+  const selectedType = useMemo(
+    () => ticketTypes.find((type) => type.id === selectedTypeId) ?? null,
+    [selectedTypeId, ticketTypes],
+  );
+  const conditional = useMemo(
+    () => getTicketConditionalRequirements(
+      { priority, status },
+      {
+        requireDueDateForUrgent: selectedType?.require_due_date_for_urgent ?? true,
+        requireCategoryForWaiting: selectedType?.require_category_for_waiting ?? true,
+      },
+    ),
+    [priority, selectedType?.require_category_for_waiting, selectedType?.require_due_date_for_urgent, status],
+  );
 
   const { data: organizationResults } = useQuery({
     queryKey: ['crm-organizations-search', debouncedOrganizationSearch],
@@ -139,23 +184,55 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     staleTime: 10_000,
   });
 
+  const { data: duplicateSuggestions = [] } = useQuery({
+    queryKey: ['ticket-modal-duplicates', debouncedTitle.trim(), selectedContactId, selectedOrganizationId],
+    queryFn: () => {
+      const params: FindTicketDuplicatesParams = { title: debouncedTitle.trim() };
+      if (selectedContactId) params.contact_id = selectedContactId;
+      if (selectedOrganizationId) params.organization_id = selectedOrganizationId;
+      return ticketsApi.findDuplicates(params);
+    },
+    enabled: open && debouncedTitle.trim().length >= 3,
+    staleTime: 15_000,
+  });
+
   const mutation = useMutation({
-    mutationFn: (values: FormValues) => {
-      const payload: import('../../services/api').CreateTicketPayload = {
-        title:    values.title,
+    mutationFn: async (values: FormValues) => {
+      const draft: TicketCreateDraft = {
+        title: values.title,
+        description: values.description,
         priority: values.priority,
-        status:   values.status,
-        tags:     values.tags,
+        status: values.status,
+        category: values.category,
+        type_id: values.type_id,
+        due_date: values.due_date || undefined,
+        tags: values.tags,
+        contact_id: selectedContactId ?? undefined,
+        organization_id: selectedOrganizationId ?? undefined,
+        assigned_to: assigneeId,
+        source_conversation_id: defaultValues?.source_conversation_id,
+        require_due_date_for_urgent_override: selectedType?.require_due_date_for_urgent ?? true,
+        require_category_for_waiting_override: selectedType?.require_category_for_waiting ?? true,
       };
-      if (values.description)  payload.description  = values.description;
-      if (values.category)     payload.category     = values.category;
-      if (values.type_id)      payload.type_id      = values.type_id;
-      if (values.due_date)     payload.due_date     = new Date(values.due_date).toISOString();
-      if (selectedContactId)   payload.contact_id   = selectedContactId;
-      if (selectedOrganizationId) payload.organization_id = selectedOrganizationId;
-      if (assigneeId)          payload.assigned_to  = assigneeId;
-      if (defaultValues?.source_conversation_id) payload.source_conversation_id = defaultValues.source_conversation_id;
-      return ticketsApi.create(payload);
+      const validation = validateTicketCreateDraft(draft);
+      if (!validation.isValid) {
+        throw new Error(validation.errors[0] ?? 'Dados inválidos para criar ticket');
+      }
+
+      const payload = buildCreateTicketPayload(draft);
+      const createdTicket = await ticketsApi.create(payload);
+      for (const file of files) {
+        await ticketsApi.uploadAttachment(createdTicket.id, file);
+      }
+
+      saveTicketCreatePreferences({
+        priority: values.priority,
+        status: values.status,
+        type_id: values.type_id ?? '',
+        assigned_to: assigneeId ?? '',
+      });
+
+      return createdTicket;
     },
     onSuccess: (createdTicket) => {
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -173,9 +250,10 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
       setOrganizationSearch('');
       setAssigneeId(null);
       setTagInput('');
+      setFiles([]);
       onClose();
     },
-    onError: () => toast.error('Erro ao criar ticket'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Erro ao criar ticket'),
   });
 
   function addTag(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -239,11 +317,22 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     setShowOrganizationDropdown(false);
   }
 
+  function handleFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    if (selected.length === 0) return;
+    setFiles((prev) => [...prev, ...selected]);
+    event.target.value = '';
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, idx) => idx !== index));
+  }
+
   const users = usersData?.data ?? [];
 
   return (
     <Modal open={open} onClose={onClose} title={t('tickets.form.create')} maxWidth="md">
-      <form onSubmit={handleSubmit((v) => mutation.mutate(v))}>
+      <form onSubmit={handleSubmit((values: FormValues) => mutation.mutate(values))}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {hasSourceConversation ? (
@@ -260,6 +349,63 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 protocol: defaultValues?.source_protocol ?? defaultValues?.source_conversation_id ?? '—',
                 defaultValue: 'Originado do atendimento {{protocol}}',
               })}
+            </div>
+          ) : null}
+
+          {conditional.hints.length > 0 ? (
+            <div style={{
+              border: '1px solid var(--line-2)',
+              background: 'var(--bg-3)',
+              borderRadius: 'var(--r)',
+              padding: '8px 10px',
+              display: 'grid',
+              gap: 4,
+            }}>
+              {conditional.hints.map((hint) => (
+                <p key={hint} style={{ margin: 0, fontSize: 11, color: 'var(--txt-2)' }}>{hint}</p>
+              ))}
+            </div>
+          ) : null}
+
+          {duplicateSuggestions.length > 0 ? (
+            <div style={{
+              border: '1px solid rgba(245,158,11,.35)',
+              background: 'var(--amber-dim)',
+              borderRadius: 'var(--r)',
+              padding: '8px 10px',
+              display: 'grid',
+              gap: 6,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                Possíveis tickets duplicados
+              </div>
+              {duplicateSuggestions.map((item) => (
+                <a
+                  key={item.id}
+                  href={`/tickets/${item.id}`}
+                  style={{
+                    display: 'grid',
+                    gap: 2,
+                    textDecoration: 'none',
+                    padding: '7px 8px',
+                    borderRadius: 'var(--r)',
+                    border: '1px solid var(--line)',
+                    background: 'var(--bg-2)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--teal)', fontFamily: 'var(--mono)' }}>#{item.id.slice(-6).toUpperCase()}</span>
+                    <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>Score {item.score}</span>
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{item.title}</span>
+                  <span style={{ fontSize: 11, color: 'var(--txt-2)' }}>
+                    {STATUS_LABEL[item.status as keyof typeof STATUS_LABEL] ?? item.status}
+                    {' · '}
+                    {PRIORITY_LABEL[item.priority as keyof typeof PRIORITY_LABEL] ?? item.priority}
+                    {item.category ? ` · ${item.category}` : ''}
+                  </span>
+                </a>
+              ))}
             </div>
           ) : null}
 
@@ -429,7 +575,10 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 ))}
               </select>
             </div>
-            <Input label={t('tickets.fields.category')} {...register('category')} />
+            <Input
+              label={conditional.categoryRequired ? `${t('tickets.fields.category')} *` : t('tickets.fields.category')}
+              {...register('category')}
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -437,6 +586,9 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
               <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
                 {t('tickets.fields.dueDate')}
               </label>
+              {conditional.dueDateRequired ? (
+                <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 6 }}>Obrigatório para prioridade urgente</div>
+              ) : null}
               <input type="date" {...register('due_date')} style={selectStyle} />
             </div>
           </div>
@@ -470,6 +622,25 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             <input type="text" placeholder="Digite e pressione Enter" value={tagInput}
               onChange={(e) => setTagInput(e.target.value)} onKeyDown={addTag}
               style={{ ...selectStyle, display: 'block' }} />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
+              Anexos na abertura
+            </label>
+            <input type="file" multiple onChange={handleFilesChange} style={{ ...selectStyle, display: 'block', padding: '8px 10px', height: 'auto' }} />
+            {files.length > 0 ? (
+              <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+                {files.map((file, index) => (
+                  <div key={`${file.name}-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+                    <button type="button" onClick={() => removeFile(index)} style={{ background: 'none', border: 'none', color: 'var(--txt-2)', cursor: 'pointer', lineHeight: 1 }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
