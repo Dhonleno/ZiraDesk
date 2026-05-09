@@ -69,7 +69,7 @@ async function syncActiveConversations(schemaName: string): Promise<void> {
        SELECT assigned_to AS user_id, COUNT(*)::integer AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'active_outbound', 'in_service', 'pending', 'bot')
+         AND status IN ('open', 'in_service', 'pending', 'bot')
        GROUP BY assigned_to
      ) conv
      WHERE aa.user_id = conv.user_id`,
@@ -82,7 +82,7 @@ async function syncActiveConversations(schemaName: string): Promise<void> {
        SELECT DISTINCT assigned_to
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'active_outbound', 'in_service', 'pending', 'bot')
+         AND status IN ('open', 'in_service', 'pending', 'bot')
      )`,
   );
 }
@@ -215,14 +215,16 @@ export async function toggleAgentAvailability(
        SET status = 'online',
            pause_reason = NULL,
            pause_started_at = NULL,
-           pause_notes = NULL
+           pause_notes = NULL,
+           online_since = COALESCE(online_since, NOW())
        WHERE user_id = $1::uuid`,
       userId,
     );
   } else {
     await prisma.$executeRawUnsafe(
       `UPDATE ${assignmentsRef}
-       SET status = CASE WHEN status = 'paused' THEN 'paused' ELSE 'offline' END
+       SET status = CASE WHEN status = 'paused' THEN 'paused' ELSE 'offline' END,
+           online_since = NULL
        WHERE user_id = $1::uuid`,
       userId,
     );

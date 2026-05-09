@@ -1,7 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
+import { hasRole } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { getMonitorSnapshot } from './monitor.service.js';
+import { getTvSnapshot } from './tv.service.js';
 import { getSocketServer } from '../../socket/index.js';
 import { prisma } from '../../config/database.js';
 import { quoteIdent } from './conversations/protocols.js';
@@ -55,6 +57,19 @@ export async function omnichannelMonitorRoutes(app: FastifyInstance): Promise<vo
       // If socket server is unavailable, keep DB-based status as fallback.
     }
 
+    return reply.send({ success: true, data });
+  });
+
+  app.get('/tv', { preHandler: [authMiddleware, hasRole('owner', 'admin'), tenantSchemaFromJwt] }, async (request, reply) => {
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    if (!schemaName) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Schema do tenant nao identificado' },
+      });
+    }
+
+    const data = await getTvSnapshot(schemaName);
     return reply.send({ success: true, data });
   });
 }

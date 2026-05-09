@@ -55,6 +55,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       active_conversations INTEGER NOT NULL DEFAULT 0,
       is_available BOOLEAN NOT NULL DEFAULT false,
       status VARCHAR(20) NOT NULL DEFAULT 'offline',
+      last_seen_at TIMESTAMPTZ,
       pause_reason VARCHAR(100),
       pause_started_at TIMESTAMPTZ,
       pause_notes TEXT,
@@ -314,6 +315,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       conversation_type VARCHAR(20) NOT NULL DEFAULT 'inbound',
       status          VARCHAR(20)  NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
+      assigned_at     TIMESTAMPTZ,
       close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
       close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
       closed_at       TIMESTAMPTZ,
@@ -475,6 +477,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       color       VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
       is_active   BOOLEAN NOT NULL DEFAULT true,
       sort_order  INTEGER NOT NULL DEFAULT 0,
+      require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
+      require_category_for_waiting BOOLEAN NOT NULL DEFAULT true,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )

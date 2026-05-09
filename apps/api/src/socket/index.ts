@@ -6,6 +6,61 @@ import { prisma } from '../config/database.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 
 let io: SocketServer | null = null;
+let hasPublicUsersTable: boolean | null = null;
+
+interface TypingPayload {
+  conversationId?: string;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseTypingPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const conversationId = (payload as TypingPayload).conversationId;
+  if (typeof conversationId !== 'string' || !conversationId.trim()) return null;
+  const normalized = conversationId.trim();
+  if (!isUuid(normalized)) return null;
+  return normalized;
+}
+
+async function publicUsersTableExists(): Promise<boolean> {
+  if (hasPublicUsersTable !== null) return hasPublicUsersTable;
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public.users') IS NOT NULL AS exists`,
+  );
+  hasPublicUsersTable = rows[0]?.exists === true;
+  return hasPublicUsersTable;
+}
+
+async function refreshAgentPresence(schemaName: string, userId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+    await tx.$executeRawUnsafe(
+      `UPDATE agent_assignments
+       SET last_seen_at = NOW()
+       WHERE user_id = $1::uuid`,
+      userId,
+    );
+    await tx.$executeRawUnsafe(
+      `UPDATE users
+       SET last_seen_at = NOW()
+       WHERE id = $1::uuid`,
+      userId,
+    );
+  });
+
+  if (await publicUsersTableExists()) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE public.users
+       SET last_seen_at = NOW()
+       WHERE id = $1::uuid`,
+      userId,
+    );
+  }
+}
 
 export function createSocketServer(httpServer: HttpServer): SocketServer {
   io = new SocketServer(httpServer, {
@@ -64,21 +119,57 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
     void socket.join(`agent:${userId}`);
 
     if (schemaName) {
-      void prisma.$executeRawUnsafe(
-        `UPDATE ${quoteIdent(schemaName)}.agent_assignments
-         SET status = 'online',
-             is_available = true
-         WHERE user_id = $1::uuid
-           AND status = 'offline'`,
+      void prisma.$queryRawUnsafe<Array<{ became_online: boolean }>>(
+        `WITH previous AS (
+           SELECT status
+           FROM ${quoteIdent(schemaName)}.agent_assignments
+           WHERE user_id = $1::uuid
+         ),
+         updated AS (
+           UPDATE ${quoteIdent(schemaName)}.agent_assignments
+           SET status = 'online',
+               is_available = true,
+               last_seen_at = NOW(),
+               updated_at = NOW()
+           WHERE user_id = $1::uuid
+           RETURNING 1
+         )
+         SELECT
+           EXISTS (SELECT 1 FROM previous WHERE status = 'offline')
+           AND EXISTS (SELECT 1 FROM updated) AS became_online`,
         userId,
-      ).then((updatedCount) => {
-        if (Number(updatedCount) > 0) {
+      ).then((rows) => {
+        const becameOnline = rows[0]?.became_online === true;
+        if (becameOnline) {
           socketServer.to(`tenant:${tenantId}`).emit('agent:online', { userId });
         }
       }).catch((err: unknown) => {
         console.error('[Socket] Connect handler error:', err);
       });
+
+      void refreshAgentPresence(schemaName, userId).catch((err: unknown) => {
+        console.error('[Socket] Presence refresh on connect failed:', err);
+      });
     }
+
+    socket.on('agent:heartbeat', () => {
+      if (!schemaName) return;
+      void refreshAgentPresence(schemaName, userId).catch((err: unknown) => {
+        console.error('[Socket] Heartbeat handler error:', err);
+      });
+    });
+
+    socket.on('conversation:join', (payload: unknown) => {
+      const conversationId = parseTypingPayload(payload);
+      if (!conversationId) return;
+      void socket.join(`conversation:${conversationId}`);
+    });
+
+    socket.on('conversation:leave', (payload: unknown) => {
+      const conversationId = parseTypingPayload(payload);
+      if (!conversationId) return;
+      void socket.leave(`conversation:${conversationId}`);
+    });
 
     socket.on('disconnect', async () => {
       try {

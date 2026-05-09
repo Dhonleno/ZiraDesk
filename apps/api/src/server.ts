@@ -2,6 +2,7 @@ import './config/env.js'; // valida env antes de qualquer coisa
 import './jobs/send-message.job.js'; // inicia o worker de mensagens
 import './jobs/inactivity.job.js'; // inicia o worker de inatividade
 import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
+import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
@@ -23,6 +24,7 @@ import { callsRoutes } from './modules/calls/calls.routes.js';
 import { portalModuleRoutes } from './modules/portal/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
+import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
 
 const app = Fastify({
   ignoreTrailingSlash: true,
@@ -43,6 +45,28 @@ function rateLimitMax(requestUrl: string) {
   if (requestUrl.startsWith('/api/auth/')) return 10;
   if (requestUrl.startsWith('/api/webhooks/')) return 1000;
   return 200;
+}
+
+async function resetAgentPresenceOnBoot(): Promise<void> {
+  const tenants = await prisma.$queryRawUnsafe<Array<{ schema_name: string }>>(
+    `SELECT schema_name
+     FROM tenants
+     WHERE status IN ('active', 'trial')`,
+  );
+
+  for (const tenant of tenants) {
+    await ensureAgentAssignmentsInfrastructure(prisma, tenant.schema_name);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+      await tx.$executeRawUnsafe(
+        `UPDATE agent_assignments
+         SET status = 'offline',
+             is_available = false,
+             online_since = NULL`,
+      );
+    });
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -118,6 +142,9 @@ async function bootstrap(): Promise<void> {
       services,
     });
   });
+
+  await resetAgentPresenceOnBoot();
+  app.log.info('[Presence] Agent presence reset to offline on boot');
 
   // Inicia o servidor HTTP e anexa Socket.io
   const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });

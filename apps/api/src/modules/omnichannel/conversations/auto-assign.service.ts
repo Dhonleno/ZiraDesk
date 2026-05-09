@@ -3,6 +3,7 @@ import type { Server } from 'socket.io';
 import { quoteIdent } from './protocols.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { sendWhatsAppTextMessage } from './csat.service.js';
+import { PRESENCE_TIMEOUT_MS } from '../presence.constants.js';
 
 interface AgentCandidateRow {
   user_id: string;
@@ -58,6 +59,7 @@ export async function ensureAgentAssignmentsInfrastructure(
       active_conversations INTEGER NOT NULL DEFAULT 0,
       is_available BOOLEAN NOT NULL DEFAULT false,
       status VARCHAR(20) NOT NULL DEFAULT 'offline',
+      last_seen_at TIMESTAMPTZ,
       pause_reason VARCHAR(100),
       pause_started_at TIMESTAMPTZ,
       pause_notes TEXT,
@@ -67,7 +69,9 @@ export async function ensureAgentAssignmentsInfrastructure(
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${assignmentsRef}
+    ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'offline',
+    ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS pause_reason VARCHAR(100),
     ADD COLUMN IF NOT EXISTS pause_started_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS pause_notes TEXT
@@ -77,6 +81,11 @@ export async function ensureAgentAssignmentsInfrastructure(
     ALTER TABLE ${assignmentsRef}
     ALTER COLUMN is_available SET DEFAULT false,
     ALTER COLUMN status SET DEFAULT 'offline'
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${assignmentsRef}
+    ADD COLUMN IF NOT EXISTS online_since TIMESTAMPTZ
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -94,6 +103,12 @@ export async function ensureAgentAssignmentsInfrastructure(
     UPDATE ${assignmentsRef}
     SET status = CASE WHEN COALESCE(is_available, false) THEN 'online' ELSE 'offline' END
     WHERE status IS NULL OR status = ''
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${assignmentsRef}
+    SET last_seen_at = NOW()
+    WHERE last_seen_at IS NULL
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -181,6 +196,7 @@ async function resolveAgentForAssignment(
        WHERE aa.user_id = $1::uuid
          AND aa.is_available = true
          AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
        LIMIT 1`,
@@ -207,6 +223,7 @@ async function resolveAgentForAssignment(
        JOIN ${agentBotSkillsRef} abs ON abs.user_id = aa.user_id
        WHERE aa.is_available = true
          AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
          AND abs.bot_option_id IN (SELECT id FROM option_scope)
@@ -225,6 +242,7 @@ async function resolveAgentForAssignment(
      JOIN ${usersRef} u ON u.id = aa.user_id
      WHERE aa.is_available = true
        AND aa.status = 'online'
+       AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
        AND u.status = 'active'
        AND u.role IN ('owner', 'admin', 'agent')
      ORDER BY aa.last_assigned_at ASC
@@ -249,6 +267,7 @@ async function persistAutoAssignment(
   const updatedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE ${conversationsRef}
      SET assigned_to = $1::uuid,
+         assigned_at = NOW(),
          status = 'open'
      WHERE id = $2::uuid
        AND assigned_to IS NULL
@@ -266,7 +285,7 @@ async function persistAutoAssignment(
            SELECT COUNT(*)::integer
            FROM ${conversationsRef}
            WHERE assigned_to = $1::uuid
-             AND status IN ('open', 'active_outbound', 'in_service', 'pending', 'bot')
+             AND status IN ('open', 'in_service', 'pending', 'bot')
          )
      WHERE user_id = $1::uuid`,
     agentId,
