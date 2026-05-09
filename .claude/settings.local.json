@@ -46,7 +46,10 @@
       "Bash(npx tsx *)",
       "Bash(pnpm --filter api build)",
       "Bash(npm run *)",
-      "PowerShell($env:PGPASSWORD=\"ziradesk\"; psql -U ziradesk -h localhost -d ziradesk -c \"\\\\d channels\" 2>&1)"
+      "PowerShell($env:PGPASSWORD=\"ziradesk\"; psql -U ziradesk -h localhost -d ziradesk -c \"\\\\d channels\" 2>&1)",
+      "Bash(Get-ChildItem -Path \"d:\\\\Projetos\\\\ZiraDesk\\\\apps\\\\api\\\\prisma\" -Recurse -Depth 3)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(xargs ls -la)"
     ]
   }
 }
