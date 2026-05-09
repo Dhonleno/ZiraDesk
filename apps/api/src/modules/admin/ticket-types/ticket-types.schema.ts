@@ -5,6 +5,8 @@ export const createTicketTypeSchema = z.object({
   icon: z.string().trim().min(1).max(20).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional(),
   sort_order: z.coerce.number().int().min(0).optional(),
+  require_due_date_for_urgent: z.boolean().optional(),
+  require_category_for_waiting: z.boolean().optional(),
 });
 
 export const updateTicketTypeSchema = z.object({
@@ -13,6 +15,8 @@ export const updateTicketTypeSchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Cor inválida').optional(),
   sort_order: z.coerce.number().int().min(0).optional(),
   is_active: z.boolean().optional(),
+  require_due_date_for_urgent: z.boolean().optional(),
+  require_category_for_waiting: z.boolean().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Informe ao menos um campo',
 });

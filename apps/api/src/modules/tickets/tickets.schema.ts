@@ -7,16 +7,21 @@ export const createTicketSchema = z.object({
   source_conversation_id: z.string().uuid().optional(),
   title:           z.string().min(3).max(255),
   description:     z.string().optional(),
-  status:          z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).default('open'),
+  status:          z.enum(['open', 'in_progress', 'waiting']).default('open'),
   priority:        z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   category:        z.string().max(100).optional(),
   type_id:         z.string().uuid().nullable().optional(),
-  assigned_to:     z.string().uuid().optional(),
+  assigned_to:     z.string().uuid().nullable().optional(),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
 });
 
-export const updateTicketSchema = createTicketSchema.partial();
+export const updateTicketSchema = createTicketSchema
+  .omit({ status: true })
+  .partial()
+  .extend({
+    status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+  });
 
 export const listTicketsQuerySchema = z.object({
   page:        z.coerce.number().int().positive().default(1),
@@ -31,6 +36,13 @@ export const listTicketsQuerySchema = z.object({
   category:    z.string().optional(),
   sort_by:     z.enum(['created_at', 'updated_at', 'priority', 'due_date']).default('created_at'),
   sort_order:  z.enum(['asc', 'desc']).default('desc'),
+});
+
+export const findTicketDuplicatesQuerySchema = z.object({
+  title: z.string().trim().min(3).max(255),
+  contact_id: z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
+  exclude_id: z.string().uuid().optional(),
 });
 
 export const createCommentSchema = z.object({
@@ -66,6 +78,7 @@ export const createTimeEntrySchema = z.object({
 export type CreateTicketInput  = z.infer<typeof createTicketSchema>;
 export type UpdateTicketInput  = z.infer<typeof updateTicketSchema>;
 export type ListTicketsQuery   = z.infer<typeof listTicketsQuerySchema>;
+export type FindTicketDuplicatesQuery = z.infer<typeof findTicketDuplicatesQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;

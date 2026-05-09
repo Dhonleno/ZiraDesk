@@ -7,6 +7,7 @@ import type {
   CreateTicketInput,
   UpdateTicketInput,
   ListTicketsQuery,
+  FindTicketDuplicatesQuery,
   CreateCommentInput,
   UpdateCommentInput,
   UpdateChecklistItemInput,
@@ -25,6 +26,13 @@ export class ForbiddenError extends Error {
   constructor(message = 'Acesso negado') {
     super(message);
     this.name = 'ForbiddenError';
+  }
+}
+
+export class BusinessRuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BusinessRuleError';
   }
 }
 
@@ -141,6 +149,83 @@ interface TicketEventRow {
   avatar_url: string | null;
 }
 
+interface TicketDuplicateRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  category: string | null;
+  contact_name: string | null;
+  organization_name: string | null;
+  created_at: Date;
+  updated_at: Date;
+  score: number;
+}
+
+interface TicketTypeRuleRow {
+  require_due_date_for_urgent: boolean;
+  require_category_for_waiting: boolean;
+}
+
+const STATUS_TRANSITIONS: Record<string, ReadonlySet<string>> = {
+  open: new Set(['in_progress', 'waiting', 'resolved', 'closed']),
+  in_progress: new Set(['open', 'waiting', 'resolved', 'closed']),
+  waiting: new Set(['open', 'in_progress', 'resolved', 'closed']),
+  resolved: new Set(['open', 'closed']),
+  closed: new Set(['open']),
+};
+
+function ensureValidStatusTransition(fromStatus: string, toStatus: string): void {
+  if (fromStatus === toStatus) return;
+  const allowed = STATUS_TRANSITIONS[fromStatus];
+  if (!allowed || !allowed.has(toStatus)) {
+    throw new BusinessRuleError(`Transição de status inválida: ${fromStatus} -> ${toStatus}`);
+  }
+}
+
+function ensureTicketConditionalRules(input: {
+  status: string;
+  priority: string;
+  category: string | null;
+  dueDate: string | Date | null;
+  requireDueDateForUrgent: boolean;
+  requireCategoryForWaiting: boolean;
+}): void {
+  if (input.requireDueDateForUrgent && input.priority === 'urgent' && !input.dueDate) {
+    throw new BusinessRuleError('Prazo é obrigatório para tickets urgentes');
+  }
+
+  if (input.requireCategoryForWaiting && input.status === 'waiting' && !(input.category ?? '').trim()) {
+    throw new BusinessRuleError('Categoria é obrigatória quando o status é "Aguardando"');
+  }
+}
+
+async function getTicketTypeRules(typeId: string | null): Promise<TicketTypeRuleRow> {
+  if (!typeId) {
+    return {
+      require_due_date_for_urgent: true,
+      require_category_for_waiting: true,
+    };
+  }
+
+  const rows = await prisma.$queryRawUnsafe<TicketTypeRuleRow[]>(
+    `SELECT require_due_date_for_urgent, require_category_for_waiting
+     FROM ticket_types
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    typeId,
+  );
+
+  if (!rows[0]) {
+    return {
+      require_due_date_for_urgent: true,
+      require_category_for_waiting: true,
+    };
+  }
+
+  return rows[0];
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
@@ -196,9 +281,17 @@ async function ensureTicketInfrastructure(): Promise<void> {
       color VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
       is_active BOOLEAN NOT NULL DEFAULT true,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
+      require_category_for_waiting BOOLEAN NOT NULL DEFAULT true,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ticket_types
+    ADD COLUMN IF NOT EXISTS require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS require_category_for_waiting BOOLEAN NOT NULL DEFAULT true
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -454,9 +547,63 @@ export async function getTicket(id: string) {
   return rows[0];
 }
 
+/* ── findPotentialDuplicates ────────────────────────────────────────────── */
+export async function findTicketDuplicates(query: FindTicketDuplicatesQuery) {
+  await ensureTicketInfrastructure();
+
+  const title = query.title.trim();
+  if (title.length < 3) return [];
+
+  const rows = await prisma.$queryRawUnsafe<TicketDuplicateRow[]>(
+    `SELECT
+       t.id,
+       t.title,
+       t.status,
+       t.priority,
+       t.category,
+       ct.name AS contact_name,
+       o.name AS organization_name,
+       t.created_at,
+       t.updated_at,
+       (
+         CASE WHEN LOWER(t.title) = LOWER($1) THEN 35 ELSE 0 END +
+         CASE WHEN t.title ILIKE '%' || $1 || '%' THEN 20 ELSE 0 END +
+         CASE WHEN $2::uuid IS NOT NULL AND t.contact_id = $2::uuid THEN 35 ELSE 0 END +
+         CASE WHEN $3::uuid IS NOT NULL AND t.organization_id = $3::uuid THEN 25 ELSE 0 END
+       )::integer AS score
+     FROM tickets t
+     LEFT JOIN contacts ct ON ct.id = t.contact_id
+     LEFT JOIN organizations o ON o.id = t.organization_id
+     WHERE t.status IN ('open', 'in_progress', 'waiting', 'resolved')
+       AND ($4::uuid IS NULL OR t.id <> $4::uuid)
+       AND (
+         t.title ILIKE '%' || $1 || '%'
+         OR ($2::uuid IS NOT NULL AND t.contact_id = $2::uuid)
+         OR ($3::uuid IS NOT NULL AND t.organization_id = $3::uuid)
+       )
+     ORDER BY score DESC, t.updated_at DESC
+     LIMIT 5`,
+    title,
+    query.contact_id ?? null,
+    query.organization_id ?? null,
+    query.exclude_id ?? null,
+  );
+
+  return rows;
+}
+
 /* ── createTicket ────────────────────────────────────────────────────────── */
 export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string) {
   await ensureTicketInfrastructure();
+  const typeRules = await getTicketTypeRules(data.type_id ?? null);
+  ensureTicketConditionalRules({
+    status: data.status,
+    priority: data.priority,
+    category: data.category ?? null,
+    dueDate: data.due_date ?? null,
+    requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
+    requireCategoryForWaiting: typeRules.require_category_for_waiting,
+  });
   const tagsLiteral = toPgArray(data.tags ?? []);
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
@@ -517,13 +664,30 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
   const old = await getTicket(id);
 
   const newStatus    = data.status    ?? old.status;
+  ensureValidStatusTransition(old.status, newStatus);
+  const newPriority = data.priority ?? old.priority;
+  const hasCategoryField = Object.prototype.hasOwnProperty.call(data, 'category');
+  const newCategory = hasCategoryField ? (data.category ?? null) : old.category;
+  const newDueDate = data.due_date ?? old.due_date;
+  const hasTypeId = Object.prototype.hasOwnProperty.call(data, 'type_id');
+  const newTypeId = hasTypeId ? (data.type_id ?? null) : old.type_id;
+  const typeRules = await getTicketTypeRules(newTypeId);
+  ensureTicketConditionalRules({
+    status: newStatus,
+    priority: newPriority,
+    category: newCategory,
+    dueDate: newDueDate,
+    requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
+    requireCategoryForWaiting: typeRules.require_category_for_waiting,
+  });
   const resolvedAt   =
     newStatus === 'resolved' && old.status !== 'resolved' ? 'NOW()' :
     newStatus !== 'resolved' && old.status === 'resolved' ? 'NULL'  : null;
 
   const tagsLiteral  = data.tags !== undefined ? toPgArray(data.tags) : null;
-  const hasTypeId = Object.prototype.hasOwnProperty.call(data, 'type_id');
   const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
+  const hasAssignedTo = Object.prototype.hasOwnProperty.call(data, 'assigned_to');
+  const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
 
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `UPDATE tickets SET
@@ -532,13 +696,13 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        status          = COALESCE($3,        status),
        priority        = COALESCE($4,        priority),
        category        = COALESCE($5,        category),
-       assigned_to     = COALESCE($6::uuid,  assigned_to),
-       type_id         = CASE WHEN $7::boolean THEN $8::uuid ELSE type_id END,
-       due_date        = COALESCE($9::timestamptz, due_date),
-       tags            = COALESCE($10::text[], tags),
+       assigned_to     = CASE WHEN $6::boolean THEN $7::uuid ELSE assigned_to END,
+       type_id         = CASE WHEN $8::boolean THEN $9::uuid ELSE type_id END,
+       due_date        = COALESCE($10::timestamptz, due_date),
+       tags            = COALESCE($11::text[], tags),
        resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
        updated_at      = NOW()
-     WHERE id = $11::uuid
+     WHERE id = $12::uuid
      RETURNING
        id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
        assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
@@ -550,7 +714,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     data.status         ?? null,
     data.priority       ?? null,
     data.category       ?? null,
-    data.assigned_to    ?? null,
+    hasAssignedTo,
+    assignedToValue,
     hasTypeId,
     typeIdValue,
     data.due_date       ?? null,
@@ -628,10 +793,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
 export async function deleteTicket(id: string, deletedBy: string, tenantId: string) {
   const old = await getTicket(id);
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE tickets SET status = 'closed', updated_at = NOW() WHERE id = $1::uuid`,
-    id,
-  );
+  await prisma.$executeRawUnsafe(`DELETE FROM tickets WHERE id = $1::uuid`, id);
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
@@ -640,10 +802,10 @@ export async function deleteTicket(id: string, deletedBy: string, tenantId: stri
   );
 
   try {
-    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket: { ...old, status: 'closed' } });
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:deleted', { ticketId: id });
   } catch { /* socket não inicializado em testes */ }
 
-  return { ...old, status: 'closed' };
+  return { deleted: true, id };
 }
 
 /* ── assignTicket ────────────────────────────────────────────────────────── */

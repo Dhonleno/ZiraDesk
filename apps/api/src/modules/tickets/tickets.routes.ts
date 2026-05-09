@@ -8,6 +8,7 @@ import {
   createTicketSchema,
   updateTicketSchema,
   listTicketsQuerySchema,
+  findTicketDuplicatesQuerySchema,
   createCommentSchema,
   updateCommentSchema,
   assignTicketSchema,
@@ -39,8 +40,10 @@ import {
   deleteTimeEntry,
   getTicketTimeline,
   getStats,
+  findTicketDuplicates,
   NotFoundError,
   ForbiddenError,
+  BusinessRuleError,
 } from './tickets.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
@@ -127,6 +130,20 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ success: true, data: rows });
   });
 
+  // GET /api/tickets/duplicates?title=...&contact_id=...&organization_id=...
+  app.get('/duplicates', { preHandler: guard }, async (request, reply) => {
+    const parsed = findTicketDuplicatesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const data = await findTicketDuplicates(parsed.data);
+    return reply.send({ success: true, data });
+  });
+
   // POST /api/tickets
   app.post('/', { preHandler: guard }, async (request, reply) => {
     const parsed = createTicketSchema.safeParse(request.body);
@@ -136,8 +153,15 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Dados inválidos', details: parsed.error.flatten() },
       });
     }
-    const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!);
-    return reply.code(201).send({ success: true, data: ticket });
+    try {
+      const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!);
+      return reply.code(201).send({ success: true, data: ticket });
+    } catch (err) {
+      if (err instanceof BusinessRuleError) {
+        return reply.code(400).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // GET /api/tickets/:id/relations
@@ -371,6 +395,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof BusinessRuleError)
+        return reply.code(400).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

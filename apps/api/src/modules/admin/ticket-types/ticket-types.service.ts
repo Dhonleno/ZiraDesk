@@ -9,6 +9,8 @@ export interface TicketTypeRow {
   color: string;
   is_active: boolean;
   sort_order: number;
+  require_due_date_for_urgent: boolean;
+  require_category_for_waiting: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -52,9 +54,17 @@ async function ensureTicketTypesInfrastructure(schemaName: string): Promise<void
       color VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
       is_active BOOLEAN NOT NULL DEFAULT true,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
+      require_category_for_waiting BOOLEAN NOT NULL DEFAULT true,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${ticketTypesRef}
+    ADD COLUMN IF NOT EXISTS require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS require_category_for_waiting BOOLEAN NOT NULL DEFAULT true
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -82,7 +92,7 @@ export async function listTicketTypes(tenantId: string, schemaName?: string): Pr
   const ticketTypesRef = tableRef(resolvedSchemaName, 'ticket_types');
 
   return prisma.$queryRawUnsafe<TicketTypeRow[]>(
-    `SELECT id, name, icon, color, is_active, sort_order, created_at, updated_at
+    `SELECT id, name, icon, color, is_active, sort_order, require_due_date_for_urgent, require_category_for_waiting, created_at, updated_at
      FROM ${ticketTypesRef}
      ORDER BY is_active DESC, sort_order ASC, name ASC`,
   );
@@ -99,13 +109,15 @@ export async function createTicketType(
   const ticketTypesRef = tableRef(resolvedSchemaName, 'ticket_types');
 
   const rows = await prisma.$queryRawUnsafe<TicketTypeRow[]>(
-    `INSERT INTO ${ticketTypesRef} (name, icon, color, sort_order)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, name, icon, color, is_active, sort_order, created_at, updated_at`,
+    `INSERT INTO ${ticketTypesRef} (name, icon, color, sort_order, require_due_date_for_urgent, require_category_for_waiting)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, icon, color, is_active, sort_order, require_due_date_for_urgent, require_category_for_waiting, created_at, updated_at`,
     data.name.trim(),
     data.icon?.trim() || '🎫',
     data.color ?? '#00C9A7',
     data.sort_order ?? 0,
+    data.require_due_date_for_urgent ?? true,
+    data.require_category_for_waiting ?? true,
   );
 
   return rows[0]!;
@@ -129,14 +141,18 @@ export async function updateTicketType(
          color = COALESCE($3::text, color),
          sort_order = COALESCE($4::integer, sort_order),
          is_active = COALESCE($5::boolean, is_active),
+         require_due_date_for_urgent = COALESCE($6::boolean, require_due_date_for_urgent),
+         require_category_for_waiting = COALESCE($7::boolean, require_category_for_waiting),
          updated_at = NOW()
-     WHERE id = $6::uuid
-     RETURNING id, name, icon, color, is_active, sort_order, created_at, updated_at`,
+     WHERE id = $8::uuid
+     RETURNING id, name, icon, color, is_active, sort_order, require_due_date_for_urgent, require_category_for_waiting, created_at, updated_at`,
     data.name?.trim() ?? null,
     data.icon?.trim() ?? null,
     data.color ?? null,
     data.sort_order ?? null,
     data.is_active ?? null,
+    data.require_due_date_for_urgent ?? null,
+    data.require_category_for_waiting ?? null,
     typeId,
   );
 
