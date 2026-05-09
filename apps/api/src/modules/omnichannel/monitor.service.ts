@@ -3,7 +3,7 @@ import {
   ensureAgentAssignmentsInfrastructure,
   ensureAgentBotSkillsInfrastructure,
 } from './conversations/auto-assign.service.js';
-import { quoteIdent } from './conversations/protocols.js';
+import { ensureConversationProtocolInfrastructure, quoteIdent } from './conversations/protocols.js';
 
 interface MonitorAgent {
   id: string;
@@ -11,6 +11,7 @@ interface MonitorAgent {
   avatar_url: string | null;
   role: string;
   status: 'online' | 'paused' | 'offline' | string;
+  is_available: boolean;
   pause_reason: string | null;
   pause_started_at: string | null;
   active_conversations: number;
@@ -49,6 +50,7 @@ function tableRef(schemaName: string, table: string): string {
 export async function getMonitorSnapshot(schemaName: string): Promise<MonitorResponse> {
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
   const usersRef = tableRef(schemaName, 'users');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
@@ -63,6 +65,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
       avatar_url: string | null;
       role: string;
       status: string;
+      is_available: boolean;
       pause_reason: string | null;
       pause_started_at: Date | null;
       active_conversations: number;
@@ -74,9 +77,18 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          u.avatar_url,
          u.role,
          COALESCE(aa.status, 'offline') AS status,
+         COALESCE(aa.is_available, false) AS is_available,
          aa.pause_reason,
          aa.pause_started_at,
-         COALESCE(aa.active_conversations, 0) AS active_conversations,
+         COALESCE(
+           (
+             SELECT COUNT(*)::integer
+             FROM ${conversationsRef} c_active
+             WHERE c_active.assigned_to = u.id
+               AND c_active.status IN ('open', 'in_service', 'pending', 'bot')
+           ),
+           0
+         ) AS active_conversations,
          COALESCE(
            json_agg(
              json_build_object(
@@ -104,9 +116,9 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          u.avatar_url,
          u.role,
          aa.status,
+         aa.is_available,
          aa.pause_reason,
-         aa.pause_started_at,
-         aa.active_conversations
+         aa.pause_started_at
        ORDER BY u.name ASC`,
     ),
     prisma.$queryRawUnsafe<Array<{ tag: string | null; total: bigint }>>(
@@ -122,7 +134,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
       `SELECT assigned_to::text AS agent_id, COUNT(*) AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'active_outbound', 'in_service', 'pending', 'bot')
+         AND status IN ('open', 'in_service', 'pending', 'bot')
        GROUP BY assigned_to`,
     ),
     prisma.$queryRawUnsafe<Array<{
@@ -138,7 +150,15 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
              AND c.resolved_at::date = CURRENT_DATE
          ) AS total_resolved,
          (
-           SELECT AVG(EXTRACT(EPOCH FROM (c.resolved_at - c.created_at)) / 60.0)
+           SELECT AVG(EXTRACT(EPOCH FROM (
+             c.resolved_at - COALESCE(
+               CASE
+                 WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+                 ELSE NULL
+               END,
+               c.created_at
+             )
+           )) / 60.0)
            FROM ${conversationsRef} c
            WHERE c.resolved_at IS NOT NULL
              AND c.resolved_at::date = CURRENT_DATE

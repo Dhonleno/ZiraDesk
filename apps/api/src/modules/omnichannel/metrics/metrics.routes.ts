@@ -9,6 +9,7 @@ import {
   getByChannel,
   getByDepartment,
   getCsatDistribution,
+  getMyStats,
   getOverview,
   getPeakHours,
   getVolumeByPeriod,
@@ -96,6 +97,26 @@ function getFilters(raw: z.infer<typeof metricsQuerySchema>) {
 }
 
 export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/metrics/me', { preHandler: guard }, async (request, reply) => {
+    const parsed = metricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = await resolveSchemaNameFromRequest(request)();
+      const data = await getMyStats(request.user.id, getFilters(parsed.data), schemaName);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar métricas' },
+      });
+    }
+  });
+
   app.get('/metrics/overview', { preHandler: guard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {

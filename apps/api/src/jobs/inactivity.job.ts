@@ -1,4 +1,4 @@
-import { Queue, Worker } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
@@ -30,7 +30,7 @@ interface TenantSettingsRow {
   settings: unknown;
 }
 
-interface InactivitySettings {
+export interface InactivitySettings {
   enabled: boolean;
   warningMinutes: number;
   closeMinutes: number;
@@ -87,7 +87,7 @@ function parseInactivitySettings(settings: unknown): InactivitySettings {
   };
 }
 
-async function getTenantInactivitySettings(tenantId: string): Promise<InactivitySettings> {
+export async function getTenantInactivitySettings(tenantId: string): Promise<InactivitySettings> {
   const rows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
     'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
     tenantId,
@@ -255,6 +255,15 @@ inactivityWorker.on('failed', (job, err) => {
 export async function cancelInactivityJobs(conversationId: string): Promise<void> {
   await inactivityQueue.remove(`warning-${conversationId}`);
   await inactivityQueue.remove(`close-${conversationId}`);
+
+  const pendingJobs = await inactivityQueue.getJobs(['delayed', 'waiting']);
+  const jobsFromConversation = pendingJobs.filter((job: Job<InactivityJobData>) => {
+    return job.data?.conversationId === conversationId;
+  });
+
+  await Promise.all(jobsFromConversation.map(async (job) => {
+    await job.remove();
+  }));
 }
 
 export async function scheduleInactivityCheck(

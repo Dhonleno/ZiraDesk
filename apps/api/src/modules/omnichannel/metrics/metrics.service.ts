@@ -1,5 +1,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../../../config/database.js';
+import { ensureConversationProtocolInfrastructure } from '../conversations/protocols.js';
+import { ensureConversationCsatInfrastructure } from '../conversations/csat.infrastructure.js';
+import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
 
 interface MetricsFilters {
   dateFrom: Date;
@@ -12,9 +15,20 @@ interface MetricsFilters {
 
 type MetricsDbClient = Pick<PrismaClient, '$transaction'>;
 type TxClient = Prisma.TransactionClient;
+const initializedMetricSchemas = new Set<string>();
 
 function toSafeSchema(schemaName: string): string {
   return schemaName.replace(/"/g, '""');
+}
+
+async function ensureMetricsInfrastructure(schemaName: string): Promise<void> {
+  if (initializedMetricSchemas.has(schemaName)) return;
+
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
+  await ensureConversationCsatInfrastructure(prisma, schemaName);
+  await ensureCloseConfigInfrastructure(schemaName);
+
+  initializedMetricSchemas.add(schemaName);
 }
 
 async function withTenantSchema<T>(
@@ -68,6 +82,8 @@ function toPercentage(count: number, total: number): number {
 }
 
 export async function getOverview(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
@@ -92,7 +108,15 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 
     const tmaRows = await tx.$queryRawUnsafe<Array<{ avg_minutes: number | null }>>(
       `SELECT
-         ROUND(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 60))::integer AS avg_minutes
+         ROUND(AVG(EXTRACT(EPOCH FROM (
+           resolved_at - COALESCE(
+             CASE
+               WHEN conversation_type = 'outbound' THEN outbound_returned_at
+               ELSE NULL
+             END,
+             created_at
+           )
+         )) / 60))::integer AS avg_minutes
        FROM conversations
        ${whereSql}
        ${whereSql ? 'AND' : 'WHERE'} status = 'resolved'
@@ -110,6 +134,8 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
          SELECT
            c.id,
            c.created_at,
+           c.conversation_type,
+           c.outbound_returned_at,
            MIN(m.created_at) FILTER (
              WHERE m.sender_type = 'agent'
                AND m.is_internal = false
@@ -121,7 +147,15 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
        )
        SELECT
          ROUND(
-           AVG(EXTRACT(EPOCH FROM (first_agent_message_at - created_at)) / 60)
+           AVG(EXTRACT(EPOCH FROM (
+             first_agent_message_at - COALESCE(
+               CASE
+                 WHEN conversation_type = 'outbound' THEN outbound_returned_at
+                 ELSE NULL
+               END,
+               created_at
+             )
+           )) / 60)
          )::integer AS avg_minutes
        FROM first_responses
        WHERE first_agent_message_at IS NOT NULL`,
@@ -235,6 +269,8 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 }
 
 export async function getVolumeByPeriod(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
@@ -266,6 +302,8 @@ export async function getVolumeByPeriod(filters: MetricsFilters, schemaName: str
 }
 
 export async function getByAgent(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = ['c.assigned_to IS NOT NULL'];
     const params: unknown[] = [];
@@ -285,7 +323,15 @@ export async function getByAgent(filters: MetricsFilters, schemaName: string, db
          u.id AS agent_id,
          COUNT(c.id) AS total,
          COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
-         ROUND(AVG(EXTRACT(EPOCH FROM (c.resolved_at - c.created_at)) / 60))::integer AS avg_minutes,
+         ROUND(AVG(EXTRACT(EPOCH FROM (
+           c.resolved_at - COALESCE(
+             CASE
+               WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+               ELSE NULL
+             END,
+             c.created_at
+           )
+         )) / 60))::integer AS avg_minutes,
          ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat
        FROM conversations c
        JOIN users u ON u.id = c.assigned_to
@@ -304,6 +350,8 @@ export async function getByAgent(filters: MetricsFilters, schemaName: string, db
 }
 
 export async function getByChannel(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
@@ -326,6 +374,8 @@ export async function getByChannel(filters: MetricsFilters, schemaName: string, 
 }
 
 export async function getByDepartment(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
@@ -353,6 +403,8 @@ export async function getByDepartment(filters: MetricsFilters, schemaName: strin
 }
 
 export async function getPeakHours(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
@@ -383,7 +435,82 @@ export async function getPeakHours(filters: MetricsFilters, schemaName: string, 
   });
 }
 
+export async function getMyStats(
+  agentId: string,
+  filters: MetricsFilters,
+  schemaName: string,
+  db: MetricsDbClient = prisma,
+) {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const safeSchema = toSafeSchema(schemaName);
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchema}", public`);
+
+    const statsRows = await tx.$queryRawUnsafe<Array<{
+      total: bigint;
+      resolved: bigint;
+      avg_minutes: number | null;
+      avg_csat: number | null;
+      sla_pct: number | null;
+    }>>(
+      `SELECT
+         COUNT(c.id) AS total,
+         COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
+         ROUND(AVG(EXTRACT(EPOCH FROM (
+           c.resolved_at - COALESCE(
+             CASE WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at ELSE NULL END,
+             c.created_at
+           )
+         )) / 60))::integer AS avg_minutes,
+         ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat,
+         ROUND(
+           COUNT(c.id) FILTER (
+             WHERE fr.first_response_seconds IS NOT NULL
+               AND fr.first_response_seconds <= 300
+           ) * 100.0 / NULLIF(COUNT(c.id), 0),
+           1
+         ) AS sla_pct
+       FROM conversations c
+       LEFT JOIN LATERAL (
+         SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
+         FROM messages m
+         WHERE m.conversation_id = c.id
+           AND m.sender_type = 'agent'
+           AND m.is_internal = false
+       ) fr ON true
+       WHERE c.assigned_to = $1::uuid
+         AND c.created_at >= $2::timestamptz
+         AND c.created_at < $3::timestamptz`,
+      agentId,
+      filters.dateFrom,
+      filters.dateToExclusive,
+    );
+
+    const onlineRows = await tx.$queryRawUnsafe<Array<{ online_since: Date | null }>>(
+      `SELECT aa.updated_at AS online_since
+       FROM agent_assignments aa
+       WHERE aa.user_id = $1::uuid
+         AND aa.status = 'online'
+       LIMIT 1`,
+      agentId,
+    );
+
+    const s = statsRows[0];
+    return {
+      total: toNumber(s?.total),
+      resolved: toNumber(s?.resolved),
+      avg_minutes: s?.avg_minutes ?? null,
+      avg_csat: s?.avg_csat ?? null,
+      sla_pct: s?.sla_pct ?? null,
+      onlineSince: onlineRows[0]?.online_since?.toISOString() ?? null,
+    };
+  });
+}
+
 export async function getCsatDistribution(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = ['csat_score IS NOT NULL'];
     const params: unknown[] = [];

@@ -17,6 +17,8 @@ const DEFAULT_INACTIVITY_WARNING_MESSAGE =
   'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.';
 const DEFAULT_INACTIVITY_CLOSE_MESSAGE =
   'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊';
+const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE = 'end_of_day';
+const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS = 24;
 const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   '✅ Seu atendimento foi aceito!',
   '',
@@ -48,6 +50,17 @@ async function removeOldLogos(tenantId: string, keepFileName: string) {
 function resolveLogoPath(fileName: string): string | null {
   if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   return path.join(LOGO_DIR, fileName);
+}
+
+function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' {
+  return value === 'hours' ? 'hours' : DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE;
+}
+
+function resolveActiveOutboundValidityHours(value: unknown): number {
+  if (typeof value !== 'number') return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS;
+  const parsed = Math.trunc(value);
+  if (parsed < 1 || parsed > 168) return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS;
+  return parsed;
 }
 
 export async function readLogoFile(fileName: string): Promise<Buffer | null> {
@@ -105,6 +118,8 @@ export async function getSettings(tenantId: string) {
       (s.inactivity_warning_message as string | undefined) ?? DEFAULT_INACTIVITY_WARNING_MESSAGE,
     inactivity_close_message:
       (s.inactivity_close_message as string | undefined) ?? DEFAULT_INACTIVITY_CLOSE_MESSAGE,
+    active_outbound_validity_mode: resolveActiveOutboundValidityMode(s.active_outbound_validity_mode),
+    active_outbound_validity_hours: resolveActiveOutboundValidityHours(s.active_outbound_validity_hours),
     bot_assigned_message:
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     created_at: tenant.createdAt,
@@ -146,6 +161,12 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.inactivity_close_message !== undefined
       ? { inactivity_close_message: data.inactivity_close_message }
       : {}),
+    ...(data.active_outbound_validity_mode !== undefined
+      ? { active_outbound_validity_mode: data.active_outbound_validity_mode }
+      : {}),
+    ...(data.active_outbound_validity_hours !== undefined
+      ? { active_outbound_validity_hours: data.active_outbound_validity_hours }
+      : {}),
     ...(data.bot_assigned_message !== undefined
       ? { bot_assigned_message: data.bot_assigned_message }
       : {}),
@@ -183,6 +204,8 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       (s.inactivity_warning_message as string | undefined) ?? DEFAULT_INACTIVITY_WARNING_MESSAGE,
     inactivity_close_message:
       (s.inactivity_close_message as string | undefined) ?? DEFAULT_INACTIVITY_CLOSE_MESSAGE,
+    active_outbound_validity_mode: resolveActiveOutboundValidityMode(s.active_outbound_validity_mode),
+    active_outbound_validity_hours: resolveActiveOutboundValidityHours(s.active_outbound_validity_hours),
     bot_assigned_message:
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
   };

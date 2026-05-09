@@ -28,8 +28,10 @@ import {
 } from '../omnichannel/conversations/csat.service.js';
 import {
   cancelInactivityJobs,
+  getTenantInactivitySettings,
   scheduleInactivityCheck,
 } from '../../jobs/inactivity.job.js';
+import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
 
 interface MetaMessage {
   from: string;
@@ -65,6 +67,7 @@ interface MetaStatus {
     code?: number;
     title?: string;
     message?: string;
+    href?: string;
     error_data?: {
       details?: string;
       messaging_product?: string;
@@ -118,6 +121,8 @@ interface ContactRow {
 interface ConversationRow {
   id: string;
   assigned_to?: string | null;
+  outbound_origin_agent_id?: string | null;
+  outbound_expires_at?: Date | null;
   bot_stage?: string | null;
   status?: string;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
@@ -125,9 +130,19 @@ interface ConversationRow {
   csat_expires_at?: Date | null;
 }
 
+interface AvailableAgentRow {
+  user_id: string;
+  name: string;
+}
+
 interface MessageRow {
   id: string;
   conversation_id: string;
+}
+
+interface ConversationStatusRow {
+  id: string;
+  status: string;
 }
 
 interface ChannelMatch {
@@ -152,6 +167,8 @@ interface MentionLookupRow {
 interface ActiveConversationByPhoneRow {
   id: string;
 }
+
+const ACTIVE_CONVERSATION_STATUSES = "'open', 'pending', 'active_outbound', 'in_service', 'in_progress', 'bot'";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -211,6 +228,64 @@ function getMentionMediaSubtype(row: MentionLookupRow): string | null {
   if (!row.metadata || typeof row.metadata !== 'object') return null;
   const mediaSubtype = (row.metadata as Record<string, unknown>).media_subtype;
   return typeof mediaSubtype === 'string' && mediaSubtype.trim() ? mediaSubtype.trim() : null;
+}
+
+async function findBestAvailableAgent(
+  tx: Pick<typeof prisma, '$queryRawUnsafe'>,
+  preferredAgentId?: string | null,
+): Promise<AvailableAgentRow | null> {
+  if (preferredAgentId) {
+    const preferredRows = await tx.$queryRawUnsafe<AvailableAgentRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM agent_assignments aa
+       JOIN users u ON u.id = aa.user_id
+       WHERE aa.user_id = $1::uuid
+         AND aa.is_available = true
+         AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+         AND u.status = 'active'
+         AND u.role IN ('owner', 'admin', 'agent')
+       LIMIT 1`,
+      preferredAgentId,
+    );
+
+    if (preferredRows[0]) return preferredRows[0];
+  }
+
+  const rows = await tx.$queryRawUnsafe<AvailableAgentRow[]>(
+    `SELECT aa.user_id, u.name
+     FROM agent_assignments aa
+     JOIN users u ON u.id = aa.user_id
+     WHERE aa.is_available = true
+       AND aa.status = 'online'
+       AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+       AND u.status = 'active'
+       AND u.role IN ('owner', 'admin', 'agent')
+     ORDER BY aa.last_assigned_at ASC
+     LIMIT 1`,
+  );
+
+  return rows[0] ?? null;
+}
+
+async function syncActiveConversationCounters(
+  tx: Pick<typeof prisma, '$executeRawUnsafe'>,
+  userIds: Array<string | null | undefined>,
+): Promise<void> {
+  const unique = Array.from(new Set(userIds.filter((value): value is string => Boolean(value))));
+  for (const userId of unique) {
+    await tx.$executeRawUnsafe(
+      `UPDATE agent_assignments aa
+       SET active_conversations = (
+         SELECT COUNT(*)::integer
+         FROM conversations c
+         WHERE c.assigned_to = aa.user_id
+           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+       )
+       WHERE aa.user_id = $1::uuid`,
+      userId,
+    );
+  }
 }
 
 async function findChannelByPhoneNumberId(
@@ -333,7 +408,7 @@ async function closeConversationOutsideHours(
      SET status = 'closed',
          resolved_at = NOW()
      WHERE id = $1::uuid
-       AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')`,
+       AND status IN (${ACTIVE_CONVERSATION_STATUSES})`,
     conversationId,
   );
 }
@@ -366,7 +441,7 @@ async function handleOutsideBusinessHours({
      JOIN "${schemaName}".contacts ct ON ct.id = c.contact_id
      WHERE c.channel_id = $1::uuid
        AND (ct.whatsapp = $2 OR ct.phone = $2)
-       AND c.status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+       AND c.status IN (${ACTIVE_CONVERSATION_STATUSES})
      ORDER BY c.created_at DESC
      LIMIT 1`,
     channelId,
@@ -579,15 +654,35 @@ async function processIncomingMessage(
 
     console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
 
+    await tx.$executeRawUnsafe(
+      `UPDATE conversations
+       SET status = 'closed',
+           closed_at = NOW(),
+           metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+       WHERE contact_id = $1::uuid
+         AND channel_id = $2::uuid
+         AND status = 'active_outbound'
+         AND outbound_expires_at IS NOT NULL
+         AND outbound_expires_at <= NOW()`,
+      contactId,
+      channelId,
+      JSON.stringify({
+        active_outbound_expired: true,
+        active_outbound_expired_at: new Date().toISOString(),
+      }),
+    );
+
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id, status, csat_stage, csat_score, csat_expires_at
               , assigned_to
+              , outbound_origin_agent_id
+              , outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
        FROM conversations
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
          AND (
-           status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+           status IN (${ACTIVE_CONVERSATION_STATUSES})
            OR (
              status = 'resolved'
              AND csat_stage IN ('sent', 'waiting_comment')
@@ -630,10 +725,24 @@ async function processIncomingMessage(
       isNewConversation = true;
     }
 
+    await tx.$executeRawUnsafe(
+      `UPDATE conversations
+       SET metadata = COALESCE(metadata, '{}'::jsonb)
+         - 'whatsapp_reengagement_required'
+         - 'whatsapp_reengagement_failed_at'
+         - 'whatsapp_reengagement_error_code'
+         - 'whatsapp_reengagement_error_title'
+         - 'whatsapp_reengagement_error_message'
+         - 'whatsapp_reengagement_error_details'
+       WHERE id = $1::uuid`,
+      conversationId,
+    );
+
     const currentConversation = convRows[0] ?? null;
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
     const currentCsatExpiresAt = currentConversation?.csat_expires_at ?? null;
+    const isActiveOutboundReturnFlow = currentConversation?.status === 'active_outbound';
 
     let mentionMetadata: Record<string, unknown> | null = null;
     if (quotedExternalId) {
@@ -810,18 +919,90 @@ async function processIncomingMessage(
         outsideBusinessHours,
         csatHandled: true,
         csatPayload,
+        refreshInactivityForAssignedConversation: false,
       };
     }
 
     const currentAssignedTo = currentConversation?.assigned_to ?? null;
     const currentBotStage = currentConversation?.bot_stage ?? null;
-    const hasAssignedAgent = Boolean(currentAssignedTo);
-    const canProcessBot = isNewConversation || (!hasAssignedAgent && currentBotStage === 'waiting_choice');
-    const skipBot = hasAssignedAgent || currentBotStage === 'done';
+    let hasAssignedAgent = Boolean(currentAssignedTo);
 
-    const botResponse = (!skipBot && canProcessBot)
-      ? await processBotMessage(content, conversationId, isNewConversation, tx, false)
-      : null;
+    if (isActiveOutboundReturnFlow) {
+      const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
+      let preferredAgentName: string | null = null;
+      if (preferredAgentId) {
+        const preferredAgentRows = await tx.$queryRawUnsafe<Array<{ name: string | null }>>(
+          `SELECT name
+           FROM users
+           WHERE id = $1::uuid
+           LIMIT 1`,
+          preferredAgentId,
+        );
+        preferredAgentName = preferredAgentRows[0]?.name ?? null;
+      }
+      const selectedAgent = await findBestAvailableAgent(tx, preferredAgentId);
+      const resolvedAssignedTo = selectedAgent?.user_id ?? null;
+      hasAssignedAgent = Boolean(resolvedAssignedTo);
+
+      if (resolvedAssignedTo !== currentAssignedTo) {
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET assigned_to = $1::uuid,
+               assigned_at = NOW()
+           WHERE id = $2::uuid`,
+          resolvedAssignedTo,
+          conversationId,
+        );
+      }
+
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET status = 'open',
+             outbound_returned_at = NOW(),
+             metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+         WHERE id = $1::uuid`,
+        conversationId,
+        JSON.stringify({
+          active_outbound_returned: true,
+          active_outbound_returned_at: new Date().toISOString(),
+          active_outbound_origin_agent_id: preferredAgentId,
+          active_outbound_origin_agent_name: preferredAgentName,
+          active_outbound_received_by_agent_id: selectedAgent?.user_id ?? null,
+          active_outbound_received_by_agent_name: selectedAgent?.name ?? null,
+          active_outbound_replied_within_window: true,
+        }),
+      );
+
+      if (selectedAgent?.user_id) {
+        await tx.$executeRawUnsafe(
+          `UPDATE agent_assignments
+           SET last_assigned_at = NOW()
+           WHERE user_id = $1::uuid`,
+          selectedAgent.user_id,
+        );
+      }
+
+      await syncActiveConversationCounters(tx, [currentAssignedTo, selectedAgent?.user_id ?? null]);
+    }
+
+    // Mensagem de cliente em conversa com agente atribuído deve sempre manter o fluxo humano.
+    if (hasAssignedAgent) {
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET last_message_at = NOW()
+         WHERE id = $1::uuid`,
+        conversationId,
+      );
+    }
+
+    let botResponse: Awaited<ReturnType<typeof processBotMessage>> | null = null;
+    if (!hasAssignedAgent && !isActiveOutboundReturnFlow) {
+      const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
+      const skipBot = currentBotStage === 'done';
+      if (!skipBot && canProcessBot) {
+        botResponse = await processBotMessage(content, conversationId, isNewConversation, tx, false);
+      }
+    }
 
     const msgRows = await tx.$queryRawUnsafe<
       [{ id: string; content: string; created_at: Date; sender_type: string }]
@@ -905,7 +1086,7 @@ async function processIncomingMessage(
     return {
       conversationId,
       isNewConversation,
-      shouldAutoAssign: (isNewConversation && !botResponse) || botResponse?.type === 'choice',
+      shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
       botTag: botResponse?.type === 'choice' ? (botResponse.option?.tag ?? undefined) : undefined,
       botOptionId: botResponse?.type === 'choice' ? (botResponse.option?.id ?? undefined) : undefined,
       message: savedMessage,
@@ -921,8 +1102,22 @@ async function processIncomingMessage(
       outsideBusinessHours,
       csatHandled: false,
       csatPayload: null,
+      refreshInactivityForAssignedConversation: hasAssignedAgent,
     };
   });
+
+  if (result.refreshInactivityForAssignedConversation) {
+    await cancelInactivityJobs(result.conversationId);
+    const inactivitySettings = await getTenantInactivitySettings(tenantId);
+    if (inactivitySettings.enabled && isOpen) {
+      await scheduleInactivityCheck(
+        result.conversationId,
+        tenantId,
+        schemaName,
+        inactivitySettings.warningMinutes,
+      );
+    }
+  }
 
   const io = getSocketServer();
   if (result.isNewConversation) {
@@ -958,20 +1153,17 @@ async function processIncomingMessage(
     });
   }
 
-  await cancelInactivityJobs(result.conversationId);
-  const inactivityEnabled = tenantSettings.inactivity_enabled !== false;
-  const warningMinutesRaw = Number(tenantSettings.inactivity_warning_minutes ?? 30);
-  const warningMinutes = Number.isFinite(warningMinutesRaw)
-    ? Math.max(1, Math.floor(warningMinutesRaw))
-    : 30;
-
-  if (inactivityEnabled && isOpen) {
-    await scheduleInactivityCheck(
-      result.conversationId,
-      tenantId,
-      schemaName,
-      warningMinutes,
-    );
+  if (!result.refreshInactivityForAssignedConversation) {
+    await cancelInactivityJobs(result.conversationId);
+    const inactivitySettings = await getTenantInactivitySettings(tenantId);
+    if (inactivitySettings.enabled && isOpen) {
+      await scheduleInactivityCheck(
+        result.conversationId,
+        tenantId,
+        schemaName,
+        inactivitySettings.warningMinutes,
+      );
+    }
   }
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
@@ -1046,6 +1238,16 @@ async function processStatusUpdate(
   _app: FastifyInstance,
   status: MetaStatus,
 ) {
+  const firstError = status.errors?.[0];
+  const firstErrorCode = typeof firstError?.code === 'number' ? firstError.code : null;
+  const firstErrorTitle = typeof firstError?.title === 'string' ? firstError.title : null;
+  const firstErrorMessage = typeof firstError?.message === 'string' ? firstError.message : null;
+  const firstErrorDetails =
+    typeof firstError?.error_data?.details === 'string'
+      ? firstError.error_data.details
+      : null;
+  const requiresReengagementTemplate = status.status === 'failed' && firstErrorCode === 131047;
+
   const statusMap: Record<string, string> = {
     sent: 'sent',
     delivered: 'delivered',
@@ -1058,6 +1260,12 @@ async function processStatusUpdate(
     webhook_timestamp: status.timestamp,
     recipient_id: status.recipient_id,
     errors: status.errors ?? null,
+    whatsapp_error_code: firstErrorCode,
+    whatsapp_error_title: firstErrorTitle,
+    whatsapp_error_message: firstErrorMessage,
+    whatsapp_error_details: firstErrorDetails,
+    whatsapp_reengagement_required: requiresReengagementTemplate || null,
+    whatsapp_reengagement_detected_at: requiresReengagementTemplate ? new Date().toISOString() : null,
   };
 
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
@@ -1077,6 +1285,71 @@ async function processStatusUpdate(
     );
 
     if (result[0]) {
+      if (requiresReengagementTemplate) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "${tenant.schema_name}".conversations
+           SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+           WHERE id = $1::uuid`,
+          result[0].conversation_id,
+          JSON.stringify({
+            whatsapp_reengagement_required: true,
+            whatsapp_reengagement_failed_at: new Date().toISOString(),
+            whatsapp_reengagement_error_code: firstErrorCode,
+            whatsapp_reengagement_error_title: firstErrorTitle,
+            whatsapp_reengagement_error_message: firstErrorMessage,
+            whatsapp_reengagement_error_details: firstErrorDetails,
+          }),
+        );
+
+        const convRows = await prisma.$queryRawUnsafe<ConversationStatusRow[]>(
+          `SELECT id, status
+           FROM "${tenant.schema_name}".conversations
+           WHERE id = $1::uuid
+           LIMIT 1`,
+          result[0].conversation_id,
+        );
+
+        if (convRows[0]?.status === 'active_outbound') {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "${tenant.schema_name}".messages (
+               id,
+               conversation_id,
+               sender_type,
+               content,
+               content_type,
+               is_internal,
+               status,
+               metadata
+             )
+             SELECT
+               gen_random_uuid(),
+               $1::uuid,
+               'system',
+               $2,
+               'text',
+               false,
+               'failed',
+               $3::jsonb
+             WHERE NOT EXISTS (
+               SELECT 1
+               FROM "${tenant.schema_name}".messages m
+               WHERE m.conversation_id = $1::uuid
+                 AND m.sender_type = 'system'
+                 AND m.metadata->>'delivery_failed_for_message_id' = $4
+             )`,
+            result[0].conversation_id,
+            'Falha no envio ativo do WhatsApp: a janela de 24h expirou. Envie um template para reengajar o contato.',
+            JSON.stringify({
+              delivery_failed_for_message_id: result[0].id,
+              delivery_failed_external_id: status.id,
+              delivery_failed_error_code: firstErrorCode,
+              delivery_failed_type: 'whatsapp_reengagement_required',
+            }),
+            result[0].id,
+          );
+        }
+      }
+
       if (status.status === 'failed') {
         console.error('[WhatsApp Status] Delivery failed', JSON.stringify({
           tenantId: tenant.id,
@@ -1092,8 +1365,14 @@ async function processStatusUpdate(
       io.to(`tenant:${tenant.id}`).emit('message:status', {
         messageId: result[0].id,
         conversationId: result[0].conversation_id,
+        externalId: status.id,
         status: mappedStatus,
       });
+      if (requiresReengagementTemplate) {
+        io.to(`tenant:${tenant.id}`).emit('conversation:updated', {
+          conversationId: result[0].conversation_id,
+        });
+      }
       break;
     }
   }

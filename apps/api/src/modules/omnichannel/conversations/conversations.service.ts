@@ -85,6 +85,28 @@ async function ensureConversationHelpersInfrastructure(tenantId?: string): Promi
   `);
 }
 
+type ActiveCounterClient = Pick<typeof prisma, '$executeRawUnsafe'>;
+
+async function syncActiveConversationCounters(
+  db: ActiveCounterClient,
+  userIds: Array<string | null | undefined>,
+): Promise<void> {
+  const uniqueIds = Array.from(new Set(userIds.filter((value): value is string => Boolean(value))));
+  for (const userId of uniqueIds) {
+    await db.$executeRawUnsafe(
+      `UPDATE agent_assignments aa
+       SET active_conversations = (
+         SELECT COUNT(*)::integer
+         FROM conversations c
+         WHERE c.assigned_to = aa.user_id
+           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+       )
+       WHERE aa.user_id = $1::uuid`,
+      userId,
+    );
+  }
+}
+
 interface ConversationRow {
   id: string;
   contact_id: string | null;
@@ -96,6 +118,7 @@ interface ConversationRow {
   status: string;
   protocol_number: string | null;
   assigned_to: string | null;
+  assigned_at: Date | null;
   subject: string | null;
   last_message: string | null;
   last_message_at: Date | null;
@@ -121,6 +144,20 @@ interface ConversationTagChip {
   id: string;
   name: string;
   color: string;
+}
+
+type ActiveOutboundValidityMode = 'end_of_day' | 'hours';
+
+function resolveActiveOutboundValidity(
+  settings: Record<string, unknown>,
+): { mode: ActiveOutboundValidityMode; hours: number } {
+  const modeRaw = settings.active_outbound_validity_mode;
+  const hoursRaw = settings.active_outbound_validity_hours;
+  const mode: ActiveOutboundValidityMode = modeRaw === 'hours' ? 'hours' : 'end_of_day';
+  const parsedHours = typeof hoursRaw === 'number' ? Math.trunc(hoursRaw) : Number.NaN;
+  const hours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 168 ? parsedHours : 24;
+
+  return { mode, hours };
 }
 
 function normalizeProtocolNumber(value: string | null | undefined): string | null {
@@ -173,9 +210,16 @@ interface MentionMetadata {
   media_subtype?: string | null;
 }
 
+interface WhatsAppTemplateMetadata {
+  name: string;
+  language: string;
+  components?: Array<Record<string, unknown>>;
+}
+
 interface MessageMetadataPatch {
   filename?: string;
   mention?: MentionMetadata;
+  whatsapp_template?: WhatsAppTemplateMetadata;
 }
 
 interface MessageCursorRow {
@@ -237,7 +281,13 @@ function buildListConversationSqlContext(
 
   if (tab === 'active') {
     conditions.push('c.assigned_to IS NOT NULL');
-    conditions.push("c.status IN ('open', 'active_outbound')");
+    conditions.push("c.status IN ('open', 'in_service')");
+
+    if (assigned_to_me) {
+      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
+    }
+  } else if (tab === 'return') {
+    conditions.push("c.status = 'active_outbound'");
 
     if (assigned_to_me) {
       conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
@@ -300,6 +350,7 @@ interface MessagePageResult {
 
 interface ConversationCounts {
   active: number;
+  return: number;
   mine: number;
   queue: number;
   closed: number;
@@ -374,7 +425,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
       `SELECT
          c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
-         c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
+         c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
          c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
          c.created_at, c.metadata,
          ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
@@ -527,6 +578,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 
   const rows = await prisma.$queryRawUnsafe<Array<{
     active: bigint;
+    return: bigint;
     mine: bigint;
     queue: bigint;
     closed: bigint;
@@ -534,11 +586,14 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
     `SELECT
        COUNT(*) FILTER (
          WHERE assigned_to IS NOT NULL
-           AND status IN ('open', 'active_outbound')
+           AND status IN ('open', 'in_service')
        ) AS active,
        COUNT(*) FILTER (
+         WHERE status = 'active_outbound'
+       ) AS return,
+       COUNT(*) FILTER (
          WHERE assigned_to::text = $1::text
-           AND status IN ('open', 'active_outbound')
+           AND status IN ('open', 'in_service')
        ) AS mine,
        COUNT(*) FILTER (
          WHERE assigned_to IS NULL
@@ -554,6 +609,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
   const counts = rows[0];
   return {
     active: Number(counts?.active ?? 0),
+    return: Number(counts?.return ?? 0),
     mine: Number(counts?.mine ?? 0),
     queue: Number(counts?.queue ?? 0),
     closed: Number(counts?.closed ?? 0),
@@ -563,48 +619,117 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
   const schemaName = await getSchemaName(tenantId);
   const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
   await ensureConversationCsatInfrastructure(prisma, schemaName);
   if (schemaName) {
     await ensureConversationTagsInfrastructure(schemaName);
   }
+  const conversationsRef = `${schemaPrefix}conversations`;
+  const contactsRef = `${schemaPrefix}contacts`;
+  const organizationsRef = `${schemaPrefix}organizations`;
+  const usersRef = `${schemaPrefix}users`;
+  const channelsRef = `${schemaPrefix}channels`;
+  const clientsRef = `${schemaPrefix}clients`;
   const conversationTagsRef = `${schemaPrefix}conversation_tags`;
   const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
-  const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `SELECT
-       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
-       c.status, c.protocol_number, c.assigned_to, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
-       c.created_at, c.metadata,
-       ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
-       o.name AS organization_name,
-       u.name AS assigned_name,
-       ch.name AS channel_name,
-       COALESCE(
-         (
-           SELECT json_agg(
-             json_build_object(
-               'id', ctag.id,
-               'name', ctag.name,
-               'color', ctag.color
+  let convRows: ConversationRow[] = [];
+  try {
+    convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+      `SELECT
+         c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+         c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
+         c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+         c.created_at, c.metadata,
+         ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
+         o.name AS organization_name,
+         u.name AS assigned_name,
+         ch.name AS channel_name,
+         COALESCE(
+           (
+             SELECT json_agg(
+               json_build_object(
+                 'id', ctag.id,
+                 'name', ctag.name,
+                 'color', ctag.color
+               )
+               ORDER BY ctag.sort_order ASC, ctag.name ASC
              )
-             ORDER BY ctag.sort_order ASC, ctag.name ASC
-           )
-           FROM ${conversationTagAssignmentsRef} cta
-           JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
-           WHERE cta.conversation_id = c.id
-             AND ctag.is_active = true
-         ),
-         '[]'::json
-       ) AS tags
-     FROM ${schemaPrefix}conversations c
-     LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
-     LEFT JOIN ${schemaPrefix}organizations o ON o.id = c.organization_id
-     LEFT JOIN ${schemaPrefix}users u ON u.id = c.assigned_to
-     LEFT JOIN ${schemaPrefix}channels ch ON ch.id = c.channel_id
-     WHERE c.id = $1::uuid
-     LIMIT 1`,
-    conversationId,
-  );
+             FROM ${conversationTagAssignmentsRef} cta
+             JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
+             WHERE cta.conversation_id = c.id
+               AND ctag.is_active = true
+           ),
+           '[]'::json
+         ) AS tags
+       FROM ${conversationsRef} c
+       LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+       LEFT JOIN ${organizationsRef} o ON o.id = c.organization_id
+       LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+       LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
+       WHERE c.id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+  } catch (error) {
+    if (!isLegacySchemaError(error)) throw error;
+
+    convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+      `SELECT
+         c.id,
+         c.client_id AS contact_id,
+         NULL::uuid AS organization_id,
+         c.channel_id,
+         c.channel_type,
+         COALESCE(c.metadata->>'type', 'inbound') AS conversation_type,
+         c.external_id,
+         c.status,
+         NULL::text AS protocol_number,
+         c.assigned_to,
+         NULL::timestamptz AS assigned_at,
+         c.subject,
+         c.last_message,
+         c.last_message_at,
+         c.resolved_at,
+         c.csat_score,
+         c.csat_comment,
+         c.csat_sent_at,
+         c.csat_responded_at,
+         c.csat_stage,
+         c.created_at,
+         c.metadata,
+         cl.name AS contact_name,
+         cl.email AS contact_email,
+         cl.phone AS contact_phone,
+         cl.phone AS contact_whatsapp,
+         NULL::text AS organization_name,
+         u.name AS assigned_name,
+         ch.name AS channel_name,
+         COALESCE(
+           (
+             SELECT json_agg(
+               json_build_object(
+                 'id', ctag.id,
+                 'name', ctag.name,
+                 'color', ctag.color
+               )
+               ORDER BY ctag.sort_order ASC, ctag.name ASC
+             )
+             FROM ${conversationTagAssignmentsRef} cta
+             JOIN ${conversationTagsRef} ctag ON ctag.id = cta.tag_id
+             WHERE cta.conversation_id = c.id
+               AND ctag.is_active = true
+           ),
+           '[]'::json
+         ) AS tags
+       FROM ${conversationsRef} c
+       LEFT JOIN ${clientsRef} cl ON cl.id = c.client_id
+       LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+       LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
+       WHERE c.id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+  }
 
   if (!convRows[0]) throw new NotFoundError('Conversa não encontrada');
 
@@ -697,6 +822,9 @@ export interface SendMessageResult {
   mediaId: string | null;
   mediaType: 'image' | 'audio' | 'video' | 'document' | null;
   mediaFilename: string | null;
+  templateName: string | null;
+  templateLanguage: string | null;
+  templateComponents: Array<Record<string, unknown>> | null;
   replyToExternalId: string | null;
   replyToMessageId: string | null;
 }
@@ -709,6 +837,9 @@ export interface MessageDispatchPayload {
   channelCredentials: Record<string, string> | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  templateName?: string | null;
+  templateLanguage?: string | null;
+  templateComponents?: Array<Record<string, unknown>> | null;
 }
 
 export interface CreateConversationResult {
@@ -726,15 +857,18 @@ export async function sendMessage(
       id: string;
       channel_id: string | null;
       channel_type: string;
+      status: string;
       contact_id: string | null;
       contact_phone: string | null;
       contact_email: string | null;
       channel_credentials: string | null;
+      metadata: unknown;
     }]
   >(
-    `SELECT c.id, c.channel_id, c.channel_type, c.contact_id,
+    `SELECT c.id, c.channel_id, c.channel_type, c.status, c.contact_id,
             ct.phone AS contact_phone, ct.email AS contact_email,
-            ch.credentials AS channel_credentials
+            ch.credentials AS channel_credentials,
+            c.metadata
      FROM conversations c
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      LEFT JOIN channels ch ON ch.id = c.channel_id
@@ -749,15 +883,57 @@ export async function sendMessage(
     body.media_id && body.media_type
       ? body.media_type
       : body.contentType ?? 'text';
+  const isTemplateMessage = contentType === 'template';
 
-  const content = body.content?.trim() ?? '';
+  const conversationMetadata = (
+    conv.metadata && typeof conv.metadata === 'object'
+      ? conv.metadata as Record<string, unknown>
+      : null
+  );
+  const requiresReengagementTemplate = conversationMetadata?.whatsapp_reengagement_required === true;
+
+  if (
+    conv.channel_type === 'whatsapp'
+    && !isTemplateMessage
+    && (
+      conv.status === 'active_outbound'
+      || requiresReengagementTemplate
+    )
+  ) {
+    throw new ConflictError(
+      'WhatsApp fora da janela de 24h: envie um template para reengajar o contato.',
+    );
+  }
+
+  const rawContent = body.content?.trim() ?? '';
   const mediaId = body.media_id ?? null;
   const mediaFilename = body.media_filename ?? null;
   const mentionMessageId = body.mention_message_id ?? null;
   const metadataPatch: MessageMetadataPatch = {};
+  const templateName = isTemplateMessage ? body.whatsapp_template?.name?.trim() ?? null : null;
+  const templateLanguage = isTemplateMessage
+    ? body.whatsapp_template?.language?.trim() || 'pt_BR'
+    : null;
+  const templateComponents = isTemplateMessage
+    ? body.whatsapp_template?.components ?? []
+    : [];
+  const normalizedTemplateComponents = templateComponents
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+  const content = isTemplateMessage
+    ? (rawContent || `[Template WhatsApp: ${templateName ?? 'sem_nome'}]`)
+    : rawContent;
 
   if (mediaFilename) {
     metadataPatch.filename = mediaFilename;
+  }
+  if (templateName && templateLanguage) {
+    metadataPatch.whatsapp_template = {
+      name: templateName,
+      language: templateLanguage,
+      ...(normalizedTemplateComponents.length
+        ? { components: normalizedTemplateComponents }
+        : {}),
+    };
   }
 
   let replyToExternalId: string | null = null;
@@ -817,11 +993,12 @@ export async function sendMessage(
   );
 
   const message = msgRows[0]!;
-  const mediaPreviewLabel: Record<'image' | 'audio' | 'video' | 'document', string> = {
+  const mediaPreviewLabel: Record<'image' | 'audio' | 'video' | 'document' | 'template', string> = {
     image: '[Imagem]',
     audio: '[Áudio]',
     video: '[Vídeo]',
     document: '[Documento]',
+    template: '[Template WhatsApp]',
   };
   const lastMessagePreview =
     content.slice(0, 255) ||
@@ -850,6 +1027,9 @@ export async function sendMessage(
     mediaId,
     mediaType: mediaId ? (contentType as 'image' | 'audio' | 'video' | 'document') : null,
     mediaFilename,
+    templateName,
+    templateLanguage,
+    templateComponents: normalizedTemplateComponents.length ? normalizedTemplateComponents : null,
     replyToExternalId,
     replyToMessageId,
   };
@@ -880,15 +1060,75 @@ export async function createConversation(
 
   const conversationType = data.type ?? 'inbound';
   const initialMessage = data.initial_message?.trim() ?? '';
+  const initialTemplateName = data.initial_template?.name?.trim() ?? '';
+  const initialTemplateLanguage = data.initial_template?.language?.trim() || 'pt_BR';
+  const initialTemplateComponents = (data.initial_template?.components ?? [])
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+  const hasInitialTemplate = Boolean(initialTemplateName);
   const initialStatus = conversationType === 'outbound' ? 'active_outbound' : 'open';
-  const metadata = {
+  const tenantRows = tenantId
+    ? await prisma.$queryRawUnsafe<Array<{ settings: unknown }>>(
+      `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
+      tenantId,
+    )
+    : [];
+  const tenantSettings =
+    typeof tenantRows[0]?.settings === 'object' && tenantRows[0]?.settings !== null
+      ? (tenantRows[0].settings as Record<string, unknown>)
+      : {};
+  const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
+    ? tenantSettings.timezone.trim()
+    : 'America/Sao_Paulo';
+  const activeOutboundValidity = resolveActiveOutboundValidity(tenantSettings);
+
+  const metadata: Record<string, unknown> = {
     type: conversationType,
   };
+  if (conversationType === 'outbound') {
+    metadata.active_outbound = true;
+    metadata.active_outbound_started_at = new Date().toISOString();
+    metadata.active_outbound_origin_agent_id = userId;
+    metadata.active_outbound_timezone = tenantTimezone;
+    metadata.active_outbound_validity_mode = activeOutboundValidity.mode;
+    metadata.active_outbound_validity_hours = activeOutboundValidity.hours;
+  }
 
   const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (contact_id, organization_id, channel_id, channel_type, conversation_type, status, protocol_number, assigned_to, subject, metadata)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10::jsonb)
+    `INSERT INTO conversations (
+       contact_id,
+       organization_id,
+       channel_id,
+       channel_type,
+       conversation_type,
+       status,
+       protocol_number,
+       assigned_to,
+       subject,
+       metadata,
+       outbound_expires_at,
+       outbound_origin_agent_id
+     )
+     VALUES (
+       $1::uuid,
+       $2::uuid,
+       $3::uuid,
+       $4,
+       $5,
+       $6,
+       $7,
+       $8::uuid,
+       $9,
+       $10::jsonb,
+       CASE
+         WHEN $5 = 'outbound' AND $12 = 'hours'
+           THEN NOW() + ($13::integer * INTERVAL '1 hour')
+         WHEN $5 = 'outbound'
+           THEN ((date_trunc('day', NOW() AT TIME ZONE $11::text) + INTERVAL '1 day') AT TIME ZONE $11::text)
+         ELSE NULL
+       END,
+       CASE WHEN $5 = 'outbound' THEN $8::uuid ELSE NULL END
+     )
      RETURNING *`,
     data.contact_id,
     data.organization_id ?? null,
@@ -900,6 +1140,9 @@ export async function createConversation(
     userId,
     data.subject ?? null,
     JSON.stringify(metadata),
+    tenantTimezone,
+    activeOutboundValidity.mode,
+    activeOutboundValidity.hours,
   );
   const conversation = convRows[0]!;
   const protocolMessage = buildProtocolMessage(protocolNumber);
@@ -912,17 +1155,31 @@ export async function createConversation(
   );
   let lastMessagePreview = protocolMessage.slice(0, 255);
   let initialMessageRows: Array<{ id: string }> = [];
+  const initialAgentContent = hasInitialTemplate
+    ? `[Template WhatsApp: ${initialTemplateName}]`
+    : initialMessage;
+  const initialAgentMetadata = hasInitialTemplate
+    ? JSON.stringify({
+      whatsapp_template: {
+        name: initialTemplateName,
+        language: initialTemplateLanguage,
+        ...(initialTemplateComponents.length ? { components: initialTemplateComponents } : {}),
+      },
+    })
+    : JSON.stringify({});
 
-  if (initialMessage) {
+  if (initialAgentContent) {
     initialMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type)
-       VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text')
+      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, metadata)
+       VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5::jsonb)
        RETURNING id`,
       conversation.id,
       userId,
-      initialMessage,
+      initialAgentContent,
+      hasInitialTemplate ? 'template' : 'text',
+      initialAgentMetadata,
     );
-    lastMessagePreview = initialMessage.slice(0, 255);
+    lastMessagePreview = initialAgentContent.slice(0, 255);
   }
 
   await prisma.$executeRawUnsafe(
@@ -934,24 +1191,33 @@ export async function createConversation(
   const protocolDispatches: MessageDispatchPayload[] = [];
   if (channelCheck[0].type === 'whatsapp') {
     const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
-    protocolDispatches.push({
-      messageId: protocolMessageRows[0]!.id,
-      protocolNumber,
-      content: protocolMessage,
-      channelType: channelCheck[0].type,
-      channelCredentials,
-      contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
-      contactEmail: contactCheck[0].email,
-    });
-
-    if (initialMessageRows[0]) {
+    const shouldDispatchProtocol =
+      conversationType !== 'outbound';
+    if (shouldDispatchProtocol) {
       protocolDispatches.push({
-        messageId: initialMessageRows[0].id,
-        content: initialMessage,
+        messageId: protocolMessageRows[0]!.id,
+        protocolNumber,
+        content: protocolMessage,
         channelType: channelCheck[0].type,
         channelCredentials,
         contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
         contactEmail: contactCheck[0].email,
+      });
+    }
+
+    if (initialMessageRows[0]) {
+      protocolDispatches.push({
+        messageId: initialMessageRows[0].id,
+        content: initialAgentContent,
+        channelType: channelCheck[0].type,
+        channelCredentials,
+        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+        contactEmail: contactCheck[0].email,
+        templateName: hasInitialTemplate ? initialTemplateName : null,
+        templateLanguage: hasInitialTemplate ? initialTemplateLanguage : null,
+        templateComponents: hasInitialTemplate
+          ? (initialTemplateComponents.length ? initialTemplateComponents : null)
+          : null,
       });
     }
   }
@@ -960,9 +1226,20 @@ export async function createConversation(
 }
 
 export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {
+  const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
+    `SELECT id, assigned_to
+     FROM conversations
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    conversationId,
+  );
+  const previous = previousRows[0];
+  if (!previous) throw new NotFoundError('Conversa não encontrada');
+
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET assigned_to = $1::uuid,
+         assigned_at = NOW(),
          status = 'open'
      WHERE id = $2::uuid
      RETURNING *`,
@@ -992,6 +1269,8 @@ export async function assignConversation(conversationId: string, assignToUserId:
     JSON.stringify({ assigned_to: assignToUserId, status: 'open' }),
   );
 
+  await syncActiveConversationCounters(prisma, [previous.assigned_to, assignToUserId]);
+
   return rows[0];
 }
 
@@ -1001,9 +1280,20 @@ export async function transferConversation(
   transferredBy: string,
   reason?: string,
 ) {
+  const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
+    `SELECT id, assigned_to
+     FROM conversations
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    conversationId,
+  );
+  const previous = previousRows[0];
+  if (!previous) throw new NotFoundError('Conversa não encontrada');
+
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
-     SET assigned_to = $1::uuid
+     SET assigned_to = $1::uuid,
+         assigned_at = NOW()
      WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
@@ -1019,6 +1309,8 @@ export async function transferConversation(
     JSON.stringify({ assigned_to: assignToUserId, reason: reason ?? null }),
   );
 
+  await syncActiveConversationCounters(prisma, [previous.assigned_to, assignToUserId]);
+
   return rows[0];
 }
 
@@ -1029,11 +1321,15 @@ export async function updateConversation(
 ) {
   await ensureConversationCsatInfrastructure(prisma);
 
-  const convCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM conversations WHERE id = $1::uuid LIMIT 1`,
+  const convCheck = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
+    `SELECT id, assigned_to
+     FROM conversations
+     WHERE id = $1::uuid
+     LIMIT 1`,
     conversationId,
   );
   if (!convCheck[0]) throw new NotFoundError('Conversa não encontrada');
+  const previousAssignedTo = convCheck[0].assigned_to;
 
   const hasAssignedTo = 'assignedTo' in body;
   const assignedToValue = body.assignedTo ?? null;
@@ -1078,6 +1374,8 @@ export async function updateConversation(
     );
   }
 
+  await syncActiveConversationCounters(prisma, [previousAssignedTo, rows[0]?.assigned_to ?? null]);
+
   return rows[0]!;
 }
 
@@ -1095,8 +1393,8 @@ export async function resolveConversation(
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
 
-    const conversationRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id
+    const conversationRows = await tx.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
+      `SELECT id, assigned_to
        FROM conversations
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -1174,6 +1472,8 @@ export async function resolveConversation(
         csat_mode: body.csatMode,
       }),
     );
+
+    await syncActiveConversationCounters(tx, [conversation.assigned_to ?? conversationRows[0].assigned_to]);
 
     return conversation;
   });

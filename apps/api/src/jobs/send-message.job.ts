@@ -15,8 +15,24 @@ interface SendMessageJob {
   mediaId?: string | null;
   mediaType?: string | null;
   mediaFilename?: string | null;
+  templateName?: string | null;
+  templateLanguage?: string | null;
+  templateComponents?: Array<Record<string, unknown>> | null;
   replyToExternalId?: string | null;
   replyToMessageId?: string | null;
+}
+
+interface MetaApiErrorResponse {
+  error?: {
+    message?: string;
+    type?: string;
+    code?: number;
+    error_subcode?: number;
+    fbtrace_id?: string;
+    error_data?: {
+      details?: string;
+    };
+  };
 }
 
 function normalizeWhatsappText(content: string): string {
@@ -27,6 +43,24 @@ function normalizeWhatsappText(content: string): string {
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function sanitizeCredentials(credentials: Record<string, string>): Record<string, string> {
+  const hidden = '***';
+  return {
+    ...credentials,
+    ...(credentials.accessToken ? { accessToken: hidden } : {}),
+    ...(credentials.access_token ? { access_token: hidden } : {}),
+    ...(credentials.verifyToken ? { verifyToken: hidden } : {}),
+    ...(credentials.verify_token ? { verify_token: hidden } : {}),
+  };
+}
+
+function sanitizeJobData(job: SendMessageJob): Record<string, unknown> {
+  return {
+    ...job,
+    channelCredentials: sanitizeCredentials(job.channelCredentials),
+  };
 }
 
 async function resolveSchemaName(job: SendMessageJob): Promise<string | null> {
@@ -58,6 +92,29 @@ async function persistExternalId(job: SendMessageJob, externalId: string): Promi
      WHERE id = $2::uuid`,
     externalId,
     job.messageId,
+  );
+}
+
+async function persistFailedStatus(
+  job: SendMessageJob,
+  metadataPatch: Record<string, unknown>,
+): Promise<void> {
+  const schemaName = await resolveSchemaName(job);
+  if (!schemaName) {
+    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist failed status', {
+      tenantId: job.tenantId,
+      messageId: job.messageId,
+    });
+    return;
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${quoteIdent(schemaName)}.messages
+     SET status = 'failed',
+         metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+     WHERE id = $1::uuid`,
+    job.messageId,
+    JSON.stringify(metadataPatch),
   );
 }
 
@@ -93,6 +150,30 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExt
   const context = replyExternalId
     ? { context: { message_id: replyExternalId } }
     : {};
+  const templateName = job.templateName?.trim() ?? '';
+  const templateLanguage = job.templateLanguage?.trim() || 'pt_BR';
+  const templateComponents = Array.isArray(job.templateComponents)
+    ? job.templateComponents.filter(
+      (component): component is Record<string, unknown> => Boolean(component) && typeof component === 'object',
+    )
+    : [];
+
+  if (templateName) {
+    return {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: sanitizedPhone,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: {
+          policy: 'deterministic',
+          code: templateLanguage,
+        },
+        ...(templateComponents.length ? { components: templateComponents } : {}),
+      },
+    };
+  }
 
   if (!job.mediaId || !job.mediaType) {
     return {
@@ -182,7 +263,7 @@ const worker = new Worker<SendMessageJob>(
   async (job) => {
     const { channelType, channelCredentials } = job.data;
     console.log('[WhatsApp Worker] Executing job:', job.id);
-    console.log('[WhatsApp Worker] Job data:', JSON.stringify(job.data));
+    console.log('[WhatsApp Worker] Job data:', JSON.stringify(sanitizeJobData(job.data)));
 
     switch (channelType) {
       case 'whatsapp': {
@@ -203,7 +284,7 @@ const worker = new Worker<SendMessageJob>(
         const replyExternalId = await resolveReplyExternalId(job.data);
         const body = buildWhatsAppBody(job.data, sanitizedPhone, replyExternalId);
 
-        console.log('[WhatsApp Send] Job data:', JSON.stringify(job.data, null, 2));
+        console.log('[WhatsApp Send] Job data:', JSON.stringify(sanitizeJobData(job.data), null, 2));
         console.log('[WhatsApp Send] PhoneNumberId:', phoneNumberId);
         console.log('[WhatsApp Send] Sending to:', sanitizedPhone);
         console.log('[WhatsApp Send] Payload:', JSON.stringify(body, null, 2));
@@ -223,6 +304,26 @@ const worker = new Worker<SendMessageJob>(
         console.log('[WhatsApp Send] Response:', responseText);
 
         if (!response.ok) {
+          let metaErrorCode: number | null = null;
+          let metaErrorMessage: string | null = null;
+          let metaErrorDetails: string | null = null;
+
+          try {
+            const parsed = JSON.parse(responseText) as MetaApiErrorResponse;
+            metaErrorCode = typeof parsed.error?.code === 'number' ? parsed.error.code : null;
+            metaErrorMessage = parsed.error?.message?.trim() ?? null;
+            metaErrorDetails = parsed.error?.error_data?.details?.trim() ?? null;
+          } catch {
+            // Keep fallbacks as null when Meta payload isn't JSON.
+          }
+
+          await persistFailedStatus(job.data, {
+            whatsapp_send_http_status: response.status,
+            whatsapp_send_error_code: metaErrorCode,
+            whatsapp_send_error_message: metaErrorMessage,
+            whatsapp_send_error_details: metaErrorDetails,
+            whatsapp_send_failed_at: new Date().toISOString(),
+          });
           throw new Error(`Meta API error: ${responseText}`);
         }
 
@@ -256,7 +357,9 @@ const worker = new Worker<SendMessageJob>(
 
 worker.on('failed', (job, err) => {
   console.error(`[WhatsApp Worker] Job ${job?.id} FAILED:`, err);
-  console.error('[WhatsApp Worker] Job data was:', job?.data);
+  if (job?.data) {
+    console.error('[WhatsApp Worker] Job data was:', sanitizeJobData(job.data));
+  }
 });
 
 worker.on('active', (job) => {

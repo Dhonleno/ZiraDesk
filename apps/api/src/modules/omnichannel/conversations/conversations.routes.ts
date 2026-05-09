@@ -92,6 +92,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           channelCredentials: dispatch.channelCredentials,
           content: dispatch.content,
           to: dispatch.contactPhone,
+          templateName: dispatch.templateName ?? null,
+          templateLanguage: dispatch.templateLanguage ?? null,
+          templateComponents: dispatch.templateComponents ?? null,
         });
       }
 
@@ -167,11 +170,14 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
             tenantSchema: tenantUser.schemaName ?? null,
             channelType: result.channelType,
             channelCredentials: creds,
-            content: parsed.data.content ?? '',
+            content: result.message.content ?? '',
             to: result.contactPhone ?? result.contactEmail ?? '',
             mediaId: result.mediaId,
             mediaType: result.mediaType,
             mediaFilename: result.mediaFilename,
+            templateName: result.templateName,
+            templateLanguage: result.templateLanguage,
+            templateComponents: result.templateComponents,
             replyToExternalId: result.replyToExternalId,
             replyToMessageId: result.replyToMessageId,
           };
@@ -220,6 +226,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         if (err instanceof NotFoundError) {
           return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        if (err instanceof ConflictError) {
+          return reply.code(409).send({ success: false, error: { message: err.message } });
         }
         throw err;
       }

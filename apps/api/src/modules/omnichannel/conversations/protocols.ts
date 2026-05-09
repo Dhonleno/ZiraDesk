@@ -49,6 +49,26 @@ export async function ensureConversationProtocolInfrastructure(
      ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) DEFAULT 'inbound'`,
   );
 
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS outbound_expires_at TIMESTAMPTZ`,
+  );
+
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS outbound_origin_agent_id UUID`,
+  );
+
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS outbound_returned_at TIMESTAMPTZ`,
+  );
+
+  await db.$executeRawUnsafe(
+    `ALTER TABLE ${conversationsRef}
+     ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
+  );
+
   try {
     await db.$executeRawUnsafe(
       `UPDATE ${conversationsRef}
@@ -68,6 +88,21 @@ export async function ensureConversationProtocolInfrastructure(
     `UPDATE ${conversationsRef}
      SET conversation_type = 'inbound'
      WHERE conversation_type IS NULL`,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE ${conversationsRef}
+     SET outbound_origin_agent_id = assigned_to
+     WHERE conversation_type = 'outbound'
+       AND outbound_origin_agent_id IS NULL
+       AND assigned_to IS NOT NULL`,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE ${conversationsRef}
+     SET assigned_at = created_at
+     WHERE assigned_to IS NOT NULL
+       AND assigned_at IS NULL`,
   );
 
   await db.$executeRawUnsafe(buildGenerateProtocolSql(schemaName));

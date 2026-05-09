@@ -15,7 +15,7 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
-    tab: z.enum(['active', 'queue', 'closed']).optional(),
+    tab: z.enum(['active', 'queue', 'return', 'closed']).optional(),
     sub_status: z.enum(['resolved', 'closed', 'outbound']).optional(),
     status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),
@@ -38,24 +38,48 @@ export const createConversationBodySchema = z
     type: z.enum(['inbound', 'outbound']).default('inbound'),
     subject: z.string().max(255).optional(),
     initial_message: z.string().max(4000).optional(),
+    initial_template: z.object({
+      name: z.string().trim().min(1).max(512),
+      language: z.string().trim().min(2).max(20).default('pt_BR'),
+      components: z.array(z.record(z.unknown())).optional(),
+    }).optional(),
   })
-  .refine((data) => data.type !== 'outbound' || Boolean(data.initial_message?.trim()), {
+  .refine((data) => (
+    data.type !== 'outbound'
+      || Boolean(data.initial_message?.trim())
+      || Boolean(data.initial_template?.name?.trim())
+  ), {
     path: ['initial_message'],
-    message: 'Mensagem inicial é obrigatória para atendimento ativo',
+    message: 'Mensagem inicial ou template é obrigatório para atendimento ativo',
   });
 
 export const sendMessageBodySchema = z.object({
   content: z.string().max(4000).optional(),
-  contentType: z.enum(['text', 'image', 'audio', 'video', 'document']).default('text'),
+  contentType: z.enum(['text', 'image', 'audio', 'video', 'document', 'template']).default('text'),
   isInternal: z.coerce.boolean().optional(),
   media_id: z.string().optional(),
   media_type: z.enum(['image', 'audio', 'video', 'document']).optional(),
   media_filename: z.string().max(255).optional(),
   mention_message_id: z.string().uuid().optional(),
-}).refine((data) => Boolean(data.content?.trim()) || Boolean(data.media_id), {
-  message: 'Mensagem deve conter texto ou mídia',
+  whatsapp_template: z.object({
+    name: z.string().trim().min(1).max(512),
+    language: z.string().trim().min(2).max(20).default('pt_BR'),
+    components: z.array(z.record(z.unknown())).optional(),
+  }).optional(),
+}).refine((data) => {
+  if (data.contentType === 'template') {
+    return Boolean(data.whatsapp_template?.name?.trim());
+  }
+
+  return Boolean(data.content?.trim()) || Boolean(data.media_id);
+}, {
+  message: 'Mensagem deve conter texto, mídia ou template',
 }).refine((data) => !data.media_id || Boolean(data.media_type), {
   message: 'media_type é obrigatório quando media_id for informado',
+}).refine((data) => data.contentType === 'template' || !data.whatsapp_template, {
+  message: 'whatsapp_template só pode ser enviado quando contentType = template',
+}).refine((data) => data.contentType !== 'template' || !data.media_id, {
+  message: 'Template não pode ser enviado junto com mídia',
 });
 
 export const listMessagesQuerySchema = z.object({
