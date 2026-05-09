@@ -21,6 +21,8 @@ interface TenantSettings {
   inactivity_close_minutes?: number;
   inactivity_warning_message?: string;
   inactivity_close_message?: string;
+  active_outbound_validity_mode?: 'end_of_day' | 'hours';
+  active_outbound_validity_hours?: number;
   bot_assigned_message?: string;
   created_at?: string;
   plan?: { id: string; name: string; slug: string; priceMonth: string };
@@ -237,6 +239,8 @@ export interface TicketType {
   color: string;
   is_active: boolean;
   sort_order: number;
+  require_due_date_for_urgent: boolean;
+  require_category_for_waiting: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -305,6 +309,61 @@ export interface MonitorData {
     avg_resolution_minutes: number;
     total_messages: number;
   };
+}
+
+export interface TvAgentSummary {
+  offline: number;
+  online: number;
+  available: number;
+  inService: number;
+  paused: number;
+}
+
+export interface TvConversationSummary {
+  queued: number;
+  inService: number;
+  resolvedToday: number;
+  abandoned: number;
+}
+
+export interface TvStatsSummary {
+  tme: number;
+  tma: number;
+  csat: number;
+  sla: number;
+}
+
+export interface TvAgentCard {
+  id: string;
+  name: string;
+  avatarInitials: string;
+  status: 'online' | 'paused' | 'offline';
+  pauseReason: string | null;
+  pauseStartedAt: string | null;
+  pauseDuration: string | null;
+  activeConversations: number;
+  isAvailable: boolean;
+}
+
+export interface TvConversationCard {
+  id: string;
+  protocol: string;
+  channelType: string;
+  contactName: string;
+  contactPhone: string;
+  agentName: string | null;
+  assignedAt: string | null;
+  createdAt: string;
+  status: string;
+  waitTime: number | null;
+}
+
+export interface TvDashboardData {
+  agents: TvAgentSummary;
+  conversations: TvConversationSummary;
+  stats: TvStatsSummary;
+  agentCards: TvAgentCard[];
+  conversationCards: TvConversationCard[];
 }
 
 export interface ConversationHelper {
@@ -818,14 +877,29 @@ export const adminApi = {
       return res.data.data;
     },
 
-    create: async (data: { name: string; icon?: string; color?: string; sort_order?: number }): Promise<TicketType> => {
+    create: async (data: {
+      name: string;
+      icon?: string;
+      color?: string;
+      sort_order?: number;
+      require_due_date_for_urgent?: boolean;
+      require_category_for_waiting?: boolean;
+    }): Promise<TicketType> => {
       const res = await api.post<{ success: boolean; data: TicketType }>('/admin/ticket-types', data);
       return res.data.data;
     },
 
     update: async (
       id: string,
-      data: Partial<{ name: string; icon: string; color: string; sort_order: number; is_active: boolean }>,
+      data: Partial<{
+        name: string;
+        icon: string;
+        color: string;
+        sort_order: number;
+        is_active: boolean;
+        require_due_date_for_urgent: boolean;
+        require_category_for_waiting: boolean;
+      }>,
     ): Promise<TicketType> => {
       const res = await api.patch<{ success: boolean; data: TicketType }>(`/admin/ticket-types/${id}`, data);
       return res.data.data;
@@ -1180,6 +1254,19 @@ export interface TicketSearchResult {
   priority: TicketPriority | string;
 }
 
+export interface TicketDuplicateSuggestion {
+  id: string;
+  title: string;
+  status: TicketStatus | string;
+  priority: TicketPriority | string;
+  category: string | null;
+  contact_name: string | null;
+  organization_name: string | null;
+  created_at: string;
+  updated_at: string;
+  score: number;
+}
+
 export interface AddTicketRelationPayload {
   related_id: string;
   relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by';
@@ -1225,13 +1312,20 @@ export interface CreateTicketPayload {
   priority?:       TicketPriority;
   category?:       string;
   type_id?:        string | null;
-  assigned_to?:    string;
+  assigned_to?:    string | null;
   contact_id?:     string;
   organization_id?: string;
   conversation_id?: string;
   source_conversation_id?: string;
   due_date?:       string;
   tags?:           string[];
+}
+
+export interface FindTicketDuplicatesParams {
+  title: string;
+  contact_id?: string;
+  organization_id?: string;
+  exclude_id?: string;
 }
 
 export interface CreateCommentPayload {
@@ -1285,6 +1379,7 @@ export interface OmnichannelConversation {
   contact_whatsapp?: string | null;
   organization_name?: string | null;
   assigned_to: string | null;
+  assigned_at: string | null;
   assigned_name: string | null;
   channel_id: string | null;
   channel_name: string | null;
@@ -1301,7 +1396,8 @@ export interface OmnichannelMessage {
   content: string;
   content_type: 'text' | 'image' | 'audio' | 'video' | 'document' | string;
   media_url?: string | null;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
+  external_id?: string | null;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
   is_internal: boolean;
   created_at: string;
   metadata?: {
@@ -1323,7 +1419,7 @@ export interface ListConversationsParams {
   page?: number;
   perPage?: number;
   per_page?: number;
-  tab?: 'active' | 'queue' | 'closed';
+  tab?: 'active' | 'queue' | 'return' | 'closed';
   sub_status?: 'resolved' | 'closed' | 'outbound';
   search?: string;
   status?: string;
@@ -1342,16 +1438,26 @@ export interface CreateConversationPayload {
   type?: 'inbound' | 'outbound';
   subject?: string;
   initial_message?: string;
+  initial_template?: {
+    name: string;
+    language?: string;
+    components?: Array<Record<string, unknown>>;
+  };
 }
 
 export interface SendMessagePayload {
   content?: string;
-  contentType?: 'text' | 'image' | 'audio' | 'video' | 'document';
+  contentType?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'template';
   isInternal?: boolean;
   media_id?: string;
   media_type?: 'image' | 'audio' | 'video' | 'document';
   media_filename?: string;
   mention_message_id?: string;
+  whatsapp_template?: {
+    name: string;
+    language?: string;
+    components?: Array<Record<string, unknown>>;
+  };
 }
 
 export interface UploadedMediaResponse {
@@ -1481,6 +1587,10 @@ export interface OnboardingStatus {
 export const omnichannelApi = {
   monitor: async (): Promise<MonitorData> => {
     const res = await api.get<{ success: boolean; data: MonitorData }>('/omnichannel/monitor');
+    return res.data.data;
+  },
+  tv: async (): Promise<TvDashboardData> => {
+    const res = await api.get<{ success: boolean; data: TvDashboardData }>('/omnichannel/tv');
     return res.data.data;
   },
 
@@ -1823,7 +1933,7 @@ export const ticketsApi = {
   },
 
   delete: async (id: string) => {
-    const res = await api.delete<{ success: boolean; data: Ticket }>(`/tickets/${id}`);
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean; id: string } }>(`/tickets/${id}`);
     return res.data;
   },
 
@@ -1858,6 +1968,13 @@ export const ticketsApi = {
   search: async (q: string, exclude?: string): Promise<TicketSearchResult[]> => {
     const res = await api.get<{ success: boolean; data: TicketSearchResult[] }>('/tickets/search', {
       params: { q, ...(exclude ? { exclude } : {}) },
+    });
+    return res.data.data;
+  },
+
+  findDuplicates: async (params: FindTicketDuplicatesParams): Promise<TicketDuplicateSuggestion[]> => {
+    const res = await api.get<{ success: boolean; data: TicketDuplicateSuggestion[] }>('/tickets/duplicates', {
+      params,
     });
     return res.data.data;
   },

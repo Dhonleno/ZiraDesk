@@ -44,6 +44,7 @@ import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { PortalTickets } from './pages/portal/PortalTickets';
 import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
 import { PortalCreateTicket } from './pages/portal/PortalCreateTicket';
+import { TVDashboard } from './pages/tv/TVDashboard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +90,17 @@ export function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
           </Route>
+
+          <Route
+            path="/tv"
+            element={(
+              <RequireAuth>
+                <ErrorBoundary>
+                  <TVDashboard />
+                </ErrorBoundary>
+              </RequireAuth>
+            )}
+          />
 
           {/* Área do super admin */}
           <Route

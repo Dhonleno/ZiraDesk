@@ -14,9 +14,22 @@ const schema = z.object({
   type: z.enum(['inbound', 'outbound']),
   subject: z.string().optional(),
   initial_message: z.string().optional(),
-}).refine((data) => data.type !== 'outbound' || Boolean(data.initial_message?.trim()), {
+  use_initial_template: z.boolean().default(false),
+  initial_template_name: z.string().optional(),
+  initial_template_language: z.string().optional(),
+  initial_template_body_params: z.string().optional(),
+}).refine((data) => (
+  data.type !== 'outbound'
+  || Boolean(data.initial_message?.trim())
+  || (data.use_initial_template && Boolean(data.initial_template_name?.trim()))
+), {
   path: ['initial_message'],
   message: 'initialMessageRequired',
+}).refine((data) => (
+  !data.use_initial_template || Boolean(data.initial_template_name?.trim())
+), {
+  path: ['initial_template_name'],
+  message: 'initialTemplateNameRequired',
 });
 
 type FormData = z.infer<typeof schema>;
@@ -43,12 +56,22 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { type: 'inbound' },
+    defaultValues: {
+      type: 'inbound',
+      use_initial_template: false,
+      initial_template_language: 'pt_BR',
+    },
   });
 
   const selectedContactId = watch('contact_id');
   const selectedChannelId = watch('channel_id');
   const selectedType = watch('type') ?? 'inbound';
+  const useInitialTemplate = watch('use_initial_template') ?? false;
+
+  useEffect(() => {
+    if (selectedType === 'outbound') return;
+    setValue('use_initial_template', false, { shouldValidate: true });
+  }, [selectedType, setValue]);
 
   // Load channels
   const { data: channels = [] } = useQuery({
@@ -72,6 +95,28 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         type: data.type,
         ...(data.subject ? { subject: data.subject } : {}),
         ...(data.initial_message ? { initial_message: data.initial_message } : {}),
+        ...(data.use_initial_template && data.initial_template_name?.trim()
+          ? {
+            initial_template: {
+              name: data.initial_template_name.trim(),
+              language: data.initial_template_language?.trim() || 'pt_BR',
+              ...(data.initial_template_body_params?.trim()
+                ? {
+                  components: [
+                    {
+                      type: 'body',
+                      parameters: data.initial_template_body_params
+                        .split('\n')
+                        .map((item) => item.trim())
+                        .filter(Boolean)
+                        .map((text) => ({ type: 'text', text })),
+                    },
+                  ],
+                }
+                : {}),
+            },
+          }
+          : {}),
       }),
     onSuccess: (conv) => {
       toast.success(t('form.created'));
@@ -164,6 +209,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               {t('form.type')} *
             </label>
             <input type="hidden" {...register('type')} />
+            <input type="hidden" {...register('use_initial_template')} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <button
                 type="button"
@@ -379,10 +425,118 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('form.initialMessage')}{selectedType === 'outbound' ? ' *' : ''}
             </label>
+            {selectedType === 'outbound' && (
+              <button
+                type="button"
+                onClick={() => setValue('use_initial_template', !useInitialTemplate, { shouldValidate: true })}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 8,
+                  borderRadius: 'var(--r-pill)',
+                  border: `1px solid ${useInitialTemplate ? 'rgba(0,201,167,.45)' : 'var(--line-2)'}`,
+                  background: useInitialTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  color: useInitialTemplate ? 'var(--teal)' : 'var(--txt-2)',
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    border: `1px solid ${useInitialTemplate ? 'var(--teal)' : 'var(--line-2)'}`,
+                    background: useInitialTemplate ? 'var(--teal)' : 'transparent',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--on-teal)',
+                    fontSize: 10,
+                    lineHeight: 1,
+                  }}
+                >
+                  {useInitialTemplate ? '✓' : ''}
+                </span>
+                {t('form.useTemplate')}
+              </button>
+            )}
+
+            {selectedType === 'outbound' && useInitialTemplate && (
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 8,
+                  marginBottom: 10,
+                  padding: '10px',
+                  borderRadius: 'var(--r)',
+                  border: '1px solid rgba(0,201,167,.25)',
+                  background: 'rgba(0,201,167,.06)',
+                }}
+              >
+                <input
+                  type="text"
+                  {...register('initial_template_name')}
+                  placeholder={t('form.templateNamePlaceholder')}
+                  style={{
+                    width: '100%',
+                    background: 'var(--bg-3)',
+                    border: `1px solid ${errors.initial_template_name ? 'var(--red)' : 'var(--line-2)'}`,
+                    borderRadius: 'var(--r)',
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    fontFamily: 'var(--font)',
+                    color: 'var(--txt)',
+                    outline: 'none',
+                  }}
+                />
+                <input
+                  type="text"
+                  {...register('initial_template_language')}
+                  placeholder="pt_BR"
+                  style={{
+                    width: '100%',
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 'var(--r)',
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    fontFamily: 'var(--font)',
+                    color: 'var(--txt)',
+                    outline: 'none',
+                  }}
+                />
+                <textarea
+                  {...register('initial_template_body_params')}
+                  rows={2}
+                  placeholder={t('form.templateParamsPlaceholder')}
+                  style={{
+                    width: '100%',
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 'var(--r)',
+                    padding: '9px 12px',
+                    fontSize: 12,
+                    fontFamily: 'var(--font)',
+                    color: 'var(--txt)',
+                    outline: 'none',
+                    resize: 'vertical',
+                    lineHeight: 1.5,
+                  }}
+                />
+                {errors.initial_template_name && (
+                  <p style={{ fontSize: 11, color: 'var(--red)' }}>{t('form.initialTemplateNameRequired')}</p>
+                )}
+              </div>
+            )}
             <textarea
               {...register('initial_message')}
               placeholder={t(selectedType === 'outbound' ? 'form.initialMessageOutboundPlaceholder' : 'form.initialMessagePlaceholder')}
               rows={3}
+              disabled={selectedType === 'outbound' && useInitialTemplate}
               style={{
                 width: '100%',
                 background: 'var(--bg-3)',
@@ -395,6 +549,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 outline: 'none',
                 resize: 'vertical',
                 lineHeight: 1.5,
+                opacity: selectedType === 'outbound' && useInitialTemplate ? 0.6 : 1,
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--teal-dim)'; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = errors.initial_message ? 'var(--red)' : 'var(--line-2)'; e.currentTarget.style.boxShadow = 'none'; }}

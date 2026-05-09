@@ -82,8 +82,8 @@ export function ConversationsPage() {
   }, [qc]);
 
   return (
-    <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
-      <div className="flex h-full overflow-hidden">
+    <PageShell padding={0} contentStyle={{ overflowX: 'visible', overflowY: 'hidden' }}>
+      <div className="flex h-full" style={{ overflowX: 'visible', overflowY: 'hidden' }}>
         <ConversationList
           selectedId={selectedId}
           onSelect={setSelectedId}

@@ -58,7 +58,8 @@
   },
   "tabs": {
     "active": "En atención",
-    "queue": "Fila",
+    "queue": "Bot",
+    "return": "Retorno",
     "closed": "Cerradas"
   },
   "subTabs": {
@@ -74,9 +75,11 @@
   },
   "notifications": {
     "newMessage": "Nuevo mensaje",
-    "newQueue": "Nueva conversación en la fila",
-    "waiting": "está esperando atención",
-    "permissionDenied": "Activa las notificaciones del navegador para recibir alertas de nuevas atenciones"
+    "assigned": "Nueva atención asignada",
+    "assignedBody": "fue asignado a ti",
+    "permissionDenied": "Activa las notificaciones del navegador para recibir alertas de nuevas atenciones",
+    "messages": "mensajes",
+    "markAllRead": "Marcar todas como leídas"
   },
   "outboundBadge": "↗ Retorno",
   "botBadge": "🤖 Bot",
@@ -140,7 +143,16 @@
     "messageDelivered": "Entregado",
     "messageRead": "Leído",
     "via": "Vía",
-    "internalNoteActive": "Nota interna activa"
+    "internalNoteActive": "Nota interna activa",
+    "templateNamePlaceholder": "Nombre del template aprobado (ej: reengagement_es)",
+    "templateParamsPlaceholder": "Parámetros del body (1 por línea, opcional)",
+    "templateHint": "WhatsApp exige templates fuera de la ventana de 24 horas.",
+    "templateModeHint": "Modo template activo (Enter para enviar template)",
+    "templatePreviewPlaceholder": "Vista previa interna del mensaje (opcional)",
+    "templateNameRequired": "Informe el nombre del template de WhatsApp.",
+    "activeOutboundReturnHeader": "Retorno de envío activo",
+    "activeOutboundReturnSub": "El cliente respondió dentro de la validez del envío activo iniciado por {{agent}}.",
+    "activeOutboundFallbackAgent": "agente responsable"
   },
   "resolve": {
     "title": "Resolver atención",
@@ -228,6 +240,39 @@
     "viewConversations": "Ver atenciones",
     "noAgents": "Ningún agente en línea"
   },
+  "tv": {
+    "title": "Monitor en Tiempo Real",
+    "offline": "Offline",
+    "online": "Online",
+    "available": "Disponibles",
+    "inService": "En Atención",
+    "paused": "Pausados",
+    "queued": "En Espera",
+    "resolvedToday": "Resueltos Hoy",
+    "abandoned": "Abandonados",
+    "tme": "TME",
+    "tma": "TMA",
+    "csat": "CSAT",
+    "sla": "SLA",
+    "waiting": "Esperando",
+    "available_status": "Disponible"
+  },
+  "myStats": {
+    "title": "Mis métricas",
+    "periodToday": "Hoy",
+    "period7days": "7 días",
+    "period30days": "30 días",
+    "loading": "Cargando...",
+    "totalLabel": "Atenciones",
+    "totalHint": "atenciones en el período",
+    "resolvedLabel": "Resueltos",
+    "resolvedHint": "atenciones resueltas",
+    "tmaHint": "Tiempo promedio de resolución",
+    "csatHint": "Satisfacción promedio de clientes",
+    "slaHint": "1ª respuesta en hasta 5 min",
+    "onlineLabel": "En línea hace",
+    "onlineHint": "desde que entró en servicio"
+  },
   "tags": {
     "title": "Etiquetas",
     "manage": "Gestionar etiquetas",
@@ -290,6 +335,9 @@
     "initialMessage": "Mensaje inicial",
     "initialMessagePlaceholder": "Escribe el primer mensaje (opcional)",
     "initialMessageOutboundPlaceholder": "Escribe el mensaje que será enviado al contacto",
+    "useTemplate": "Usar template de WhatsApp",
+    "templateNamePlaceholder": "Nombre del template (obligatorio)",
+    "templateParamsPlaceholder": "Parámetros del body (1 por línea, opcional)",
     "create": "Iniciar atención",
     "creating": "Iniciando...",
     "created": "Atención iniciada con éxito",
@@ -299,6 +347,7 @@
     "errorLoadChannels": "Error al cargar canales",
     "clientRequired": "Seleccione un contacto",
     "channelRequired": "Seleccione un canal",
-    "initialMessageRequired": "Escribe el mensaje inicial"
+    "initialMessageRequired": "Escribe el mensaje inicial",
+    "initialTemplateNameRequired": "Informe el nombre del template"
   }
 }

@@ -7,6 +7,8 @@ import { useNotification } from '../../hooks/useNotification';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
+import { useNotificationStore } from '../../stores/notification.store';
+import { AgentStatsModal } from './AgentStatsModal';
 
 interface ConversationItem {
   id: string;
@@ -73,11 +75,12 @@ interface ConversationCreatedEventPayload {
   contactName?: string | null;
 }
 
-type TabKey = 'active' | 'queue' | 'closed';
+type TabKey = 'active' | 'queue' | 'return' | 'closed';
 type ClosedSubStatus = null | 'resolved' | 'closed' | 'outbound';
 
 interface ConversationCounts {
   active: number;
+  return: number;
   mine: number;
   queue: number;
   closed: number;
@@ -182,12 +185,15 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
   const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
   const [filterTagId, setFilterTagId] = useState<string | null>(null);
   const [showTagFilterDropdown, setShowTagFilterDropdown] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [newActivity, setNewActivity] = useState<Set<string>>(new Set());
   const [newConversations, setNewConversations] = useState<Set<string>>(new Set());
   const activityTimeoutsRef = useRef<Map<string, number>>(new Map());
   const newConversationTimeoutsRef = useRef<Map<string, number>>(new Map());
   const desktopPermissionDeniedRef = useRef(false);
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
+  const mainTabsRef = useRef<HTMLDivElement | null>(null);
+  const closedSubTabsRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
 
@@ -197,6 +203,29 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     setActiveTab('active');
     setSubStatus(null);
   }, [initialAgentId]);
+
+  const revealSelectedTab = useCallback((selector: string, container: HTMLDivElement | null) => {
+    if (!container) return;
+    const target = container.querySelector<HTMLButtonElement>(selector);
+    if (!target) return;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    revealSelectedTab(`button[data-tab-key="${activeTab}"]`, mainTabsRef.current);
+  }, [activeTab, revealSelectedTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'closed') return;
+    const key = subStatus ?? 'all';
+    revealSelectedTab(`button[data-subtab-key="${key}"]`, closedSubTabsRef.current);
+  }, [activeTab, revealSelectedTab, subStatus]);
 
   const clearTimer = useCallback((timers: Map<string, number>, id: string) => {
     const timer = timers.get(id);
@@ -357,6 +386,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
   useEffect(() => {
     if (!selectedId) return;
     clearConversationHighlight(selectedId);
+    useNotificationStore.getState().markConversationRead(selectedId);
   }, [clearConversationHighlight, selectedId]);
 
   useEffect(() => {
@@ -444,35 +474,17 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
 
         showNotification(contactName, content, '/icon-192.png');
       }
-    };
 
-    const handleCreated = (data: ConversationCreatedEventPayload) => {
-      invalidateConversationData();
-      const conversationId = data.conversationId ?? data.conversation?.id;
-      const cachedConversation = getConversationFromCache(conversationId);
-      const assignedAgentId =
-        data.conversation?.assigned_to
-        ?? data.conversation?.assignedTo
-        ?? data.conversation?.assignedAgentId
-        ?? cachedConversation?.assigned_to
-        ?? null;
-
-      if (conversationId) {
-        markNewConversation(conversationId);
-      }
-
-      // Notificação de browser para nova conversa em fila (sem agente atribuído) com aba fora de foco.
-      if (isBrowserTabHidden() && assignedAgentId === null) {
-        if (typeof Notification === 'undefined') return;
-        if (Notification.permission !== 'granted') {
-          if (Notification.permission === 'denied') {
-            notifyPermissionDeniedOnce();
-          }
-          return;
-        }
-
+      // Bell notification: group by conversation; skip if conversation is currently open.
+      if (
+        isClientMessage
+        && (isAssignedToCurrentUser || isQueueConversation)
+        && conversationId
+        && conversationId !== selectedId
+      ) {
         const contactName =
-          data.contactName
+          data.contact?.name
+          ?? data.contactName
           ?? data.conversation?.contact_name
           ?? data.conversation?.contactName
           ?? data.conversation?.client_name
@@ -480,12 +492,24 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
           ?? cachedConversation?.contact_name
           ?? cachedConversation?.client_name
           ?? t('notifications.newMessage');
-        showNotification(
-          t('notifications.newQueue'),
-          `${contactName} ${t('notifications.waiting')}`,
-          '/icon-192.png',
-        );
+        const content = message?.content?.trim() || t('notifications.newMessage');
+        useNotificationStore.getState().addMessage({
+          conversationId,
+          contactName,
+          message: content,
+          timestamp: new Date().toISOString(),
+        });
       }
+    };
+
+    const handleCreated = (data: ConversationCreatedEventPayload) => {
+      invalidateConversationData();
+      const conversationId = data.conversationId ?? data.conversation?.id;
+
+      if (conversationId) {
+        markNewConversation(conversationId);
+      }
+
     };
 
     const handleAssigned = (data: { conversationId?: string }) => {
@@ -495,6 +519,26 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
         markNewConversation(conversationId);
       }
       syncToActiveTabForCurrentUser(conversationId);
+
+      if (isBrowserTabHidden()) {
+        if (typeof Notification === 'undefined') return;
+        if (Notification.permission !== 'granted') {
+          if (Notification.permission === 'denied') {
+            notifyPermissionDeniedOnce();
+          }
+          return;
+        }
+        const cachedConversation = getConversationFromCache(conversationId);
+        const contactName =
+          cachedConversation?.contact_name
+          ?? cachedConversation?.client_name
+          ?? t('notifications.newMessage');
+        showNotification(
+          t('notifications.assigned'),
+          `${contactName} ${t('notifications.assignedBody')}`,
+          '/icon-192.png',
+        );
+      }
     };
 
     const handleUpdated = (data: {
@@ -570,6 +614,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
 
   const TABS: Array<{ key: TabKey; labelKey: string }> = [
     { key: 'active', labelKey: 'tabs.active' },
+    { key: 'return', labelKey: 'tabs.return' },
     { key: 'queue', labelKey: 'tabs.queue' },
     { key: 'closed', labelKey: 'tabs.closed' },
   ];
@@ -609,7 +654,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
             perPage: 50,
             tab: activeTab,
             assigned_to_me:
-              activeTab === 'active' && !filterAgentId
+              (activeTab === 'active' || activeTab === 'return') && !filterAgentId
                 ? (assignedToMe ? true : undefined)
                 : undefined,
             agent_id: filterAgentId || undefined,
@@ -651,7 +696,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       flexDirection: 'column',
       background: 'var(--bg-2)',
       borderRight: '1px solid var(--line)',
-      overflow: 'hidden',
+      overflow: 'visible',
     }}>
       {/* Header */}
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
@@ -669,6 +714,31 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
             }}>
               {count}
             </span>
+            <button
+              onClick={() => setShowStats(true)}
+              title={t('myStats.title')}
+              style={{
+                width: 24, height: 24,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--bg-4)', border: '1px solid var(--line)',
+                borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--txt-2)',
+                transition: 'all .15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--teal)';
+                e.currentTarget.style.color = 'var(--teal)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--line)';
+                e.currentTarget.style.color = 'var(--txt-2)';
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                <rect x="1" y="6" width="2" height="4" rx="0.5" fill="currentColor" />
+                <rect x="4.5" y="3.5" width="2" height="6.5" rx="0.5" fill="currentColor" />
+                <rect x="8" y="1" width="2" height="9" rx="0.5" fill="currentColor" />
+              </svg>
+            </button>
             {onNew && (
               <button
                 onClick={onNew}
@@ -916,33 +986,43 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       </div>
 
       {/* Main tabs */}
-      <div style={{
+      <div
+        className="omni-tabs-scroll"
+        ref={mainTabsRef}
+        style={{
         display: 'flex',
+        flexWrap: 'nowrap',
         padding: '8px 14px',
         gap: 4,
         borderBottom: '1px solid var(--line)',
         flexShrink: 0,
         overflowX: 'auto',
-        scrollbarWidth: 'none',
-      }}>
+        overflowY: 'hidden',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'var(--bg-5) transparent',
+      }}
+      >
         {TABS.map((tab) => {
           const isQueueTab = tab.key === 'queue';
-          const tabCount = isQueueTab
-            ? counts?.queue
-            : activeTab === tab.key
-              ? tab.key === 'active'
-                ? counts?.active
-                : counts?.closed
-              : undefined;
+          const isReturnTab = tab.key === 'return';
+          const isAmberCounter = isQueueTab || isReturnTab;
+          const tabCount = tab.key === 'active'
+            ? counts?.active
+            : tab.key === 'queue'
+              ? counts?.queue
+              : tab.key === 'return'
+                ? counts?.return
+                : counts?.closed;
           return (
             <button
               key={tab.key}
+              data-tab-key={tab.key}
               onClick={() => {
                 setActiveTab(tab.key);
                 setSubStatus(null);
               }}
               style={{
-                padding: '4px 9px',
+                padding: '6px 12px',
                 borderRadius: 'var(--r-pill)',
                 fontSize: 11,
                 fontWeight: 500,
@@ -951,6 +1031,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
+                flexShrink: 0,
                 border: activeTab === tab.key ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
                 background: activeTab === tab.key ? 'var(--teal-dim)' : 'transparent',
                 color: activeTab === tab.key ? 'var(--teal)' : 'var(--txt-3)',
@@ -967,8 +1048,8 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: isQueueTab ? 'rgba(245,158,11,.18)' : 'rgba(0,201,167,.14)',
-                  color: isQueueTab ? '#F59E0B' : 'var(--teal)',
+                  background: isAmberCounter ? 'rgba(245,158,11,.18)' : 'rgba(0,201,167,.14)',
+                  color: isAmberCounter ? '#F59E0B' : 'var(--teal)',
                   fontSize: 10,
                   fontWeight: 700,
                 }}>
@@ -981,17 +1062,25 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       </div>
 
       {activeTab === 'closed' && (
-        <div style={{
+        <div
+          className="omni-tabs-scroll"
+          ref={closedSubTabsRef}
+          style={{
           display: 'flex',
+          flexWrap: 'nowrap',
           gap: 4,
           padding: '8px 14px',
           borderBottom: '1px solid var(--line)',
           overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}>
+          overflowY: 'hidden',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--bg-5) transparent',
+        }}
+        >
           {CLOSED_SUB_TABS.map((tab) => (
             <button
               key={tab.key ?? 'all'}
+              data-subtab-key={tab.key ?? 'all'}
               onClick={() => setSubStatus(tab.key)}
               style={{
                 padding: '3px 8px',
@@ -999,6 +1088,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                 fontSize: 10,
                 fontWeight: 500,
                 cursor: 'pointer',
+                flexShrink: 0,
                 whiteSpace: 'nowrap',
                 border: subStatus === tab.key ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
                 background: subStatus === tab.key ? 'var(--teal-dim)' : 'transparent',
@@ -1305,6 +1395,8 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
               );
             })}
       </div>
+
+      <AgentStatsModal open={showStats} onClose={() => setShowStats(false)} />
     </div>
   );
 }

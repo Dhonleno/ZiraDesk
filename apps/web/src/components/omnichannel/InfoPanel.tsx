@@ -8,7 +8,6 @@ import { EditContactModal } from '../crm/EditContactModal';
 import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
-import { useToast } from '../../stores/toast.store';
 import { CallWidget } from './CallWidget';
 
 interface Conversation {
@@ -178,7 +177,6 @@ interface Props {
 export function InfoPanel({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const navigate = useNavigate();
-  const toast = useToast();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
@@ -344,13 +342,6 @@ export function InfoPanel({ conversationId }: Props) {
 
     setCreateTicketData(nextData);
     setShowCreateTicket(true);
-  }
-
-  function handleCreateProposal() {
-    handleCreateTicket({
-      title: `Proposta — ${contactName ?? conv?.client_name ?? 'Contato'}`,
-      category: 'Proposta',
-    });
   }
 
   return (
@@ -694,9 +685,7 @@ export function InfoPanel({ conversationId }: Props) {
               <SectionTitle>{t('info.quickActions')}</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {[
-                  { label: t('info.createProposal'), onClick: handleCreateProposal, icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.schedule'), onClick: () => toast.info('Funcionalidade de agenda em breve!'), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M1.5 5h9" stroke="currentColor" strokeWidth="1.1"/><path d="M4 1.5v1.5M8 1.5v1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
-                  { label: t('info.viewTickets'), onClick: () => navigate(`/tickets${contactId ? `?contact_id=${contactId}` : ''}`), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 3.5v3l1.5 1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
+                  { label: t('info.viewTickets'), onClick: () => navigate(`/tickets${contactId ? `?contact_id=${contactId}` : ''}`), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3.2a1.2 1.2 0 011.2-1.2h5.6A1.2 1.2 0 0110 3.2v1a1 1 0 100 2v1.6A1.2 1.2 0 018.8 9H3.2A1.2 1.2 0 012 7.8V6.2a1 1 0 100-2v-1z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/><path d="M4.3 4.8h3.4M4.3 6.4h2.1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                   { label: t('info.createTicket'), onClick: () => handleCreateTicket(), icon: <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2" width="9" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M6 5v4M4 7h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg> },
                 ].map((a) => (
                   <button

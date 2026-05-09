@@ -11,6 +11,7 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
+import { ConversationTimer } from './ConversationTimer';
 import { ResolveModal, type ResolvePayload } from './ResolveModal';
 import { TransferModal } from './TransferModal';
 import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
@@ -18,6 +19,7 @@ import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
 import { MessageMedia } from './MessageMedia';
 import { RequestHelpModal } from './RequestHelpModal';
 import { TagDropdown } from './TagDropdown';
+import { MessageStatus } from './MessageStatus';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
@@ -27,6 +29,14 @@ type CallRecordingMetadata = {
   duration?: number;
   call_sid?: string;
 };
+type MessageDeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+interface MessageStatusSocketEvent {
+  conversationId: string;
+  messageId: string;
+  externalId?: string | null;
+  status: Exclude<MessageDeliveryStatus, 'pending'>;
+}
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
 
@@ -203,6 +213,24 @@ function mentionTypeLabel(mention: MentionData): string {
   return mention.content;
 }
 
+function resolveMessageDeliveryStatus(message: Message): MessageDeliveryStatus {
+  const rawStatus = typeof message.status === 'string' ? message.status : 'pending';
+  const normalized = rawStatus.toLowerCase();
+  const knownStatus = normalized === 'sent'
+    || normalized === 'delivered'
+    || normalized === 'read'
+    || normalized === 'failed'
+    || normalized === 'pending'
+    ? normalized as MessageDeliveryStatus
+    : 'pending';
+
+  if (message.sender_type !== 'agent') return knownStatus;
+  if (!message.external_id && (knownStatus === 'sent' || knownStatus === 'delivered' || knownStatus === 'read')) {
+    return 'pending';
+  }
+  return knownStatus;
+}
+
 function MentionMediaThumb({ conversationId, mediaId }: { conversationId: string; mediaId: string }) {
   const { data: mediaBlob } = useQuery({
     queryKey: ['mention-media-thumb', conversationId, mediaId],
@@ -296,7 +324,6 @@ export function ChatArea({ conversationId }: Props) {
   const currentUserRole = useAuthStore((state) => state.user?.role);
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [isTyping, _setIsTyping] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -309,6 +336,11 @@ export function ChatArea({ conversationId }: Props) {
   const [localMediaUrls, setLocalMediaUrls] = useState<Record<string, string>>({});
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [useTemplateMessage, setUseTemplateMessage] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateLanguage, setTemplateLanguage] = useState('pt_BR');
+  const [templateParams, setTemplateParams] = useState('');
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [showShortcutSuggestions, setShowShortcutSuggestions] = useState(false);
   const [shortcutSuggestions, setShortcutSuggestions] = useState<QuickReply[]>([]);
   const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
@@ -534,6 +566,11 @@ export function ChatArea({ conversationId }: Props) {
   useEffect(() => {
     setContent('');
     setIsInternal(false);
+    setUseTemplateMessage(false);
+    setTemplateName('');
+    setTemplateLanguage('pt_BR');
+    setTemplateParams('');
+    setTemplateError(null);
     setShowEmojiPicker(false);
     setShowQuickReplies(false);
     setShowTagDropdown(false);
@@ -713,6 +750,45 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['call-history', conversationId] });
     });
 
+    const unsubMessageStatus = subscribeToEvent<MessageStatusSocketEvent>('message:status', (event) => {
+      if (event.conversationId !== conversationId) return;
+      setMessages((prev) => prev.map((msg) => {
+        const byId = msg.id === event.messageId;
+        const byExternalId = Boolean(event.externalId) && msg.external_id === event.externalId;
+        if (!byId && !byExternalId) return msg;
+        return {
+          ...msg,
+          status: event.status,
+          external_id: event.externalId ?? msg.external_id ?? null,
+        };
+      }));
+      qc.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation; messages: Message[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map((msg) => {
+              const byId = msg.id === event.messageId;
+              const byExternalId = Boolean(event.externalId) && msg.external_id === event.externalId;
+              if (!byId && !byExternalId) return msg;
+              return {
+                ...msg,
+                status: event.status,
+                external_id: event.externalId ?? msg.external_id ?? null,
+              };
+            }),
+          };
+        },
+      );
+    });
+
+    const unsubSocketConnect = subscribeToEvent('connect', () => {
+      void loadLatestMessages(true);
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    });
+
     return () => {
       unsubNew();
       unsubIncoming();
@@ -724,20 +800,66 @@ export function ChatArea({ conversationId }: Props) {
       unsubHelpAccepted();
       unsubHelpDeclined();
       unsubCallStatus();
+      unsubMessageStatus();
+      unsubSocketConnect();
     };
   }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
+  useEffect(() => {
+    if (!hasValidSession) return;
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void loadLatestMessages(true);
+    }, 10_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [hasValidSession, loadLatestMessages]);
+
   const sendMutation = useMutation({
-    mutationFn: (payload: { text: string; isInternalMessage: boolean; mentionMessageId?: string | null }) =>
-      omnichannelApi.sendMessage(conversationId, {
+    mutationFn: (
+      payload:
+        | { mode: 'text'; text: string; isInternalMessage: boolean; mentionMessageId?: string | null }
+        | { mode: 'template'; text: string; templateName: string; templateLanguage: string; templateParams: string[] },
+    ) => {
+      if (payload.mode === 'template') {
+        return omnichannelApi.sendMessage(conversationId, {
+          content: payload.text,
+          contentType: 'template',
+          whatsapp_template: {
+            name: payload.templateName,
+            language: payload.templateLanguage,
+            ...(payload.templateParams.length
+              ? {
+                components: [
+                  {
+                    type: 'body',
+                    parameters: payload.templateParams.map((text) => ({ type: 'text', text })),
+                  },
+                ],
+              }
+              : {}),
+          },
+        });
+      }
+
+      return omnichannelApi.sendMessage(conversationId, {
         content: payload.text,
         contentType: 'text',
         isInternal: payload.isInternalMessage,
         ...(payload.mentionMessageId ? { mention_message_id: payload.mentionMessageId } : {}),
-      }),
+      });
+    },
     onSuccess: () => {
       setContent('');
       setIsInternal(false);
+      setUseTemplateMessage(false);
+      setTemplateName('');
+      setTemplateLanguage('pt_BR');
+      setTemplateParams('');
+      setTemplateError(null);
       setMentioningMessage(null);
       shouldAutoScrollNextRef.current = true;
       nextScrollBehaviorRef.current = 'smooth';
@@ -745,7 +867,18 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void loadLatestMessages(true);
     },
-    onError: () => toast.error(t('chat.send') + ' — erro'),
+    onError: (error: unknown) => {
+      const apiMessage = (
+        error as {
+          response?: {
+            data?: {
+              error?: { message?: string };
+            };
+          };
+        }
+      )?.response?.data?.error?.message;
+      toast.error(apiMessage ?? `${t('chat.send')} — erro`);
+    },
   });
 
   const endMutation = useMutation({
@@ -830,9 +963,32 @@ export function ChatArea({ conversationId }: Props) {
 
   function handleSend() {
     if (!canSendMessage) return;
+    if (sendMutation.isPending) return;
+
+    if (useTemplateMessage) {
+      const resolvedTemplateName = templateName.trim();
+      if (!resolvedTemplateName) {
+        setTemplateError(t('chat.templateNameRequired'));
+        return;
+      }
+      setTemplateError(null);
+      sendMutation.mutate({
+        mode: 'template',
+        text: content.trim(),
+        templateName: resolvedTemplateName,
+        templateLanguage: templateLanguage.trim() || 'pt_BR',
+        templateParams: templateParams
+          .split('\n')
+          .map((item) => item.trim())
+          .filter(Boolean),
+      });
+      return;
+    }
+
     const text = content.trim();
-    if (!text || sendMutation.isPending) return;
+    if (!text) return;
     sendMutation.mutate({
+      mode: 'text',
       text,
       isInternalMessage: isInternal,
       mentionMessageId: mentioningMessage?.message_id ?? null,
@@ -1027,8 +1183,34 @@ export function ChatArea({ conversationId }: Props) {
   const avatarName = conv?.contact_name ?? conv?.client_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
+  const isWhatsappConversation = conv?.channel_type === 'whatsapp';
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
+  const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
+  const showRecordAction = !useTemplateMessage && !hasTypedContent;
+  const activeOutboundReturn = useMemo(() => {
+    if (!conv?.metadata || typeof conv.metadata !== 'object') return null;
+    const metadata = conv.metadata as Record<string, unknown>;
+    if (metadata.active_outbound_returned !== true) return null;
+
+    const originAgentName = typeof metadata.active_outbound_origin_agent_name === 'string'
+      ? metadata.active_outbound_origin_agent_name
+      : null;
+    const returnedAt = typeof metadata.active_outbound_returned_at === 'string'
+      ? metadata.active_outbound_returned_at
+      : null;
+
+    return {
+      originAgentName,
+      returnedAt,
+    };
+  }, [conv?.metadata]);
+
+  useEffect(() => {
+    if (isWhatsappConversation) return;
+    setUseTemplateMessage(false);
+    setTemplateError(null);
+  }, [isWhatsappConversation]);
 
   const grouped = useMemo(() => {
     const list: Array<{ date: string; msgs: Message[] }> = [];
@@ -1159,6 +1341,12 @@ export function ChatArea({ conversationId }: Props) {
                 >
                   📋 {conv.protocol_number}
                 </button>
+              )}
+              {conv?.assigned_at && conv.status !== 'resolved' && conv.status !== 'closed' && (
+                <>
+                  <span style={{ color: 'var(--txt-2)', fontSize: 11 }}>·</span>
+                  <ConversationTimer assignedAt={conv.assigned_at} />
+                </>
               )}
               {statusStyle && (
                 <span
@@ -1336,6 +1524,31 @@ export function ChatArea({ conversationId }: Props) {
         </div>
       </div>
 
+      {activeOutboundReturn && (
+        <div
+          style={{
+            margin: '8px 20px 0',
+            padding: '8px 10px',
+            borderRadius: 'var(--r)',
+            border: '1px solid rgba(245,158,11,.28)',
+            background: 'rgba(245,158,11,.10)',
+            color: 'var(--amber)',
+            display: 'grid',
+            gap: 2,
+          }}
+        >
+          <strong style={{ fontSize: 11, fontWeight: 600 }}>
+            {t('chat.activeOutboundReturnHeader')}
+          </strong>
+          <span style={{ fontSize: 11, color: 'var(--txt-2)' }}>
+            {t('chat.activeOutboundReturnSub', {
+              agent: activeOutboundReturn.originAgentName ?? t('chat.activeOutboundFallbackAgent'),
+            })}
+            {activeOutboundReturn.returnedAt ? ` · ${formatTime(activeOutboundReturn.returnedAt)}` : ''}
+          </span>
+        </div>
+      )}
+
       <div
         style={{
           position: 'relative',
@@ -1420,22 +1633,8 @@ export function ChatArea({ conversationId }: Props) {
         ) : (
           grouped.map(({ date, msgs }) => (
             <div key={date}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0 8px' }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 500,
-                    color: 'var(--txt-3)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    whiteSpace: 'nowrap',
-                    fontFamily: 'var(--mono)',
-                  }}
-                >
-                  {date}
-                </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+              <div className="chat-date-separator">
+                <span className="chat-date-separator-label">{date}</span>
               </div>
 
               {msgs.map((msg) => {
@@ -1444,7 +1643,7 @@ export function ChatArea({ conversationId }: Props) {
                 const isSystem = msg.sender_type === 'system';
                 const isCallRecording = msg.content_type === 'call_recording';
                 const callRecordingMeta = parseCallRecordingMetadata(msg);
-                const isCompanySide = isAgent || isBot;
+                const isCompanySide = isAgent;
                 const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
                 const showMessageContent = Boolean(msg.content) && !hideAudioLabel && !isCallRecording;
                 const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
@@ -1466,7 +1665,7 @@ export function ChatArea({ conversationId }: Props) {
                 const senderLabelColor = isSystem
                   ? 'var(--txt-3)'
                   : isBot
-                    ? 'var(--purple)'
+                    ? 'var(--txt-2)'
                     : isAgent
                       ? 'var(--teal)'
                       : 'var(--txt-3)';
@@ -1478,20 +1677,27 @@ export function ChatArea({ conversationId }: Props) {
                     <div
                       key={msg.id}
                       style={{
-                        textAlign: 'center',
-                        fontStyle: 'italic',
-                        fontSize: 12,
-                        color: 'var(--txt-3)',
-                        padding: '4px 16px',
-                        background: 'var(--bg-3)',
-                        borderRadius: 'var(--r-pill)',
-                        margin: '8px auto',
-                        maxWidth: 360,
-                        whiteSpace: 'pre-wrap',
-                        lineHeight: 1.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        margin: '8px 0',
+                        background: 'transparent',
+                        border: 'none',
+                        boxShadow: 'none',
                       }}
                     >
-                      {msg.content}
+                      <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                      <span
+                        style={{
+                          color: 'var(--txt-2)',
+                          fontSize: 11,
+                          whiteSpace: 'nowrap',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {msg.content}
+                      </span>
+                      <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
                     </div>
                   );
                 }
@@ -1597,7 +1803,7 @@ export function ChatArea({ conversationId }: Props) {
                             : isAgent
                               ? 'linear-gradient(135deg,#0f5a50,#0b4740)'
                               : isBot
-                                ? 'rgba(139, 92, 246, 0.12)'
+                                ? 'var(--bg-4)'
                                 : 'var(--bg-3)',
                           color: msg.is_internal ? 'var(--amber)' : isAgent ? '#eafff9' : 'var(--txt)',
                           border: msg.is_internal
@@ -1605,7 +1811,7 @@ export function ChatArea({ conversationId }: Props) {
                             : isAgent
                               ? '1px solid rgba(0,201,167,.28)'
                               : isBot
-                                ? '1px solid rgba(139, 92, 246, 0.2)'
+                                ? '1px solid var(--line)'
                                 : '1px solid var(--line-2)',
                         }}
                       >
@@ -1676,9 +1882,16 @@ export function ChatArea({ conversationId }: Props) {
                           fontFamily: 'var(--mono)',
                           color: 'var(--txt-3)',
                           textAlign: isCompanySide ? 'right' : 'left',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
                         }}
                       >
-                        {formatTime(msg.created_at)}
+                        <span>{formatTime(msg.created_at)}</span>
+                        {isAgent && (
+                          <MessageStatus status={resolveMessageDeliveryStatus(msg)} />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1690,19 +1903,6 @@ export function ChatArea({ conversationId }: Props) {
 
         <div ref={bottomRef} style={{ height: 1 }} />
 
-        {isTyping && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-            <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarGradient(avatarName), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 12, borderBottomLeftRadius: 4, padding: '8px 12px' }}>
-              {[0, 1, 2].map((i) => (
-                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--txt-3)', animation: `bounce 1.2s ease infinite ${i * 0.2}s` }} />
-              ))}
-            </div>
-            <span style={{ fontSize: 10, color: 'var(--txt-3)', fontStyle: 'italic' }}>{t('chat.typing')}</span>
-          </div>
-        )}
         </div>
 
         {unseenMessageCount > 0 && (
@@ -1954,11 +2154,37 @@ export function ChatArea({ conversationId }: Props) {
                         </svg>
                       )}
                     />
+                    {isWhatsappConversation && (
+                      <ToolbarButton
+                        tooltip="Template WhatsApp"
+                        active={useTemplateMessage}
+                        onClick={() => {
+                          const next = !useTemplateMessage;
+                          setUseTemplateMessage(next);
+                          setTemplateError(null);
+                          if (next) {
+                            setIsInternal(false);
+                            setShowEmojiPicker(false);
+                            setShowQuickReplies(false);
+                            setMentioningMessage(null);
+                          }
+                        }}
+                        icon={(
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                            <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" />
+                            <path d="M4.5 6h7M4.5 9h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      />
+                    )}
                     <ToolbarButton
                       tooltip="Nota interna"
                       active={isInternal}
                       activeColor="var(--amber)"
-                      onClick={() => setIsInternal((prev) => !prev)}
+                      onClick={() => {
+                        if (useTemplateMessage) return;
+                        setIsInternal((prev) => !prev);
+                      }}
                       icon={(
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                           <path d="M11 2L14 5L5 14H2V11L11 2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -2038,6 +2264,81 @@ export function ChatArea({ conversationId }: Props) {
                     >
                       ×
                     </button>
+                  </div>
+                )}
+                {useTemplateMessage && isWhatsappConversation && (
+                  <div
+                    style={{
+                      marginBottom: 8,
+                      padding: '10px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(0,201,167,.28)',
+                      background: 'rgba(0,201,167,.08)',
+                      display: 'grid',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 110px', gap: 8 }}>
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={(event) => {
+                          setTemplateName(event.target.value);
+                          if (templateError) setTemplateError(null);
+                        }}
+                        placeholder={t('chat.templateNamePlaceholder')}
+                        style={{
+                          width: '100%',
+                          background: 'var(--bg-3)',
+                          border: `1px solid ${templateError ? 'var(--red)' : 'var(--line-2)'}`,
+                          borderRadius: 'var(--r)',
+                          padding: '8px 10px',
+                          fontSize: 12,
+                          fontFamily: 'var(--font)',
+                          color: 'var(--txt)',
+                          outline: 'none',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={templateLanguage}
+                        onChange={(event) => setTemplateLanguage(event.target.value)}
+                        placeholder="pt_BR"
+                        style={{
+                          width: '100%',
+                          background: 'var(--bg-3)',
+                          border: '1px solid var(--line-2)',
+                          borderRadius: 'var(--r)',
+                          padding: '8px 10px',
+                          fontSize: 12,
+                          fontFamily: 'var(--mono)',
+                          color: 'var(--txt)',
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={templateParams}
+                      onChange={(event) => setTemplateParams(event.target.value)}
+                      placeholder={t('chat.templateParamsPlaceholder')}
+                      style={{
+                        width: '100%',
+                        background: 'var(--bg-3)',
+                        border: '1px solid var(--line-2)',
+                        borderRadius: 'var(--r)',
+                        padding: '8px 10px',
+                        fontSize: 12,
+                        fontFamily: 'var(--font)',
+                        color: 'var(--txt)',
+                        outline: 'none',
+                        resize: 'vertical',
+                        lineHeight: 1.45,
+                      }}
+                    />
+                    <div style={{ fontSize: 11, color: templateError ? 'var(--red)' : 'var(--txt-2)' }}>
+                      {templateError ?? t('chat.templateHint')}
+                    </div>
                   </div>
                 )}
                 <div
@@ -2140,7 +2441,15 @@ export function ChatArea({ conversationId }: Props) {
                   value={content}
                   onChange={handleContentChange}
                   onKeyDown={handleKeyDown}
-                  placeholder={isComposerAttachmentActive ? t('media.caption') : isInternal ? 'Escreva uma nota interna...' : t('chat.inputPlaceholder')}
+                  placeholder={
+                    useTemplateMessage
+                      ? t('chat.templatePreviewPlaceholder')
+                      : isComposerAttachmentActive
+                        ? t('media.caption')
+                        : isInternal
+                          ? 'Escreva uma nota interna...'
+                          : t('chat.inputPlaceholder')
+                  }
                   disabled={!canSendMessage || isComposerAttachmentActive}
                   style={{
                     flex: 1,
@@ -2149,7 +2458,7 @@ export function ChatArea({ conversationId }: Props) {
                     outline: 'none',
                     fontSize: 13,
                     fontFamily: 'var(--font)',
-                    color: isInternal ? 'var(--amber)' : 'var(--txt)',
+                    color: isInternal && !useTemplateMessage ? 'var(--amber)' : 'var(--txt)',
                     resize: 'none',
                     minHeight: 22,
                     maxHeight: 120,
@@ -2159,11 +2468,11 @@ export function ChatArea({ conversationId }: Props) {
 
                 <button
                   type="button"
-                  onClick={hasTypedContent ? handleSend : () => void audioRecorderRef.current?.start()}
+                  onClick={showRecordAction ? () => void audioRecorderRef.current?.start() : handleSend}
                   disabled={
                     !canSendMessage ||
                     isComposerAttachmentActive ||
-                    (hasTypedContent ? sendMutation.isPending : false)
+                    (canSubmitComposer ? sendMutation.isPending : !showRecordAction)
                   }
                   style={{
                     width: 36,
@@ -2174,13 +2483,13 @@ export function ChatArea({ conversationId }: Props) {
                     position: 'relative',
                     overflow: 'hidden',
                     flexShrink: 0,
-                    background: hasTypedContent ? 'var(--teal)' : 'var(--bg-4)',
-                    color: hasTypedContent ? '#0a1a18' : 'var(--txt-2)',
+                    background: canSubmitComposer ? 'var(--teal)' : 'var(--bg-4)',
+                    color: canSubmitComposer ? '#0a1a18' : 'var(--txt-2)',
                     transition: 'all .2s cubic-bezier(.4,0,.2,1)',
-                    opacity: (!canSendMessage || isComposerAttachmentActive || (hasTypedContent && sendMutation.isPending)) ? 0.45 : 1,
+                    opacity: (!canSendMessage || isComposerAttachmentActive || (canSubmitComposer && sendMutation.isPending)) ? 0.45 : 1,
                   }}
                   onMouseEnter={(event) => {
-                    if (!hasTypedContent) {
+                    if (!canSubmitComposer) {
                       event.currentTarget.style.background = 'var(--bg-5)';
                       event.currentTarget.style.color = 'var(--teal)';
                     } else {
@@ -2189,11 +2498,11 @@ export function ChatArea({ conversationId }: Props) {
                   }}
                   onMouseLeave={(event) => {
                     event.currentTarget.style.filter = 'none';
-                    event.currentTarget.style.background = hasTypedContent ? 'var(--teal)' : 'var(--bg-4)';
-                    event.currentTarget.style.color = hasTypedContent ? '#0a1a18' : 'var(--txt-2)';
+                    event.currentTarget.style.background = canSubmitComposer ? 'var(--teal)' : 'var(--bg-4)';
+                    event.currentTarget.style.color = canSubmitComposer ? '#0a1a18' : 'var(--txt-2)';
                   }}
-                  aria-label={hasTypedContent ? t('chat.send') : t('media.record')}
-                  title={hasTypedContent ? t('chat.send') : t('media.record')}
+                  aria-label={showRecordAction ? t('media.record') : t('chat.send')}
+                  title={showRecordAction ? t('media.record') : t('chat.send')}
                 >
                   <span
                     style={{
@@ -2202,8 +2511,8 @@ export function ChatArea({ conversationId }: Props) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      opacity: hasTypedContent ? 0 : 1,
-                      transform: hasTypedContent ? 'scale(.7)' : 'scale(1)',
+                      opacity: showRecordAction ? 1 : 0,
+                      transform: showRecordAction ? 'scale(1)' : 'scale(.7)',
                       transition: 'all .2s cubic-bezier(.4,0,.2,1)',
                     }}
                   >
@@ -2220,8 +2529,8 @@ export function ChatArea({ conversationId }: Props) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      opacity: hasTypedContent ? 1 : 0,
-                      transform: hasTypedContent ? 'scale(1)' : 'scale(.7)',
+                      opacity: showRecordAction ? 0 : 1,
+                      transform: showRecordAction ? 'scale(.7)' : 'scale(1)',
                       transition: 'all .2s cubic-bezier(.4,0,.2,1)',
                     }}
                   >
@@ -2402,6 +2711,8 @@ export function ChatArea({ conversationId }: Props) {
                   ? t('media.caption')
                   : showShortcutSuggestions
                   ? tAdmin('tenantAdmin.quickReplies.chat.hint')
+                  : useTemplateMessage
+                  ? t('chat.templateModeHint')
                   : canSendMessage && content.length > 0
                   ? t('chat.charCount', { count: content.length })
                   : canSendMessage && isInternal
