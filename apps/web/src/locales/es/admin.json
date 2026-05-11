@@ -255,7 +255,10 @@
         "reactivated": "Usuario reactivado con éxito",
         "passwordReset": "Contraseña de {{name}} restablecida",
         "tempPasswordHint": "Comparte esta contraseña con el usuario. Expirará después del primer inicio de sesión.",
-        "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal."
+        "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal.",
+        "inviteEmailNotConfigured": "Invitación creada, pero el envío de correo no está configurado. Define RESEND_API_KEY en el entorno de la API.",
+        "inviteEmailDomainNotVerified": "Invitación creada, pero el remitente no es válido. Revisa RESEND_FROM_EMAIL y el dominio verificado en Resend.",
+        "inviteEmailDeliveryFailed": "No fue posible enviar la invitación por correo ahora. Revisa la configuración del proveedor e inténtalo de nuevo."
       }
     },
     "channels": {

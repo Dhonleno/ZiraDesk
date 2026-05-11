@@ -272,7 +272,10 @@
         "tempPassword": "Senha temporária",
         "passwordReset": "Senha de {{name}} redefinida com sucesso",
         "tempPasswordHint": "Compartilhe esta senha com o usuário. Ela será inválida após o primeiro login.",
-        "resetPasswordConfirm": "Redefinir a senha de {{name}} ({{email}})? Uma nova senha temporária será gerada."
+        "resetPasswordConfirm": "Redefinir a senha de {{name}} ({{email}})? Uma nova senha temporária será gerada.",
+        "inviteEmailNotConfigured": "Convite criado, mas o envio de e-mail não está configurado. Defina RESEND_API_KEY no ambiente da API.",
+        "inviteEmailDomainNotVerified": "Convite criado, mas o remetente de e-mail não está válido. Verifique RESEND_FROM_EMAIL e o domínio no Resend.",
+        "inviteEmailDeliveryFailed": "Não foi possível enviar o convite por e-mail agora. Revise a configuração do provedor e tente novamente."
       }
     },
     "channels": {

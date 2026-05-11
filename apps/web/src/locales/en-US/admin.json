@@ -255,7 +255,10 @@
         "reactivated": "User reactivated successfully",
         "passwordReset": "Password for {{name}} has been reset",
         "tempPasswordHint": "Share this password with the user. It will expire after first login.",
-        "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated."
+        "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated.",
+        "inviteEmailNotConfigured": "Invite created, but email delivery is not configured. Set RESEND_API_KEY in the API environment.",
+        "inviteEmailDomainNotVerified": "Invite created, but sender email is invalid. Check RESEND_FROM_EMAIL and your verified domain in Resend.",
+        "inviteEmailDeliveryFailed": "We could not send the invite email right now. Check provider settings and try again."
       }
     },
     "channels": {

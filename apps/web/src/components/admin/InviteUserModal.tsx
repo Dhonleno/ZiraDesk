@@ -23,6 +23,24 @@ interface Props {
   onClose: () => void;
 }
 
+function mapInviteErrorMessage(rawMessage: string | undefined, t: (key: string) => string): string {
+  const message = (rawMessage ?? '').toLowerCase();
+
+  if (message.includes('resend_api_key')) {
+    return t('tenantAdmin.users.messages.inviteEmailNotConfigured');
+  }
+
+  if (message.includes('resend_from_email') || message.includes('domínio') || message.includes('domain')) {
+    return t('tenantAdmin.users.messages.inviteEmailDomainNotVerified');
+  }
+
+  if (message.includes('não foi possível enviar o convite por e-mail') || message.includes('could not send invite email')) {
+    return t('tenantAdmin.users.messages.inviteEmailDeliveryFailed');
+  }
+
+  return rawMessage ?? t('tenantAdmin.common.errorSave');
+}
+
 export function InviteUserModal({ open, onClose }: Props) {
   const { t } = useTranslation('admin');
   const toast = useToast();
@@ -48,7 +66,8 @@ export function InviteUserModal({ open, onClose }: Props) {
       toast.success(t('tenantAdmin.users.messages.invited'));
     },
     onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
+      const rawMessage = err.response?.data?.error?.message;
+      toast.error(mapInviteErrorMessage(rawMessage, t as (key: string) => string));
     },
   });
 
