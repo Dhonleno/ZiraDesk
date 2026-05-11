@@ -169,6 +169,10 @@ interface ActiveConversationByPhoneRow {
 }
 
 const ACTIVE_CONVERSATION_STATUSES = "'open', 'pending', 'active_outbound', 'in_service', 'in_progress', 'bot'";
+const CLOSE_KEYWORD = '#sair';
+const CLOSE_MESSAGE = 'Seu atendimento foi encerrado. Obrigado pelo contato! 😊';
+const CLOSE_HINT = '\n\nDigite *#sair* a qualquer momento para encerrar o atendimento.';
+const CLIENT_CLOSED_SYSTEM_MESSAGE = 'Cliente encerrou o atendimento digitando #sair';
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -190,6 +194,11 @@ function withWhatsappEnvFallback(credentials: Record<string, string>): Record<st
     accessToken: getCredentialValue(credentials, 'accessToken', 'access_token') ?? env.WHATSAPP_ACCESS_TOKEN,
     verifyToken: getCredentialValue(credentials, 'verifyToken', 'verify_token') ?? env.WHATSAPP_VERIFY_TOKEN,
   };
+}
+
+function withCloseHint(messageText: string): string {
+  if (messageText.toLowerCase().includes(CLOSE_KEYWORD)) return messageText;
+  return `${messageText}${CLOSE_HINT}`;
 }
 
 function buildMentionPreview(content: string | null | undefined, contentType: string): string {
@@ -397,6 +406,40 @@ async function insertBotMessage(
     conversationId,
     content,
   );
+}
+
+async function insertSystemMessage(
+  conversationId: string,
+  schemaName: string,
+  content: string,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".messages (
+      id, conversation_id, sender_type, content, content_type, is_internal, created_at
+    )
+    VALUES (
+      gen_random_uuid(), $1::uuid, 'system', $2, 'text', false, NOW()
+    )`,
+    conversationId,
+    content,
+  );
+}
+
+async function sendConversationWhatsAppText(
+  channelCredentials: Record<string, string>,
+  to: string,
+  text: string,
+): Promise<boolean> {
+  const outgoingPhoneNumberId = getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id');
+  const outgoingAccessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
+  if (!outgoingPhoneNumberId || !outgoingAccessToken) return false;
+
+  return sendWhatsAppTextMessage({
+    text,
+    to,
+    phoneNumberId: outgoingPhoneNumberId,
+    accessToken: outgoingAccessToken,
+  });
 }
 
 async function closeConversationOutsideHours(
@@ -738,6 +781,26 @@ async function processIncomingMessage(
       conversationId,
     );
 
+    const normalizedIncomingContent = content.trim().toLowerCase();
+    if (normalizedIncomingContent === CLOSE_KEYWORD) {
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET status = 'closed',
+             resolved_at = NOW()
+         WHERE id = $1::uuid`,
+        conversationId,
+      );
+
+      await sendConversationWhatsAppText(channelCredentials, formattedPhone, CLOSE_MESSAGE);
+      await insertBotMessage(conversationId, schemaName, CLOSE_MESSAGE);
+      await insertSystemMessage(conversationId, schemaName, CLIENT_CLOSED_SYSTEM_MESSAGE);
+
+      return {
+        conversationId,
+        closeByKeyword: true as const,
+      };
+    }
+
     const currentConversation = convRows[0] ?? null;
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
@@ -902,6 +965,7 @@ async function processIncomingMessage(
 
       return {
         conversationId,
+        closeByKeyword: false as const,
         isNewConversation: false,
         shouldAutoAssign: false,
         botTag: undefined,
@@ -1035,6 +1099,7 @@ async function processIncomingMessage(
     );
 
     if (botResponse) {
+      const botText = isNewConversation ? withCloseHint(botResponse.text) : botResponse.text;
       const botRows = await tx.$queryRawUnsafe<
         [{ id: string; content: string; created_at: Date; sender_type: string }]
       >(
@@ -1042,11 +1107,11 @@ async function processIncomingMessage(
          VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
          RETURNING id, content, created_at, sender_type`,
         conversationId,
-        botResponse.text,
+        botText,
       );
       botSavedMessage = botRows[0]!;
       botMessageId = botSavedMessage.id;
-      botMessageContent = botResponse.text;
+      botMessageContent = botText;
 
       if (botResponse.type === 'choice') {
         await tx.$executeRawUnsafe(
@@ -1055,7 +1120,7 @@ async function processIncomingMessage(
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
-          botResponse.text.slice(0, 255),
+          botText.slice(0, 255),
           conversationId,
         );
       } else {
@@ -1065,7 +1130,7 @@ async function processIncomingMessage(
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
-          botResponse.text.slice(0, 255),
+          botText.slice(0, 255),
           conversationId,
         );
       }
@@ -1085,6 +1150,7 @@ async function processIncomingMessage(
 
     return {
       conversationId,
+      closeByKeyword: false as const,
       isNewConversation,
       shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
       botTag: botResponse?.type === 'choice' ? (botResponse.option?.tag ?? undefined) : undefined,
@@ -1105,6 +1171,23 @@ async function processIncomingMessage(
       refreshInactivityForAssignedConversation: hasAssignedAgent,
     };
   });
+
+  if (result.closeByKeyword) {
+    await cancelInactivityJobs(result.conversationId);
+
+    const io = getSocketServer();
+    const resolvedAt = new Date().toISOString();
+    io.to(`tenant:${tenantId}`).emit('conversation:updated', {
+      conversationId: result.conversationId,
+      status: 'closed',
+      resolvedAt,
+    });
+    io.to(`conversation:${result.conversationId}`).emit('conversation:closed', {
+      conversationId: result.conversationId,
+      reason: 'client_request',
+    });
+    return;
+  }
 
   if (result.refreshInactivityForAssignedConversation) {
     await cancelInactivityJobs(result.conversationId);
@@ -1180,16 +1263,21 @@ async function processIncomingMessage(
   }
 
   if (result.botMessageId && result.botMessageContent) {
-    await messageQueue.add('send', {
-      messageId: result.botMessageId,
-      conversationId: result.conversationId,
-      tenantId,
-      tenantSchema: schemaName,
-      channelType: 'whatsapp',
-      channelCredentials,
-      content: result.botMessageContent,
-      to: formattedPhone,
-    });
+    if (result.shouldAutoAssign) {
+      // Send transfer message directly so it arrives before the "accepted" message from autoAssign
+      await sendConversationWhatsAppText(channelCredentials, formattedPhone, result.botMessageContent);
+    } else {
+      await messageQueue.add('send', {
+        messageId: result.botMessageId,
+        conversationId: result.conversationId,
+        tenantId,
+        tenantSchema: schemaName,
+        channelType: 'whatsapp',
+        channelCredentials,
+        content: result.botMessageContent,
+        to: formattedPhone,
+      });
+    }
   }
 
   if (result.shouldAutoAssign) {
