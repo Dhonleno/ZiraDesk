@@ -21,6 +21,7 @@ const envSchema = z.object({
   TWILIO_API_SECRET: z.string(),
   API_URL: z.string(),
   RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
 });
 

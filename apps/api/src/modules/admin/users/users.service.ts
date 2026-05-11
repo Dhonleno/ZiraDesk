@@ -1,6 +1,8 @@
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
+import { Resend } from 'resend';
 import { prisma } from '../../../config/database.js';
+import { env } from '../../../config/env.js';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.schema.js';
 
 export class NotFoundError extends Error {
@@ -39,6 +41,15 @@ interface UserRow {
   status: string;
   last_seen_at: Date | null;
   created_at: Date;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export async function listUsers(query: ListUsersQuery) {
@@ -116,6 +127,10 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
   const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
+  if (!env.RESEND_API_KEY) {
+    throw new ConflictError('Envio de convite por e-mail não configurado. Defina RESEND_API_KEY.');
+  }
+
   const created = await prisma.$queryRawUnsafe<UserRow[]>(
     `INSERT INTO users (name, email, password_hash, role, status)
      VALUES ($1, $2, $3, $4, 'active')
@@ -126,7 +141,44 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
     data.role,
   );
 
-  return { user: created[0]!, tempPassword };
+  const user = created[0]!;
+  const resend = new Resend(env.RESEND_API_KEY);
+  const fromEmail = env.RESEND_FROM_EMAIL || `suporte@${tenant.slug}.ziradesk.com.br`;
+  const loginUrl = `${env.APP_URL.replace(/\/$/, '')}/login`;
+
+  try {
+    const { error } = await resend.emails.send({
+      from: `ZiraDesk <${fromEmail}>`,
+      to: user.email,
+      subject: 'Convite para acessar o ZiraDesk',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#111827;">
+          <h2 style="margin:0 0 12px;">Convite de acesso</h2>
+          <p style="margin:0 0 10px;">Olá, ${escapeHtml(user.name)}.</p>
+          <p style="margin:0 0 10px;">
+            Você foi convidado para acessar o workspace <strong>${escapeHtml(tenant.name)}</strong> no ZiraDesk.
+          </p>
+          <p style="margin:0 0 10px;"><strong>E-mail:</strong> ${escapeHtml(user.email)}</p>
+          <p style="margin:0 0 10px;"><strong>Senha temporária:</strong> <code>${escapeHtml(tempPassword)}</code></p>
+          <p style="margin:0 0 10px;">Faça login em: <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p>
+          <p style="margin:0;">Por segurança, altere essa senha após o primeiro acesso.</p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (sendError) {
+    await prisma.$executeRawUnsafe(`DELETE FROM users WHERE id = $1::uuid`, user.id);
+
+    const reason = sendError instanceof Error ? sendError.message : 'erro desconhecido';
+    throw new ConflictError(
+      `Não foi possível enviar o convite por e-mail (${reason}). Verifique RESEND_FROM_EMAIL/domínio no Resend e tente novamente.`,
+    );
+  }
+
+  return { user, tempPassword };
 }
 
 export async function updateUser(id: string, data: UpdateUserInput) {
