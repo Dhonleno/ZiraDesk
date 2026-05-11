@@ -104,6 +104,7 @@
   "chat": {
     "inputPlaceholder": "Type your message...",
     "resolvedPlaceholder": "This conversation has been resolved",
+    "closedByClient": "This conversation was closed by the customer",
     "internalNote": "Internal note",
     "send": "Send",
     "resolve": "Resolve",

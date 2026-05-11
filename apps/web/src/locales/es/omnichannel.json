@@ -104,6 +104,7 @@
   "chat": {
     "inputPlaceholder": "Escribe tu mensaje...",
     "resolvedPlaceholder": "Esta conversación ha sido resuelta",
+    "closedByClient": "Esta atención fue cerrada por el cliente",
     "internalNote": "Nota interna",
     "send": "Enviar",
     "resolve": "Resolver",

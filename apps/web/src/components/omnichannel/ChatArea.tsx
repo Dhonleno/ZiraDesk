@@ -10,7 +10,7 @@ import {
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
-import { subscribeToEvent } from '../../services/socket';
+import { emitSocketEvent, subscribeToEvent } from '../../services/socket';
 import { ConversationTimer } from './ConversationTimer';
 import { ResolveModal, type ResolvePayload } from './ResolveModal';
 import { TransferModal } from './TransferModal';
@@ -36,6 +36,11 @@ interface MessageStatusSocketEvent {
   messageId: string;
   externalId?: string | null;
   status: Exclude<MessageDeliveryStatus, 'pending'>;
+}
+
+interface ConversationClosedSocketEvent {
+  conversationId: string;
+  reason?: string;
 }
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
@@ -346,6 +351,7 @@ export function ChatArea({ conversationId }: Props) {
   const [selectedShortcutIndex, setSelectedShortcutIndex] = useState(0);
   const [unseenMessageCount, setUnseenMessageCount] = useState(0);
   const [isAssuming, setIsAssuming] = useState(false);
+  const [isConversationClosed, setIsConversationClosed] = useState(false);
   const [mentioningMessage, setMentioningMessage] = useState<MentionData | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
@@ -675,6 +681,9 @@ export function ChatArea({ conversationId }: Props) {
 
   useEffect(() => {
     if (!hasValidSession) return;
+    setIsConversationClosed(false);
+    const joinPayload = { conversationId };
+    emitSocketEvent('conversation:join', joinPayload);
 
     const handleIncomingConversationUpdate = () => {
       const nearBottom = isNearBottom();
@@ -721,6 +730,12 @@ export function ChatArea({ conversationId }: Props) {
     }>('conversation:updated', (event) => {
       const updatedConversationId = event.conversationId ?? event.conversation?.id;
       if (updatedConversationId !== conversationId) return;
+      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    });
+    const unsubClosed = subscribeToEvent<ConversationClosedSocketEvent>('conversation:closed', (event) => {
+      if (event.conversationId !== conversationId) return;
+      setIsConversationClosed(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
@@ -784,6 +799,7 @@ export function ChatArea({ conversationId }: Props) {
     });
 
     const unsubSocketConnect = subscribeToEvent('connect', () => {
+      emitSocketEvent('conversation:join', joinPayload);
       void loadLatestMessages(true);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
@@ -795,6 +811,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubResolved();
       unsubTransferred();
       unsubUpdated();
+      unsubClosed();
       unsubCsatUpdated();
       unsubHelpRequested();
       unsubHelpAccepted();
@@ -802,6 +819,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubCallStatus();
       unsubMessageStatus();
       unsubSocketConnect();
+      emitSocketEvent('conversation:leave', joinPayload);
     };
   }, [conversationId, hasValidSession, isNearBottom, loadLatestMessages, qc]);
 
@@ -897,6 +915,7 @@ export function ChatArea({ conversationId }: Props) {
   const reopenMutation = useMutation({
     mutationFn: () => omnichannelApi.reopen(conversationId),
     onSuccess: () => {
+      setIsConversationClosed(false);
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
@@ -1164,6 +1183,7 @@ export function ChatArea({ conversationId }: Props) {
 
   const conv = data?.conversation as Conversation | undefined;
   const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
+  const isClosedForComposer = isResolved || isConversationClosed;
   const isUnassigned = !conv?.assigned_to;
   const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
   const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
@@ -1171,9 +1191,9 @@ export function ChatArea({ conversationId }: Props) {
   const isHelper = acceptedHelpers.some((helper) => helper.helper_user_id === currentUserId);
   const helperIndicator = acceptedHelpers[0] ?? null;
   const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole ?? '');
-  const canSendMessage = (isAssignedToMe || isHelper) && !isResolved;
-  const canAssume = isUnassigned && !isResolved;
-  const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isResolved;
+  const canSendMessage = (isAssignedToMe || isHelper) && !isClosedForComposer;
+  const canAssume = isUnassigned && !isClosedForComposer;
+  const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
   const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
   const organizationName = (
@@ -2542,7 +2562,7 @@ export function ChatArea({ conversationId }: Props) {
                 </button>
                 </div>
               </>
-            ) : isUnassigned ? (
+            ) : !isClosedForComposer && isUnassigned ? (
               <div
                 style={{
                   display: 'flex',
@@ -2607,7 +2627,7 @@ export function ChatArea({ conversationId }: Props) {
                   {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
                 </button>
               </div>
-            ) : isAssignedToOther && !isResolved && !isHelper ? (
+            ) : !isClosedForComposer && isAssignedToOther && !isHelper ? (
               <div
                 style={{
                   display: 'flex',
@@ -2684,7 +2704,11 @@ export function ChatArea({ conversationId }: Props) {
                   cursor: 'not-allowed',
                 }}
               >
-                <span>Este atendimento foi encerrado</span>
+                <span>
+                  {isConversationClosed
+                    ? t('chat.closedByClient')
+                    : 'Este atendimento foi encerrado'}
+                </span>
                 <button
                   onClick={() => reopenMutation.mutate()}
                   disabled={reopenMutation.isPending}
