@@ -722,7 +722,7 @@ export async function processBotMessage(
   if (selectedOption.has_submenu) {
     const subOptions = await getOptionsByParent(db, menu.id, selectedOption.id);
     const subGreeting = selectedOption.submenu_greeting?.trim()
-      || `Voce selecionou *${selectedOption.label}*. Escolha uma opcao:`;
+      || `*${selectedOption.label}* — escolha uma opção:`;
 
     const menuText = buildMenuText(subGreeting, subOptions, menu.footer, true);
     const newPath = [...path, selectedOption.id];

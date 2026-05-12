@@ -1100,6 +1100,24 @@ async function processIncomingMessage(
 
     if (botResponse) {
       const botText = isNewConversation ? withCloseHint(botResponse.text) : botResponse.text;
+      let resolvedBotText = botText;
+
+      if (botResponse.type === 'choice') {
+        const queuePositionRows = await tx.$queryRawUnsafe<Array<{ count: string }>>(
+          `SELECT COUNT(*)::text AS count
+           FROM conversations
+           WHERE assigned_to IS NULL
+             AND status IN ('open', 'pending', 'bot')
+             AND id != $1::uuid`,
+          conversationId,
+        );
+        const position = Number.parseInt(queuePositionRows[0]?.count ?? '0', 10) + 1;
+
+        resolvedBotText = position <= 1
+          ? 'Aguarde um momento, você é o próximo a ser atendido.'
+          : `Você é o ${position}º da fila. Em breve um de nossos atendentes irá lhe ajudar.`;
+      }
+
       const botRows = await tx.$queryRawUnsafe<
         [{ id: string; content: string; created_at: Date; sender_type: string }]
       >(
@@ -1107,11 +1125,11 @@ async function processIncomingMessage(
          VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
          RETURNING id, content, created_at, sender_type`,
         conversationId,
-        botText,
+        resolvedBotText,
       );
       botSavedMessage = botRows[0]!;
       botMessageId = botSavedMessage.id;
-      botMessageContent = botText;
+      botMessageContent = resolvedBotText;
 
       if (botResponse.type === 'choice') {
         await tx.$executeRawUnsafe(
@@ -1120,7 +1138,7 @@ async function processIncomingMessage(
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
-          botText.slice(0, 255),
+          resolvedBotText.slice(0, 255),
           conversationId,
         );
       } else {
@@ -1130,7 +1148,7 @@ async function processIncomingMessage(
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
-          botText.slice(0, 255),
+          resolvedBotText.slice(0, 255),
           conversationId,
         );
       }
