@@ -143,6 +143,10 @@
         "assignedMessage": "Message when assigned to agent",
         "assignedMessageHint": "Sent to customer when an agent takes over the conversation"
       },
+      "maxConversations": "Simultaneous conversation limit per agent",
+      "maxConversationsDesc": "Maximum number of open conversations each agent can have. Leave blank for no limit.",
+      "maxConversationsAgent": "Conversation limit",
+      "maxConversationsAgentDesc": "Individual limit for this agent. Leave blank to use the global default.",
       "emailInbound": {
         "title": "Support Email",
         "address": "Email address",

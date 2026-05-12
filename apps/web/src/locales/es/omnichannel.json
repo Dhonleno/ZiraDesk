@@ -187,13 +187,24 @@
   },
   "transfer": {
     "title": "Transferir atención",
+    "byAgent": "Por agente",
+    "bySkill": "Por grupo",
     "searchAgent": "Buscar agente...",
-    "reason": "Motivo (opcional)",
-    "reasonPlaceholder": "¿Por qué estás transfiriendo?",
-    "confirm": "Transferir",
+    "available": "Disponible",
+    "inService": "En atención ({{count}})",
+    "noAgents": "Ningún agente disponible en este momento",
+    "noSkills": "Ningún grupo con agentes disponibles",
+    "onlineAgents": "{{count}} agente en línea",
+    "onlineAgents_plural": "{{count}} agentes en línea",
+    "reason": "Motivo de transferencia (opcional)",
+    "reasonPlaceholder": "Describa el motivo...",
+    "submit": "Transferir atención",
     "cancel": "Cancelar",
-    "transferred": "Conversación transferida para {{name}}",
-    "systemMessage": "Atención transferida para {{name}}"
+    "transferred": "Conversación transferida a {{name}}",
+    "systemMessage": "Atención transferida a {{name}}",
+    "agentOffline": "Este agente está desconectado",
+    "noAgentsForSkill": "Ningún agente disponible para este grupo",
+    "error": "Error al transferir conversación"
   },
   "history": {
     "loadMore": "Cargar mensajes anteriores",
@@ -239,7 +250,8 @@
     "resolved": "Resueltos",
     "avgTime": "TME",
     "viewConversations": "Ver atenciones",
-    "noAgents": "Ningún agente en línea"
+    "noAgents": "Ningún agente en línea",
+    "conversations": "atenciones"
   },
   "tv": {
     "title": "Monitor en Tiempo Real",

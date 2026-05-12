@@ -143,6 +143,10 @@
         "assignedMessage": "Mensagem ao transferir para agente",
         "assignedMessageHint": "Enviada ao cliente quando um agente assume o atendimento"
       },
+      "maxConversations": "Limite de atendimentos simultâneos por agente",
+      "maxConversationsDesc": "Número máximo de atendimentos abertos que cada agente pode ter. Deixe em branco para sem limite.",
+      "maxConversationsAgent": "Limite de atendimentos",
+      "maxConversationsAgentDesc": "Limite individual para este agente. Deixe em branco para usar o padrão global.",
       "emailInbound": {
         "title": "E-mail de Suporte",
         "address": "Endereço de e-mail",

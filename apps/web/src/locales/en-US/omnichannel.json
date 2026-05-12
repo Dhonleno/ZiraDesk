@@ -187,13 +187,24 @@
   },
   "transfer": {
     "title": "Transfer conversation",
+    "byAgent": "By agent",
+    "bySkill": "By group",
     "searchAgent": "Search agent...",
-    "reason": "Reason (optional)",
-    "reasonPlaceholder": "Why are you transferring?",
-    "confirm": "Transfer",
+    "available": "Available",
+    "inService": "In service ({{count}})",
+    "noAgents": "No agents available at the moment",
+    "noSkills": "No groups with available agents",
+    "onlineAgents": "{{count}} agent online",
+    "onlineAgents_plural": "{{count}} agents online",
+    "reason": "Transfer reason (optional)",
+    "reasonPlaceholder": "Describe the reason...",
+    "submit": "Transfer conversation",
     "cancel": "Cancel",
     "transferred": "Conversation transferred to {{name}}",
-    "systemMessage": "Conversation transferred to {{name}}"
+    "systemMessage": "Conversation transferred to {{name}}",
+    "agentOffline": "This agent is offline",
+    "noAgentsForSkill": "No agents available for this group",
+    "error": "Error transferring conversation"
   },
   "history": {
     "loadMore": "Load previous messages",
@@ -239,7 +250,8 @@
     "resolved": "Resolved",
     "avgTime": "AHT",
     "viewConversations": "View conversations",
-    "noAgents": "No agents online"
+    "noAgents": "No agents online",
+    "conversations": "conversations"
   },
   "tv": {
     "title": "Live Operations Monitor",

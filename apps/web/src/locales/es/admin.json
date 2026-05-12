@@ -143,6 +143,10 @@
         "assignedMessage": "Mensaje al transferir a un agente",
         "assignedMessageHint": "Se envía al cliente cuando un agente toma la conversación"
       },
+      "maxConversations": "Límite de atenciones simultáneas por agente",
+      "maxConversationsDesc": "Número máximo de conversaciones abiertas que puede tener cada agente. Deje en blanco para sin límite.",
+      "maxConversationsAgent": "Límite de atenciones",
+      "maxConversationsAgentDesc": "Límite individual para este agente. Deje en blanco para usar el valor global.",
       "emailInbound": {
         "title": "Correo de Soporte",
         "address": "Dirección de correo",
