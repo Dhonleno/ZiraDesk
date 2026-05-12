@@ -36,6 +36,7 @@
       "category": "Categoría",
       "dueDate": "Fecha límite",
       "tags": "Etiquetas",
+      "source": "Origen",
       "createdAt": "Creado en",
       "updatedAt": "Actualizado en",
       "noResponsible": "Sin responsable",
@@ -60,6 +61,7 @@
     },
     "actions": {
       "assign": "Asignar",
+      "assignToMe": "Asignarme",
       "resolve": "Resolver",
       "close": "Cerrar",
       "reopen": "Reabrir",
@@ -108,6 +110,47 @@
     "newFromEmail": "Nuevo ticket por e-mail",
     "newFromPortal": "Nuevo ticket desde el portal",
     "filterByAgent": "Todos los agentes",
+    "searchPlaceholder": "Buscar tickets...",
+    "view": "Vista",
+    "viewKanban": "Kanban",
+    "viewList": "Lista",
+    "errorUpdate": "Error al actualizar el ticket",
+    "errorAttachmentUpload": "Error al subir adjunto",
+    "attachmentUploaded": "Adjunto enviado",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "attachFile": "Adjuntar archivo",
+    "kanban": {
+      "open": "Abierto",
+      "inProgress": "En progreso",
+      "waiting": "En espera",
+      "resolved": "Resuelto",
+      "empty": "Ningún ticket"
+    },
+    "card": {
+      "noDueDate": "Sin fecha límite",
+      "overdue": "Vencido"
+    },
+    "detail": {
+      "backToList": "Volver",
+      "editTitle": "Editar título",
+      "addTask": "Agregar tarea",
+      "addAttachment": "Agregar adjunto",
+      "noAttachments": "Sin adjuntos",
+      "comments": "Comentarios",
+      "history": "Historial",
+      "write": "Escribir",
+      "preview": "Vista previa",
+      "newTagPlaceholder": "+ Etiqueta",
+      "systemUser": "Sistema",
+      "sections": {
+        "details": "DETALLES",
+        "assignment": "ASIGNACIÓN",
+        "contact": "CONTACTO",
+        "dueDate": "PLAZO",
+        "classification": "CLASIFICACIÓN"
+      }
+    },
     "realtime": {
       "newTicket": "Nuevo ticket creado",
       "assignedToYou": "Se te ha asignado un ticket"

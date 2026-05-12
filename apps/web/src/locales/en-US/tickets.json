@@ -36,6 +36,7 @@
       "category": "Category",
       "dueDate": "Due date",
       "tags": "Tags",
+      "source": "Source",
       "createdAt": "Created at",
       "updatedAt": "Updated at",
       "noResponsible": "Unassigned",
@@ -60,6 +61,7 @@
     },
     "actions": {
       "assign": "Assign",
+      "assignToMe": "Assign to me",
       "resolve": "Resolve",
       "close": "Close",
       "reopen": "Reopen",
@@ -108,6 +110,47 @@
     "newFromEmail": "New ticket by email",
     "newFromPortal": "New ticket from portal",
     "filterByAgent": "All agents",
+    "searchPlaceholder": "Search tickets...",
+    "view": "View",
+    "viewKanban": "Kanban",
+    "viewList": "List",
+    "errorUpdate": "Error updating ticket",
+    "errorAttachmentUpload": "Error uploading attachment",
+    "attachmentUploaded": "Attachment uploaded",
+    "save": "Save",
+    "cancel": "Cancel",
+    "attachFile": "Attach file",
+    "kanban": {
+      "open": "Open",
+      "inProgress": "In progress",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "empty": "No ticket"
+    },
+    "card": {
+      "noDueDate": "No due date",
+      "overdue": "Overdue"
+    },
+    "detail": {
+      "backToList": "Back",
+      "editTitle": "Edit title",
+      "addTask": "Add task",
+      "addAttachment": "Add attachment",
+      "noAttachments": "No attachments",
+      "comments": "Comments",
+      "history": "History",
+      "write": "Write",
+      "preview": "Preview",
+      "newTagPlaceholder": "+ Tag",
+      "systemUser": "System",
+      "sections": {
+        "details": "DETAILS",
+        "assignment": "ASSIGNMENT",
+        "contact": "CONTACT",
+        "dueDate": "DUE DATE",
+        "classification": "CLASSIFICATION"
+      }
+    },
     "realtime": {
       "newTicket": "New ticket created",
       "assignedToYou": "A ticket was assigned to you"
