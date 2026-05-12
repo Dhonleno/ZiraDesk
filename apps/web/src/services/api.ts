@@ -24,6 +24,7 @@ interface TenantSettings {
   active_outbound_validity_mode?: 'end_of_day' | 'hours';
   active_outbound_validity_hours?: number;
   bot_assigned_message?: string;
+  max_conversations_per_agent?: number | null;
   created_at?: string;
   plan?: { id: string; name: string; slug: string; priceMonth: string };
 }
@@ -137,14 +138,55 @@ interface UpdateChannelPayload {
   status?: 'active' | 'inactive';
 }
 
-export interface BusinessHour {
+export interface BusinessHourShift {
   id: string;
-  day_of_week: number;
-  is_active: boolean;
-  open_time: string;
-  close_time: string;
-  created_at: string;
-  updated_at: string;
+  openTime: string;
+  closeTime: string;
+}
+
+export interface BusinessHourDay {
+  id: string;
+  dayOfWeek: number;
+  isActive: boolean;
+  shifts: BusinessHourShift[];
+}
+
+export interface BusinessHoursHoliday {
+  id: string;
+  date: string;
+  name: string;
+  behavior: 'closed' | 'custom_hours';
+  openTime: string | null;
+  closeTime: string | null;
+  isNational: boolean;
+  country: string | null;
+}
+
+export interface BusinessHoursData {
+  config: {
+    is24x7: boolean;
+  };
+  days: BusinessHourDay[];
+  holidays: BusinessHoursHoliday[];
+}
+
+export interface UpdateBusinessHoursPayload {
+  is24x7?: boolean;
+  days?: Array<{
+    dayOfWeek: number;
+    isActive: boolean;
+    shifts: Array<{ openTime: string; closeTime: string }>;
+  }>;
+  holidays?: {
+    add?: Array<{
+      date: string;
+      name: string;
+      behavior: 'closed' | 'custom_hours';
+      openTime?: string;
+      closeTime?: string;
+    }>;
+    remove?: string[];
+  };
 }
 
 export interface BusinessHoursStatus {
@@ -289,6 +331,7 @@ export interface AgentWithSkills {
   status: 'online' | 'paused' | 'offline' | string;
   is_available: boolean;
   active_conversations: number;
+  max_conversations: number | null;
   pause_reason: string | null;
   pause_started_at: string | null;
   skills: AgentSkill[];
@@ -403,9 +446,63 @@ export const api = axios.create({
   },
 });
 
+const TOKEN_REFRESH_LEEWAY_SECONDS = 15;
+let proactiveRefreshPromise: Promise<string> | null = null;
+
+interface JwtPayloadWithExp {
+  exp?: number;
+}
+
+function decodeJwtPayload(token: string): JwtPayloadWithExp | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3 || !parts[1]) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const json = atob(padded);
+    return JSON.parse(json) as JwtPayloadWithExp;
+  } catch {
+    return null;
+  }
+}
+
+function shouldProactivelyRefreshToken(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return payload.exp <= now + TOKEN_REFRESH_LEEWAY_SECONDS;
+}
+
+async function refreshAccessTokenOnce(): Promise<string> {
+  if (proactiveRefreshPromise) return proactiveRefreshPromise;
+
+  proactiveRefreshPromise = api
+    .post<{ accessToken: string }>('/auth/refresh')
+    .then(({ data }) => {
+      const newToken = data.accessToken;
+      useAuthStore.getState().setAuth({ token: newToken });
+      return newToken;
+    })
+    .catch((error: unknown) => {
+      useAuthStore.getState().logout();
+      throw error;
+    })
+    .finally(() => {
+      proactiveRefreshPromise = null;
+    });
+
+  return proactiveRefreshPromise;
+}
+
 // Injeta o access token em cada requisição
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = useAuthStore.getState().token;
+api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  let token = useAuthStore.getState().token;
+  const isRefreshRequest = config.url?.includes('/auth/refresh') ?? false;
+
+  if (token && !isRefreshRequest && shouldProactivelyRefreshToken(token)) {
+    token = await refreshAccessTokenOnce();
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -730,7 +827,7 @@ export const adminApi = {
     return res.data;
   },
 
-  updateUser: async (id: string, payload: { name?: string; role?: string; status?: string }) => {
+  updateUser: async (id: string, payload: { name?: string; role?: string; status?: string; max_conversations?: number | null }) => {
     const res = await api.patch<{ success: boolean; data: TenantUser }>(`/admin/users/${id}`, payload);
     return res.data;
   },
@@ -778,15 +875,23 @@ export const adminApi = {
   },
 
   businessHours: {
-    list: async (): Promise<BusinessHour[]> => {
-      const res = await api.get<{ success: boolean; data: BusinessHour[] }>('/admin/business-hours');
+    list: async (): Promise<BusinessHoursData> => {
+      const res = await api.get<{ success: boolean; data: BusinessHoursData }>('/admin/business-hours');
       return res.data.data;
     },
 
-    update: async (day: number, data: Partial<BusinessHour>): Promise<BusinessHour> => {
-      const res = await api.patch<{ success: boolean; data: BusinessHour }>(
-        `/admin/business-hours/${day}`,
+    update: async (data: UpdateBusinessHoursPayload): Promise<BusinessHoursData> => {
+      const res = await api.patch<{ success: boolean; data: BusinessHoursData }>(
+        '/admin/business-hours',
         data,
+      );
+      return res.data.data;
+    },
+
+    importNationalHolidays: async (country: 'BR' | 'US' | 'PT' | 'AR'): Promise<{ imported: number }> => {
+      const res = await api.post<{ success: boolean; data: { imported: number } }>(
+        '/admin/business-hours/holidays/import',
+        { country },
       );
       return res.data.data;
     },
@@ -1347,6 +1452,21 @@ export interface CreateTicketTimePayload {
 
 // ── Omnichannel Types ─────────────────────────────────────────────────────────
 
+export interface TransferAgent {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  role: string;
+  active_conversations: number;
+  is_available: boolean;
+}
+
+export interface TransferSkill {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
 export interface OmnichannelConversation {
   id: string;
   status: string;
@@ -1773,11 +1893,29 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  transfer: async (conversationId: string, userId: string, reason?: string): Promise<OmnichannelConversation> => {
+  transfer: async (
+    conversationId: string,
+    target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
+    reason?: string,
+  ): Promise<OmnichannelConversation> => {
+    const body = target.userId
+      ? { user_id: target.userId, reason }
+      : { skill_id: target.skillId, reason };
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       `/omnichannel/conversations/${conversationId}/transfer`,
-      { user_id: userId, reason },
+      body,
     );
+    return res.data.data;
+  },
+
+  getTransferAgents: async (currentAgentId?: string): Promise<TransferAgent[]> => {
+    const params = currentAgentId ? { current_agent_id: currentAgentId } : {};
+    const res = await api.get<{ success: boolean; data: TransferAgent[] }>('/omnichannel/transfer/agents', { params });
+    return res.data.data;
+  },
+
+  getTransferSkills: async (): Promise<TransferSkill[]> => {
+    const res = await api.get<{ success: boolean; data: TransferSkill[] }>('/omnichannel/transfer/skills');
     return res.data.data;
   },
 
