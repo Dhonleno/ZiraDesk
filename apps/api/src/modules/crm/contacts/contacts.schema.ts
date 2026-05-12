@@ -15,7 +15,20 @@ export const createContactSchema = z.object({
   notes:           z.string().optional(),
 });
 
-export const updateContactSchema = createContactSchema.partial();
+export const updateContactSchema = z.object({
+  organization_id: z.string().uuid().nullable().optional(),
+  name:            z.string().min(2).max(150).nullable().optional(),
+  email:           z.string().email().nullable().optional(),
+  phone:           z.string().max(30).nullable().optional(),
+  whatsapp:        z.string().max(30).nullable().optional(),
+  document:        z.string().max(20).nullable().optional(),
+  role:            z.string().max(100).nullable().optional(),
+  department:      z.string().max(100).nullable().optional(),
+  is_primary:      z.boolean().nullable().optional(),
+  tags:            z.array(z.string()).nullable().optional(),
+  custom_fields:   z.record(z.unknown()).nullable().optional(),
+  notes:           z.string().nullable().optional(),
+});
 
 export const listContactsQuerySchema = z.object({
   page:            z.coerce.number().int().positive().default(1),

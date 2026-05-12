@@ -217,7 +217,7 @@ export async function updateContact(id: string, data: UpdateContactInput, update
     }
   }
 
-  const tagsLiteral    = data.tags !== undefined ? toPgArray(data.tags) : null;
+  const tagsLiteral    = data.tags === undefined ? null : toPgArray(data.tags ?? []);
   const customFieldsJson = data.custom_fields !== undefined ? JSON.stringify(data.custom_fields) : null;
 
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
