@@ -270,10 +270,29 @@ function ensurePathInside(baseDir: string, targetPath: string): void {
 type RawExecutor = typeof prisma;
 let ticketInfraEnsured = false;
 
-async function ensureTicketInfrastructure(): Promise<void> {
+function ensureSafeSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/i.test(schemaName)) {
+    throw new ForbiddenError('Schema do tenant inválido');
+  }
+  return schemaName.replace(/"/g, '""');
+}
+
+async function withTenantSchema<T>(
+  schemaName: string,
+  runner: (db: RawExecutor) => Promise<T>,
+): Promise<T> {
+  const safeSchemaName = ensureSafeSchemaName(schemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+    return runner(tx as RawExecutor);
+  });
+}
+
+async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<void> {
   if (ticketInfraEnsured) return;
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_types (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name VARCHAR(80) NOT NULL,
@@ -288,45 +307,45 @@ async function ensureTicketInfrastructure(): Promise<void> {
     )
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE ticket_types
     ADD COLUMN IF NOT EXISTS require_due_date_for_urgent BOOLEAN NOT NULL DEFAULT true,
     ADD COLUMN IF NOT EXISTS require_category_for_waiting BOOLEAN NOT NULL DEFAULT true
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_types_name_unique
     ON ticket_types (LOWER(name))
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS source_conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
     ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
     ON tickets(email_message_id)
     WHERE email_message_id IS NOT NULL
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS type_id UUID REFERENCES ticket_types(id) ON DELETE SET NULL
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_tickets_type_id
     ON tickets(type_id)
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_events (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -339,12 +358,12 @@ async function ensureTicketInfrastructure(): Promise<void> {
     )
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket
     ON ticket_events(ticket_id)
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_attachments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -358,28 +377,28 @@ async function ensureTicketInfrastructure(): Promise<void> {
     )
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket
     ON ticket_attachments(ticket_id)
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE ticket_attachments
     ADD COLUMN IF NOT EXISTS comment_id UUID REFERENCES ticket_comments(id) ON DELETE CASCADE
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE ticket_comments
     ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'agent'
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     ALTER TABLE ticket_comments
     ALTER COLUMN user_id DROP NOT NULL
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_checklists (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -392,12 +411,12 @@ async function ensureTicketInfrastructure(): Promise<void> {
     )
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_ticket_checklists_ticket
     ON ticket_checklists(ticket_id)
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_time_entries (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
@@ -409,7 +428,7 @@ async function ensureTicketInfrastructure(): Promise<void> {
     )
   `);
 
-  await prisma.$executeRawUnsafe(`
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_time_entries_ticket
     ON ticket_time_entries(ticket_id)
   `);
@@ -535,7 +554,23 @@ export async function listTickets(query: ListTicketsQuery) {
 }
 
 /* ── getTicket ───────────────────────────────────────────────────────────── */
-export async function getTicket(id: string) {
+export async function getTicket(id: string, schemaName?: string, db?: RawExecutor): Promise<TicketRow> {
+  if (db) {
+    await ensureTicketInfrastructure(db);
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `${BASE_SELECT}
+       WHERE t.id = $1::uuid
+       LIMIT 1`,
+      id,
+    );
+    if (!rows[0]) throw new NotFoundError('Ticket');
+    return rows[0];
+  }
+
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (tx) => getTicket(id, undefined, tx));
+  }
+
   await ensureTicketInfrastructure();
   const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
     `${BASE_SELECT}
@@ -865,7 +900,44 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
 }
 
 /* ── listComments ────────────────────────────────────────────────────────── */
-export async function listComments(ticketId: string) {
+export async function listComments(ticketId: string, schemaName?: string) {
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (db) => {
+      await getTicket(ticketId, undefined, db);
+
+      const rows = await db.$queryRawUnsafe<CommentRow[]>(
+        `SELECT
+           tc.id, tc.ticket_id, tc.user_id, tc.contact_id, tc.source, tc.content, tc.is_internal, tc.created_at,
+           COALESCE(c.name, u.name) AS author_name,
+           COALESCE(c.avatar_url, u.avatar_url) AS author_avatar,
+           COALESCE((
+             SELECT json_agg(
+               json_build_object(
+                 'id', ta.id,
+                 'filename', ta.filename,
+                 'file_url', ta.file_url,
+                 'mime_type', ta.mime_type
+               )
+               ORDER BY ta.created_at ASC
+             )
+             FROM ticket_attachments ta
+             WHERE ta.comment_id = tc.id
+           ), '[]'::json) AS attachments
+         FROM ticket_comments tc
+         LEFT JOIN users u ON u.id = tc.user_id
+         LEFT JOIN contacts c ON c.id = tc.contact_id
+         WHERE tc.ticket_id = $1::uuid
+         ORDER BY tc.created_at ASC`,
+        ticketId,
+      );
+
+      return rows.map((row) => ({
+        ...row,
+        attachments: Array.isArray(row.attachments) ? row.attachments : [],
+      }));
+    });
+  }
+
   await getTicket(ticketId);
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
@@ -1051,7 +1123,24 @@ export async function deleteComment(commentId: string, userId: string, role: str
 }
 
 /* ── attachments ─────────────────────────────────────────────────────────── */
-export async function listAttachments(ticketId: string): Promise<TicketAttachmentRow[]> {
+export async function listAttachments(ticketId: string, schemaName?: string): Promise<TicketAttachmentRow[]> {
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (db) => {
+      await ensureTicketInfrastructure(db);
+      await getTicket(ticketId, undefined, db);
+
+      const rows = await db.$queryRawUnsafe<TicketAttachmentRow[]>(
+        `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+         FROM ticket_attachments
+         WHERE ticket_id = $1::uuid
+         ORDER BY created_at DESC`,
+        ticketId,
+      );
+
+      return rows;
+    });
+  }
+
   await ensureTicketInfrastructure();
   await getTicket(ticketId);
 
@@ -1190,7 +1279,34 @@ export async function readAttachmentContent(attachmentId: string): Promise<{
 }
 
 /* ── checklist ───────────────────────────────────────────────────────────── */
-export async function listChecklistItems(ticketId: string): Promise<TicketChecklistRow[]> {
+export async function listChecklistItems(ticketId: string, schemaName?: string): Promise<TicketChecklistRow[]> {
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (db) => {
+      await ensureTicketInfrastructure(db);
+      await getTicket(ticketId, undefined, db);
+
+      const rows = await db.$queryRawUnsafe<TicketChecklistRow[]>(
+        `SELECT
+           tc.id,
+           tc.ticket_id,
+           tc.title,
+           tc.is_done,
+           tc.done_by,
+           tc.done_at,
+           tc.sort_order,
+           tc.created_at,
+           u.name AS done_by_name
+         FROM ticket_checklists tc
+         LEFT JOIN users u ON u.id = tc.done_by
+         WHERE tc.ticket_id = $1::uuid
+         ORDER BY tc.sort_order, tc.created_at ASC`,
+        ticketId,
+      );
+
+      return rows;
+    });
+  }
+
   await ensureTicketInfrastructure();
   await getTicket(ticketId);
 
@@ -1321,7 +1437,33 @@ export async function deleteChecklistItem(ticketId: string, itemId: string): Pro
 }
 
 /* ── time tracking ───────────────────────────────────────────────────────── */
-export async function listTimeEntries(ticketId: string): Promise<TicketTimeEntryRow[]> {
+export async function listTimeEntries(ticketId: string, schemaName?: string): Promise<TicketTimeEntryRow[]> {
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (db) => {
+      await ensureTicketInfrastructure(db);
+      await getTicket(ticketId, undefined, db);
+
+      const rows = await db.$queryRawUnsafe<TicketTimeEntryRow[]>(
+        `SELECT
+           te.id,
+           te.ticket_id,
+           te.user_id,
+           te.description,
+           te.minutes,
+           te.worked_at,
+           te.created_at,
+           u.name AS user_name
+         FROM ticket_time_entries te
+         JOIN users u ON u.id = te.user_id
+         WHERE te.ticket_id = $1::uuid
+         ORDER BY te.worked_at DESC, te.created_at DESC`,
+        ticketId,
+      );
+
+      return rows;
+    });
+  }
+
   await ensureTicketInfrastructure();
   await getTicket(ticketId);
 
@@ -1419,7 +1561,35 @@ export async function deleteTimeEntry(
 }
 
 /* ── getTicketTimeline ───────────────────────────────────────────────────── */
-export async function getTicketTimeline(ticketId: string) {
+export async function getTicketTimeline(ticketId: string, schemaName?: string) {
+  if (schemaName) {
+    return withTenantSchema(schemaName, async (db) => {
+      await ensureTicketInfrastructure(db);
+      await getTicket(ticketId, undefined, db);
+
+      const rows = await db.$queryRawUnsafe<TicketEventRow[]>(
+        `SELECT
+           te.id,
+           te.ticket_id,
+           te.user_id,
+           te.event_type,
+           te.old_value,
+           te.new_value,
+           te.metadata,
+           te.created_at,
+           u.name AS user_name,
+           u.avatar_url
+         FROM ticket_events te
+         LEFT JOIN users u ON u.id = te.user_id
+         WHERE te.ticket_id = $1::uuid
+         ORDER BY te.created_at ASC`,
+        ticketId,
+      );
+
+      return rows;
+    });
+  }
+
   await ensureTicketInfrastructure();
   await getTicket(ticketId);
 

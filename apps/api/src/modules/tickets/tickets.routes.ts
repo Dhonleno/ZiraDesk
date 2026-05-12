@@ -358,7 +358,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id/timeline
   app.get<{ Params: { id: string } }>('/:id/timeline', { preHandler: guard }, async (request, reply) => {
     try {
-      const timeline = await getTicketTimeline(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const timeline = await getTicketTimeline(request.params.id, schemaName);
       return reply.send({ success: true, data: timeline });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -371,7 +372,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
     try {
-      const ticket = await getTicket(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const ticket = await getTicket(request.params.id, schemaName);
       return reply.send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -443,7 +445,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id/comments
   app.get<{ Params: { id: string } }>('/:id/comments', { preHandler: guard }, async (request, reply) => {
     try {
-      const comments = await listComments(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const comments = await listComments(request.params.id, schemaName);
       return reply.send({ success: true, data: comments });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -455,7 +458,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id/checklist
   app.get<{ Params: { id: string } }>('/:id/checklist', { preHandler: guard }, async (request, reply) => {
     try {
-      const items = await listChecklistItems(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const items = await listChecklistItems(request.params.id, schemaName);
       return reply.send({ success: true, data: items });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -536,7 +540,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id/time
   app.get<{ Params: { id: string } }>('/:id/time', { preHandler: guard }, async (request, reply) => {
     try {
-      const entries = await listTimeEntries(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const entries = await listTimeEntries(request.params.id, schemaName);
       return reply.send({ success: true, data: entries });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -674,7 +679,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/:id/attachments
   app.get<{ Params: { id: string } }>('/:id/attachments', { preHandler: guard }, async (request, reply) => {
     try {
-      const attachments = await listAttachments(request.params.id);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const attachments = await listAttachments(request.params.id, schemaName);
       return reply.send({ success: true, data: attachments });
     } catch (err) {
       if (err instanceof NotFoundError) {
