@@ -25,6 +25,7 @@ const settingsSchema = z.object({
   active_outbound_validity_mode: z.enum(['end_of_day', 'hours']).default('end_of_day'),
   active_outbound_validity_hours: z.number().int().min(1).max(168),
   bot_assigned_message: z.string().max(1000).optional(),
+  max_conversations_per_agent: z.number().int().min(1).max(500).nullable().optional(),
 });
 
 type SettingsForm = z.infer<typeof settingsSchema>;
@@ -121,6 +122,7 @@ export function Settings() {
           'Você está sendo atendido por *{{agent}}*.',
           'Em breve entraremos em contato.',
         ].join('\n'),
+        max_conversations_per_agent: data.max_conversations_per_agent ?? null,
       });
     }
   }, [data, reset]);
@@ -136,6 +138,7 @@ export function Settings() {
         active_outbound_validity_mode: values.active_outbound_validity_mode,
         active_outbound_validity_hours: values.active_outbound_validity_hours,
         bot_assigned_message: values.bot_assigned_message ?? '',
+        max_conversations_per_agent: values.max_conversations_per_agent ?? null,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
@@ -653,6 +656,21 @@ export function Settings() {
                 {t('tenantAdmin.settings.bot.assignedMessageHint')}
               </p>
             </div>
+
+            <Input
+              type="number"
+              label={t('tenantAdmin.settings.maxConversations')}
+              min={1}
+              max={500}
+              placeholder={t('tenantAdmin.settings.maxConversationsDesc')}
+              error={errors.max_conversations_per_agent?.message}
+              {...register('max_conversations_per_agent', {
+                setValueAs: (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+              })}
+            />
+            <p className="text-xs -mt-3" style={{ color: 'var(--txt-3)' }}>
+              {t('tenantAdmin.settings.maxConversationsDesc')}
+            </p>
 
                 </div>
 

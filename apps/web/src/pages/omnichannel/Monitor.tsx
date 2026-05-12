@@ -55,7 +55,7 @@ function AgentConversationsPanel({
   onTransfer,
 }: {
   agentId: string;
-  onTransfer: (conversationId: string) => void;
+  onTransfer: (conversationId: string, agentId: string) => void;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ['agent-conversations', agentId],
@@ -112,7 +112,7 @@ function AgentConversationsPanel({
             </div>
             <button
               type="button"
-              onClick={() => onTransfer(conversation.id)}
+              onClick={() => onTransfer(conversation.id, agentId)}
               style={{
                 border: '1px solid var(--line-2)',
                 background: 'var(--bg-3)',
@@ -145,8 +145,9 @@ function AgentMonitorCard({
   expanded: boolean;
   onToggleConversations: (agentId: string) => void;
   onOpenFilteredConversations: (agentId: string) => void;
-  onTransfer: (conversationId: string) => void;
+  onTransfer: (conversationId: string, agentId: string) => void;
 }) {
+  const { t } = useTranslation('omnichannel');
   return (
     <div className={`agent-card ${agent.status}`}>
       <div className="agent-card-header">
@@ -171,7 +172,11 @@ function AgentMonitorCard({
       )}
 
       <div className="agent-card-stats">
-        <span>{agent.active_conversations} atendimentos ativos</span>
+        <span>
+          {agent.max_conversations != null
+            ? `${agent.active_conversations}/${agent.max_conversations} ${t('monitor.conversations')}`
+            : `${agent.active_conversations} ${t('monitor.conversations')}`}
+        </span>
       </div>
 
       {agent.skills?.length > 0 && (
@@ -244,14 +249,16 @@ export function MonitorPage() {
   const navigate = useNavigate();
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [transferConversationId, setTransferConversationId] = useState<string | null>(null);
+  const [transferCurrentAgentId, setTransferCurrentAgentId] = useState<string | null>(null);
   const [showTransferModal, setShowTransferModal] = useState(false);
 
   const handleViewAgentConversations = (agentId: string) => {
     navigate(`/omnichannel/conversations?agent_id=${agentId}`);
   };
 
-  const handleSupervisorTransfer = (conversationId: string) => {
+  const handleSupervisorTransfer = (conversationId: string, agentId: string) => {
     setTransferConversationId(conversationId);
+    setTransferCurrentAgentId(agentId);
     setShowTransferModal(true);
   };
 
@@ -405,9 +412,11 @@ export function MonitorPage() {
         <TransferModal
           open={showTransferModal}
           conversationId={transferConversationId}
+          currentAgentId={transferCurrentAgentId}
           onClose={() => {
             setShowTransferModal(false);
             setTransferConversationId(null);
+            setTransferCurrentAgentId(null);
           }}
           onTransferred={async () => {
             await qc.invalidateQueries({ queryKey: ['monitor'] });

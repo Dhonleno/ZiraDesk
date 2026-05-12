@@ -19,6 +19,7 @@ interface TenantUser {
   status: string;
   last_seen_at: string | null;
   created_at: string;
+  max_conversations?: number | null;
 }
 
 const ROLE_STYLES: Record<string, { bg: string; color: string }> = {

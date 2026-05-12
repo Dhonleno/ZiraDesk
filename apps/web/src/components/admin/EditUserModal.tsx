@@ -13,6 +13,7 @@ import { useToast } from '../../stores/toast.store';
 const schema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   role: z.enum(['admin', 'agent', 'viewer']),
+  max_conversations: z.number().int().min(1).max(500).nullable().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -22,6 +23,7 @@ interface TenantUser {
   name: string;
   email: string;
   role: string;
+  max_conversations?: number | null;
 }
 
 interface Props {
@@ -50,12 +52,18 @@ export function EditUserModal({ open, onClose, user }: Props) {
       reset({
         name: user.name,
         role: (user.role as FormValues['role']) ?? 'agent',
+        max_conversations: user.max_conversations ?? null,
       });
     }
   }, [user, reset]);
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) => adminApi.updateUser(user!.id, values),
+    mutationFn: (values: FormValues) =>
+      adminApi.updateUser(user!.id, {
+        name: values.name,
+        role: values.role,
+        max_conversations: values.max_conversations ?? null,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success(t('tenantAdmin.users.messages.updated'));
@@ -107,6 +115,16 @@ export function EditUserModal({ open, onClose, user }: Props) {
             <option value="viewer">{t('tenantAdmin.users.roles.viewer')}</option>
           </select>
         </div>
+        <Input
+          type="number"
+          label={t('tenantAdmin.settings.maxConversationsAgent')}
+          min={1}
+          max={500}
+          placeholder={t('tenantAdmin.settings.maxConversationsAgentDesc')}
+          {...register('max_conversations', {
+            setValueAs: (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+          })}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>
             {t('tenantAdmin.common.cancel')}

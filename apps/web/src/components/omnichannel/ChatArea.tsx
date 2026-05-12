@@ -1692,7 +1692,7 @@ export function ChatArea({ conversationId }: Props) {
                 const mention = msg.metadata?.mention ?? null;
                 const canMentionThisMessage = canSendMessage && !msg.is_internal;
 
-                if (isSystem && !isCallRecording) {
+                if (isSystem && !isCallRecording && !msg.is_internal) {
                   return (
                     <div
                       key={msg.id}
@@ -2562,71 +2562,6 @@ export function ChatArea({ conversationId }: Props) {
                 </button>
                 </div>
               </>
-            ) : !isClosedForComposer && isUnassigned ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  background: 'var(--bg-2)',
-                  borderTop: '1px solid var(--line)',
-                  borderRadius: 12,
-                  padding: '12px 14px',
-                }}
-              >
-                <div
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: '50%',
-                    background: 'var(--bg-4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--txt-3)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-                    <circle cx="10" cy="6.5" r="3" stroke="currentColor" strokeWidth="1.4" />
-                    <path d="M3 18c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', marginBottom: 2 }}>
-                    Nenhum agente responsável
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                    Assuma o atendimento para enviar mensagens
-                  </div>
-                </div>
-                <button
-                  onClick={() => void handleAssume()}
-                  disabled={isAssuming}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 14px',
-                    borderRadius: 'var(--r)',
-                    background: 'var(--teal)',
-                    border: 'none',
-                    color: '#0a1a18',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'var(--font)',
-                    cursor: isAssuming ? 'not-allowed' : 'pointer',
-                    opacity: isAssuming ? 0.6 : 1,
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
-                    <path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                  </svg>
-                  {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
-                </button>
-              </div>
             ) : !isClosedForComposer && isAssignedToOther && !isHelper ? (
               <div
                 style={{
@@ -2688,7 +2623,7 @@ export function ChatArea({ conversationId }: Props) {
                   </button>
                 )}
               </div>
-            ) : (
+            ) : isClosedForComposer ? (
               <div
                 style={{
                   display: 'flex',
@@ -2727,7 +2662,7 @@ export function ChatArea({ conversationId }: Props) {
                   {t('resolve.reopen', { defaultValue: 'Reabrir' })}
                 </button>
               </div>
-            )}
+            ) : null}
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>
@@ -2760,6 +2695,7 @@ export function ChatArea({ conversationId }: Props) {
       <TransferModal
         open={showTransferModal}
         conversationId={conversationId}
+        currentAgentId={conv?.assigned_to ?? null}
         onClose={() => setShowTransferModal(false)}
         onTransferred={async ({ name: agentName }) => {
           await transferSystemMessage.mutateAsync(agentName);
