@@ -1,302 +1,564 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { adminApi, ticketsApi, type Ticket, type TicketStatus, type TicketPriority } from '../../services/api';
-import { useAuthStore } from '../../stores/auth.store';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { adminApi, ticketsApi, type Ticket, type TicketPriority, type TicketStatus } from '../../services/api';
+import { PageShell } from '../../components/layout/PageShell';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
-import { TicketCard } from '../../components/tickets/TicketCard';
-import { PageShell } from '../../components/layout/PageShell';
-import { TicketDetail } from './TicketDetail';
 
-/* ── Types ───────────────────────────────────────────────────────────────── */
-type StatusTab = TicketStatus | 'all';
+type BoardStatus = 'open' | 'in_progress' | 'waiting' | 'resolved';
+type TicketView = 'kanban' | 'list';
 
-interface StatusTabDef {
-  key:   StatusTab;
-  label: string;
+const BOARD_COLUMNS: BoardStatus[] = ['open', 'in_progress', 'waiting', 'resolved'];
+const STATUS_ACCENT: Record<BoardStatus, string> = {
+  open: 'var(--teal)',
+  in_progress: '#F59E0B',
+  waiting: '#8B5CF6',
+  resolved: 'var(--txt-2)',
+};
+
+function isBoardStatus(value: string): value is BoardStatus {
+  return BOARD_COLUMNS.includes(value as BoardStatus);
 }
 
-/* ── KPI card ─────────────────────────────────────────────────────────────── */
-function KpiCard({ label, value, color, loading }: { label: string; value: number | undefined; color: string; loading: boolean }) {
+function formatCompactDate(value: string): string {
+  return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function initials(name: string | null | undefined): string {
+  if (!name) return '??';
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0] ?? '')
+    .join('')
+    .toUpperCase();
+}
+
+function sanitizeTicketTitle(value: string): string {
+  return value
+    .replace(/[`*_~>#\[\]\(\)!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getPriorityStyle(priority: TicketPriority, t: (key: string) => string) {
+  if (priority === 'urgent') {
+    return { bg: '#EF444420', color: '#EF4444', label: `! ${t('tickets.priority.urgent')}` };
+  }
+
+  if (priority === 'high') {
+    return { bg: '#F59E0B20', color: '#F59E0B', label: `↑ ${t('tickets.priority.high')}` };
+  }
+
+  if (priority === 'medium') {
+    return { bg: '#8B5CF620', color: '#8B5CF6', label: `→ ${t('tickets.priority.medium')}` };
+  }
+
+  return { bg: 'var(--bg-4)', color: 'var(--txt-2)', label: `↓ ${t('tickets.priority.low')}` };
+}
+
+function getDueMeta(ticket: Ticket): { label: string; color: string } | null {
+  if (!ticket.due_date) return null;
+
+  const due = new Date(ticket.due_date);
+  const today = new Date();
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const diffDays = Math.floor((dueStart - todayStart) / (24 * 60 * 60 * 1000));
+
+  if (diffDays < 0) {
+    return { label: formatCompactDate(ticket.due_date), color: '#EF4444' };
+  }
+
+  if (diffDays <= 3) {
+    return { label: formatCompactDate(ticket.due_date), color: '#F59E0B' };
+  }
+
+  return { label: formatCompactDate(ticket.due_date), color: 'var(--txt-2)' };
+}
+
+function statusLabel(status: BoardStatus, t: (key: string) => string): string {
+  if (status === 'open') return t('tickets.kanban.open');
+  if (status === 'in_progress') return t('tickets.kanban.inProgress');
+  if (status === 'waiting') return t('tickets.kanban.waiting');
+  return t('tickets.kanban.resolved');
+}
+
+function StackAvatar({
+  name,
+  src,
+  className,
+}: {
+  name: string | null | undefined;
+  src?: string | null;
+  className?: string;
+}) {
   return (
-    <div style={{
-      flex: 1, minWidth: 100, padding: '12px 14px', borderRadius: 'var(--r-lg)',
-      background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 4,
-    }}>
-      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--txt-3)' }}>{label}</span>
-      <span style={{ fontSize: 22, fontWeight: 600, color, fontFamily: 'var(--mono)', lineHeight: 1 }}>
-        {loading ? '—' : (value ?? 0)}
-      </span>
+    <span className={`tickets-avatar ${className ?? ''}`.trim()} title={name ?? undefined}>
+      {src ? <img src={src} alt={name ?? ''} /> : <span>{initials(name)}</span>}
+    </span>
+  );
+}
+
+function TicketCard({
+  ticket,
+  t,
+  onClick,
+}: {
+  ticket: Ticket;
+  t: (key: string) => string;
+  onClick: () => void;
+}) {
+  const priority = getPriorityStyle(ticket.priority, t);
+  const dueMeta = getDueMeta(ticket);
+
+  return (
+    <button
+      type="button"
+      className="tickets-card"
+      onClick={onClick}
+      title={sanitizeTicketTitle(ticket.title)}
+    >
+      <div className="tickets-card-top">
+        <span className="tickets-card-id">#{ticket.id.slice(-6).toUpperCase()}</span>
+        <span className="tickets-priority-badge" style={{ background: priority.bg, color: priority.color }}>
+          {priority.label}
+        </span>
+      </div>
+
+      <div className="tickets-card-title">{sanitizeTicketTitle(ticket.title) || ticket.title}</div>
+
+      {ticket.category ? <div className="tickets-card-category">{ticket.category}</div> : null}
+
+      <div className="tickets-card-bottom">
+        <div className="tickets-avatar-stack" aria-hidden>
+          <StackAvatar name={ticket.contact_name ?? ticket.client_name ?? null} />
+          <StackAvatar
+            name={ticket.assignee_name ?? null}
+            src={ticket.assignee_avatar}
+            className="tickets-avatar-overlap"
+          />
+        </div>
+
+        {dueMeta ? (
+          <span className="tickets-card-due" style={{ color: dueMeta.color }}>
+            {dueMeta.label}
+          </span>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
+function SortableTicketCard({
+  ticket,
+  t,
+  onClick,
+}: {
+  ticket: Ticket;
+  t: (key: string) => string;
+  onClick: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <TicketCard ticket={ticket} t={t} onClick={onClick} />
     </div>
   );
 }
 
-/* ── Select style ─────────────────────────────────────────────────────────── */
-const selectStyle: React.CSSProperties = {
-  background: 'var(--bg-3)', border: '1px solid var(--line-2)', color: 'var(--txt)',
-  height: '2rem', borderRadius: 'var(--r)', padding: '0 0.625rem',
-  fontSize: 12, outline: 'none', fontFamily: 'var(--font)', cursor: 'pointer',
-};
+function DroppableColumn({
+  id,
+  children,
+}: {
+  id: BoardStatus;
+  children: ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({ id });
+  return <div ref={setNodeRef} className="tickets-column-body">{children}</div>;
+}
 
-/* ── Main page ────────────────────────────────────────────────────────────── */
 export function TicketsPage() {
   const { t } = useTranslation('tickets');
-  const { id: paramId } = useParams<{ id?: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const user = useAuthStore((s) => s.user);
 
-  const [search, setSearch]           = useState('');
-  const [statusTab, setStatusTab]     = useState<StatusTab>('all');
-  const [priority, setPriority]       = useState<TicketPriority | ''>('');
-  const [filterAgent, setFilterAgent] = useState('');
+  const [view, setView] = useState<TicketView>('kanban');
+  const [search, setSearch] = useState('');
+  const [priority, setPriority] = useState<TicketPriority | ''>('');
+  const [agentId, setAgentId] = useState('');
+  const [category, setCategory] = useState('');
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
-  const debouncedSearch = useDebounce(search, 300);
-  const selectedId = paramId ?? null;
-  const contactFilter = searchParams.get('contact_id');
+  const debouncedSearch = useDebounce(search, 250);
 
-  /* ── Status tabs ── */
-  const STATUS_TABS: StatusTabDef[] = [
-    { key: 'all',         label: t('tickets.status.all') },
-    { key: 'open',        label: t('tickets.status.open') },
-    { key: 'in_progress', label: t('tickets.status.in_progress') },
-    { key: 'waiting',     label: t('tickets.status.waiting') },
-    { key: 'resolved',    label: t('tickets.status.resolved') },
-    { key: 'closed',      label: t('tickets.status.closed') },
-  ];
+  const listQueryKey = ['tickets-board', debouncedSearch, priority, agentId, category] as const;
 
-  /* ── Queries ── */
-  const { data: ticketsData, isPending: listLoading } = useQuery({
-    queryKey: ['tickets', debouncedSearch, statusTab, priority, filterAgent, contactFilter],
+  const { data: ticketsData, isPending } = useQuery({
+    queryKey: listQueryKey,
     queryFn: () => {
       const params: import('../../services/api').ListTicketsParams = {
-        per_page:   50,
-        sort_by:    'created_at',
+        per_page: 100,
+        sort_by: 'updated_at',
         sort_order: 'desc',
       };
-      if (debouncedSearch)      params.search   = debouncedSearch;
-      if (statusTab !== 'all')  params.status   = statusTab;
-      if (priority)             params.priority  = priority;
-      if (filterAgent)          params.assigned_to = filterAgent;
-      if (contactFilter)        params.contact_id = contactFilter;
+
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (priority) params.priority = priority;
+      if (agentId) params.assigned_to = agentId;
+      if (category) params.category = category;
+
       return ticketsApi.list(params);
     },
-    staleTime: 30_000,
+    staleTime: 25_000,
   });
 
   const { data: agentsData } = useQuery({
-    queryKey: ['ticket-filter-agents'],
+    queryKey: ['tickets-filter-agents'],
     queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
     staleTime: 60_000,
   });
 
-  const { data: stats, isPending: statsLoading } = useQuery({
-    queryKey: ['ticket-stats'],
-    queryFn: () => ticketsApi.getStats(),
-    staleTime: 60_000,
+  const statusMutation = useMutation({
+    mutationFn: ({ ticketId, status }: { ticketId: string; status: TicketStatus }) =>
+      ticketsApi.update(ticketId, { status }),
+    onMutate: async ({ ticketId, status }) => {
+      await queryClient.cancelQueries({ queryKey: listQueryKey });
+      const previous = queryClient.getQueryData<{ data: Ticket[]; meta: { total: number } }>(listQueryKey);
+
+      if (previous) {
+        queryClient.setQueryData(listQueryKey, {
+          ...previous,
+          data: previous.data.map((ticket) => (
+            ticket.id === ticketId ? { ...ticket, status } : ticket
+          )),
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_error, _payload, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(listQueryKey, ctx.previous);
+      }
+      toast.error(t('tickets.errorUpdate'));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+    },
   });
 
-  /* ── Realtime ── */
   useEffect(() => {
-    const unsub1 = subscribeToEvent<{ ticket?: Ticket; source?: string; contactName?: string | null; subject?: string | null }>('ticket:created', (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
-      const source = data?.source ?? data?.ticket?.source ?? 'manual';
-      if (source === 'email') {
-        const contact = data?.contactName ?? 'Cliente';
-        const subject = data?.subject ?? data?.ticket?.title ?? 'Sem assunto';
-        toast.info(`📧 ${t('tickets.newFromEmail')}: ${contact} — "${subject}"`);
-        return;
-      }
-      if (source === 'portal') {
-        const contact = data?.contactName ?? 'Contato';
-        toast.info(`🌐 ${t('tickets.newFromPortal')}: ${contact}`);
-        return;
-      }
-      toast.info(t('tickets.realtime.newTicket'));
-    });
+    const unsubscribers = [
+      subscribeToEvent('ticket:created', () => {
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      }),
+      subscribeToEvent('ticket:updated', () => {
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      }),
+      subscribeToEvent('ticket:deleted', () => {
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      }),
+      subscribeToEvent('ticket:assigned', () => {
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      }),
+    ];
 
-    const unsub2 = subscribeToEvent<{ ticket: Ticket }>('ticket:updated', (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      if (selectedId === data.ticket.id) {
-        void queryClient.invalidateQueries({ queryKey: ['ticket', data.ticket.id] });
-      }
-    });
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [queryClient]);
 
-    const unsub3 = subscribeToEvent<{ ticket: Ticket }>('ticket:assigned', (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      if (data.ticket.assigned_to === user?.id) {
-        toast.info(t('tickets.realtime.assignedToYou'));
-      }
-    });
-
-    const unsub4 = subscribeToEvent<{ ticketId: string }>('ticket:deleted', (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      void queryClient.invalidateQueries({ queryKey: ['ticket-stats'] });
-      if (selectedId === data.ticketId) {
-        navigate('/tickets');
-      }
-    });
-
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-  }, [navigate, queryClient, toast, user?.id, t, selectedId]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const tickets = ticketsData?.data ?? [];
-  const total   = ticketsData?.meta.total ?? 0;
+  const total = ticketsData?.meta.total ?? tickets.length;
+
+  const categories = useMemo(() => {
+    const values = new Set<string>();
+    tickets.forEach((ticket) => {
+      if (ticket.category) values.add(ticket.category);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [tickets]);
+
+  const grouped = useMemo(() => {
+    const map: Record<BoardStatus, Ticket[]> = {
+      open: [],
+      in_progress: [],
+      waiting: [],
+      resolved: [],
+    };
+
+    tickets.forEach((ticket) => {
+      if (isBoardStatus(ticket.status)) {
+        map[ticket.status].push(ticket);
+      }
+    });
+
+    return map;
+  }, [tickets]);
+
+  const ticketById = useMemo(() => {
+    const map = new Map<string, Ticket>();
+    tickets.forEach((ticket) => map.set(ticket.id, ticket));
+    return map;
+  }, [tickets]);
+
+  const activeTicket = activeTicketId ? ticketById.get(activeTicketId) ?? null : null;
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveTicketId(String(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveTicketId(null);
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : null;
+
+    if (!overId) return;
+
+    const source = ticketById.get(activeId);
+    if (!source) return;
+
+    let targetStatus: BoardStatus | null = null;
+
+    if (isBoardStatus(overId)) {
+      targetStatus = overId;
+    } else {
+      const targetTicket = ticketById.get(overId);
+      if (targetTicket && isBoardStatus(targetTicket.status)) {
+        targetStatus = targetTicket.status;
+      }
+    }
+
+    if (!targetStatus || targetStatus === source.status) return;
+
+    statusMutation.mutate({ ticketId: source.id, status: targetStatus });
+  }
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-      {/* ── KPI bar — full width ── */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
-        padding: '12px 16px', borderBottom: '1px solid var(--line)',
-        background: 'var(--bg-2)', flexShrink: 0,
-      }}>
-        <KpiCard label={t('tickets.stats.open')}          value={stats?.open_tickets}        color="var(--blue)"   loading={statsLoading} />
-        <KpiCard label={t('tickets.stats.inProgress')}    value={stats?.in_progress_tickets} color="var(--amber)"  loading={statsLoading} />
-        <KpiCard label={t('tickets.stats.waiting')}       value={stats?.waiting_tickets}     color="var(--purple)" loading={statsLoading} />
-        <KpiCard label={t('tickets.stats.resolvedToday')} value={stats?.resolved_today}      color="var(--green)"  loading={statsLoading} />
-      </div>
-
-      {/* ── Panels row ── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-      {/* ── Left panel ── */}
-      <div style={{
-        width: 360, minWidth: 300, display: 'flex', flexDirection: 'column',
-        borderRight: '1px solid var(--line)', background: 'var(--bg-2)', overflow: 'hidden',
-      }}>
-
-        {/* Header */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {t('tickets.title')}
-              <span style={{ fontSize: 11, fontWeight: 500, padding: '1px 7px', borderRadius: 'var(--r-pill)',
-                background: 'var(--bg-5)', color: 'var(--txt-3)', fontFamily: 'var(--mono)', border: '1px solid var(--line-2)' }}>
-                {total}
-              </span>
-            </h1>
-            <button
-              onClick={() => navigate('/tickets/new')}
-              className="zd-btn zd-btn-primary"
-            >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              {t('tickets.new')}
-            </button>
+      <section className="tickets-page-v2">
+        <header className="tickets-page-header">
+          <div className="tickets-page-title-wrap">
+            <h1>{t('tickets.title')}</h1>
+            <span className="tickets-total-badge">{total}</span>
           </div>
 
-          {/* Search */}
-          <div style={{ position: 'relative', marginBottom: 10 }}>
-            <svg style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-              width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-              <circle cx="5.5" cy="5.5" r="4" stroke="var(--txt-3)" strokeWidth="1.2" />
-              <path d="M9 9l2.5 2.5" stroke="var(--txt-3)" strokeWidth="1.2" strokeLinecap="round" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Buscar tickets..."
-              aria-label="Buscar tickets"
-              className="zd-input"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{
-                width: '100%', boxSizing: 'border-box', height: '2rem',
-                paddingLeft: 30, paddingRight: 10, borderRadius: 'var(--r)',
-                fontSize: 12,
-              }}
-            />
-          </div>
-
-          {/* Filters row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, alignItems: 'center' }}>
-            <select aria-label="Filtrar por prioridade" style={{ ...selectStyle, width: '100%', minWidth: 0 }} value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority | '')}>
-              <option value="">{t('tickets.priority.all')}</option>
-              <option value="low">{t('tickets.priority.low')}</option>
-              <option value="medium">{t('tickets.priority.medium')}</option>
-              <option value="high">{t('tickets.priority.high')}</option>
-              <option value="urgent">{t('tickets.priority.urgent')}</option>
-            </select>
+          <div className="tickets-inline-filters">
             <select
-              aria-label="Filtrar por agente"
-              style={{ ...selectStyle, width: '100%', minWidth: 0 }}
-              value={filterAgent}
-              onChange={(e) => setFilterAgent(e.target.value)}
+              className="tickets-inline-select"
+              value={agentId}
+              onChange={(event) => setAgentId(event.target.value)}
+              aria-label={t('tickets.filterByAgent')}
             >
               <option value="">{t('tickets.filterByAgent')}</option>
               {(agentsData?.data ?? []).map((agent) => (
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
               ))}
             </select>
-          </div>
-        </div>
 
-        {/* Status tabs */}
-        <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid var(--line)',
-          padding: '0 4px', flexShrink: 0 }}>
-          {STATUS_TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setStatusTab(key)}
-              style={{
-                padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: 'var(--font)',
-                color: statusTab === key ? 'var(--teal)' : 'var(--txt-3)',
-                borderBottom: statusTab === key ? '2px solid var(--teal)' : '2px solid transparent',
-                marginBottom: -1,
-              }}
+            <select
+              className="tickets-inline-select"
+              value={priority}
+              onChange={(event) => setPriority(event.target.value as TicketPriority | '')}
+              aria-label={t('tickets.priority.all')}
             >
-              {label}
-            </button>
-          ))}
-        </div>
+              <option value="">{t('tickets.priority.all')}</option>
+              <option value="urgent">{t('tickets.priority.urgent')}</option>
+              <option value="high">{t('tickets.priority.high')}</option>
+              <option value="medium">{t('tickets.priority.medium')}</option>
+              <option value="low">{t('tickets.priority.low')}</option>
+            </select>
 
-        {/* List */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {listLoading && (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--txt-3)', fontSize: 13 }}>Carregando...</div>
-          )}
-          {!listLoading && tickets.length === 0 && (
-            <div style={{ padding: 16, minHeight: 260 }}>
-              <div className="zd-empty-state">
-                <div className="zd-empty-icon" aria-hidden>
-                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                    <rect x="3.5" y="4" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <path d="M7 8h8M7 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tickets.noResults')}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste os filtros ou crie um novo ticket.</div>
-              </div>
+            <select
+              className="tickets-inline-select"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              aria-label={t('tickets.fields.category')}
+            >
+              <option value="">{t('tickets.fields.category')}</option>
+              {categories.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+
+            <div className="tickets-search-wrap">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              <input
+                className="tickets-search-input"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t('tickets.searchPlaceholder')}
+                aria-label={t('tickets.searchPlaceholder')}
+              />
             </div>
-          )}
-          {tickets.map((ticket) => (
-            <TicketCard
-              key={ticket.id}
-              ticket={ticket}
-              selected={ticket.id === selectedId}
-              onClick={() => navigate(`/tickets/${ticket.id}`)}
-            />
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* ── Right panel (detail) ── */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-        <TicketDetail ticketId={selectedId} />
-      </div>
+          <div className="tickets-header-actions">
+            <button type="button" className="tickets-primary-btn" onClick={() => navigate('/tickets/new')}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              {t('tickets.new')}
+            </button>
 
-      </div>
-      </div>
+            <div className="tickets-view-toggle" role="group" aria-label={t('tickets.view')}>
+              <button
+                type="button"
+                className={view === 'kanban' ? 'active' : ''}
+                onClick={() => setView('kanban')}
+                title={t('tickets.viewKanban')}
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+                  <rect x="1.5" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                  <rect x="6" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                  <rect x="10.5" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={view === 'list' ? 'active' : ''}
+                onClick={() => setView('list')}
+                title={t('tickets.viewList')}
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+                  <path d="M4 3h9M4 7.5h9M4 12h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  <circle cx="2" cy="3" r=".9" fill="currentColor" />
+                  <circle cx="2" cy="7.5" r=".9" fill="currentColor" />
+                  <circle cx="2" cy="12" r=".9" fill="currentColor" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {isPending ? (
+          <div className="tickets-loading">{t('common.loading', { ns: 'admin', defaultValue: 'Carregando...' })}</div>
+        ) : null}
+
+        {!isPending && view === 'kanban' ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="tickets-kanban-board">
+              {BOARD_COLUMNS.map((column) => (
+                <section key={column} className="tickets-column" id={column}>
+                  <header className="tickets-column-head">
+                    <span>{statusLabel(column, t)}</span>
+                    <span className="tickets-column-count" style={{ color: STATUS_ACCENT[column] }}>
+                      {grouped[column].length}
+                    </span>
+                  </header>
+
+                  <DroppableColumn id={column}>
+                    {grouped[column].length === 0 ? (
+                      <div className="tickets-column-empty">
+                        <span className="tickets-empty-icon" aria-hidden>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                            <rect x="3.5" y="4" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                            <path d="M7 8h8M7 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        </span>
+                        <span>{t('tickets.kanban.empty')}</span>
+                      </div>
+                    ) : (
+                      <SortableContext items={grouped[column].map((ticket) => ticket.id)} strategy={rectSortingStrategy}>
+                        {grouped[column].map((ticket) => (
+                          <SortableTicketCard
+                            key={ticket.id}
+                            ticket={ticket}
+                            t={t}
+                            onClick={() => navigate(`/tickets/${ticket.id}`)}
+                          />
+                        ))}
+                      </SortableContext>
+                    )}
+                  </DroppableColumn>
+                </section>
+              ))}
+            </div>
+
+            <DragOverlay>
+              {activeTicket ? (
+                <div style={{ width: 280 }}>
+                  <TicketCard ticket={activeTicket} t={t} onClick={() => {}} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : null}
+
+        {!isPending && view === 'list' ? (
+          <div className="tickets-list-board">
+            {BOARD_COLUMNS.map((column) => (
+              <section key={column} className="tickets-list-section">
+                <header className="tickets-column-head">
+                  <span>{statusLabel(column, t)}</span>
+                  <span className="tickets-column-count" style={{ color: STATUS_ACCENT[column] }}>
+                    {grouped[column].length}
+                  </span>
+                </header>
+
+                <div className="tickets-list-items">
+                  {grouped[column].length === 0 ? (
+                    <div className="tickets-list-empty">{t('tickets.kanban.empty')}</div>
+                  ) : (
+                    grouped[column].map((ticket) => (
+                      <TicketCard
+                        key={ticket.id}
+                        ticket={ticket}
+                        t={t}
+                        onClick={() => navigate(`/tickets/${ticket.id}`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : null}
+      </section>
     </PageShell>
   );
 }

@@ -19,6 +19,7 @@ import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
 import CreateTicket from './pages/tickets/CreateTicket';
+import { TicketDetailPage } from './pages/tickets/TicketDetail';
 import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Users as AdminUsers } from './pages/admin/Users';
 import { Channels as AdminChannels } from './pages/admin/Channels';
@@ -146,7 +147,7 @@ export function App() {
             <Route path="crm/contacts/:id" element={<ContactsPage />} />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="tickets/new" element={<CreateTicket />} />
-            <Route path="tickets/:id" element={<TicketsPage />} />
+            <Route path="tickets/:id" element={<TicketDetailPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />

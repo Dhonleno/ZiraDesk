@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   adminApi,
   contactsApi,
@@ -76,6 +77,7 @@ function buildDraft(form: CreateTicketForm): TicketCreateDraft {
 }
 
 export default function CreateTicket() {
+  const { t } = useTranslation('tickets');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -111,6 +113,11 @@ export default function CreateTicket() {
     queryFn: adminApi.ticketTypes.list,
     staleTime: 60_000,
   });
+  const { data: categoriesData } = useQuery({
+    queryKey: ['ticket-categories-options'],
+    queryFn: () => ticketsApi.list({ per_page: 100, sort_by: 'updated_at', sort_order: 'desc' }),
+    staleTime: 60_000,
+  });
   const selectedType = useMemo(
     () => ticketTypes.find((item) => item.id === form.type_id) ?? null,
     [form.type_id, ticketTypes],
@@ -125,6 +132,14 @@ export default function CreateTicket() {
     ),
     [form.priority, form.status, selectedType?.require_category_for_waiting, selectedType?.require_due_date_for_urgent],
   );
+  const categoryOptions = useMemo(() => {
+    const values = new Set<string>();
+    (categoriesData?.data ?? []).forEach((item) => {
+      if (item.category) values.add(item.category);
+    });
+    if (form.category) values.add(form.category);
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [categoriesData?.data, form.category]);
 
   const { data: agentsData } = useQuery({
     queryKey: ['create-ticket-agents'],
@@ -358,21 +373,60 @@ export default function CreateTicket() {
 
             <div className="ct-field">
               <label className="ct-label" htmlFor="ct-attachments">Anexos na abertura</label>
-              <input
-                id="ct-attachments"
-                type="file"
-                multiple
-                className="ct-input"
-                onChange={handleFilesChange}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <label
+                  htmlFor="ct-attachments"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    background: 'var(--bg-4)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--r)',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    color: 'var(--txt)',
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                    <path d="M11 6.5 6 11.5a3.5 3.5 0 1 1-5-5l5.5-5.5a2 2 0 1 1 2.8 2.8L4 9.1a1 1 0 1 1-1.4-1.4l4.6-4.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {t('tickets.attachFile')}
+                  <input
+                    id="ct-attachments"
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleFilesChange}
+                  />
+                </label>
+              </div>
               {files.length > 0 ? (
-                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                   {files.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="ct-selected-item">
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div
+                      key={`${file.name}-${index}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        maxWidth: '100%',
+                        padding: '3px 8px',
+                        border: '1px solid var(--line)',
+                        borderRadius: 'var(--r-pill)',
+                        background: 'var(--bg-3)',
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--txt-2)' }}>
                         {file.name}
                       </span>
-                      <button type="button" onClick={() => removeFile(index)} aria-label={`Remover ${file.name}`}>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        aria-label={`Remover ${file.name}`}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--txt-3)', cursor: 'pointer', lineHeight: 1 }}
+                      >
                         ×
                       </button>
                     </div>
@@ -587,13 +641,22 @@ export default function CreateTicket() {
                 {conditional.categoryRequired ? <span className="required"> *</span> : null}
               </label>
               {conditional.categoryRequired ? <span className="ct-rule-required">Obrigatório para status aguardando</span> : null}
-              <input
+              <select
                 id="ct-category"
                 value={form.category}
                 onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))}
-                placeholder="Ex: Infraestrutura, Financeiro..."
-                className="ct-input"
-              />
+                className="ct-select"
+                style={{
+                  background: 'var(--bg-2)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--txt)',
+                }}
+              >
+                <option value="">Selecione a categoria</option>
+                {categoryOptions.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
             </div>
           </aside>
         </div>
