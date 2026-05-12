@@ -134,6 +134,8 @@ interface ConversationRow {
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   csat_score?: number | null;
   csat_expires_at?: Date | null;
+  ai_agent_active?: boolean | null;
+  ai_attempts?: number | null;
 }
 
 interface AvailableAgentRow {
@@ -727,6 +729,8 @@ async function processIncomingMessage(
               , outbound_origin_agent_id
               , outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
+              , (metadata->>'ai_agent_active')::boolean AS ai_agent_active
+              , COALESCE((metadata->>'ai_attempts')::int, 0) AS ai_attempts
        FROM conversations
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
@@ -996,6 +1000,7 @@ async function processIncomingMessage(
     const currentAssignedTo = currentConversation?.assigned_to ?? null;
     const currentBotStage = currentConversation?.bot_stage ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
+    const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
 
     if (isActiveOutboundReturnFlow) {
       const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
@@ -1066,7 +1071,7 @@ async function processIncomingMessage(
     }
 
     let botResponse: Awaited<ReturnType<typeof processBotMessage>> | null = null;
-    if (!hasAssignedAgent && !isActiveOutboundReturnFlow) {
+    if (!hasAssignedAgent && !isActiveOutboundReturnFlow && !isAIAgentActive) {
       const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
       const skipBot = currentBotStage === 'done';
       if (!skipBot && canProcessBot) {
@@ -1176,6 +1181,7 @@ async function processIncomingMessage(
       conversationId,
       closeByKeyword: false as const,
       isNewConversation,
+      isBotLeafTransfer: !isActiveOutboundReturnFlow && botResponse?.type === 'choice',
       shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
       botTag: botResponse?.type === 'choice' ? (botResponse.option?.tag ?? undefined) : undefined,
       botOptionId: botResponse?.type === 'choice' ? (botResponse.option?.id ?? undefined) : undefined,
@@ -1196,7 +1202,10 @@ async function processIncomingMessage(
       shouldProcessAI: (botResponse === null || botResponse?.type === 'invalid')
         && !hasAssignedAgent
         && !isActiveOutboundReturnFlow
-        && currentBotStage !== 'done',
+        && currentBotStage !== 'done'
+        && !isAIAgentActive,
+      shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
+      aiAttempts: currentConversation?.ai_attempts ?? 0,
     };
   });
 
@@ -1290,11 +1299,19 @@ async function processIncomingMessage(
     });
   }
 
+  // Pre-check AI config when bot reached a leaf node, so we can decide whether to send
+  // the queue-position message or suppress it (AI greeting will replace it).
+  let aiConfigForLeaf: import('../ai/ai.service.js').AIAgentConfig | null = null;
+  if (result.isBotLeafTransfer) {
+    aiConfigForLeaf = await getAIAgentConfig(prisma, schemaName);
+  }
+  const aiActivatesOnLeaf = Boolean(aiConfigForLeaf?.is_enabled && aiConfigForLeaf?.openai_api_key);
+
   if (result.botMessageId && result.botMessageContent) {
-    if (result.shouldAutoAssign) {
+    if (result.shouldAutoAssign && !aiActivatesOnLeaf) {
       // Send transfer message directly so it arrives before the "accepted" message from autoAssign
       await sendConversationWhatsAppText(channelCredentials, formattedPhone, result.botMessageContent);
-    } else {
+    } else if (!result.shouldAutoAssign) {
       await messageQueue.add('send', {
         messageId: result.botMessageId,
         conversationId: result.conversationId,
@@ -1306,18 +1323,168 @@ async function processIncomingMessage(
         to: formattedPhone,
       });
     }
+    // When aiActivatesOnLeaf, the queue-position message stays in DB but is not sent via WhatsApp;
+    // the AI greeting below takes its place.
   }
 
   if (result.shouldAutoAssign) {
-    await autoAssignConversation(
-      result.conversationId,
-      tenantId,
-      schemaName,
-      prisma,
-      io,
-      undefined,
-      result.botOptionId,
-    );
+    if (aiActivatesOnLeaf && aiConfigForLeaf) {
+      // Bot reached a leaf node and AI Agent is enabled → activate AI instead of assigning to agent
+      const creds = decryptCredentials(aiConfigForLeaf.openai_api_key!);
+      void creds; // apiKey not needed for greeting
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE "${schemaName}".conversations
+         SET status = 'bot',
+             metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":true,"ai_attempts":0}'::jsonb
+         WHERE id = $1::uuid`,
+        result.conversationId,
+      );
+
+      const firstName = result.contactName.split(' ')[0] ?? '';
+      const greeting = `Olá${firstName ? `, ${firstName}` : ''}! Sou ${aiConfigForLeaf.agent_name}, assistente virtual. Como posso te ajudar?`;
+
+      const greetRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+        `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+         VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+         RETURNING id, content, created_at, sender_type`,
+        result.conversationId,
+        greeting,
+      );
+      await prisma.$executeRawUnsafe(
+        `UPDATE "${schemaName}".conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
+        greeting.slice(0, 255),
+        result.conversationId,
+      );
+      await sendConversationWhatsAppText(channelCredentials, formattedPhone, greeting);
+      if (greetRows[0]) {
+        io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+          conversationId: result.conversationId,
+          message: greetRows[0],
+          contact: { id: result.contactId, name: result.contactName },
+        });
+      }
+    } else {
+      await autoAssignConversation(
+        result.conversationId,
+        tenantId,
+        schemaName,
+        prisma,
+        io,
+        undefined,
+        result.botOptionId,
+      );
+    }
+  }
+
+  // AI Agent ativo — responde mensagens enquanto a conversa está com ai_agent_active
+  if (result.shouldProcessAIActive) {
+    try {
+      const aiConfig = await getAIAgentConfig(prisma, schemaName);
+
+      if (!aiConfig?.is_enabled || !aiConfig?.openai_api_key) {
+        // IA foi desabilitada — fallback para auto-assign
+        await prisma.$executeRawUnsafe(
+          `UPDATE "${schemaName}".conversations
+           SET status = 'open',
+               metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false}'::jsonb
+           WHERE id = $1::uuid`,
+          result.conversationId,
+        );
+        await autoAssignConversation(result.conversationId, tenantId, schemaName, prisma, io);
+      } else {
+        const creds = decryptCredentials(aiConfig.openai_api_key);
+        const apiKey = creds['key'] ?? aiConfig.openai_api_key;
+        const wantsHuman = /falar com (humano|pessoa|atendente|agente)/i.test(content);
+        const attempts = result.aiAttempts ?? 0;
+
+        const doTransferFromAI = async () => {
+          const transferMsg = 'Vou transferir você para um de nossos especialistas. Aguarde um momento.';
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".conversations
+             SET status = 'open', last_message = $1, last_message_at = NOW(),
+                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false,"ai_attempts":0,"bot_stage":"choice"}'::jsonb
+             WHERE id = $2::uuid`,
+            transferMsg.slice(0, 255),
+            result.conversationId,
+          );
+          const xferRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+            `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status)
+             VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
+             RETURNING id, content, created_at, sender_type`,
+            result.conversationId,
+            transferMsg,
+          );
+          await sendConversationWhatsAppText(channelCredentials, formattedPhone, transferMsg);
+          if (xferRows[0]) {
+            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+              conversationId: result.conversationId,
+              message: xferRows[0],
+              contact: { id: result.contactId, name: result.contactName },
+            });
+          }
+          await autoAssignConversation(
+            result.conversationId, tenantId, schemaName, prisma, io,
+            undefined, aiConfig.fallback_skill_id ?? undefined,
+          );
+        };
+
+        if (wantsHuman) {
+          await doTransferFromAI();
+        } else {
+          const chunks = await searchKnowledge(
+            prisma, schemaName, content, apiKey, aiConfig.confidence_threshold,
+          );
+
+          if (chunks.length === 0 && attempts >= aiConfig.max_attempts) {
+            await doTransferFromAI();
+          } else {
+            const history = await getConversationHistoryText(
+              prisma, schemaName, result.conversationId, 10,
+            );
+            const aiResult = await generateAIResponse({
+              query: content,
+              chunks,
+              conversationHistory: history,
+              config: { ...aiConfig, openai_api_key: apiKey },
+              contactName: result.contactName,
+            });
+
+            if (aiResult.shouldTransfer) {
+              await doTransferFromAI();
+            } else {
+              const newAttempts = chunks.length === 0 ? attempts + 1 : 0;
+              const aiMsgRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+                `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+                 VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+                 RETURNING id, content, created_at, sender_type`,
+                result.conversationId,
+                aiResult.response,
+              );
+              await prisma.$executeRawUnsafe(
+                `UPDATE "${schemaName}".conversations
+                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                     metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+                 WHERE id = $3::uuid`,
+                aiResult.response.slice(0, 255),
+                JSON.stringify({ ai_agent_active: true, ai_attempts: newAttempts }),
+                result.conversationId,
+              );
+              await sendConversationWhatsAppText(channelCredentials, formattedPhone, aiResult.response);
+              if (aiMsgRows[0]) {
+                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                  conversationId: result.conversationId,
+                  message: aiMsgRows[0],
+                  contact: { id: result.contactId, name: result.contactName },
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[AI Agent] Erro ao processar conversa ativa:', err instanceof Error ? err.message : err);
+    }
   }
 
   // AI Agent — só executa se o bot não tratou a mensagem e não há agente humano

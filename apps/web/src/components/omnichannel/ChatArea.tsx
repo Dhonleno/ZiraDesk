@@ -1660,6 +1660,7 @@ export function ChatArea({ conversationId }: Props) {
               {msgs.map((msg) => {
                 const isAgent = msg.sender_type === 'agent';
                 const isBot = msg.sender_type === 'bot';
+                const isAIMessage = isBot && msg.metadata?.source === 'ai_agent';
                 const isSystem = msg.sender_type === 'system';
                 const isCallRecording = msg.content_type === 'call_recording';
                 const callRecordingMeta = parseCallRecordingMetadata(msg);
@@ -1677,18 +1678,22 @@ export function ChatArea({ conversationId }: Props) {
                   : contactDisplayName;
                 const senderLabel = isSystem
                   ? 'Sistema'
-                  : isBot
-                    ? '🤖 Bot'
-                    : isAgent
-                      ? agentDisplayName
-                      : clientLabel;
+                  : isAIMessage
+                    ? 'IA'
+                    : isBot
+                      ? '🤖 Bot'
+                      : isAgent
+                        ? agentDisplayName
+                        : clientLabel;
                 const senderLabelColor = isSystem
                   ? 'var(--txt-3)'
-                  : isBot
-                    ? 'var(--txt-2)'
-                    : isAgent
-                      ? 'var(--teal)'
-                      : 'var(--txt-3)';
+                  : isAIMessage
+                    ? 'var(--teal)'
+                    : isBot
+                      ? 'var(--txt-2)'
+                      : isAgent
+                        ? 'var(--teal)'
+                        : 'var(--txt-3)';
                 const mention = msg.metadata?.mention ?? null;
                 const canMentionThisMessage = canSendMessage && !msg.is_internal;
 
@@ -1739,23 +1744,34 @@ export function ChatArea({ conversationId }: Props) {
                         width: 28,
                         height: 28,
                         borderRadius: '50%',
-                        background: isBot
-                          ? 'var(--purple-dim)'
-                          : isAgent
-                            ? 'linear-gradient(135deg,var(--teal),#00A88C)'
-                            : avatarGradient(avatarName),
-                        border: isBot ? '1px solid rgba(167,139,250,.3)' : 'none',
+                        background: isAIMessage
+                          ? 'var(--teal-dim)'
+                          : isBot
+                            ? 'var(--purple-dim)'
+                            : isAgent
+                              ? 'linear-gradient(135deg,var(--teal),#00A88C)'
+                              : avatarGradient(avatarName),
+                        border: isAIMessage
+                          ? '1px solid rgba(0,201,167,.28)'
+                          : isBot
+                            ? '1px solid rgba(167,139,250,.3)'
+                            : 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 10,
                         fontWeight: 600,
-                        color: isBot ? 'var(--purple)' : '#fff',
+                        color: isAIMessage ? 'var(--teal)' : isBot ? 'var(--purple)' : '#fff',
                         flexShrink: 0,
                         marginBottom: 2,
                       }}
                     >
-                      {isBot ? (
+                      {isAIMessage ? (
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                          <path d="M7 1.5l1.2 3.3L11.5 6l-3.3 1.2L7 10.5l-1.2-3.3L2.5 6l3.3-1.2L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                          <path d="M11.5 10l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
+                        </svg>
+                      ) : isBot ? (
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                           <rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
                           <rect x="6" y="2" width="4" height="3" rx="1" stroke="currentColor" strokeWidth="1.3" />
@@ -1822,9 +1838,11 @@ export function ChatArea({ conversationId }: Props) {
                             ? 'var(--amber-dim)'
                             : isAgent
                               ? 'linear-gradient(135deg,#0f5a50,#0b4740)'
-                              : isBot
-                                ? 'var(--bg-4)'
-                                : 'var(--bg-3)',
+                              : isAIMessage
+                                ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
+                                : isBot
+                                  ? 'var(--bg-4)'
+                                  : 'var(--bg-3)',
                           color: msg.is_internal ? 'var(--amber)' : isAgent ? '#eafff9' : 'var(--txt)',
                           border: msg.is_internal
                             ? '1px solid rgba(245,158,11,.3)'

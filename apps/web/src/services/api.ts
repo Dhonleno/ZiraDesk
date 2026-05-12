@@ -1589,6 +1589,7 @@ export interface OmnichannelMessage {
   created_at: string;
   metadata?: {
     filename?: string;
+    source?: string;
     mention?: {
       message_id: string;
       sender_type: 'agent' | 'client' | 'bot' | 'system' | string;
