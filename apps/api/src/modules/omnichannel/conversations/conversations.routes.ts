@@ -32,8 +32,10 @@ import {
   NotFoundError,
   ConflictError,
   ForbiddenError,
+  TransferError,
 } from './conversations.service.js';
 import { getSocketServer } from '../../../socket/index.js';
+import { syncAgentAvailability } from './auto-assign.service.js';
 import { messageQueue } from '../../../jobs/queue.js';
 import {
   cancelInactivityJobs,
@@ -44,6 +46,138 @@ import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
+
+type TenantRawDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+
+interface ConversationDispatchRow {
+  channel_type: string | null;
+  whatsapp: string | null;
+  phone: string | null;
+  credentials: string | object | null;
+}
+
+interface AgentNameRow {
+  name: string | null;
+}
+
+function ensureSafeSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/.test(schemaName)) {
+    throw new Error('Schema do tenant inválido');
+  }
+  return schemaName.replace(/"/g, '""');
+}
+
+async function withTenantSchema<T>(
+  schemaName: string,
+  runner: (tx: TenantRawDbClient) => Promise<T>,
+): Promise<T> {
+  const safeSchemaName = ensureSafeSchemaName(schemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+    return runner(tx);
+  });
+}
+
+async function sendConversationWhatsAppText(
+  schemaName: string,
+  conversationId: string,
+  text: string,
+): Promise<boolean> {
+  const convRows = await withTenantSchema(schemaName, (tx) =>
+    tx.$queryRawUnsafe<ConversationDispatchRow[]>(
+      `SELECT
+         c.channel_type,
+         ct.whatsapp,
+         ct.phone,
+         ch.credentials
+       FROM conversations c
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       LEFT JOIN channels ch ON ch.id = c.channel_id
+       WHERE c.id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    ),
+  );
+
+  const conv = convRows[0];
+  if (!conv || conv.channel_type !== 'whatsapp') return false;
+
+  const credentials = conv.credentials ? decryptCredentials(conv.credentials) : {};
+  const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
+  const accessToken = credentials.accessToken ?? credentials.access_token;
+  const clientPhone = (conv.whatsapp ?? conv.phone ?? '').replace(/\D/g, '');
+
+  if (!clientPhone || !phoneNumberId || !accessToken) return false;
+
+  return sendWhatsAppTextMessage({
+    text,
+    to: clientPhone,
+    phoneNumberId,
+    accessToken,
+  });
+}
+
+async function insertConversationMessage(
+  schemaName: string,
+  conversationId: string,
+  senderType: 'bot' | 'system',
+  content: string,
+  isInternal: boolean,
+): Promise<void> {
+  await withTenantSchema(schemaName, (tx) =>
+    tx.$executeRawUnsafe(
+      `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+       VALUES (gen_random_uuid(), $1::uuid, $2, $3, 'text', $4::boolean, NOW())`,
+      conversationId,
+      senderType,
+      content,
+      isInternal,
+    ),
+  );
+}
+
+async function notifyCustomerAssigned(
+  tenantId: string,
+  schemaName: string,
+  conversationId: string,
+  agentName: string,
+): Promise<void> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const settings = (tenant?.settings as Record<string, unknown> | null) ?? {};
+  const configuredTemplate = typeof settings.bot_assigned_message === 'string'
+    ? settings.bot_assigned_message.trim()
+    : '';
+
+  const assignMessage = (configuredTemplate || [
+    '✅ Seu atendimento foi aceito!',
+    '',
+    `Você está sendo atendido por *${agentName}*.`,
+    'Em breve entraremos em contato. 😊',
+  ].join('\n')).replace(/\{\{\s*agent\s*\}\}/gi, agentName);
+
+  const sent = await sendConversationWhatsAppText(schemaName, conversationId, assignMessage);
+  if (sent) {
+    await insertConversationMessage(schemaName, conversationId, 'bot', assignMessage, false);
+  }
+}
+
+async function getAgentName(schemaName: string, agentId: string): Promise<string> {
+  const rows = await withTenantSchema(schemaName, (tx) =>
+    tx.$queryRawUnsafe<AgentNameRow[]>(
+      `SELECT name
+       FROM users
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      agentId,
+    ),
+  );
+
+  return rows[0]?.name ?? 'Agente';
+}
 
 export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/omnichannel/conversations
@@ -248,86 +382,36 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const assignedConversation = await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
+        const { conversation: assignedConversation, previousAssignedTo } =
+          await assignConversation(request.params.id, parsed.data.user_id, request.user.id);
         const tenantUser = request.user as AuthUser;
         const conversationId = request.params.id;
+        const schemaName = tenantUser.schemaName ?? null;
+        const tenantId = tenantUser.tenantId ?? null;
 
         try {
-          const convRows = await prisma.$queryRawUnsafe<Array<{
-            id: string;
-            channel_type: string | null;
-            whatsapp: string | null;
-            phone: string | null;
-            credentials: string | object | null;
-            agent_name: string | null;
-          }>>(
-            `SELECT
-               c.id,
-               c.channel_type,
-               ct.whatsapp,
-               ct.phone,
-               ch.credentials,
-               u.name AS agent_name
-             FROM conversations c
-             LEFT JOIN contacts ct ON ct.id = c.contact_id
-             LEFT JOIN channels ch ON ch.id = c.channel_id
-             LEFT JOIN users u ON u.id = $2::uuid
-             WHERE c.id = $1::uuid
-             LIMIT 1`,
-            conversationId,
-            parsed.data.user_id,
-          );
-
-          const conv = convRows[0];
-          if (conv?.channel_type === 'whatsapp') {
-            const credentials = conv.credentials ? decryptCredentials(conv.credentials) : {};
-            const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
-            const accessToken = credentials.accessToken ?? credentials.access_token;
-            const clientPhone = (conv.whatsapp ?? conv.phone ?? '').replace(/\D/g, '');
-
-            if (clientPhone && phoneNumberId && accessToken) {
-              let configuredTemplate = '';
-
-              if (tenantUser.tenantId) {
-                const tenant = await prisma.tenant.findUnique({
-                  where: { id: tenantUser.tenantId },
-                  select: { settings: true },
-                });
-                const settings = (tenant?.settings as Record<string, unknown> | null) ?? {};
-                configuredTemplate = typeof settings.bot_assigned_message === 'string'
-                  ? settings.bot_assigned_message.trim()
-                  : '';
-              }
-
-              const agentName = conv.agent_name ?? 'Agente';
-              const assignMessage = (configuredTemplate || [
-                '✅ Seu atendimento foi aceito!',
-                '',
-                `Você está sendo atendido por *${agentName}*.`,
-                'Em breve entraremos em contato. 😊',
-              ].join('\n')).replace(/\{\{\s*agent\s*\}\}/gi, agentName);
-
-              const sent = await sendWhatsAppTextMessage({
-                text: assignMessage,
-                to: clientPhone,
-                phoneNumberId,
-                accessToken,
-              });
-
-              if (sent) {
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
-                   VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
-                  conversationId,
-                  assignMessage,
-                );
-              }
-            }
+          if (schemaName && tenantId) {
+            const agentName = await getAgentName(schemaName, parsed.data.user_id);
+            await notifyCustomerAssigned(
+              tenantId,
+              schemaName,
+              conversationId,
+              agentName,
+            );
           }
         } catch (error) {
           request.log.error(
             { error, conversationId, assignedTo: parsed.data.user_id },
             '[Omnichannel] Falha ao notificar cliente após assumir conversa manualmente',
+          );
+        }
+
+        if (schemaName && tenantId) {
+          await syncAgentAvailability(
+            prisma,
+            schemaName,
+            [previousAssignedTo, parsed.data.user_id],
+            tenantId,
           );
         }
 
@@ -375,25 +459,85 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
-        const conversation = await transferConversation(
+        const target = parsed.data.user_id
+          ? { userId: parsed.data.user_id }
+          : { skillId: parsed.data.skill_id! };
+
+        const result = await transferConversation(
           request.params.id,
-          parsed.data.user_id,
+          target,
           request.user.id,
           parsed.data.reason,
         );
         const tenantUser = request.user as AuthUser;
+        const tenantId = tenantUser.tenantId ?? null;
+        const schemaName = tenantUser.schemaName ?? null;
+        const conversationId = request.params.id;
+
+        if (!tenantId || !schemaName) {
+          return reply.code(500).send({
+            success: false,
+            error: { message: 'Schema do tenant não resolvido' },
+          });
+        }
+
+        const destinationAgentName = await getAgentName(schemaName, result.resolvedUserId);
+
+        const transferMsg = `Seu atendimento foi transferido. Agora você está sendo atendido por *${destinationAgentName}*.`;
+        const systemMsg = `Atendimento transferido para ${destinationAgentName}${parsed.data.reason ? ` - Motivo: ${parsed.data.reason}` : ''}`;
+
+        try {
+          const sent = await sendConversationWhatsAppText(schemaName, conversationId, transferMsg);
+          if (sent) {
+            await insertConversationMessage(schemaName, conversationId, 'bot', transferMsg, false);
+          }
+        } catch (error) {
+          request.log.error(
+            { error, conversationId, assignedTo: result.resolvedUserId },
+            '[Omnichannel] Falha ao enviar mensagem de transferência via WhatsApp',
+          );
+        }
+
+        try {
+          await insertConversationMessage(schemaName, conversationId, 'system', systemMsg, true);
+        } catch (error) {
+          request.log.error(
+            { error, conversationId },
+            '[Omnichannel] Falha ao registrar nota interna de transferência',
+          );
+        }
+
+        await syncAgentAvailability(
+          prisma,
+          schemaName,
+          [result.previousAssignedTo, result.resolvedUserId],
+          tenantId,
+        );
 
         const io = getSocketServer();
-        io.to(`agent:${parsed.data.user_id}`).emit('conversation:transferred', {
-          conversationId: request.params.id,
+        io.to(`agent:${result.resolvedUserId}`).emit('conversation:transferred', {
+          conversationId,
           reason: parsed.data.reason,
         });
-        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', {
-          conversationId: request.params.id,
+        io.to(`agent:${result.resolvedUserId}`).emit('conversation:assigned', {
+          conversationId,
+          agentId: result.resolvedUserId,
+        });
+        io.to(`tenant:${tenantId}`).emit('conversation:updated', {
+          conversationId,
+          assignedTo: result.resolvedUserId,
+          assigned_to: result.resolvedUserId,
+          status: 'open',
         });
 
-        return reply.send({ success: true, data: conversation });
+        return reply.send({ success: true, data: result.data });
       } catch (err) {
+        if (err instanceof TransferError) {
+          return reply.code(400).send({
+            success: false,
+            error: { message: err.message, code: err.code },
+          });
+        }
         if (err instanceof NotFoundError) {
           return reply.code(404).send({ success: false, error: { message: err.message } });
         }
@@ -429,6 +573,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         request.user.id,
         schemaName,
       );
+
+      const tenantId = tenantUser.tenantId ?? null;
+      if (tenantId) {
+        await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);
+      }
 
       const io = getSocketServer();
 
@@ -467,12 +616,26 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     try {
       const conversation = await updateConversation(request.params.id, parsed.data, request.user.id);
       const tenantUser = request.user as AuthUser;
+      const patchSchemaName = tenantUser.schemaName ?? null;
+      const patchTenantId = tenantUser.tenantId ?? null;
+
+      if (
+        (parsed.data.status === 'resolved' || parsed.data.status === 'closed') &&
+        patchSchemaName &&
+        patchTenantId
+      ) {
+        await syncAgentAvailability(
+          prisma,
+          patchSchemaName,
+          [conversation.assigned_to],
+          patchTenantId,
+        );
+      }
 
       const io = getSocketServer();
       if (parsed.data.status === 'resolved') {
-        const schemaName = tenantUser.schemaName;
-        if (schemaName) {
-          sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
+        if (patchSchemaName) {
+          sendCsatMessage(request.params.id, patchSchemaName, prisma).catch((err: unknown) => {
             request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
           });
         }

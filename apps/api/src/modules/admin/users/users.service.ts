@@ -181,7 +181,7 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
   return { user, tempPassword };
 }
 
-export async function updateUser(id: string, data: UpdateUserInput) {
+export async function updateUser(id: string, data: UpdateUserInput, schemaName?: string) {
   await getUser(id);
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
@@ -196,6 +196,17 @@ export async function updateUser(id: string, data: UpdateUserInput) {
     data.status ?? null,
     id,
   );
+
+  if ('max_conversations' in data && schemaName) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "${schemaName}".agent_assignments
+       SET max_conversations = $2
+       WHERE user_id = $1::uuid`,
+      id,
+      data.max_conversations ?? null,
+    );
+  }
+
   return rows[0]!;
 }
 

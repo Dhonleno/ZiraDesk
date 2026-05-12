@@ -5,6 +5,7 @@ import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { sendWhatsAppTextMessage } from '../modules/omnichannel/conversations/csat.service.js';
 import { getSocketServer } from '../socket/index.js';
+import { syncAgentAvailability } from '../modules/omnichannel/conversations/auto-assign.service.js';
 
 type InactivityType = 'warning' | 'close';
 
@@ -18,6 +19,7 @@ interface InactivityJobData {
 interface InactivityConversationRow {
   id: string;
   status: string;
+  assigned_to: string | null;
   last_message_at: Date | null;
   created_at: Date;
   whatsapp: string | null;
@@ -120,6 +122,7 @@ async function loadConversation(
     `SELECT
        c.id,
        c.status,
+       c.assigned_to,
        c.last_message_at,
        c.created_at,
        ct.whatsapp,
@@ -231,6 +234,8 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
        AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')`,
     conversationId,
   );
+
+  await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);
 
   io.to(`tenant:${tenantId}`).emit('conversation:updated', {
     conversationId,

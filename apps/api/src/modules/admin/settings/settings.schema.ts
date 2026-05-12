@@ -19,6 +19,7 @@ export const updateSettingsSchema = z.object({
   active_outbound_validity_mode: z.enum(['end_of_day', 'hours']).optional(),
   active_outbound_validity_hours: z.number().int().min(1).max(168).optional(),
   bot_assigned_message: z.string().max(1000).optional(),
+  max_conversations_per_agent: z.number().int().min(1).max(500).nullable().optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined

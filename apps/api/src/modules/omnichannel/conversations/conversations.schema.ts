@@ -103,10 +103,16 @@ export const assignConversationBodySchema = z.object({
   user_id: z.string().uuid(),
 });
 
-export const transferConversationBodySchema = z.object({
-  user_id: z.string().uuid(),
-  reason: z.string().optional(),
-});
+export const transferConversationBodySchema = z
+  .object({
+    user_id: z.string().uuid().optional(),
+    skill_id: z.string().uuid().optional(),
+    reason: z.string().optional(),
+  })
+  .refine(
+    (data) => Boolean(data.user_id) !== Boolean(data.skill_id),
+    { message: 'Forneça user_id OU skill_id (não ambos, não nenhum)' },
+  );
 
 export const requestHelpBodySchema = z.object({
   helper_user_id: z.string().uuid(),

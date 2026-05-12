@@ -53,6 +53,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       user_id UUID NOT NULL UNIQUE REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
       last_assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       active_conversations INTEGER NOT NULL DEFAULT 0,
+      max_conversations INTEGER DEFAULT NULL,
       is_available BOOLEAN NOT NULL DEFAULT false,
       status VARCHAR(20) NOT NULL DEFAULT 'offline',
       last_seen_at TIMESTAMPTZ,
@@ -185,29 +186,77 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".business_hours (
+    CREATE TABLE IF NOT EXISTS "${schemaName}".business_hours (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       day_of_week INTEGER NOT NULL,
       is_active   BOOLEAN DEFAULT true,
-      open_time   TIME NOT NULL DEFAULT '08:00',
-      close_time  TIME NOT NULL DEFAULT '18:00',
       created_at  TIMESTAMPTZ DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(day_of_week)
     )
   `);
 
   await prisma.$executeRawUnsafe(`
-    INSERT INTO "${schemaName}".business_hours (day_of_week, is_active, open_time, close_time)
+    CREATE TABLE IF NOT EXISTS "${schemaName}".business_hours_shifts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      business_hour_id UUID NOT NULL REFERENCES "${schemaName}".business_hours(id) ON DELETE CASCADE,
+      open_time TIME NOT NULL,
+      close_time TIME NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".business_hours_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      is_24x7 BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".business_hours_holidays (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      date DATE NOT NULL,
+      name VARCHAR(120) NOT NULL,
+      behavior VARCHAR(20) NOT NULL DEFAULT 'closed',
+      open_time TIME,
+      close_time TIME,
+      is_national BOOLEAN DEFAULT false,
+      country VARCHAR(5),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(date, country)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".business_hours (day_of_week, is_active)
     VALUES
-      (0, false, '08:00', '18:00'),
-      (1, true,  '08:00', '18:00'),
-      (2, true,  '08:00', '18:00'),
-      (3, true,  '08:00', '18:00'),
-      (4, true,  '08:00', '18:00'),
-      (5, true,  '08:00', '18:00'),
-      (6, false, '08:00', '18:00')
+      (0, true),
+      (1, true),
+      (2, true),
+      (3, true),
+      (4, true),
+      (5, true),
+      (6, true)
     ON CONFLICT (day_of_week) DO NOTHING
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".business_hours_shifts (business_hour_id, open_time, close_time)
+    SELECT bh.id, '08:00'::time, '18:00'::time
+    FROM "${schemaName}".business_hours bh
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM "${schemaName}".business_hours_shifts s
+      WHERE s.business_hour_id = bh.id
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO "${schemaName}".business_hours_config (is_24x7)
+    SELECT false
+    WHERE NOT EXISTS (SELECT 1 FROM "${schemaName}".business_hours_config)
   `);
 
   await prisma.$executeRawUnsafe(`

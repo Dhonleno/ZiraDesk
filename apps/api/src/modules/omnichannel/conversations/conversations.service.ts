@@ -40,6 +40,16 @@ export class ForbiddenError extends Error {
   }
 }
 
+export class TransferError extends Error {
+  constructor(
+    public readonly code: 'AGENT_OFFLINE' | 'NO_AGENTS_AVAILABLE_FOR_SKILL',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'TransferError';
+  }
+}
+
 function validateSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/.test(schemaName)) {
     throw new ForbiddenError('Schema do tenant inválido');
@@ -424,7 +434,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   try {
     const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
       `SELECT
-         c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+         c.id, c.contact_id, COALESCE(c.organization_id, ct.organization_id) AS organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
          c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
          c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
          c.created_at, c.metadata,
@@ -451,7 +461,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
          ) AS tags
        FROM ${conversationsRef} c
        LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
-       LEFT JOIN ${organizationsRef} o ON o.id = c.organization_id
+       LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)
        LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
        LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
        ${modernContext.whereSql}
@@ -636,7 +646,7 @@ export async function getConversationWithMessages(conversationId: string, tenant
   try {
     convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
       `SELECT
-         c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+         c.id, c.contact_id, COALESCE(c.organization_id, ct.organization_id) AS organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
          c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
          c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
          c.created_at, c.metadata,
@@ -663,7 +673,7 @@ export async function getConversationWithMessages(conversationId: string, tenant
          ) AS tags
        FROM ${conversationsRef} c
        LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
-       LEFT JOIN ${organizationsRef} o ON o.id = c.organization_id
+       LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)
        LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
        LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
        WHERE c.id = $1::uuid
@@ -1023,7 +1033,7 @@ export async function sendMessage(
     channelId: conv.channel_id,
     contactPhone: conv.contact_phone,
     contactEmail: conv.contact_email,
-    channelCredentials: conv.channel_credentials,
+    channelCredentials: (body.isInternal ?? false) ? null : conv.channel_credentials,
     mediaId,
     mediaType: mediaId ? (contentType as 'image' | 'audio' | 'video' | 'document') : null,
     mediaFilename,
@@ -1225,7 +1235,11 @@ export async function createConversation(
   return { conversation, protocolDispatches };
 }
 
-export async function assignConversation(conversationId: string, assignToUserId: string, assignedBy: string) {
+export async function assignConversation(
+  conversationId: string,
+  assignToUserId: string,
+  assignedBy: string,
+): Promise<{ conversation: ConversationRow; previousAssignedTo: string | null }> {
   const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations
@@ -1271,24 +1285,122 @@ export async function assignConversation(conversationId: string, assignToUserId:
 
   await syncActiveConversationCounters(prisma, [previous.assigned_to, assignToUserId]);
 
-  return rows[0];
+  return { conversation: rows[0]!, previousAssignedTo: previous.assigned_to };
+}
+
+export interface TransferAgentRow {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  role: string;
+  active_conversations: number;
+  is_available: boolean;
+}
+
+export interface TransferSkillRow {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
+export async function listTransferAgents(currentAgentId?: string): Promise<TransferAgentRow[]> {
+  const excludeClause = currentAgentId ? `AND u.id != $1::uuid` : '';
+  const params: string[] = currentAgentId ? [currentAgentId] : [];
+
+  return prisma.$queryRawUnsafe<TransferAgentRow[]>(
+    `SELECT u.id, u.name, u.avatar_url, u.role,
+            aa.is_available,
+            COALESCE(ac.count, 0) AS active_conversations
+     FROM users u
+     JOIN agent_assignments aa ON aa.user_id = u.id
+     LEFT JOIN (
+       SELECT assigned_to, COUNT(*)::integer AS count
+       FROM conversations
+       WHERE status IN ('open', 'in_service', 'pending')
+         AND assigned_to IS NOT NULL
+       GROUP BY assigned_to
+     ) ac ON ac.assigned_to = u.id
+     WHERE aa.status = 'online'
+       AND u.status = 'active'
+       AND u.role IN ('owner', 'admin', 'agent')
+       ${excludeClause}
+     ORDER BY aa.is_available DESC, COALESCE(ac.count, 0) ASC`,
+    ...params,
+  );
+}
+
+export async function listTransferSkills(): Promise<TransferSkillRow[]> {
+  return prisma.$queryRawUnsafe<TransferSkillRow[]>(
+    `SELECT bo.id, bo.label AS name,
+            COUNT(DISTINCT aa.user_id)::integer AS online_agents_count
+     FROM bot_options bo
+     JOIN agent_bot_skills abs ON abs.bot_option_id = bo.id
+     JOIN agent_assignments aa ON aa.user_id = abs.user_id
+     WHERE aa.status = 'online'
+       AND aa.is_available = true
+     GROUP BY bo.id, bo.label
+     HAVING COUNT(DISTINCT aa.user_id) > 0
+     ORDER BY bo.label ASC`,
+  );
 }
 
 export async function transferConversation(
   conversationId: string,
-  assignToUserId: string,
+  target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
   transferredBy: string,
   reason?: string,
-) {
-  const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
+): Promise<{ data: ConversationRow; resolvedUserId: string; previousAssignedTo: string | null }> {
+  const currentConversationRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations
      WHERE id = $1::uuid
      LIMIT 1`,
     conversationId,
   );
-  const previous = previousRows[0];
-  if (!previous) throw new NotFoundError('Conversa não encontrada');
+  const currentConversation = currentConversationRows[0];
+  if (!currentConversation) throw new NotFoundError('Conversa não encontrada');
+
+  const noAgentFallbackId = '00000000-0000-0000-0000-000000000000';
+  const currentAgentId = currentConversation.assigned_to ?? noAgentFallbackId;
+  let assignToUserId: string;
+
+  if (target.userId) {
+    const statusRows = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+      `SELECT aa.status
+       FROM agent_assignments aa
+       WHERE aa.user_id = $1::uuid
+       LIMIT 1`,
+      target.userId,
+    );
+
+    if (!statusRows[0] || statusRows[0].status !== 'online') {
+      throw new TransferError('AGENT_OFFLINE', 'Agente não está online');
+    }
+
+    assignToUserId = target.userId;
+  } else {
+    const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT u.id
+       FROM agent_bot_skills abs
+       JOIN agent_assignments aa ON aa.user_id = abs.user_id
+       JOIN users u ON u.id = abs.user_id
+       WHERE abs.bot_option_id = $1::uuid
+         AND aa.status = 'online'
+         AND aa.is_available = true
+         AND u.status = 'active'
+         AND u.id != $2::uuid
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
+       LIMIT 1`,
+      target.skillId,
+      currentAgentId,
+    );
+
+    if (!eligibleAgents[0]) {
+      throw new TransferError('NO_AGENTS_AVAILABLE_FOR_SKILL', 'Nenhum agente disponível para este grupo');
+    }
+
+    assignToUserId = eligibleAgents[0].id;
+  }
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
@@ -1309,9 +1421,13 @@ export async function transferConversation(
     JSON.stringify({ assigned_to: assignToUserId, reason: reason ?? null }),
   );
 
-  await syncActiveConversationCounters(prisma, [previous.assigned_to, assignToUserId]);
+  await syncActiveConversationCounters(prisma, [currentConversation.assigned_to, assignToUserId]);
 
-  return rows[0];
+  return {
+    data: rows[0]!,
+    resolvedUserId: assignToUserId,
+    previousAssignedTo: currentConversation.assigned_to,
+  };
 }
 
 export async function updateConversation(

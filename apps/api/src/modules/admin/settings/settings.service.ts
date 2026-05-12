@@ -122,6 +122,8 @@ export async function getSettings(tenantId: string) {
     active_outbound_validity_hours: resolveActiveOutboundValidityHours(s.active_outbound_validity_hours),
     bot_assigned_message:
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
+    max_conversations_per_agent:
+      typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -170,6 +172,9 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.bot_assigned_message !== undefined
       ? { bot_assigned_message: data.bot_assigned_message }
       : {}),
+    ...('max_conversations_per_agent' in data
+      ? { max_conversations_per_agent: data.max_conversations_per_agent ?? null }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -208,6 +213,8 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     active_outbound_validity_hours: resolveActiveOutboundValidityHours(s.active_outbound_validity_hours),
     bot_assigned_message:
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
+    max_conversations_per_agent:
+      typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
   };
 }
 

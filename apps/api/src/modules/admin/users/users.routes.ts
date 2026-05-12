@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -71,7 +72,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const user = await updateUser(request.params.id, parsed.data);
+      const user = await updateUser(request.params.id, parsed.data, (request.user as AuthUser).schemaName ?? undefined);
       return reply.send({ success: true, data: user });
     } catch (err) {
       if (err instanceof NotFoundError)

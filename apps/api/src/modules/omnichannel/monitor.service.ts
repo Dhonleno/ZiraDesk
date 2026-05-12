@@ -15,6 +15,7 @@ interface MonitorAgent {
   pause_reason: string | null;
   pause_started_at: string | null;
   active_conversations: number;
+  max_conversations: number | null;
   skills: Array<{
     id: string;
     bot_option_id: string;
@@ -69,6 +70,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
       pause_reason: string | null;
       pause_started_at: Date | null;
       active_conversations: number;
+      max_conversations: number | null;
       skills: MonitorAgent['skills'];
     }>>(
       `SELECT
@@ -80,6 +82,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          COALESCE(aa.is_available, false) AS is_available,
          aa.pause_reason,
          aa.pause_started_at,
+         aa.max_conversations,
          COALESCE(
            (
              SELECT COUNT(*)::integer
@@ -118,7 +121,8 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          aa.status,
          aa.is_available,
          aa.pause_reason,
-         aa.pause_started_at
+         aa.pause_started_at,
+         aa.max_conversations
        ORDER BY u.name ASC`,
     ),
     prisma.$queryRawUnsafe<Array<{ tag: string | null; total: bigint }>>(

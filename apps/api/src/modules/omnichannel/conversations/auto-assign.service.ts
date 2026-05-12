@@ -4,6 +4,7 @@ import { quoteIdent } from './protocols.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { sendWhatsAppTextMessage } from './csat.service.js';
 import { PRESENCE_TIMEOUT_MS } from '../presence.constants.js';
+import { getSocketServer } from '../../../socket/index.js';
 
 interface AgentCandidateRow {
   user_id: string;
@@ -25,6 +26,15 @@ interface ConversationDispatchRow {
 interface AutoAssignSettings {
   auto_assign: boolean;
   auto_assign_algorithm: 'round_robin';
+  max_conversations_per_agent: number | null;
+}
+
+interface AgentAvailabilityRow {
+  user_id: string;
+  active_conversations: number;
+  max_conversations: number | null;
+  status: string;
+  is_available: boolean;
 }
 
 function tableRef(schemaName: string, table: string): string {
@@ -36,9 +46,14 @@ function parseAutoAssignSettings(settings: unknown): AutoAssignSettings {
     ? (settings as Record<string, unknown>)
     : {};
 
+  const rawLimit = safe['max_conversations_per_agent'];
   return {
     auto_assign: safe['auto_assign'] === true,
     auto_assign_algorithm: safe['auto_assign_algorithm'] === 'round_robin' ? 'round_robin' : 'round_robin',
+    max_conversations_per_agent:
+      typeof rawLimit === 'number' && Number.isInteger(rawLimit) && rawLimit >= 1
+        ? rawLimit
+        : null,
   };
 }
 
@@ -65,6 +80,11 @@ export async function ensureAgentAssignmentsInfrastructure(
       pause_notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${assignmentsRef}
+    ADD COLUMN IF NOT EXISTS max_conversations INTEGER DEFAULT NULL
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -182,6 +202,7 @@ async function resolveAgentForAssignment(
   schemaName: string,
   preferredAgentId?: string,
   requiredBotOptionId?: string,
+  globalLimit?: number | null,
 ): Promise<AgentCandidateRow | null> {
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
@@ -199,8 +220,10 @@ async function resolveAgentForAssignment(
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
        LIMIT 1`,
       preferredAgentId,
+      globalLimit ?? null,
     );
 
     if (preferredRows[0]) return preferredRows[0];
@@ -227,9 +250,11 @@ async function resolveAgentForAssignment(
          AND u.status = 'active'
          AND u.role IN ('owner', 'admin', 'agent')
          AND abs.bot_option_id IN (SELECT id FROM option_scope)
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
        ORDER BY aa.last_assigned_at ASC
        LIMIT 1`,
       requiredBotOptionId.trim(),
+      globalLimit ?? null,
     );
 
     if (rowsBySkill[0]) return rowsBySkill[0];
@@ -245,8 +270,10 @@ async function resolveAgentForAssignment(
        AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
        AND u.status = 'active'
        AND u.role IN ('owner', 'admin', 'agent')
+       AND aa.active_conversations < COALESCE(aa.max_conversations, $1::integer, 999999)
      ORDER BY aa.last_assigned_at ASC
      LIMIT 1`,
+    globalLimit ?? null,
   );
 
   return rows[0] ?? null;
@@ -255,7 +282,7 @@ async function resolveAgentForAssignment(
 async function persistAutoAssignment(
   prisma: PrismaClient,
   schemaName: string,
-  tenantSettings: unknown,
+  _tenantSettings: unknown,
   conversationId: string,
   agentId: string,
   agentName: string,
@@ -323,20 +350,7 @@ async function persistAutoAssignment(
     const clientPhone = (conversation.whatsapp ?? conversation.phone ?? '').replace(/\D/g, '');
     if (!phoneNumberId || !accessToken || !clientPhone) return true;
 
-    const settings = (typeof tenantSettings === 'object' && tenantSettings !== null)
-      ? (tenantSettings as Record<string, unknown>)
-      : {};
-
-    const configuredTemplate = typeof settings.bot_assigned_message === 'string'
-      ? settings.bot_assigned_message.trim()
-      : '';
-
-    const assignMessage = (configuredTemplate || [
-      '✅ Seu atendimento foi aceito!',
-      '',
-      `Você está sendo atendido por *${agentName}*.`,
-      'Em breve entraremos em contato. 😊',
-    ].join('\n')).replace(/\{\{\s*agent\s*\}\}/gi, agentName);
+    const assignMessage = `Olá! Meu nome é *${agentName}*. Em que posso ajudar?`;
 
     const sent = await sendWhatsAppTextMessage({
       text: assignMessage,
@@ -392,6 +406,65 @@ function emitAssignmentEvents(
   });
 }
 
+export async function syncAgentAvailability(
+  prisma: PrismaClient,
+  schemaName: string,
+  agentIds: Array<string | null | undefined>,
+  tenantId: string,
+): Promise<void> {
+  const uniqueIds = [...new Set(agentIds.filter((id): id is string => Boolean(id)))];
+  if (uniqueIds.length === 0) return;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const { max_conversations_per_agent: globalLimit } = parseAutoAssignSettings(tenant?.settings);
+
+  const assignmentsRef = tableRef(schemaName, 'agent_assignments');
+  const conversationsRef = tableRef(schemaName, 'conversations');
+  const io = getSocketServer();
+
+  for (const agentId of uniqueIds) {
+    const rows = await prisma.$queryRawUnsafe<AgentAvailabilityRow[]>(
+      `UPDATE ${assignmentsRef}
+       SET active_conversations = (
+         SELECT COUNT(*)::integer
+         FROM ${conversationsRef}
+         WHERE assigned_to = $1::uuid
+           AND status IN ('open', 'in_service', 'pending', 'bot')
+       )
+       WHERE user_id = $1::uuid
+       RETURNING user_id, active_conversations, max_conversations, status, is_available`,
+      agentId,
+    );
+
+    const agent = rows[0];
+    if (!agent || agent.status !== 'online') continue;
+
+    const effectiveLimit = agent.max_conversations ?? globalLimit;
+    if (effectiveLimit === null) continue;
+
+    const shouldBeAvailable = agent.active_conversations < effectiveLimit;
+    if (agent.is_available === shouldBeAvailable) continue;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${assignmentsRef}
+       SET is_available = $2::boolean
+       WHERE user_id = $1::uuid
+         AND status = 'online'`,
+      agentId,
+      shouldBeAvailable,
+    );
+
+    io.to(`tenant:${tenantId}`).emit('agent:updated', {
+      agentId,
+      isAvailable: shouldBeAvailable,
+      ...(shouldBeAvailable ? {} : { reason: 'max_conversations_reached' }),
+    });
+  }
+}
+
 export async function autoAssignConversation(
   conversationId: string,
   tenantId: string,
@@ -417,6 +490,7 @@ export async function autoAssignConversation(
     schemaName,
     preferredAgentId,
     requiredBotOptionId,
+    settings.max_conversations_per_agent,
   );
   if (!nextAgent) {
     if (requiredBotOptionId) {
@@ -435,6 +509,8 @@ export async function autoAssignConversation(
   );
 
   if (!assigned) return null;
+
+  await syncAgentAvailability(prisma, schemaName, [nextAgent.user_id], tenantId);
 
   emitAssignmentEvents(io, tenantId, conversationId, nextAgent.user_id, nextAgent.name);
 
