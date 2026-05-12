@@ -300,7 +300,7 @@ export function InfoPanel({ conversationId }: Props) {
   const organizationId = contactData?.organization_id ?? conv?.organization_id ?? null;
   const organizationName = (contactData?.organization_name ?? conv?.organization_name ?? null)?.trim() || null;
   const name = contactName || 'Contato não identificado';
-  const contactBadgeLabel = organizationName ? `Contato · ${organizationName}` : 'Contato avulso';
+  const contactBadgeLabel = 'Contato';
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const currentChannelSub =
     conv?.channel_type === 'email'
@@ -400,35 +400,6 @@ export function InfoPanel({ conversationId }: Props) {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)' }}>{name}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{contactBadgeLabel}</div>
-              </div>
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-                  Organização
-                </div>
-                <div
-                  title={organizationName ?? undefined}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '4px 10px',
-                    borderRadius: 'var(--r)',
-                    border: '1px solid var(--line-2)',
-                    background: 'var(--bg-3)',
-                    color: organizationName ? 'var(--txt-2)' : 'var(--txt-3)',
-                    fontSize: 11,
-                    maxWidth: '100%',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                    <rect x="1" y="2.5" width="9" height="6.5" rx="1.3" stroke="currentColor" strokeWidth="1.1" />
-                    <path d="M3.5 2.5V2a1 1 0 011-1h2a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-                  </svg>
-                  {organizationName ?? 'Sem organização'}
-                </div>
               </div>
               {/* Links CRM */}
               {contactId && (

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -13,6 +13,14 @@ type SkillLevel = 'junior' | 'intermediate' | 'senior';
 type SkillTreeNode = Omit<Skill, 'children'> & {
   children: SkillTreeNode[];
 };
+
+type CheckState = 'checked' | 'indeterminate' | 'unchecked';
+
+interface SkillTreeIndex {
+  childrenById: Map<string, string[]>;
+  parentById: Map<string, string>;
+  leafIds: Set<string>;
+}
 
 function buildOptionTree(options: Skill[]): SkillTreeNode[] {
   const byId = new Map<string, SkillTreeNode>();
@@ -38,6 +46,57 @@ function buildOptionTree(options: Skill[]): SkillTreeNode[] {
   return roots;
 }
 
+function buildTreeIndex(nodes: SkillTreeNode[]): SkillTreeIndex {
+  const childrenById = new Map<string, string[]>();
+  const parentById = new Map<string, string>();
+  const leafIds = new Set<string>();
+
+  const walk = (node: SkillTreeNode) => {
+    const childIds = node.children.map((child) => child.id);
+    childrenById.set(node.id, childIds);
+    if (childIds.length === 0) {
+      leafIds.add(node.id);
+    }
+
+    for (const child of node.children) {
+      parentById.set(child.id, node.id);
+      walk(child);
+    }
+  };
+
+  for (const root of nodes) walk(root);
+  return { childrenById, parentById, leafIds };
+}
+
+function selectAllDescendants(nodeId: string, index: SkillTreeIndex): string[] {
+  const descendants: string[] = [];
+  const stack = [...(index.childrenById.get(nodeId) ?? [])];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    descendants.push(current);
+    const children = index.childrenById.get(current) ?? [];
+    for (const childId of children) stack.push(childId);
+  }
+
+  return descendants;
+}
+
+function getParentState(nodeId: string, selectedIds: Set<string>, index: SkillTreeIndex): CheckState {
+  const childIds = index.childrenById.get(nodeId) ?? [];
+  if (childIds.length === 0) {
+    return selectedIds.has(nodeId) ? 'checked' : 'unchecked';
+  }
+
+  const states = childIds.map((childId) => getParentState(childId, selectedIds, index));
+  const allChecked = states.every((state) => state === 'checked');
+  const allUnchecked = states.every((state) => state === 'unchecked');
+
+  if (allChecked) return 'checked';
+  if (allUnchecked) return 'unchecked';
+  return 'indeterminate';
+}
+
 function BotOptionTree({ options, level = 0, t }: { options: SkillTreeNode[]; level?: number; t: TFunction<'admin'> }) {
   return (
     <div style={{ marginLeft: level * 16 }}>
@@ -61,36 +120,48 @@ function BotOptionTree({ options, level = 0, t }: { options: SkillTreeNode[]; le
 
 function SkillOptionRow({
   option,
-  assignedLevels,
-  onChange,
+  levelsById,
+  onToggle,
+  onLevelChange,
+  getNodeState,
   t,
   depth = 0,
 }: {
   option: SkillTreeNode;
-  assignedLevels: Record<string, SkillLevel>;
-  onChange: (optionId: string, assigned: boolean, level: SkillLevel) => void;
+  levelsById: Record<string, SkillLevel>;
+  onToggle: (optionId: string, assigned: boolean) => void;
+  onLevelChange: (optionId: string, level: SkillLevel) => void;
+  getNodeState: (optionId: string) => CheckState;
   t: TFunction<'admin'>;
   depth?: number;
 }) {
-  const currentLevel = assignedLevels[option.id];
-  const isAssigned = !!currentLevel;
+  const currentLevel = levelsById[option.id] ?? 'intermediate';
+  const nodeState = getNodeState(option.id);
+  const isAssigned = nodeState === 'checked';
+  const checkboxRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!checkboxRef.current) return;
+    checkboxRef.current.indeterminate = nodeState === 'indeterminate';
+  }, [nodeState]);
 
   return (
     <>
       <div className={`skill-option-row ${isAssigned ? 'assigned' : ''}`} style={{ paddingLeft: depth * 20 }}>
         <label className="skill-checkbox">
           <input
+            ref={checkboxRef}
             type="checkbox"
             checked={isAssigned}
-            onChange={(event) => onChange(option.id, event.target.checked, currentLevel ?? 'intermediate')}
+            onChange={(event) => onToggle(option.id, event.target.checked)}
           />
           <span className="option-label">{option.number}. {option.label}</span>
         </label>
 
         {isAssigned && (
           <select
-            value={currentLevel ?? 'intermediate'}
-            onChange={(event) => onChange(option.id, true, event.target.value as SkillLevel)}
+            value={currentLevel}
+            onChange={(event) => onLevelChange(option.id, event.target.value as SkillLevel)}
             className="level-select"
           >
             <option value="junior">{t('tenantAdmin.skills.levels.junior')}</option>
@@ -104,8 +175,10 @@ function SkillOptionRow({
         <SkillOptionRow
           key={child.id}
           option={child}
-          assignedLevels={assignedLevels}
-          onChange={onChange}
+          levelsById={levelsById}
+          onToggle={onToggle}
+          onLevelChange={onLevelChange}
+          getNodeState={getNodeState}
           t={t}
           depth={depth + 1}
         />
@@ -119,9 +192,12 @@ export function Skills() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [selectedAgent, setSelectedAgent] = useState<AgentWithSkills | null>(null);
-  const [assignedLevels, setAssignedLevels] = useState<Record<string, SkillLevel>>({});
-  const [initialLevels, setInitialLevels] = useState<Record<string, SkillLevel>>({});
+  const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
+  const [initialSelectedSkillIds, setInitialSelectedSkillIds] = useState<Set<string>>(new Set());
+  const [skillLevelsById, setSkillLevelsById] = useState<Record<string, SkillLevel>>({});
+  const [initialLevelsById, setInitialLevelsById] = useState<Record<string, SkillLevel>>({});
   const [loadingAgentSkills, setLoadingAgentSkills] = useState(false);
+  const skillLevelsRef = useRef<Record<string, SkillLevel>>({});
 
   const { data: botOptions = [], isLoading: loadingOptions } = useQuery({
     queryKey: ['admin', 'skills'],
@@ -134,6 +210,11 @@ export function Skills() {
   });
 
   const tree = useMemo(() => buildOptionTree(botOptions), [botOptions]);
+  const treeIndex = useMemo(() => buildTreeIndex(tree), [tree]);
+
+  useEffect(() => {
+    skillLevelsRef.current = skillLevelsById;
+  }, [skillLevelsById]);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin', 'skills'] });
@@ -146,20 +227,22 @@ export function Skills() {
       if (!selectedAgent) return;
 
       const allOptionIds = new Set<string>([
-        ...Object.keys(initialLevels),
-        ...Object.keys(assignedLevels),
+        ...Array.from(initialSelectedSkillIds),
+        ...Array.from(selectedSkillIds),
       ]);
 
       const ops: Promise<unknown>[] = [];
       for (const optionId of allOptionIds) {
-        const before = initialLevels[optionId];
-        const after = assignedLevels[optionId];
+        const before = initialSelectedSkillIds.has(optionId);
+        const after = selectedSkillIds.has(optionId);
+        const beforeLevel = initialLevelsById[optionId] ?? 'intermediate';
+        const afterLevel = skillLevelsById[optionId] ?? 'intermediate';
 
         if (!before && after) {
           ops.push(
             adminApi.skills.assignSkill(selectedAgent.id, {
               bot_option_id: optionId,
-              level: after,
+              level: afterLevel,
             }),
           );
           continue;
@@ -170,11 +253,11 @@ export function Skills() {
           continue;
         }
 
-        if (before && after && before !== after) {
+        if (before && after && beforeLevel !== afterLevel) {
           ops.push(
             adminApi.skills.assignSkill(selectedAgent.id, {
               bot_option_id: optionId,
-              level: after,
+              level: afterLevel,
             }),
           );
         }
@@ -185,8 +268,10 @@ export function Skills() {
     onSuccess: async () => {
       await invalidate();
       setSelectedAgent(null);
-      setAssignedLevels({});
-      setInitialLevels({});
+      setSelectedSkillIds(new Set());
+      setInitialSelectedSkillIds(new Set());
+      setSkillLevelsById({});
+      setInitialLevelsById({});
       toast.success(t('tenantAdmin.skills.assign'));
     },
     onError: () => toast.error('Erro ao salvar habilidades do agente'),
@@ -201,8 +286,11 @@ export function Skills() {
         acc[skill.bot_option_id] = skill.level;
         return acc;
       }, {});
-      setInitialLevels(nextLevels);
-      setAssignedLevels(nextLevels);
+      const selectedIds = new Set(Object.keys(nextLevels));
+      setInitialLevelsById(nextLevels);
+      setSkillLevelsById(nextLevels);
+      setInitialSelectedSkillIds(new Set(selectedIds));
+      setSelectedSkillIds(new Set(selectedIds));
     } catch {
       toast.error('Erro ao carregar habilidades do agente');
       setSelectedAgent(null);
@@ -211,14 +299,51 @@ export function Skills() {
     }
   };
 
-  const handleToggleSkill = (optionId: string, assigned: boolean, level: SkillLevel) => {
-    setAssignedLevels((current) => {
-      if (!assigned) {
-        const { [optionId]: _removed, ...rest } = current;
-        return rest;
+  const syncAncestors = (optionId: string, selectedIds: Set<string>, levelsById: Record<string, SkillLevel>) => {
+    let parentId = treeIndex.parentById.get(optionId);
+    while (parentId) {
+      const state = getParentState(parentId, selectedIds, treeIndex);
+      if (state === 'checked') {
+        selectedIds.add(parentId);
+        levelsById[parentId] = levelsById[parentId] ?? 'intermediate';
+      } else {
+        selectedIds.delete(parentId);
+        delete levelsById[parentId];
       }
-      return { ...current, [optionId]: level };
+      parentId = treeIndex.parentById.get(parentId);
+    }
+  };
+
+  const handleToggleSkill = (optionId: string, assigned: boolean) => {
+    setSelectedSkillIds((currentSelected) => {
+      const nextSelected = new Set(currentSelected);
+      const nextLevels = { ...skillLevelsRef.current };
+      const cascadeIds = [optionId, ...selectAllDescendants(optionId, treeIndex)];
+
+      if (assigned) {
+        for (const id of cascadeIds) {
+          nextSelected.add(id);
+          nextLevels[id] = nextLevels[id] ?? 'intermediate';
+        }
+      } else {
+        for (const id of cascadeIds) {
+          nextSelected.delete(id);
+          delete nextLevels[id];
+        }
+      }
+
+      syncAncestors(optionId, nextSelected, nextLevels);
+      setSkillLevelsById(nextLevels);
+      return nextSelected;
     });
+  };
+
+  const handleLevelChange = (optionId: string, level: SkillLevel) => {
+    setSkillLevelsById((current) => ({ ...current, [optionId]: level }));
+  };
+
+  const getNodeState = (optionId: string): CheckState => {
+    return getParentState(optionId, selectedSkillIds, treeIndex);
   };
 
   return (
@@ -317,8 +442,10 @@ export function Skills() {
         open={!!selectedAgent}
         onClose={() => {
           setSelectedAgent(null);
-          setAssignedLevels({});
-          setInitialLevels({});
+          setSelectedSkillIds(new Set());
+          setInitialSelectedSkillIds(new Set());
+          setSkillLevelsById({});
+          setInitialLevelsById({});
         }}
         title={selectedAgent ? t('tenantAdmin.skills.assignTitle', { name: selectedAgent.name }) : t('tenantAdmin.skills.assign')}
         maxWidth="md"
@@ -337,8 +464,10 @@ export function Skills() {
               <SkillOptionRow
                 key={option.id}
                 option={option}
-                assignedLevels={assignedLevels}
-                onChange={handleToggleSkill}
+                levelsById={skillLevelsById}
+                onToggle={handleToggleSkill}
+                onLevelChange={handleLevelChange}
+                getNodeState={getNodeState}
                 t={t}
               />
             ))
@@ -349,8 +478,10 @@ export function Skills() {
           <button
             onClick={() => {
               setSelectedAgent(null);
-              setAssignedLevels({});
-              setInitialLevels({});
+              setSelectedSkillIds(new Set());
+              setInitialSelectedSkillIds(new Set());
+              setSkillLevelsById({});
+              setInitialLevelsById({});
             }}
             style={{
               border: '1px solid var(--line-2)',

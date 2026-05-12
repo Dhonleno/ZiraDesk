@@ -208,6 +208,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
     const liveAudioCtxRef = useRef<AudioContext | null>(null);
     const previewUrlRequestIdRef = useRef(0);
     const audioUrlRef = useRef<string | null>(null);
+    const waveformBarsRef = useRef<number[]>([]);
+    const playbackAnimRef = useRef<number | null>(null);
 
     const releasePreviewUrl = useCallback((url: string | null) => {
       if (!url) return;
@@ -245,6 +247,13 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       }
     }, []);
 
+    const stopPlaybackAnimation = useCallback(() => {
+      if (playbackAnimRef.current !== null) {
+        cancelAnimationFrame(playbackAnimRef.current);
+        playbackAnimRef.current = null;
+      }
+    }, []);
+
     const stopLiveAudioContext = useCallback(async () => {
       stopWaveAnimation();
       analyserRef.current?.disconnect();
@@ -258,6 +267,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
     const resetRecorderState = useCallback((notifyInactive = true) => {
       stopTimer();
       void stopLiveAudioContext();
+      stopPlaybackAnimation();
+      waveformBarsRef.current = [];
       mediaRecorderRef.current = null;
       stopModeRef.current = null;
       chunksRef.current = [];
@@ -278,7 +289,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       if (notifyInactive) {
         onActiveChange?.(false);
       }
-    }, [onActiveChange, releasePreviewUrl, stopLiveAudioContext, stopTimer]);
+    }, [onActiveChange, releasePreviewUrl, stopLiveAudioContext, stopPlaybackAnimation, stopTimer]);
 
     const startWaveAnimation = useCallback((stream: MediaStream) => {
       const canvas = liveCanvasRef.current;
@@ -329,25 +340,52 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       drawStaticWave(ctx, width, height, 'rgba(0,201,167,.45)');
     }, []);
 
+    const redrawWaveform = useCallback((progress: number) => {
+      const canvas = staticCanvasRef.current;
+      const bars = waveformBarsRef.current;
+      if (!canvas || !bars.length) return;
+      const setup = setupCanvas(canvas);
+      if (!setup) return;
+      const { ctx, width, height } = setup;
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#00C9A7';
+      const barWidth = 3;
+      const gap = 2;
+      const playheadX = Math.round(progress * width);
+      ctx.clearRect(0, 0, width, height);
+      for (let i = 0; i < bars.length; i++) {
+        const barHeight = Math.max(2, (bars[i] ?? 0) * height * 0.82);
+        const x = i * (barWidth + gap);
+        const y = (height - barHeight) / 2;
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = x < playheadX ? 1 : 0.3;
+        ctx.fillRect(x, y, barWidth, barHeight);
+      }
+      ctx.globalAlpha = 1;
+      if (progress > 0 && progress <= 1) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(playheadX - 1, 0, 2, height);
+      }
+    }, []);
+
     const drawStaticWaveform = useCallback(async (blob: Blob, canvas: HTMLCanvasElement | null) => {
       if (!canvas) return;
       const setup = setupCanvas(canvas);
       if (!setup) return;
       const { ctx, width, height } = setup;
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#00C9A7';
 
       try {
         const arrayBuffer = await blob.arrayBuffer();
         const audioCtx = new AudioContext();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
         const data = audioBuffer.getChannelData(0);
+        await audioCtx.close();
 
-        ctx.clearRect(0, 0, width, height);
         const barWidth = 3;
         const gap = 2;
         const bars = Math.floor(width / (barWidth + gap));
         const step = Math.max(1, Math.floor(data.length / bars));
 
+        const heights: number[] = [];
         for (let i = 0; i < bars; i++) {
           let max = 0;
           const start = i * step;
@@ -356,18 +394,15 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             const value = Math.abs(data[j] ?? 0);
             if (value > max) max = value;
           }
-          const barHeight = Math.max(2, max * height * 0.82);
-          const y = (height - barHeight) / 2;
-          ctx.fillStyle = accent;
-          ctx.globalAlpha = 0.72;
-          ctx.fillRect(i * (barWidth + gap), y, barWidth, barHeight);
+          heights.push(max);
         }
-        ctx.globalAlpha = 1;
-        await audioCtx.close();
+        waveformBarsRef.current = heights;
+        redrawWaveform(0);
       } catch {
+        waveformBarsRef.current = [];
         drawStaticWave(ctx, width, height, 'rgba(0,201,167,.5)');
       }
-    }, []);
+    }, [redrawWaveform]);
 
     useEffect(() => {
       audioUrlRef.current = audioUrl;
@@ -392,6 +427,38 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       if (!isPaused || !liveCanvasRef.current) return;
       stopWaveAnimation();
     }, [isPaused, stopWaveAnimation]);
+
+    // Start wave animation after React renders the canvas (canvas doesn't exist until isRecording=true)
+    useEffect(() => {
+      if (!isRecording || isPaused) return;
+      if (animFrameRef.current !== null || liveAudioCtxRef.current !== null) return;
+      const stream = streamRef.current;
+      if (!stream) return;
+      startWaveAnimation(stream);
+    }, [isRecording, isPaused, startWaveAnimation]);
+
+    // Drive playhead redraws via rAF while playing, or draw static position when paused/stopped
+    useEffect(() => {
+      if (!isPlayingPreview) {
+        stopPlaybackAnimation();
+        const audio = previewAudioRef.current;
+        const dur = audio?.duration;
+        if (audio && dur && isFinite(dur) && dur > 0) {
+          redrawWaveform(audio.currentTime / dur);
+        }
+        return;
+      }
+      const tick = () => {
+        const audio = previewAudioRef.current;
+        const dur = audio?.duration;
+        if (audio && dur && isFinite(dur) && dur > 0) {
+          redrawWaveform(audio.currentTime / dur);
+        }
+        playbackAnimRef.current = requestAnimationFrame(tick);
+      };
+      playbackAnimRef.current = requestAnimationFrame(tick);
+      return () => stopPlaybackAnimation();
+    }, [isPlayingPreview, redrawWaveform, stopPlaybackAnimation]);
 
     useEffect(() => {
       const audio = previewAudioRef.current;
@@ -483,7 +550,6 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
         setAudioUrl(null);
         onActiveChange?.(true);
         startTimer();
-        startWaveAnimation(stream);
       } catch {
         toast.error(t('media.permissionDenied'));
       }
@@ -618,6 +684,17 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       cancel: cancelRecording,
     }));
 
+    const handleWaveformClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const audio = previewAudioRef.current;
+      if (!audio) return;
+      const dur = audio.duration;
+      if (!dur || !isFinite(dur)) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      audio.currentTime = pct * dur;
+      redrawWaveform(pct);
+    };
+
     const showConverting = isConverting || isSending;
     const isActive = isRecording || isPaused || isPreview || showConverting;
     if (!isActive) return null;
@@ -739,7 +816,13 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           </button>
 
           <div className="waveform-container" style={{ flex: 1, height: 32, display: 'flex', alignItems: 'center' }}>
-            <canvas ref={staticCanvasRef} width={300} height={32} style={{ width: '100%', height: 32, display: 'block' }} />
+            <canvas
+              ref={staticCanvasRef}
+              width={300}
+              height={32}
+              onClick={handleWaveformClick}
+              style={{ width: '100%', height: 32, display: 'block', cursor: 'pointer' }}
+            />
           </div>
 
           <span
