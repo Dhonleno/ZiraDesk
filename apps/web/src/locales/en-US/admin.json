@@ -34,6 +34,7 @@
       "ticketTypes": "Ticket Types",
       "conversationTags": "Tags",
       "closeConfig": "Conversation Closing",
+      "aiAgent": "AI Agent",
       "settings": "Settings"
     },
     "autoAssign": {
@@ -376,6 +377,39 @@
         "created": "Item created successfully",
         "updated": "Item updated successfully",
         "deleted": "Item deactivated successfully"
+      }
+    },
+    "aiAgent": {
+      "title": "AI Agent",
+      "enabled": "AI Agent active",
+      "agentName": "Agent name",
+      "apiKey": "OpenAI API Key",
+      "systemPrompt": "System prompt",
+      "systemPromptPlaceholder": "Agent personality and behavior instructions...",
+      "fallbackSkill": "Fallback skill",
+      "maxAttempts": "Max attempts",
+      "confidenceThreshold": "Confidence threshold",
+      "knowledge": "Knowledge base",
+      "addManual": "Add manually",
+      "addUrl": "Index URL",
+      "addFile": "Upload file",
+      "titlePlaceholder": "Article title",
+      "contentPlaceholder": "Article content...",
+      "dropzone": "Drag a file or click to select",
+      "statusProcessing": "Processing",
+      "statusIndexed": "Indexed",
+      "statusError": "Error",
+      "sourceType": "Source",
+      "noArticles": "No articles in the knowledge base",
+      "deleteConfirm": "Remove this article from the knowledge base?",
+      "disabledNotice": "AI Agent is disabled.",
+      "disabledHint": "Configure and enable to start responding automatically. The knowledge base can be prepared before enabling.",
+      "getApiKey": "Get key at platform.openai.com →",
+      "messages": {
+        "saved": "AI Agent settings saved",
+        "articleCreated": "Article added to knowledge base",
+        "articleDeleted": "Article removed",
+        "articleToggled": "Article updated"
       }
     },
     "dashboard": {

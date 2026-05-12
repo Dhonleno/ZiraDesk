@@ -3,6 +3,7 @@ import './jobs/send-message.job.js'; // inicia o worker de mensagens
 import './jobs/inactivity.job.js'; // inicia o worker de inatividade
 import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
+import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';

@@ -152,6 +152,15 @@ export function AdminLayout() {
           </AdminNavItem>
         )}
 
+        <AdminNavItem to="/admin/ai-agent" label={t('tenantAdmin.nav.aiAgent')}>
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
+            <path d="M7.5 2.5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M5.5 7.5c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2Z" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <path d="M3.7 3.7l1 1M10.3 10.3l1 1M3.7 11.3l1-1M10.3 4.7l1-1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        </AdminNavItem>
+
         <AdminNavItem to="/admin/settings" label={t('tenantAdmin.nav.settings')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />

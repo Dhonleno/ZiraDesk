@@ -13,6 +13,7 @@ import { adminSkillsRoutes } from './skills/index.js';
 import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
 import { adminTicketTypesRoutes } from './ticket-types/index.js';
 import { closeConfigRoutes } from './close-config/close-config.routes.js';
+import { aiAdminRoutes } from './ai/ai-admin.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -29,4 +30,5 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);
+  await app.register(aiAdminRoutes, { prefix: '/ai' });
 }

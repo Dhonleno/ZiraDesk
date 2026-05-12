@@ -695,6 +695,63 @@ async function createTenantTables(schemaName: string): Promise<void> {
       created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
+
+  // AI Agent — habilitar pgvector (database-level, idempotente)
+  await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS vector`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".knowledge_articles (
+      id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      title        VARCHAR(255) NOT NULL,
+      content      TEXT         NOT NULL,
+      source_type  VARCHAR(20)  NOT NULL,
+      source_url   TEXT,
+      file_name    TEXT,
+      status       VARCHAR(20)  NOT NULL DEFAULT 'processing',
+      error_message TEXT,
+      is_active    BOOLEAN      NOT NULL DEFAULT true,
+      created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".knowledge_chunks (
+      id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      article_id    UUID         NOT NULL REFERENCES "${schemaName}".knowledge_articles(id) ON DELETE CASCADE,
+      content       TEXT         NOT NULL,
+      embedding     vector(1536),
+      chunk_index   INTEGER      NOT NULL,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX "${schemaName}_knowledge_chunks_embedding_idx"
+    ON "${schemaName}".knowledge_chunks USING ivfflat (embedding vector_cosine_ops)
+    WITH (lists = 100)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".ai_agent_config (
+      id                   UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+      is_enabled           BOOLEAN NOT NULL DEFAULT false,
+      agent_name           VARCHAR(100) NOT NULL DEFAULT 'Assistente',
+      system_prompt        TEXT,
+      fallback_skill_id    UUID,
+      max_attempts         INTEGER NOT NULL DEFAULT 3,
+      confidence_threshold FLOAT   NOT NULL DEFAULT 0.75,
+      openai_api_key       TEXT,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".ai_agent_config
+       (is_enabled, agent_name, system_prompt, max_attempts, confidence_threshold)
+     VALUES (false, 'Assistente', NULL, 3, 0.75)`,
+  );
 }
 
 export async function createTenant(data: CreateTenantInput): Promise<{

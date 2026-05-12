@@ -34,6 +34,7 @@
       "ticketTypes": "Tipos de Ticket",
       "conversationTags": "Etiquetas",
       "closeConfig": "Cierre de Atención",
+      "aiAgent": "Agente de IA",
       "settings": "Configuración"
     },
     "autoAssign": {
@@ -376,6 +377,39 @@
         "created": "Ítem creado con éxito",
         "updated": "Ítem actualizado con éxito",
         "deleted": "Ítem desactivado con éxito"
+      }
+    },
+    "aiAgent": {
+      "title": "Agente de IA",
+      "enabled": "Agente de IA activo",
+      "agentName": "Nombre del agente",
+      "apiKey": "Clave API de OpenAI",
+      "systemPrompt": "Prompt del sistema",
+      "systemPromptPlaceholder": "Instrucciones de personalidad y comportamiento del agente...",
+      "fallbackSkill": "Habilidad de transferencia",
+      "maxAttempts": "Máx. intentos",
+      "confidenceThreshold": "Umbral de confianza",
+      "knowledge": "Base de conocimiento",
+      "addManual": "Agregar manualmente",
+      "addUrl": "Indexar URL",
+      "addFile": "Subir archivo",
+      "titlePlaceholder": "Título del artículo",
+      "contentPlaceholder": "Contenido del artículo...",
+      "dropzone": "Arrastra un archivo o haz clic para seleccionar",
+      "statusProcessing": "Procesando",
+      "statusIndexed": "Indexado",
+      "statusError": "Error",
+      "sourceType": "Origen",
+      "noArticles": "No hay artículos en la base de conocimiento",
+      "deleteConfirm": "¿Eliminar este artículo de la base de conocimiento?",
+      "disabledNotice": "El Agente de IA está desactivado.",
+      "disabledHint": "Configura y activa para comenzar a responder automáticamente. La base de conocimiento puede prepararse antes de activar.",
+      "getApiKey": "Obtener clave en platform.openai.com →",
+      "messages": {
+        "saved": "Configuración del Agente de IA guardada",
+        "articleCreated": "Artículo agregado a la base de conocimiento",
+        "articleDeleted": "Artículo eliminado",
+        "articleToggled": "Artículo actualizado"
       }
     },
     "dashboard": {

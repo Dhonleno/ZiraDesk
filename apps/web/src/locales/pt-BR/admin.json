@@ -34,6 +34,7 @@
       "ticketTypes": "Tipos de Ticket",
       "conversationTags": "Etiquetas",
       "closeConfig": "Encerramento de Atendimento",
+      "aiAgent": "Agente de IA",
       "settings": "Configurações"
     },
     "autoAssign": {
@@ -408,6 +409,33 @@
         "totalTickets": "Total de tickets",
         "totalMessages": "Total de mensagens"
       }
+    },
+    "aiAgent": {
+      "title": "Agente de IA",
+      "enabled": "Agente de IA ativo",
+      "agentName": "Nome do agente",
+      "apiKey": "Chave da API OpenAI",
+      "systemPrompt": "Prompt do sistema",
+      "systemPromptPlaceholder": "Instruções de personalidade e comportamento do agente...",
+      "fallbackSkill": "Habilidade de fallback",
+      "maxAttempts": "Máximo de tentativas",
+      "confidenceThreshold": "Threshold de confiança",
+      "knowledge": "Base de conhecimento",
+      "addManual": "Adicionar manualmente",
+      "addUrl": "Indexar URL",
+      "addFile": "Enviar arquivo",
+      "titlePlaceholder": "Título do artigo",
+      "contentPlaceholder": "Conteúdo do artigo...",
+      "dropzone": "Arraste um arquivo ou clique para selecionar",
+      "statusProcessing": "Processando",
+      "statusIndexed": "Indexado",
+      "statusError": "Erro",
+      "sourceType": "Origem",
+      "noArticles": "Nenhum artigo na base de conhecimento",
+      "deleteConfirm": "Remover este artigo da base de conhecimento?",
+      "disabledNotice": "O Agente de IA está desativado.",
+      "disabledHint": "Configure e ative para começar a responder automaticamente. A base de conhecimento pode ser preparada antes de ativar.",
+      "getApiKey": "Obter chave em platform.openai.com →"
     }
   },
   "superAdmin": {

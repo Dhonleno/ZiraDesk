@@ -32,6 +32,12 @@ import {
   scheduleInactivityCheck,
 } from '../../jobs/inactivity.job.js';
 import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
+import {
+  getAIAgentConfig,
+  searchKnowledge,
+  generateAIResponse,
+  getConversationHistoryText,
+} from '../ai/ai.service.js';
 
 interface MetaMessage {
   from: string;
@@ -1187,6 +1193,10 @@ async function processIncomingMessage(
       csatHandled: false,
       csatPayload: null,
       refreshInactivityForAssignedConversation: hasAssignedAgent,
+      shouldProcessAI: (botResponse === null || botResponse?.type === 'invalid')
+        && !hasAssignedAgent
+        && !isActiveOutboundReturnFlow
+        && currentBotStage !== 'done',
     };
   });
 
@@ -1308,6 +1318,127 @@ async function processIncomingMessage(
       undefined,
       result.botOptionId,
     );
+  }
+
+  // AI Agent — só executa se o bot não tratou a mensagem e não há agente humano
+  if (result.shouldProcessAI) {
+    try {
+      const aiConfig = await getAIAgentConfig(prisma, schemaName);
+
+      if (aiConfig?.is_enabled && aiConfig?.openai_api_key) {
+        const creds = decryptCredentials(aiConfig.openai_api_key);
+        const apiKey = creds['key'] ?? aiConfig.openai_api_key;
+
+        const convMetaRows = await prisma.$queryRawUnsafe<Array<{ metadata: unknown }>>(
+          `SELECT metadata FROM "${schemaName}".conversations WHERE id = $1::uuid LIMIT 1`,
+          result.conversationId,
+        );
+        const convMeta = (convMetaRows[0]?.metadata ?? {}) as Record<string, unknown>;
+        const currentAttempts = typeof convMeta['ai_attempts'] === 'number' ? convMeta['ai_attempts'] : 0;
+        const attempts = currentAttempts + 1;
+
+        const doTransfer = async () => {
+          const msg = 'Vou transferir você para um de nossos especialistas. Aguarde um momento.';
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".conversations
+             SET status = 'open', last_message = $1, last_message_at = NOW(),
+                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"bot_stage":"choice"}'::jsonb
+             WHERE id = $2::uuid`,
+            msg.slice(0, 255),
+            result.conversationId,
+          );
+          const xferRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+            `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status)
+             VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
+             RETURNING id, content, created_at, sender_type`,
+            result.conversationId,
+            msg,
+          );
+          await sendConversationWhatsAppText(channelCredentials, formattedPhone, msg);
+          if (xferRows[0]) {
+            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+              conversationId: result.conversationId,
+              message: xferRows[0],
+              contact: { id: result.contactId, name: result.contactName },
+            });
+          }
+          await autoAssignConversation(
+            result.conversationId, tenantId, schemaName, prisma, io,
+            undefined, aiConfig.fallback_skill_id ?? undefined,
+          );
+        };
+
+        if (attempts > aiConfig.max_attempts) {
+          await doTransfer();
+        } else {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".conversations
+             SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+             WHERE id = $2::uuid`,
+            JSON.stringify({ ai_attempts: attempts }),
+            result.conversationId,
+          );
+
+          const chunks = await searchKnowledge(
+            prisma, schemaName, content, apiKey,
+            aiConfig.confidence_threshold,
+          );
+
+          if (chunks.length === 0) {
+            await doTransfer();
+          } else {
+            const history = await getConversationHistoryText(
+              prisma, schemaName, result.conversationId, 10,
+            );
+            const aiResult = await generateAIResponse({
+              query: content,
+              chunks,
+              conversationHistory: history,
+              config: { ...aiConfig, openai_api_key: apiKey },
+              contactName: result.contactName,
+            });
+
+            if (aiResult.shouldTransfer) {
+              await doTransfer();
+            } else {
+              const aiMsgRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+                `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status)
+                 VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent')
+                 RETURNING id, content, created_at, sender_type`,
+                result.conversationId,
+                aiResult.response,
+              );
+              await prisma.$executeRawUnsafe(
+                `UPDATE "${schemaName}".conversations
+                 SET status = 'bot', last_message = $1, last_message_at = NOW()
+                 WHERE id = $2::uuid`,
+                aiResult.response.slice(0, 255),
+                result.conversationId,
+              );
+              if (aiMsgRows[0]) {
+                await messageQueue.add('send', {
+                  messageId: aiMsgRows[0].id,
+                  conversationId: result.conversationId,
+                  tenantId,
+                  tenantSchema: schemaName,
+                  channelType: 'whatsapp',
+                  channelCredentials,
+                  content: aiResult.response,
+                  to: formattedPhone,
+                });
+                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                  conversationId: result.conversationId,
+                  message: aiMsgRows[0],
+                  contact: { id: result.contactId, name: result.contactName },
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[AI Agent] Erro ao processar mensagem:', err instanceof Error ? err.message : err);
+    }
   }
 
   // Notify assigned agent if conversation has one

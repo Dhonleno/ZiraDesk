@@ -756,6 +756,31 @@ export const contactsApi = {
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
+export interface AIAgentConfig {
+  id: string;
+  is_enabled: boolean;
+  agent_name: string;
+  system_prompt: string | null;
+  fallback_skill_id: string | null;
+  max_attempts: number;
+  confidence_threshold: number;
+  openai_api_key: string | null;
+}
+
+export interface KnowledgeArticle {
+  id: string;
+  title: string;
+  source_type: 'manual' | 'url' | 'file';
+  source_url: string | null;
+  file_name: string | null;
+  status: 'processing' | 'indexed' | 'error';
+  error_message: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  chunk_count: number;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<{ success: boolean; data: AdminStats }>('/admin/stats/overview');
@@ -1154,6 +1179,48 @@ export const adminApi = {
     delete: async (id: string): Promise<QuickReply> => {
       const res = await api.delete<{ success: boolean; data: QuickReply }>(`/admin/quick-replies/${id}`);
       return res.data.data;
+    },
+  },
+
+  ai: {
+    getConfig: async (): Promise<AIAgentConfig> => {
+      const res = await api.get<{ success: boolean; data: AIAgentConfig }>('/admin/ai/config');
+      return res.data.data;
+    },
+
+    updateConfig: async (data: Partial<AIAgentConfig>): Promise<void> => {
+      await api.patch('/admin/ai/config', data);
+    },
+
+    listArticles: async (): Promise<KnowledgeArticle[]> => {
+      const res = await api.get<{ success: boolean; data: KnowledgeArticle[] }>('/admin/ai/knowledge');
+      return res.data.data;
+    },
+
+    createManualArticle: async (data: { title: string; content: string }): Promise<{ id: string }> => {
+      const res = await api.post<{ success: boolean; data: { id: string } }>('/admin/ai/knowledge/manual', data);
+      return res.data.data;
+    },
+
+    createUrlArticle: async (data: { url: string; title?: string }): Promise<{ id: string }> => {
+      const res = await api.post<{ success: boolean; data: { id: string } }>('/admin/ai/knowledge/url', data);
+      return res.data.data;
+    },
+
+    createFileArticle: async (file: File, title?: string): Promise<{ id: string }> => {
+      const form = new FormData();
+      form.append('file', file);
+      if (title) form.append('title', title);
+      const res = await api.post<{ success: boolean; data: { id: string } }>('/admin/ai/knowledge/file', form);
+      return res.data.data;
+    },
+
+    deleteArticle: async (id: string): Promise<void> => {
+      await api.delete(`/admin/ai/knowledge/${id}`);
+    },
+
+    toggleArticle: async (id: string, isActive: boolean): Promise<void> => {
+      await api.patch(`/admin/ai/knowledge/${id}/toggle`, { is_active: isActive });
     },
   },
 };
