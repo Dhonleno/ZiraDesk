@@ -129,7 +129,6 @@
     },
     "fields": {
       "name": "Name",
-      "whatsapp": "WhatsApp",
       "phone": "Phone",
       "email": "Email",
       "document": "Tax ID",

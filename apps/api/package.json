@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "contacts:normalize-phones": "tsx --env-file=.env src/scripts/normalize-contact-phones.ts"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"
@@ -32,6 +33,7 @@
     "fastify": "^4.27.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.13.1",
     "mammoth": "^1.12.0",
     "openai": "^6.37.0",
     "pdf-parse": "^2.4.5",

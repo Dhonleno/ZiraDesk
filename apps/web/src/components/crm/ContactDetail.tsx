@@ -289,7 +289,7 @@ export function ContactDetail({ contactId }: Props) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
           {activeTab === 'data' ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
-              <InfoField label={t('contacts.fields.whatsapp')} value={contact.whatsapp} />
+              <InfoField label={t('contacts.table.whatsapp')} value={contact.whatsapp} />
               <InfoField label={t('contacts.fields.phone')} value={contact.phone} />
               <InfoField label={t('contacts.fields.email')} value={contact.email} />
               <InfoField label={t('contacts.fields.document')} value={contact.document} />

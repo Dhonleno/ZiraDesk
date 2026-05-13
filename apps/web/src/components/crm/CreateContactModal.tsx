@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,13 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
+import { PhoneInput } from '../ui/PhoneInput';
 import { contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { isValidOptionalPhone } from '../../lib/phone';
 
-const schema = z.object({
+const buildSchema = (invalidPhoneMessage: string) => z.object({
   name:            z.string().min(2, 'Mínimo 2 caracteres'),
-  whatsapp:        z.string().optional(),
-  phone:           z.string().optional(),
+  phone:           z.string().optional().refine(isValidOptionalPhone, { message: invalidPhoneMessage }),
   email:           z.union([z.string().email('E-mail inválido'), z.literal('')]).optional(),
   document:        z.string().optional(),
   role:            z.string().optional(),
@@ -24,7 +25,7 @@ const schema = z.object({
   notes:           z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 interface Props {
   open: boolean;
@@ -33,24 +34,25 @@ interface Props {
 }
 
 export function CreateContactModal({ open, onClose, defaultOrganizationId }: Props) {
-  const { t } = useTranslation('crm');
+  const { t } = useTranslation(['crm', 'common']);
   const toast = useToast();
   const queryClient = useQueryClient();
   const [tagInput, setTagInput] = useState('');
+  const schema = useMemo(() => buildSchema(t('phone.invalid', { ns: 'common' })), [t]);
 
-  const { register, handleSubmit, watch, setValue, getValues, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, getValues, reset, setError, clearErrors, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { is_primary: false, tags: [], organization_id: defaultOrganizationId ?? '' },
   });
 
   const tags = watch('tags');
+  const phoneValue = watch('phone') ?? '';
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => contactsApi.create({
       name:       values.name,
       is_primary: values.is_primary,
       tags:       values.tags,
-      ...(values.whatsapp   ? { whatsapp:        values.whatsapp }   : {}),
       ...(values.phone      ? { phone:           values.phone }      : {}),
       ...(values.email      ? { email:           values.email }      : {}),
       ...(values.document   ? { document:        values.document }   : {}),
@@ -99,9 +101,22 @@ export function CreateContactModal({ open, onClose, defaultOrganizationId }: Pro
         <div className="space-y-4">
           <Input label={t('contacts.fields.name')} error={errors.name?.message} autoFocus {...register('name')} />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input label={t('contacts.fields.whatsapp')} type="tel" placeholder="+55 11 99999-9999" {...register('whatsapp')} />
-            <Input label={t('contacts.fields.phone')} type="tel" {...register('phone')} />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>{t('contacts.fields.phone')}</label>
+            <PhoneInput
+              country="BR"
+              value={phoneValue}
+              onChange={(nextValue, isValid) => {
+                setValue('phone', nextValue, { shouldDirty: true });
+                if (!nextValue || isValid) {
+                  clearErrors('phone');
+                  return;
+                }
+                setError('phone', { type: 'manual', message: t('phone.invalid', { ns: 'common' }) });
+              }}
+              placeholder="11 99999-9999"
+              error={errors.phone?.message}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

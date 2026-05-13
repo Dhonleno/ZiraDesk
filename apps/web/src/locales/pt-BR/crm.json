@@ -129,7 +129,6 @@
     },
     "fields": {
       "name": "Nome",
-      "whatsapp": "WhatsApp",
       "phone": "Telefone",
       "email": "E-mail",
       "document": "CPF",

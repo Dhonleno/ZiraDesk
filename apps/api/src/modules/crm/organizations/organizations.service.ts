@@ -51,9 +51,64 @@ interface OrgStatsRow {
   last_contact_at: Date | null;
 }
 
+interface OrganizationConflictRow {
+  id: string;
+  name: string;
+}
+
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
+}
+
+function normalizeDocumentForComparison(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  return digits || null;
+}
+
+function normalizeEmailForComparison(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
+async function assertUniqueOrganizationDocument(document: string | null, ignoreOrganizationId?: string): Promise<void> {
+  if (!document) return;
+
+  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+    `SELECT id, name
+     FROM organizations
+     WHERE ($1::uuid IS NULL OR id != $1::uuid)
+       AND regexp_replace(COALESCE(document, ''), '\\D', '', 'g') = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    ignoreOrganizationId ?? null,
+    document,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(`Já existe uma organização com este CPF/CNPJ (${rows[0].name}).`);
+  }
+}
+
+async function assertUniqueOrganizationEmail(email: string | null, ignoreOrganizationId?: string): Promise<void> {
+  if (!email) return;
+
+  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+    `SELECT id, name
+     FROM organizations
+     WHERE ($1::uuid IS NULL OR id != $1::uuid)
+       AND lower(trim(COALESCE(email, ''))) = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    ignoreOrganizationId ?? null,
+    email,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(`E-mail já cadastrado para outra organização (${rows[0].name}).`);
+  }
 }
 
 const SORT_COLUMNS: Record<string, string> = {
@@ -202,12 +257,10 @@ export async function getOrganizationTickets(id: string) {
 
 /* ── createOrganization ──────────────────────────────────────────────────── */
 export async function createOrganization(data: CreateOrganizationInput, createdBy: string) {
-  if (data.email) {
-    const existing = await prisma.$queryRawUnsafe<[{ id: string }]>(
-      `SELECT id FROM organizations WHERE email = $1 LIMIT 1`, data.email,
-    );
-    if (existing[0]) throw new ConflictError('E-mail já cadastrado para outra organização');
-  }
+  const normalizedEmail = normalizeEmailForComparison(data.email ?? null);
+  const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
+  await assertUniqueOrganizationEmail(normalizedEmail);
+  await assertUniqueOrganizationDocument(normalizedDocument);
 
   const tagsLiteral    = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
@@ -219,7 +272,7 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
        segment, lead_source, responsible_id, tags, custom_fields, notes
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::uuid, $15::text[], $16::jsonb, $17)
      RETURNING *`,
-    data.type ?? 'company', data.name, data.document ?? null, data.email ?? null,
+    data.type ?? 'company', data.name, normalizedDocument, normalizedEmail,
     data.phone ?? null, data.website ?? null, data.status ?? 'lead',
     data.address_street ?? null, data.address_city ?? null, data.address_state ?? null, data.address_zip ?? null,
     data.segment ?? null, data.lead_source ?? null, data.responsible_id ?? null,
@@ -240,12 +293,14 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
 /* ── updateOrganization ──────────────────────────────────────────────────── */
 export async function updateOrganization(id: string, data: UpdateOrganizationInput, updatedBy: string) {
   const existing = await getOrganization(id);
+  const normalizedEmail = data.email === undefined ? undefined : normalizeEmailForComparison(data.email);
+  const normalizedDocument = data.document === undefined ? undefined : normalizeDocumentForComparison(data.document);
 
-  if (data.email && data.email !== existing.email) {
-    const emailCheck = await prisma.$queryRawUnsafe<[{ id: string }]>(
-      `SELECT id FROM organizations WHERE email = $1 AND id != $2::uuid LIMIT 1`, data.email, id,
-    );
-    if (emailCheck[0]) throw new ConflictError('E-mail já cadastrado para outra organização');
+  if (normalizedEmail !== undefined) {
+    await assertUniqueOrganizationEmail(normalizedEmail, id);
+  }
+  if (normalizedDocument !== undefined) {
+    await assertUniqueOrganizationDocument(normalizedDocument, id);
   }
 
   const tagsLiteral    = data.tags !== undefined ? toPgArray(data.tags) : null;
@@ -273,7 +328,7 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
        updated_at      = NOW()
      WHERE id = $18::uuid
      RETURNING *`,
-    data.type ?? null, data.name ?? null, data.document ?? null, data.email ?? null,
+    data.type ?? null, data.name ?? null, normalizedDocument ?? null, normalizedEmail ?? null,
     data.phone ?? null, data.website ?? null, data.status ?? null,
     data.address_street ?? null, data.address_city ?? null, data.address_state ?? null, data.address_zip ?? null,
     data.segment ?? null, data.lead_source ?? null, data.responsible_id ?? null,

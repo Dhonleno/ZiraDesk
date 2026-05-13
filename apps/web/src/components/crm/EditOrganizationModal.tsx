@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,16 +7,18 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
+import { PhoneInput } from '../ui/PhoneInput';
 import type { CrmOrganization } from '../../services/api';
 import { organizationsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { isValidOptionalPhone } from '../../lib/phone';
 
-const schema = z.object({
+const buildSchema = (invalidPhoneMessage: string) => z.object({
   name:           z.string().min(2),
   type:           z.enum(['company', 'person']),
   document:       z.string().optional(),
   email:          z.union([z.string().email(), z.literal('')]).optional(),
-  phone:          z.string().optional(),
+  phone:          z.string().optional().refine(isValidOptionalPhone, { message: invalidPhoneMessage }),
   website:        z.string().optional(),
   status:         z.enum(['lead', 'prospect', 'client', 'inactive']),
   address_street: z.string().optional(),
@@ -27,7 +29,7 @@ const schema = z.object({
   lead_source:    z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 interface Props {
   org: CrmOrganization | null;
@@ -35,14 +37,16 @@ interface Props {
 }
 
 export function EditOrganizationModal({ org, onClose }: Props) {
-  const { t } = useTranslation('crm');
+  const { t } = useTranslation(['crm', 'common']);
   const toast = useToast();
   const queryClient = useQueryClient();
+  const schema = useMemo(() => buildSchema(t('phone.invalid', { ns: 'common' })), [t]);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, setError, clearErrors, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { type: 'company', status: 'lead' },
   });
+  const phoneValue = watch('phone') ?? '';
 
   useEffect(() => {
     if (!org) return;
@@ -130,7 +134,23 @@ export function EditOrganizationModal({ org, onClose }: Props) {
           <Input label={t('organizations.fields.document')} {...register('document')} />
           <div className="grid grid-cols-2 gap-3">
             <Input label={t('organizations.fields.email')} type="email" error={errors.email?.message} {...register('email')} />
-            <Input label={t('organizations.fields.phone')} type="tel" {...register('phone')} />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>{t('organizations.fields.phone')}</label>
+              <PhoneInput
+                country="BR"
+                value={phoneValue}
+                onChange={(nextValue, isValid) => {
+                  setValue('phone', nextValue, { shouldDirty: true });
+                  if (!nextValue || isValid) {
+                    clearErrors('phone');
+                    return;
+                  }
+                  setError('phone', { type: 'manual', message: t('phone.invalid', { ns: 'common' }) });
+                }}
+                placeholder="11 3333-4444"
+                error={errors.phone?.message}
+              />
+            </div>
           </div>
           <Input label={t('organizations.fields.website')} {...register('website')} />
           <div className="grid grid-cols-2 gap-3">

@@ -129,7 +129,6 @@
     },
     "fields": {
       "name": "Nombre",
-      "whatsapp": "WhatsApp",
       "phone": "Teléfono",
       "email": "Correo",
       "document": "RFC / ID",

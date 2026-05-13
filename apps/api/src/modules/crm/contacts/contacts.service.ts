@@ -1,6 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contacts.schema.js';
 import bcrypt from 'bcryptjs';
+import { normalizePhoneForStorage, PhoneNormalizationError } from '../../../utils/phone.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -47,6 +48,11 @@ interface ContactStatsRow {
   open_tickets: bigint;
 }
 
+interface ContactConflictRow {
+  id: string;
+  name: string;
+}
+
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
@@ -54,6 +60,82 @@ function quoteIdent(identifier: string): string {
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
+}
+
+function normalizeDocumentForComparison(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  return digits || null;
+}
+
+function normalizeEmailForComparison(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
+async function assertUniqueContactPhone(phone: string | null, ignoreContactId?: string): Promise<void> {
+  if (!phone) return;
+
+  const digits = phone.replace(/\D/g, '');
+  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+    `SELECT id, name
+     FROM contacts
+     WHERE ($1::uuid IS NULL OR id != $1::uuid)
+       AND (
+         phone = $2
+         OR whatsapp = $2
+         OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $3
+         OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $3
+       )
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    ignoreContactId ?? null,
+    phone,
+    digits,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(`Já existe um contato com este telefone (${rows[0].name}).`);
+  }
+}
+
+async function assertUniqueContactDocument(document: string | null, ignoreContactId?: string): Promise<void> {
+  if (!document) return;
+
+  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+    `SELECT id, name
+     FROM contacts
+     WHERE ($1::uuid IS NULL OR id != $1::uuid)
+       AND regexp_replace(COALESCE(document, ''), '\\D', '', 'g') = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    ignoreContactId ?? null,
+    document,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(`Já existe um contato com este CPF/CNPJ (${rows[0].name}).`);
+  }
+}
+
+async function assertUniqueContactEmail(email: string | null, ignoreContactId?: string): Promise<void> {
+  if (!email) return;
+
+  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+    `SELECT id, name
+     FROM contacts
+     WHERE ($1::uuid IS NULL OR id != $1::uuid)
+       AND lower(trim(COALESCE(email, ''))) = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    ignoreContactId ?? null,
+    email,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(`Já existe um contato com este e-mail (${rows[0].name}).`);
+  }
 }
 
 const BASE_SELECT = `
@@ -160,17 +242,41 @@ export async function getContactStats(id: string, schemaName: string) {
 
 /* ── findByWhatsapp ──────────────────────────────────────────────────────── */
 export async function findByWhatsapp(number: string) {
+  const normalized = normalizePhoneForStorage(number);
+  const digits = number.replace(/\D/g, '');
+
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
     `${BASE_SELECT}
-     WHERE ct.whatsapp = $1 OR ct.phone = $1
+     WHERE ct.whatsapp = $1
+        OR ct.phone = $1
+        OR regexp_replace(COALESCE(ct.whatsapp, ''), '\\D', '', 'g') = $2
+        OR regexp_replace(COALESCE(ct.phone, ''), '\\D', '', 'g') = $2
      LIMIT 1`,
-    number,
+    normalized ?? number,
+    digits,
   );
   return rows[0] ?? null;
 }
 
 /* ── createContact ───────────────────────────────────────────────────────── */
 export async function createContact(data: CreateContactInput, createdBy: string) {
+  let normalizedPhone: string | null = null;
+  let normalizedWhatsapp: string | null = null;
+  const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
+  const normalizedEmail = normalizeEmailForComparison(data.email ?? null);
+
+  try {
+    const unifiedInput = data.phone ?? data.whatsapp ?? null;
+    const normalizedUnified = normalizePhoneForStorage(unifiedInput);
+    normalizedPhone = normalizedUnified;
+    normalizedWhatsapp = normalizedUnified;
+  } catch (err) {
+    if (err instanceof PhoneNormalizationError) {
+      throw new ConflictError(err.message);
+    }
+    throw err;
+  }
+
   if (data.is_primary && data.organization_id) {
     await prisma.$executeRawUnsafe(
       `UPDATE contacts SET is_primary = false WHERE organization_id = $1::uuid AND is_primary = true`,
@@ -181,14 +287,18 @@ export async function createContact(data: CreateContactInput, createdBy: string)
   const tagsLiteral    = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
+  await assertUniqueContactPhone(normalizedPhone);
+  await assertUniqueContactDocument(normalizedDocument);
+  await assertUniqueContactEmail(normalizedEmail);
+
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
     `INSERT INTO contacts (
        organization_id, name, email, phone, whatsapp, document,
        role, department, is_primary, tags, custom_fields, notes
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::jsonb, $12)
+    ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::jsonb, $12)
      RETURNING *`,
-    data.organization_id ?? null, data.name, data.email ?? null, data.phone ?? null,
-    data.whatsapp ?? null, data.document ?? null, data.role ?? null, data.department ?? null,
+    data.organization_id ?? null, data.name, normalizedEmail, normalizedPhone,
+    normalizedWhatsapp, normalizedDocument, data.role ?? null, data.department ?? null,
     data.is_primary ?? false, tagsLiteral, customFieldsJson, data.notes ?? null,
   );
 
@@ -206,6 +316,31 @@ export async function createContact(data: CreateContactInput, createdBy: string)
 /* ── updateContact ───────────────────────────────────────────────────────── */
 export async function updateContact(id: string, data: UpdateContactInput, updatedBy: string) {
   const existing = await getContact(id);
+  const normalizedDocument = data.document === undefined
+    ? undefined
+    : normalizeDocumentForComparison(data.document);
+  const normalizedEmail = data.email === undefined
+    ? undefined
+    : normalizeEmailForComparison(data.email);
+
+  let normalizedPhone: string | null | undefined = undefined;
+  let normalizedWhatsapp: string | null | undefined = undefined;
+  try {
+    if (data.phone !== undefined) {
+      const normalizedUnified = normalizePhoneForStorage(data.phone ?? null);
+      normalizedPhone = normalizedUnified;
+      normalizedWhatsapp = normalizedUnified;
+    } else if (data.whatsapp !== undefined) {
+      const normalizedUnified = normalizePhoneForStorage(data.whatsapp ?? null);
+      normalizedPhone = normalizedUnified;
+      normalizedWhatsapp = normalizedUnified;
+    }
+  } catch (err) {
+    if (err instanceof PhoneNormalizationError) {
+      throw new ConflictError(err.message);
+    }
+    throw err;
+  }
 
   if (data.is_primary === true) {
     const orgId = data.organization_id ?? existing.organization_id;
@@ -219,6 +354,16 @@ export async function updateContact(id: string, data: UpdateContactInput, update
 
   const tagsLiteral    = data.tags === undefined ? null : toPgArray(data.tags ?? []);
   const customFieldsJson = data.custom_fields !== undefined ? JSON.stringify(data.custom_fields) : null;
+
+  if (normalizedPhone !== undefined) {
+    await assertUniqueContactPhone(normalizedPhone, id);
+  }
+  if (normalizedDocument !== undefined) {
+    await assertUniqueContactDocument(normalizedDocument, id);
+  }
+  if (normalizedEmail !== undefined) {
+    await assertUniqueContactEmail(normalizedEmail, id);
+  }
 
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
     `UPDATE contacts SET
@@ -237,8 +382,8 @@ export async function updateContact(id: string, data: UpdateContactInput, update
        updated_at      = NOW()
      WHERE id = $13::uuid
      RETURNING *`,
-    data.organization_id ?? null, data.name ?? null, data.email ?? null, data.phone ?? null,
-    data.whatsapp ?? null, data.document ?? null, data.role ?? null, data.department ?? null,
+    data.organization_id ?? null, data.name ?? null, normalizedEmail ?? null, normalizedPhone ?? null,
+    normalizedWhatsapp ?? null, normalizedDocument ?? null, data.role ?? null, data.department ?? null,
     data.is_primary ?? null, tagsLiteral, customFieldsJson, data.notes ?? null, id,
   );
 

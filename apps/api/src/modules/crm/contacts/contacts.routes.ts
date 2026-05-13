@@ -106,6 +106,8 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ConflictError)
+        return reply.code(409).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });
