@@ -740,7 +740,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       system_prompt        TEXT,
       fallback_skill_id    UUID,
       max_attempts         INTEGER NOT NULL DEFAULT 3,
-      confidence_threshold FLOAT   NOT NULL DEFAULT 0.75,
+      confidence_threshold FLOAT   NOT NULL DEFAULT 0.5,
       openai_api_key       TEXT,
       created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -750,7 +750,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "${schemaName}".ai_agent_config
        (is_enabled, agent_name, system_prompt, max_attempts, confidence_threshold)
-     VALUES (false, 'Assistente', NULL, 3, 0.75)`,
+     VALUES (false, 'Assistente', NULL, 3, 0.5)`,
   );
 }
 

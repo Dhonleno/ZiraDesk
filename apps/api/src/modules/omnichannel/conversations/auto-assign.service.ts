@@ -279,6 +279,38 @@ async function resolveAgentForAssignment(
   return rows[0] ?? null;
 }
 
+async function syncAllActiveConversationCounters(
+  prisma: PrismaClient,
+  schemaName: string,
+): Promise<void> {
+  const assignmentsRef = tableRef(schemaName, 'agent_assignments');
+  const conversationsRef = tableRef(schemaName, 'conversations');
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${assignmentsRef} aa
+     SET active_conversations = COALESCE(conv.total, 0)
+     FROM (
+       SELECT assigned_to AS user_id, COUNT(*)::integer AS total
+       FROM ${conversationsRef}
+       WHERE assigned_to IS NOT NULL
+         AND status IN ('open', 'in_service', 'pending', 'bot')
+       GROUP BY assigned_to
+     ) conv
+     WHERE aa.user_id = conv.user_id`,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${assignmentsRef}
+     SET active_conversations = 0
+     WHERE user_id NOT IN (
+       SELECT DISTINCT assigned_to
+       FROM ${conversationsRef}
+       WHERE assigned_to IS NOT NULL
+         AND status IN ('open', 'in_service', 'pending', 'bot')
+     )`,
+  );
+}
+
 async function persistAutoAssignment(
   prisma: PrismaClient,
   schemaName: string,
@@ -484,6 +516,7 @@ export async function autoAssignConversation(
 
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
+  await syncAllActiveConversationCounters(prisma, schemaName);
 
   const nextAgent = await resolveAgentForAssignment(
     prisma,

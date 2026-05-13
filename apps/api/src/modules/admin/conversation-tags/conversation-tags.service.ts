@@ -78,6 +78,14 @@ export async function ensureConversationTagsInfrastructure(schemaName: string): 
   `);
 
   await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${conversationTagsRef}
+    ADD COLUMN IF NOT EXISTS color VARCHAR(7) NOT NULL DEFAULT '#00C9A7',
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${conversationTagAssignmentsRef} (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id UUID REFERENCES ${conversationsRef}(id) ON DELETE CASCADE,
@@ -88,6 +96,12 @@ export async function ensureConversationTagsInfrastructure(schemaName: string): 
     )
   `);
 
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${conversationTagAssignmentsRef}
+    ADD COLUMN IF NOT EXISTS assigned_by UUID REFERENCES ${usersRef}(id),
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS idx_tag_assignments_conv ON ${conversationTagAssignmentsRef}(conversation_id)`,
   );
@@ -95,8 +109,12 @@ export async function ensureConversationTagsInfrastructure(schemaName: string): 
   for (const tag of DEFAULT_TAGS) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO ${conversationTagsRef} (name, color, sort_order)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (name) DO NOTHING`,
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM ${conversationTagsRef}
+         WHERE LOWER(name) = LOWER($1)
+       )`,
       tag.name,
       tag.color,
       tag.sort_order,

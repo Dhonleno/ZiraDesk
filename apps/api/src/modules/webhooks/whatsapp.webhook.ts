@@ -5,6 +5,7 @@ import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
+import { normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
 import {
   ensureBotInfrastructure,
   processBotMessage,
@@ -130,6 +131,8 @@ interface ConversationRow {
   outbound_origin_agent_id?: string | null;
   outbound_expires_at?: Date | null;
   bot_stage?: string | null;
+  bot_tag?: string | null;
+  bot_department?: string | null;
   status?: string;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   csat_score?: number | null;
@@ -181,9 +184,37 @@ const CLOSE_KEYWORD = '#sair';
 const CLOSE_MESSAGE = 'Seu atendimento foi encerrado. Obrigado pelo contato! 😊';
 const CLOSE_HINT = '\n\nDigite *#sair* a qualquer momento para encerrar o atendimento.';
 const CLIENT_CLOSED_SYSTEM_MESSAGE = 'Cliente encerrou o atendimento digitando #sair';
+const LOW_SIGNAL_MESSAGE_REGEX = /^(oi+|ol[aá]|opa|e ai|e aí|bom dia|boa tarde|boa noite|hello|hi|hey|blz|beleza|tudo bem|ok|obrigad[oa]|valeu)[\s!?.,:;]*$/i;
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isLowSignalMessage(content: string): boolean {
+  const normalized = content.trim();
+  if (!normalized) return true;
+  if (normalized.length <= 3) return true;
+  return LOW_SIGNAL_MESSAGE_REGEX.test(normalized);
+}
+
+function buildTopicContext(botTag?: string, botDepartment?: string): string {
+  const tag = botTag?.trim();
+  const department = botDepartment?.trim();
+
+  if (tag && department && tag.toLowerCase() !== department.toLowerCase()) {
+    return `${department} › ${tag}`;
+  }
+  if (tag) return tag;
+  if (department) return department;
+  return '';
+}
+
+function buildClarificationMessage(botTag?: string, botDepartment?: string): string {
+  const topic = buildTopicContext(botTag, botDepartment);
+  if (topic) {
+    return `Perfeito. Vou te ajudar com ${topic}. Pode descrever sua dúvida com mais detalhes?`;
+  }
+  return 'Perfeito. Pode descrever sua dúvida com mais detalhes para eu te ajudar melhor?';
 }
 
 function getCredentialValue(credentials: Record<string, unknown>, ...keys: string[]): string | null {
@@ -577,9 +608,8 @@ async function processIncomingMessage(
 
   const { tenantId, schemaName, channelId, channelCredentials } = found;
 
-  const formattedPhone = senderPhone.startsWith('55')
-    ? `+${senderPhone}`
-    : `+55${senderPhone}`;
+  const formattedPhone = normalizeWhatsAppSenderPhone(senderPhone);
+  const formattedPhoneDigits = formattedPhone.replace(/\D/g, '');
   const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
     'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
     tenantId,
@@ -672,9 +702,13 @@ async function processIncomingMessage(
 
     const contactRows = await tx.$queryRawUnsafe<ContactRow[]>(
       `SELECT id, name, organization_id FROM contacts
-       WHERE whatsapp = $1 OR phone = $1
+       WHERE whatsapp = $1
+          OR phone = $1
+          OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $2
+          OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $2
        LIMIT 1`,
       formattedPhone,
+      formattedPhoneDigits,
     );
 
     let contactId: string;
@@ -729,6 +763,8 @@ async function processIncomingMessage(
               , outbound_origin_agent_id
               , outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
+              , metadata->>'bot_tag' AS bot_tag
+              , metadata->>'bot_department' AS bot_department
               , (metadata->>'ai_agent_active')::boolean AS ai_agent_active
               , COALESCE((metadata->>'ai_attempts')::int, 0) AS ai_attempts
        FROM conversations
@@ -1001,6 +1037,11 @@ async function processIncomingMessage(
     const currentBotStage = currentConversation?.bot_stage ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
+    const isWaitingForHumanQueue = !isNewConversation
+      && !hasAssignedAgent
+      && !isActiveOutboundReturnFlow
+      && !isAIAgentActive
+      && (currentBotStage === null || currentBotStage === 'choice');
 
     if (isActiveOutboundReturnFlow) {
       const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
@@ -1183,7 +1224,12 @@ async function processIncomingMessage(
       isNewConversation,
       isBotLeafTransfer: !isActiveOutboundReturnFlow && botResponse?.type === 'choice',
       shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
-      botTag: botResponse?.type === 'choice' ? (botResponse.option?.tag ?? undefined) : undefined,
+      botTag: botResponse?.type === 'choice'
+        ? (botResponse.option?.tag ?? undefined)
+        : (currentConversation?.bot_tag ?? undefined),
+      botDepartment: botResponse?.type === 'choice'
+        ? (botResponse.option?.label ?? undefined)
+        : (currentConversation?.bot_department ?? undefined),
       botOptionId: botResponse?.type === 'choice' ? (botResponse.option?.id ?? undefined) : undefined,
       message: savedMessage,
       protocolNumber,
@@ -1203,7 +1249,8 @@ async function processIncomingMessage(
         && !hasAssignedAgent
         && !isActiveOutboundReturnFlow
         && currentBotStage !== 'done'
-        && !isAIAgentActive,
+        && !isAIAgentActive
+        && !isWaitingForHumanQueue,
       shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
     };
@@ -1382,16 +1429,16 @@ async function processIncomingMessage(
     try {
       const aiConfig = await getAIAgentConfig(prisma, schemaName);
 
-      if (!aiConfig?.is_enabled || !aiConfig?.openai_api_key) {
-        // IA foi desabilitada — fallback para auto-assign
-        await prisma.$executeRawUnsafe(
-          `UPDATE "${schemaName}".conversations
-           SET status = 'open',
-               metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false}'::jsonb
-           WHERE id = $1::uuid`,
-          result.conversationId,
-        );
-        await autoAssignConversation(result.conversationId, tenantId, schemaName, prisma, io);
+        if (!aiConfig?.is_enabled || !aiConfig?.openai_api_key) {
+          // IA foi desabilitada — fallback para auto-assign
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".conversations
+             SET status = 'open',
+                metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false,"ai_attempts":0,"bot_stage":null,"bot_current_option_id":null}'::jsonb
+             WHERE id = $1::uuid`,
+            result.conversationId,
+          );
+          await autoAssignConversation(result.conversationId, tenantId, schemaName, prisma, io);
       } else {
         const creds = decryptCredentials(aiConfig.openai_api_key);
         const apiKey = creds['key'] ?? aiConfig.openai_api_key;
@@ -1403,7 +1450,7 @@ async function processIncomingMessage(
           await prisma.$executeRawUnsafe(
             `UPDATE "${schemaName}".conversations
              SET status = 'open', last_message = $1, last_message_at = NOW(),
-                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false,"ai_attempts":0,"bot_stage":"choice"}'::jsonb
+                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false,"ai_attempts":0,"bot_stage":null,"bot_current_option_id":null}'::jsonb
              WHERE id = $2::uuid`,
             transferMsg.slice(0, 255),
             result.conversationId,
@@ -1432,12 +1479,74 @@ async function processIncomingMessage(
         if (wantsHuman) {
           await doTransferFromAI();
         } else {
+          if (isLowSignalMessage(content)) {
+            const clarification = buildClarificationMessage(result.botTag, result.botDepartment);
+            const clarifyRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+              `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+               VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+               RETURNING id, content, created_at, sender_type`,
+              result.conversationId,
+              clarification,
+            );
+            await prisma.$executeRawUnsafe(
+              `UPDATE "${schemaName}".conversations
+               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                   metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+               WHERE id = $3::uuid`,
+              clarification.slice(0, 255),
+              JSON.stringify({ ai_agent_active: true, ai_attempts: attempts }),
+              result.conversationId,
+            );
+            await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
+            if (clarifyRows[0]) {
+              io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                conversationId: result.conversationId,
+                message: clarifyRows[0],
+                contact: { id: result.contactId, name: result.contactName },
+              });
+            }
+            return;
+          }
+
+          const knowledgeQuery = buildTopicContext(result.botTag, result.botDepartment)
+            ? `${buildTopicContext(result.botTag, result.botDepartment)} ${content}`.trim()
+            : content;
           const chunks = await searchKnowledge(
-            prisma, schemaName, content, apiKey, aiConfig.confidence_threshold,
+            prisma, schemaName, knowledgeQuery, apiKey, aiConfig.confidence_threshold,
           );
 
-          if (chunks.length === 0 && attempts >= aiConfig.max_attempts) {
-            await doTransferFromAI();
+          if (chunks.length === 0) {
+            if (attempts >= aiConfig.max_attempts) {
+              await doTransferFromAI();
+              return;
+            }
+
+            const newAttempts = attempts + 1;
+            const clarification = buildClarificationMessage(result.botTag, result.botDepartment);
+            const clarifyRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+              `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+               VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+               RETURNING id, content, created_at, sender_type`,
+              result.conversationId,
+              clarification,
+            );
+            await prisma.$executeRawUnsafe(
+              `UPDATE "${schemaName}".conversations
+               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                   metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+               WHERE id = $3::uuid`,
+              clarification.slice(0, 255),
+              JSON.stringify({ ai_agent_active: true, ai_attempts: newAttempts }),
+              result.conversationId,
+            );
+            await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
+            if (clarifyRows[0]) {
+              io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                conversationId: result.conversationId,
+                message: clarifyRows[0],
+                contact: { id: result.contactId, name: result.contactName },
+              });
+            }
           } else {
             const history = await getConversationHistoryText(
               prisma, schemaName, result.conversationId, 10,
@@ -1502,14 +1611,13 @@ async function processIncomingMessage(
         );
         const convMeta = (convMetaRows[0]?.metadata ?? {}) as Record<string, unknown>;
         const currentAttempts = typeof convMeta['ai_attempts'] === 'number' ? convMeta['ai_attempts'] : 0;
-        const attempts = currentAttempts + 1;
 
         const doTransfer = async () => {
           const msg = 'Vou transferir você para um de nossos especialistas. Aguarde um momento.';
           await prisma.$executeRawUnsafe(
             `UPDATE "${schemaName}".conversations
              SET status = 'open', last_message = $1, last_message_at = NOW(),
-                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"bot_stage":"choice"}'::jsonb
+                 metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":false,"ai_attempts":0,"bot_stage":null,"bot_current_option_id":null}'::jsonb
              WHERE id = $2::uuid`,
             msg.slice(0, 255),
             result.conversationId,
@@ -1535,24 +1643,77 @@ async function processIncomingMessage(
           );
         };
 
+        if (isLowSignalMessage(content)) {
+          const clarification = buildClarificationMessage(result.botTag, result.botDepartment);
+          const clarifyRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+            `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+             VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+             RETURNING id, content, created_at, sender_type`,
+            result.conversationId,
+            clarification,
+          );
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".conversations
+             SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+             WHERE id = $3::uuid`,
+            clarification.slice(0, 255),
+            JSON.stringify({ ai_agent_active: true, ai_attempts: currentAttempts }),
+            result.conversationId,
+          );
+          await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
+          if (clarifyRows[0]) {
+            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+              conversationId: result.conversationId,
+              message: clarifyRows[0],
+              contact: { id: result.contactId, name: result.contactName },
+            });
+          }
+          return;
+        }
+
+        const attempts = currentAttempts + 1;
         if (attempts > aiConfig.max_attempts) {
           await doTransfer();
         } else {
-          await prisma.$executeRawUnsafe(
-            `UPDATE "${schemaName}".conversations
-             SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
-             WHERE id = $2::uuid`,
-            JSON.stringify({ ai_attempts: attempts }),
-            result.conversationId,
-          );
-
+          const knowledgeQuery = buildTopicContext(result.botTag, result.botDepartment)
+            ? `${buildTopicContext(result.botTag, result.botDepartment)} ${content}`.trim()
+            : content;
           const chunks = await searchKnowledge(
-            prisma, schemaName, content, apiKey,
+            prisma, schemaName, knowledgeQuery, apiKey,
             aiConfig.confidence_threshold,
           );
 
           if (chunks.length === 0) {
-            await doTransfer();
+            if (attempts >= aiConfig.max_attempts) {
+              await doTransfer();
+            } else {
+              const clarification = buildClarificationMessage(result.botTag, result.botDepartment);
+              const clarifyRows = await prisma.$queryRawUnsafe<Array<{ id: string; content: string; created_at: Date; sender_type: string }>>(
+                `INSERT INTO "${schemaName}".messages (conversation_id, sender_type, content, content_type, is_internal, status, metadata)
+                 VALUES ($1::uuid, 'bot', $2, 'text', false, 'sent', '{"source":"ai_agent"}'::jsonb)
+                 RETURNING id, content, created_at, sender_type`,
+                result.conversationId,
+                clarification,
+              );
+              await prisma.$executeRawUnsafe(
+                `UPDATE "${schemaName}".conversations
+                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                     metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+                 WHERE id = $3::uuid`,
+                clarification.slice(0, 255),
+                JSON.stringify({ ai_agent_active: true, ai_attempts: attempts }),
+                result.conversationId,
+              );
+              await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
+              if (clarifyRows[0]) {
+                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                  conversationId: result.conversationId,
+                  message: clarifyRows[0],
+                  contact: { id: result.contactId, name: result.contactName },
+                });
+              }
+            }
           } else {
             const history = await getConversationHistoryText(
               prisma, schemaName, result.conversationId, 10,
@@ -1577,10 +1738,12 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW()
+                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                     metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
                  WHERE id = $2::uuid`,
                 aiResult.response.slice(0, 255),
                 result.conversationId,
+                JSON.stringify({ ai_agent_active: true, ai_attempts: 0 }),
               );
               if (aiMsgRows[0]) {
                 await messageQueue.add('send', {

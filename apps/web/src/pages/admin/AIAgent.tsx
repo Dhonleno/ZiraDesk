@@ -195,12 +195,29 @@ export function AIAgentPage() {
             )}
 
             <div className="ai-config-grid">
-              <label className="ai-toggle-row">
-                <input
-                  type="checkbox"
-                  checked={!!configForm.is_enabled}
-                  onChange={(e) => handleConfigChange('is_enabled', e.target.checked)}
-                />
+              <label className="ai-toggle-row" style={{ cursor: 'pointer' }}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!!configForm.is_enabled}
+                  onClick={() => handleConfigChange('is_enabled', !configForm.is_enabled)}
+                  style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                >
+                  <span style={{
+                    width: 36, height: 20, borderRadius: 999,
+                    border: '1px solid var(--line)',
+                    background: configForm.is_enabled ? 'var(--teal)' : 'var(--bg-4)',
+                    display: 'inline-flex', alignItems: 'center', padding: 2,
+                    transition: 'all .15s ease',
+                  }}>
+                    <span style={{
+                      width: 14, height: 14, borderRadius: '50%',
+                      background: '#fff',
+                      transform: `translateX(${configForm.is_enabled ? 16 : 0}px)`,
+                      transition: 'transform .15s ease',
+                    }} />
+                  </span>
+                </button>
                 <span>{t('tenantAdmin.aiAgent.enabled')}</span>
               </label>
 
@@ -257,10 +274,15 @@ export function AIAgentPage() {
                   min={0.1}
                   max={1.0}
                   step={0.05}
-                  value={configForm.confidence_threshold ?? 0.75}
+                  value={configForm.confidence_threshold ?? 0.5}
                   onChange={(e) => handleConfigChange('confidence_threshold', Number(e.target.value))}
                   className="ai-input"
+                  placeholder="0.5"
                 />
+                <small className="ai-field-help">
+                  Valores entre 0.4 e 0.6 são recomendados. Valores muito altos ({'>'}0.7) podem fazer a IA transferir
+                  mesmo quando tem conhecimento relevante.
+                </small>
               </div>
             </div>
 
@@ -316,13 +338,15 @@ export function AIAgentPage() {
                     value={manualContent}
                     onChange={(e) => setManualContent(e.target.value)}
                   />
-                  <button
-                    className="ai-primary-btn"
-                    disabled={!manualTitle.trim() || !manualContent.trim() || addManualMutation.isPending}
-                    onClick={() => addManualMutation.mutate()}
-                  >
-                    {addManualMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addManual')}
-                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="ai-primary-btn"
+                      disabled={!manualTitle.trim() || !manualContent.trim() || addManualMutation.isPending}
+                      onClick={() => addManualMutation.mutate()}
+                    >
+                      {addManualMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addManual')}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -342,13 +366,15 @@ export function AIAgentPage() {
                     value={urlTitle}
                     onChange={(e) => setUrlTitle(e.target.value)}
                   />
-                  <button
-                    className="ai-primary-btn"
-                    disabled={!urlValue.trim() || addUrlMutation.isPending}
-                    onClick={() => addUrlMutation.mutate()}
-                  >
-                    {addUrlMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addUrl')}
-                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="ai-primary-btn"
+                      disabled={!urlValue.trim() || addUrlMutation.isPending}
+                      onClick={() => addUrlMutation.mutate()}
+                    >
+                      {addUrlMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addUrl')}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -385,13 +411,15 @@ export function AIAgentPage() {
                     value={fileTitle}
                     onChange={(e) => setFileTitle(e.target.value)}
                   />
-                  <button
-                    className="ai-primary-btn"
-                    disabled={!selectedFile || addFileMutation.isPending}
-                    onClick={() => addFileMutation.mutate()}
-                  >
-                    {addFileMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addFile')}
-                  </button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="ai-primary-btn"
+                      disabled={!selectedFile || addFileMutation.isPending}
+                      onClick={() => addFileMutation.mutate()}
+                    >
+                      {addFileMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.aiAgent.addFile')}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

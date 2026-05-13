@@ -1,7 +1,11 @@
 import { prisma } from '../../../config/database.js';
 import { encryptCredentials, decryptCredentials } from '../../../utils/crypto.js';
 import { knowledgeIndexQueue } from '../../../jobs/knowledge-index.job.js';
-import type { AIAgentConfig } from '../../ai/ai.service.js';
+import {
+  ensureAIAgentConfigInfrastructure,
+  ensureAIKnowledgeInfrastructure,
+  type AIAgentConfig,
+} from '../../ai/ai.service.js';
 
 export interface UpdateAIConfigInput {
   is_enabled?: boolean;
@@ -36,6 +40,8 @@ export interface ArticleRow {
 }
 
 export async function getAIConfig(schemaName: string): Promise<AIAgentConfig | null> {
+  await ensureAIAgentConfigInfrastructure(prisma, schemaName);
+
   const rows = await prisma.$queryRawUnsafe<AIAgentConfig[]>(
     `SELECT id, is_enabled, agent_name, system_prompt, fallback_skill_id,
             max_attempts, confidence_threshold, openai_api_key
@@ -58,9 +64,7 @@ export async function updateAIConfig(
   schemaName: string,
   input: UpdateAIConfigInput,
 ): Promise<void> {
-  const existing = await prisma.$queryRawUnsafe<Array<{ openai_api_key: string | null }>>(
-    `SELECT openai_api_key FROM "${schemaName}".ai_agent_config LIMIT 1`,
-  );
+  await ensureAIAgentConfigInfrastructure(prisma, schemaName);
 
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -106,13 +110,22 @@ export async function updateAIConfig(
 
   fields.push(`updated_at = NOW()`);
 
-  const sql = `UPDATE "${schemaName}".ai_agent_config SET ${fields.join(', ')}`;
+  const sql = `
+    UPDATE "${schemaName}".ai_agent_config
+       SET ${fields.join(', ')}
+     WHERE id = (
+       SELECT id
+       FROM "${schemaName}".ai_agent_config
+       ORDER BY created_at ASC
+       LIMIT 1
+     )
+  `;
   await prisma.$executeRawUnsafe(sql, ...values);
-
-  void existing; // suprime warning de var não usada
 }
 
 export async function listArticles(schemaName: string): Promise<ArticleRow[]> {
+  await ensureAIKnowledgeInfrastructure(prisma, schemaName);
+
   return prisma.$queryRawUnsafe<ArticleRow[]>(
     `SELECT ka.id, ka.title, ka.source_type, ka.source_url, ka.file_name,
             ka.status, ka.error_message, ka.is_active, ka.created_at, ka.updated_at,
@@ -129,6 +142,8 @@ export async function createArticle(
   tenantId: string,
   input: CreateArticleInput,
 ): Promise<{ id: string }> {
+  await ensureAIKnowledgeInfrastructure(prisma, schemaName);
+
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO "${schemaName}".knowledge_articles
        (title, content, source_type, source_url, file_name, status)
@@ -149,6 +164,8 @@ export async function createArticle(
 }
 
 export async function deleteArticle(schemaName: string, articleId: string): Promise<void> {
+  await ensureAIKnowledgeInfrastructure(prisma, schemaName);
+
   await prisma.$executeRawUnsafe(
     `DELETE FROM "${schemaName}".knowledge_articles WHERE id = $1::uuid`,
     articleId,
@@ -160,6 +177,8 @@ export async function toggleArticle(
   articleId: string,
   isActive: boolean,
 ): Promise<void> {
+  await ensureAIKnowledgeInfrastructure(prisma, schemaName);
+
   await prisma.$executeRawUnsafe(
     `UPDATE "${schemaName}".knowledge_articles
      SET is_active = $1, updated_at = NOW()

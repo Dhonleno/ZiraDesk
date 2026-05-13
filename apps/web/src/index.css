@@ -3923,6 +3923,12 @@
   text-transform: uppercase;
 }
 
+.ai-field-help {
+  font-size: 12px;
+  color: var(--txt-2);
+  line-height: 1.45;
+}
+
 .ai-input {
   height: 34px;
   border-radius: var(--r);
