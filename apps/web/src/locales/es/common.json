@@ -11,5 +11,17 @@
   "search": "Buscar",
   "filter": "Filtrar",
   "noResults": "No se encontraron resultados",
-  "required": "Campo obligatorio"
+  "required": "Campo obligatorio",
+  "phone": {
+    "invalid": "Número de teléfono inválido",
+    "invalidBR": "El móvil brasileño debe tener 9 después del DDD: (XX) 9XXXX-XXXX",
+    "selectCountry": "País"
+  },
+  "floatingBubble": {
+    "title": "Atenciones pendientes",
+    "newConversation": "Nueva conversación",
+    "newMessage": "Nuevo mensaje",
+    "open": "Abrir",
+    "now": "ahora"
+  }
 }

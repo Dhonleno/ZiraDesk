@@ -7,10 +7,12 @@ import { adminApi, omnichannelApi } from '../services/api';
 import { connectSocket, disconnectSocket, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
+import { FloatingChatBubble } from '../components/ui/FloatingChatBubble';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
 import { useAgentStatus } from '../hooks/useAgentStatus';
 import { PauseModal } from '../components/omnichannel/PauseModal';
 import { useToast } from '../stores/toast.store';
+import { useNotificationStore } from '../stores/notification.store';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -235,6 +237,7 @@ export function TenantLayout() {
   const { user, token, logout, isLoggingOut } = useAuth();
   const toast = useToast();
   const { pathname } = useLocation();
+  const showFloatingBubble = !pathname.startsWith('/omnichannel');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -348,6 +351,71 @@ export function TenantLayout() {
       unsubHelpRequested();
     };
   }, [navigate, queryClient, t, toast, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || pathname.startsWith('/omnichannel')) return;
+
+    interface SocketContactPayload {
+      name?: string | null;
+    }
+
+    interface SocketMessagePayload {
+      sender_type?: string;
+      senderType?: string;
+      sender_id?: string | null;
+      senderId?: string | null;
+      content?: string | null;
+    }
+
+    interface SocketConversationPayload {
+      contact_name?: string | null;
+      contactName?: string | null;
+      client_name?: string | null;
+      clientName?: string | null;
+    }
+
+    interface ConversationMessageEventPayload {
+      conversationId?: string;
+      message?: SocketMessagePayload;
+      conversation?: SocketConversationPayload;
+      contact?: SocketContactPayload;
+      contactName?: string | null;
+    }
+
+    const handleIncomingMessage = (data: ConversationMessageEventPayload) => {
+      const senderType = data.message?.sender_type ?? data.message?.senderType ?? null;
+      if (senderType !== 'client') return;
+
+      const conversationId = data.conversationId;
+      if (!conversationId) return;
+
+      const contactName =
+        data.contact?.name
+        ?? data.contactName
+        ?? data.conversation?.contact_name
+        ?? data.conversation?.contactName
+        ?? data.conversation?.client_name
+        ?? data.conversation?.clientName
+        ?? t('floatingBubble.newConversation', { ns: 'common' });
+
+      const messageText = data.message?.content?.trim() || t('notifications.newMessage', { ns: 'omnichannel' });
+
+      useNotificationStore.getState().addMessage({
+        conversationId,
+        contactName,
+        message: messageText,
+        timestamp: new Date().toISOString(),
+      });
+    };
+
+    const unsubA = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleIncomingMessage);
+    const unsubB = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleIncomingMessage);
+
+    return () => {
+      unsubA();
+      unsubB();
+    };
+  }, [pathname, t, user?.id]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -793,6 +861,7 @@ export function TenantLayout() {
         onConfirm={handleStartPause}
         isSubmitting={isStartingPause}
       />
+      <FloatingChatBubble visible={showFloatingBubble} />
       {canAccessAdminData ? <OnboardingChecklist /> : null}
     </div>
   );

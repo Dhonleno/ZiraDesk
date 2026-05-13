@@ -11,5 +11,17 @@
   "search": "Search",
   "filter": "Filter",
   "noResults": "No results found",
-  "required": "Required field"
+  "required": "Required field",
+  "phone": {
+    "invalid": "Invalid phone number",
+    "invalidBR": "Brazilian mobile numbers must include 9 after area code: (XX) 9XXXX-XXXX",
+    "selectCountry": "Country"
+  },
+  "floatingBubble": {
+    "title": "Pending conversations",
+    "newConversation": "New conversation",
+    "newMessage": "New message",
+    "open": "Open",
+    "now": "now"
+  }
 }

@@ -11,5 +11,17 @@
   "search": "Buscar",
   "filter": "Filtrar",
   "noResults": "Nenhum resultado encontrado",
-  "required": "Campo obrigatório"
+  "required": "Campo obrigatório",
+  "phone": {
+    "invalid": "Número de telefone inválido",
+    "invalidBR": "Celular brasileiro deve ter 9 após o DDD: (XX) 9XXXX-XXXX",
+    "selectCountry": "País"
+  },
+  "floatingBubble": {
+    "title": "Atendimentos pendentes",
+    "newConversation": "Nova conversa",
+    "newMessage": "Nova mensagem",
+    "open": "Abrir",
+    "now": "agora"
+  }
 }
