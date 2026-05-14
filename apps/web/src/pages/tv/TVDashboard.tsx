@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router-dom';
@@ -9,7 +9,7 @@ import {
   type TvDashboardData,
   type TvConversationCard,
 } from '../../services/api';
-import { connectSocket, disconnectSocket, subscribeToEvent } from '../../services/socket';
+import { subscribeToEvent } from '../../services/socket';
 import { useAuthStore } from '../../stores/auth.store';
 
 interface AgentEventPayload {
@@ -220,10 +220,10 @@ function ConversationChronometer({
 export function TVDashboard() {
   const { t, i18n } = useTranslation('omnichannel');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const token = useAuthStore((state) => state.token);
-  const user = useAuthStore((state) => state.user);
   const [now, setNow] = useState(new Date());
   const [dashboard, setDashboard] = useState<TvDashboardData | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const dateLabel = formatDateLabel(now, i18n.language || 'pt-BR');
 
   const { data } = useQuery({
@@ -245,12 +245,47 @@ export function TVDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!token || !user?.tenantId) return;
-    connectSocket(token, user.tenantId);
-    return () => {
-      disconnectSocket();
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
-  }, [token, user?.tenantId]);
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    if (!containerRef.current) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await containerRef.current.requestFullscreen();
+      }
+    } catch {
+      // browser bloqueou ou não suporta fullscreen
+    }
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'f') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName.toLowerCase();
+        const isTypingContext = tag === 'input' || tag === 'textarea' || target.isContentEditable;
+        if (isTypingContext) return;
+      }
+
+      event.preventDefault();
+      void toggleFullscreen();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const unsubs = [
@@ -437,7 +472,7 @@ export function TVDashboard() {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -483,10 +518,11 @@ export function TVDashboard() {
 
   return (
     <div
+      ref={containerRef}
       style={{
         background: 'var(--bg)',
         padding: '16px 24px',
-        height: '100vh',
+        height: '100%',
         overflow: 'hidden',
         fontFamily: 'var(--font)',
         color: 'var(--txt)',
@@ -495,19 +531,47 @@ export function TVDashboard() {
         gap: 12,
       }}
     >
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <svg width="96" height="22" viewBox="0 0 160 36" fill="none" aria-hidden="true">
-            <rect x="0" y="0" width="36" height="36" rx="8" fill="var(--txt)" />
-            <path d="M9 10 L27 10 L9 26 L27 26" stroke="var(--bg-2)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            <text x="46" y="23" fontSize="16" fontWeight="600" fill="var(--txt)">Zira</text>
-            <text x="82" y="23" fontSize="16" fontWeight="300" fill="var(--txt-2)">Desk</text>
-          </svg>
-          <strong style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>{t('tv.title')}</strong>
+      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ display: 'grid', gap: 2 }}>
+          <strong style={{ fontSize: 22, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            {t('tv.title')}
+          </strong>
+          <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tv.subtitle')}</span>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 24, color: 'var(--teal)' }}>{formatClock(now)}</div>
-          <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{dateLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 24, color: 'var(--teal)' }}>{formatClock(now)}</div>
+            <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{dateLabel}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void toggleFullscreen(); }}
+            title={`${isFullscreen ? t('tv.exitFullscreen') : t('tv.enterFullscreen')} (F)`}
+            aria-label={`${isFullscreen ? t('tv.exitFullscreen') : t('tv.enterFullscreen')} (F)`}
+            aria-keyshortcuts="F"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--r)',
+              border: '1px solid var(--line-2)',
+              background: 'var(--bg-3)',
+              color: 'var(--txt-2)',
+              cursor: 'pointer',
+            }}
+          >
+            {isFullscreen ? (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M5 2H2v3M9 2h3v3M2 9v3h3M12 9v3H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M5 1H1v4M9 1h4v4M1 9v4h4M13 9v4H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
         </div>
       </header>
 
@@ -569,6 +633,23 @@ export function TVDashboard() {
                 <ConversationChronometer baseTime={card.assignedAt ?? card.createdAt} color="var(--teal)" />
               </div>
             ))}
+            {inServiceConvs.length === 0 ? (
+              <div
+                style={{
+                  border: '1px dashed var(--line-2)',
+                  borderRadius: 'var(--r)',
+                  minHeight: 96,
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: 'var(--txt-3)',
+                  fontSize: 12,
+                  textAlign: 'center',
+                  padding: 12,
+                }}
+              >
+                {t('tv.emptyInService')}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -608,6 +689,23 @@ export function TVDashboard() {
                 </span>
               </div>
             ))}
+            {pausedAgents.length === 0 ? (
+              <div
+                style={{
+                  border: '1px dashed var(--line-2)',
+                  borderRadius: 'var(--r)',
+                  minHeight: 96,
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: 'var(--txt-3)',
+                  fontSize: 12,
+                  textAlign: 'center',
+                  padding: 12,
+                }}
+              >
+                {t('tv.emptyPaused')}
+              </div>
+            ) : null}
           </div>
         </div>
 

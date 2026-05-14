@@ -278,6 +278,11 @@
   },
   "tv": {
     "title": "Live Operations Monitor",
+    "subtitle": "Real-time operational monitoring",
+    "enterFullscreen": "Enter fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "emptyInService": "No active conversations",
+    "emptyPaused": "No paused agents",
     "offline": "Offline",
     "online": "Online",
     "available": "Available",

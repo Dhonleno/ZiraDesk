@@ -278,6 +278,11 @@
   },
   "tv": {
     "title": "Monitor en Tiempo Real",
+    "subtitle": "Monitoreo operativo en tiempo real",
+    "enterFullscreen": "Entrar en pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "emptyInService": "Sin atenciones en curso",
+    "emptyPaused": "Sin agentes pausados",
     "offline": "Offline",
     "online": "Online",
     "available": "Disponibles",

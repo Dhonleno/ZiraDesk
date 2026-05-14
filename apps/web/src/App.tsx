@@ -13,7 +13,6 @@ import { Tenants } from './pages/super-admin/Tenants';
 import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/omnichannel/Conversations';
-import { MonitorPage } from './pages/omnichannel/Monitor';
 import { MetricsPage } from './pages/omnichannel/Metrics';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
@@ -94,16 +93,7 @@ export function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
           </Route>
 
-          <Route
-            path="/tv"
-            element={(
-              <RequireAuth>
-                <ErrorBoundary>
-                  <TVDashboard />
-                </ErrorBoundary>
-              </RequireAuth>
-            )}
-          />
+          <Route path="/tv" element={<Navigate to="/monitor" replace />} />
 
           {/* Área do super admin */}
           <Route
@@ -137,8 +127,9 @@ export function App() {
             }
           >
             <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
+            <Route path="monitor" element={<TVDashboard />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
-            <Route path="omnichannel/monitor" element={<MonitorPage />} />
+            <Route path="omnichannel/monitor" element={<Navigate to="/monitor" replace />} />
             <Route
               path="omnichannel/metrics"
               element={(
