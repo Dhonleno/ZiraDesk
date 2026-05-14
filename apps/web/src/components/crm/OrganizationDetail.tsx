@@ -26,7 +26,7 @@ const CH_BADGE: Record<string, { color: string; label: string }> = {
 const TICKET_STATUS_COLORS: Record<string, string> = {
   open:        'var(--blue)',
   in_progress: 'var(--amber)',
-  waiting:     'var(--purple)',
+  waiting:     'var(--amber)',
   resolved:    'var(--green)',
   closed:      'var(--txt-3)',
 };

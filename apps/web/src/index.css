@@ -2007,7 +2007,7 @@
 
 .portal-status-open { color: var(--blue); border-color: rgba(96, 165, 250, .35); background: var(--blue-dim); }
 .portal-status-in_progress { color: var(--amber); border-color: rgba(245, 158, 11, .35); background: var(--amber-dim); }
-.portal-status-waiting { color: var(--purple); border-color: rgba(167, 139, 250, .35); background: var(--purple-dim); }
+.portal-status-waiting { color: var(--amber); border-color: rgba(245, 158, 11, .35); background: var(--amber-dim); }
 .portal-status-resolved,
 .portal-status-closed { color: var(--green); border-color: rgba(62, 207, 142, .35); background: var(--green-dim); }
 

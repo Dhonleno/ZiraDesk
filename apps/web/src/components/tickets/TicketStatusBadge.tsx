@@ -8,7 +8,7 @@ interface Props {
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   open:        { bg: 'var(--blue-dim)',   color: 'var(--blue)'   },
   in_progress: { bg: 'var(--amber-dim)',  color: 'var(--amber)'  },
-  waiting:     { bg: 'var(--purple-dim)', color: 'var(--purple)' },
+  waiting:     { bg: 'var(--amber-dim)',  color: 'var(--amber)'  },
   resolved:    { bg: 'var(--green-dim)',  color: 'var(--green)'  },
   closed:      { bg: 'var(--line)',       color: 'var(--txt-3)'  },
 };

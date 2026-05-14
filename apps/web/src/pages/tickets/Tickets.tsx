@@ -32,7 +32,7 @@ const BOARD_COLUMNS: BoardStatus[] = ['open', 'in_progress', 'waiting', 'resolve
 const STATUS_ACCENT: Record<BoardStatus, string> = {
   open: 'var(--teal)',
   in_progress: '#F59E0B',
-  waiting: '#8B5CF6',
+  waiting: 'var(--amber)',
   resolved: 'var(--txt-2)',
 };
 
