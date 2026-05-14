@@ -8,6 +8,7 @@ import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
+import { isConversationBotControlled } from '../../utils/conversationNotifications';
 import { AgentStatsModal } from './AgentStatsModal';
 
 interface ConversationItem {
@@ -55,6 +56,7 @@ interface SocketConversationPayload {
   assignedTo?: string | null;
   assignedAgentId?: string | null;
   status?: string | null;
+  metadata?: Record<string, unknown> | null;
   contact_name?: string | null;
   contactName?: string | null;
   client_name?: string | null;
@@ -423,13 +425,18 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
         ?? cachedConversation?.assigned_to
         ?? null;
       const conversationStatus = data.conversation?.status ?? cachedConversation?.status ?? null;
+      const conversationMetadata = data.conversation?.metadata ?? cachedConversation?.metadata ?? null;
 
       if (conversationId) {
         markConversationActivity(conversationId);
       }
 
-      // Regra 1: não tocar som se a conversa está no bot e sem agente atribuído.
-      if (senderType === 'bot' && conversationStatus === 'bot' && !assignedAgentId) {
+      // Não notificar enquanto o bot está respondendo pela conversa.
+      if (isConversationBotControlled({ status: conversationStatus, metadata: conversationMetadata })) {
+        return;
+      }
+
+      if (!currentUserId || assignedAgentId !== currentUserId) {
         return;
       }
 
@@ -440,18 +447,18 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
 
       const isClientMessage = senderType === 'client';
       const isAssignedToCurrentUser = Boolean(currentUserId) && assignedAgentId === currentUserId;
-      const isQueueConversation = assignedAgentId === null;
+      const shouldNotifyByAssignee = isAssignedToCurrentUser;
 
       // Regra final de som:
       // - mensagem do cliente
       // - conversa atribuída a mim OU em fila
       // - aba em foco (document.hidden === false)
-      if (isClientMessage && (isAssignedToCurrentUser || isQueueConversation) && !isBrowserTabHidden()) {
+      if (isClientMessage && shouldNotifyByAssignee && !isBrowserTabHidden()) {
         playNotificationSound();
       }
 
       // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
-      if (isClientMessage && isAssignedToCurrentUser && isBrowserTabHidden()) {
+      if (isClientMessage && shouldNotifyByAssignee && isBrowserTabHidden()) {
         if (typeof Notification === 'undefined') return;
         if (Notification.permission !== 'granted') {
           if (Notification.permission === 'denied') {
@@ -478,7 +485,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       // Bell notification: group by conversation; skip if conversation is currently open.
       if (
         isClientMessage
-        && (isAssignedToCurrentUser || isQueueConversation)
+        && shouldNotifyByAssignee
         && conversationId
         && conversationId !== selectedId
       ) {
@@ -505,6 +512,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     const handleCreated = (data: ConversationCreatedEventPayload) => {
       invalidateConversationData();
       const conversationId = data.conversationId ?? data.conversation?.id;
+      if (isConversationBotControlled(data.conversation)) return;
 
       if (conversationId) {
         markNewConversation(conversationId);
@@ -544,14 +552,31 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     const handleUpdated = (data: {
       conversationId?: string;
       assigned_to?: string | null;
-      conversation?: { id?: string; assigned_to?: string | null };
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      conversation?: {
+        id?: string;
+        assigned_to?: string | null;
+        assignedTo?: string | null;
+        assignedAgentId?: string | null;
+      };
     }) => {
       invalidateConversationData();
 
       const conversationId = data.conversationId ?? data.conversation?.id;
-      const assignedTo = data.assigned_to ?? data.conversation?.assigned_to;
-      if (assignedTo && assignedTo === currentUserId) {
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+      if (assignedTo === currentUserId) {
         syncToActiveTabForCurrentUser(conversationId);
+      }
+      if (assignedTo !== currentUserId && conversationId) {
+        useNotificationStore.getState().markConversationRead(conversationId);
       }
     };
 
@@ -561,7 +586,14 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     const unsubUpdated = subscribeToEvent<{
       conversationId?: string;
       assigned_to?: string | null;
-      conversation?: { id?: string; assigned_to?: string | null };
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      conversation?: {
+        id?: string;
+        assigned_to?: string | null;
+        assignedTo?: string | null;
+        assignedAgentId?: string | null;
+      };
     }>('conversation:updated', handleUpdated);
     const unsubCreated = subscribeToEvent<ConversationCreatedEventPayload>(
       'conversation:created',

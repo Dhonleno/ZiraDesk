@@ -4,7 +4,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { adminApi, omnichannelApi } from '../services/api';
-import { connectSocket, disconnectSocket, subscribeToEvent } from '../services/socket';
+import { connectSocket, disconnectSocket, setPresenceStatus, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
 import { FloatingChatBubble } from '../components/ui/FloatingChatBubble';
@@ -14,6 +14,7 @@ import { PauseModal } from '../components/omnichannel/PauseModal';
 import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
+import { isConversationBotControlled } from '../utils/conversationNotifications';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -95,6 +96,7 @@ function Breadcrumb() {
   const isProfile = pathname.startsWith('/profile');
 
   const routeLabels: Record<string, string> = {
+    '/monitor': 'Monitor',
     '/omnichannel/monitor': 'Monitor',
     '/omnichannel/metrics': 'Métricas',
     '/crm/organizations': 'Organizações',
@@ -116,7 +118,7 @@ function Breadcrumb() {
   };
 
   const staticLabel = routeLabels[pathname]
-    ?? (pathname.startsWith('/omnichannel/monitor')
+    ?? (pathname.startsWith('/monitor') || pathname.startsWith('/omnichannel/monitor')
       ? 'Monitor'
       : isConversations
         ? pathname.startsWith('/omnichannel/metrics')
@@ -271,6 +273,11 @@ export function TenantLayout() {
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
 
+  useEffect(() => {
+    if (!canToggleAvailability) return;
+    setPresenceStatus(agentStatus);
+  }, [agentStatus, canToggleAvailability]);
+
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
@@ -375,6 +382,11 @@ export function TenantLayout() {
       contactName?: string | null;
       client_name?: string | null;
       clientName?: string | null;
+      status?: string | null;
+      metadata?: Record<string, unknown> | null;
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
     }
 
     interface ConversationMessageEventPayload {
@@ -385,9 +397,32 @@ export function TenantLayout() {
       contactName?: string | null;
     }
 
+    interface ConversationUpdatedEventPayload {
+      conversationId?: string;
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      conversation?: {
+        id?: string;
+        assigned_to?: string | null;
+        assignedTo?: string | null;
+        assignedAgentId?: string | null;
+      };
+    }
+
     const handleIncomingMessage = (data: ConversationMessageEventPayload) => {
       const senderType = data.message?.sender_type ?? data.message?.senderType ?? null;
       if (senderType !== 'client') return;
+
+      if (isConversationBotControlled(data.conversation)) return;
+
+      const currentUserId = user?.id ?? null;
+      const assignedTo =
+        data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+      if (!currentUserId || assignedTo !== currentUserId) return;
 
       const conversationId = data.conversationId;
       if (!conversationId) return;
@@ -411,14 +446,35 @@ export function TenantLayout() {
       });
     };
 
+    const handleConversationUpdated = (data: ConversationUpdatedEventPayload) => {
+      const currentUserId = user?.id ?? null;
+      const conversationId = data.conversationId ?? data.conversation?.id;
+      if (!conversationId) return;
+
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+
+      if (assignedTo !== currentUserId) {
+        useNotificationStore.getState().markConversationRead(conversationId);
+      }
+    };
+
     const unsubA = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleIncomingMessage);
     const unsubB = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleIncomingMessage);
+    const unsubUpdated = subscribeToEvent<ConversationUpdatedEventPayload>('conversation:updated', handleConversationUpdated);
 
     return () => {
       unsubA();
       unsubB();
+      unsubUpdated();
     };
-  }, [pathname, t, user?.id]);
+  }, [pathname, t, user?.id, user?.role]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -739,7 +795,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Monitor */}
-          <NavItem to="/omnichannel/monitor" title="Monitor">
+          <NavItem to="/monitor" title="Monitor">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
               <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
