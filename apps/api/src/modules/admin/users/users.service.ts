@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.schema.js';
+import type { Role } from '@ziradesk/shared';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -30,6 +31,18 @@ export class PlanLimitError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'PlanLimitError';
+  }
+}
+
+type RoleUpdateErrorCode = 'CANNOT_CHANGE_OWN_ROLE' | 'ONLY_OWNER_CAN_ASSIGN_OWNER';
+
+export class RoleUpdateError extends Error {
+  code: RoleUpdateErrorCode;
+
+  constructor(code: RoleUpdateErrorCode, message: string) {
+    super(message);
+    this.name = 'RoleUpdateError';
+    this.code = code;
   }
 }
 
@@ -181,8 +194,23 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
   return { user, tempPassword };
 }
 
-export async function updateUser(id: string, data: UpdateUserInput, schemaName?: string) {
+export async function updateUser(
+  id: string,
+  data: UpdateUserInput,
+  schemaName?: string,
+  actor?: { id: string; role: Role },
+) {
   await getUser(id);
+
+  if (data.role) {
+    if (actor?.id === id) {
+      throw new RoleUpdateError('CANNOT_CHANGE_OWN_ROLE', 'Você não pode alterar seu próprio perfil');
+    }
+
+    if (data.role === 'owner' && actor?.role !== 'owner') {
+      throw new RoleUpdateError('ONLY_OWNER_CAN_ASSIGN_OWNER', 'Apenas owners podem atribuir o perfil owner');
+    }
+  }
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
     `UPDATE users

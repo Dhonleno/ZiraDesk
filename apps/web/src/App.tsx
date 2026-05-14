@@ -20,8 +20,8 @@ import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
 import CreateTicket from './pages/tickets/CreateTicket';
 import { TicketDetailPage } from './pages/tickets/TicketDetail';
-import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Users as AdminUsers } from './pages/admin/Users';
+import { Roles as AdminRoles } from './pages/admin/Roles';
 import { Channels as AdminChannels } from './pages/admin/Channels';
 import { QuickReplies as AdminQuickReplies } from './pages/admin/QuickReplies';
 import { Settings as AdminSettings } from './pages/admin/Settings';
@@ -47,6 +47,7 @@ import { PortalTickets } from './pages/portal/PortalTickets';
 import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
 import { PortalCreateTicket } from './pages/portal/PortalCreateTicket';
 import { TVDashboard } from './pages/tv/TVDashboard';
+import { ProtectedRoute } from './router/ProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,7 +139,14 @@ export function App() {
             <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
             <Route path="omnichannel/monitor" element={<MonitorPage />} />
-            <Route path="omnichannel/metrics" element={<MetricsPage />} />
+            <Route
+              path="omnichannel/metrics"
+              element={(
+                <ProtectedRoute permission="metrics:view" redirectTo="/omnichannel/conversations">
+                  <MetricsPage />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/clients" element={<Navigate to="/crm/contacts" replace />} />
             <Route path="crm/clients/:id" element={<Navigate to="/crm/contacts" replace />} />
@@ -150,10 +158,24 @@ export function App() {
             <Route path="tickets/new" element={<CreateTicket />} />
             <Route path="tickets/:id" element={<TicketDetailPage />} />
             <Route path="profile" element={<ProfilePage />} />
-            <Route path="admin" element={<AdminLayout />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<AdminDashboard />} />
+            <Route
+              path="admin"
+              element={(
+                <ProtectedRoute permission="settings:manage">
+                  <AdminLayout />
+                </ProtectedRoute>
+              )}
+            >
+              <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route
+                path="roles"
+                element={(
+                  <ProtectedRoute permission="users:manage">
+                    <AdminRoles />
+                  </ProtectedRoute>
+                )}
+              />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="business-hours" element={<AdminBusinessHours />} />
               <Route path="bot" element={<AdminBotMenu />} />

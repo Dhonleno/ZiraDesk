@@ -26,7 +26,13 @@ interface TenantSettings {
   bot_assigned_message?: string;
   max_conversations_per_agent?: number | null;
   created_at?: string;
-  plan?: { id: string; name: string; slug: string; priceMonth: string };
+  plan?: {
+    id: string;
+    name: string;
+    slug: string;
+    priceMonth: string;
+    features?: Record<string, unknown>;
+  };
 }
 
 export interface MyProfile {

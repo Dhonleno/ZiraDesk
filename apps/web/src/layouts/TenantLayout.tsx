@@ -11,6 +11,7 @@ import { FloatingChatBubble } from '../components/ui/FloatingChatBubble';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
 import { useAgentStatus } from '../hooks/useAgentStatus';
 import { PauseModal } from '../components/omnichannel/PauseModal';
+import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 
@@ -100,8 +101,8 @@ function Breadcrumb() {
     '/crm/contacts':      'Contatos',
     '/tickets':           'Tickets',
     '/profile':           'Meu perfil',
-    '/admin/dashboard':   t('tenantAdmin.nav.dashboard'),
     '/admin/users':       t('tenantAdmin.nav.users'),
+    '/admin/roles':       t('roles.title'),
     '/admin/channels':    t('tenantAdmin.nav.channels'),
     '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
     '/admin/bot': t('tenantAdmin.nav.bot'),
@@ -234,6 +235,7 @@ function usePauseDuration(startedAt: string | null): string {
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
   const { t } = useTranslation('admin');
+  const { canAny } = usePermission();
   const { user, token, logout, isLoggingOut } = useAuth();
   const toast = useToast();
   const { pathname } = useLocation();
@@ -246,9 +248,10 @@ export function TenantLayout() {
   const [showPauseModal, setShowPauseModal] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
-  const canAccessAdminData = user?.role === 'owner' || user?.role === 'admin';
-  const canToggleAvailability =
-    user?.role === 'owner' || user?.role === 'admin' || user?.role === 'agent';
+  const canAccessAdminData = canAny('settings:manage', 'users:manage');
+  const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
+  const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
+  const canViewAdminNav = canAny('settings:manage', 'users:manage');
   const roleLabel =
     user?.role === 'owner'
       ? 'Owner'
@@ -744,14 +747,16 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Métricas */}
-          <NavItem to="/omnichannel/metrics" title="Métricas">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
-              <rect x="7.75" y="6.5" width="2.5" height="6" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
-              <rect x="11.5" y="4" width="2.5" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
-            </svg>
-          </NavItem>
+          {canViewMetricsNav && (
+            <NavItem to="/omnichannel/metrics" title="Métricas">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+                <rect x="7.75" y="6.5" width="2.5" height="6" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+                <rect x="11.5" y="4" width="2.5" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+              </svg>
+            </NavItem>
+          )}
 
           {/* Organizações */}
           <NavItem to="/crm/organizations" title="Organizações">
@@ -786,18 +791,20 @@ export function TenantLayout() {
           <div style={{ width: 28, height: 1, background: 'var(--line)', margin: '10px 0 6px', opacity: 0.8 }} />
 
           {/* Administração */}
-          <NavItem to="/admin" title="Administração">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <rect x="3" y="3" width="12" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
-              <circle cx="9" cy="9" r="2.3" stroke="currentColor" strokeWidth="1.3" />
-              <path
-                d="M9 5.2v1.1M9 11.7v1.1M5.2 9h1.1M11.7 9h1.1M6.3 6.3l.8.8M10.9 10.9l.8.8M6.3 11.7l.8-.8M10.9 7.1l.8-.8"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </NavItem>
+          {canViewAdminNav && (
+            <NavItem to="/admin" title="Administração">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <rect x="3" y="3" width="12" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
+                <circle cx="9" cy="9" r="2.3" stroke="currentColor" strokeWidth="1.3" />
+                <path
+                  d="M9 5.2v1.1M9 11.7v1.1M5.2 9h1.1M11.7 9h1.1M6.3 6.3l.8.8M10.9 10.9l.8.8M6.3 11.7l.8-.8M10.9 7.1l.8-.8"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </NavItem>
+          )}
 
           {/* Spacer + bottom avatar */}
           <div style={{ flex: 1 }} />

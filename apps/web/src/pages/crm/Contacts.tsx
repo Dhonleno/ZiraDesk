@@ -12,6 +12,7 @@ import { CreateContactModal } from '../../components/crm/CreateContactModal';
 import { EditContactModal } from '../../components/crm/EditContactModal';
 import { LinkOrganizationModal } from '../../components/crm/LinkOrganizationModal';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
 
 export function ContactsPage() {
@@ -107,13 +108,15 @@ export function ContactsPage() {
               </span>
             ) : null}
             <div style={{ flex: 1 }} />
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="zd-btn zd-btn-primary"
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-              {t('contacts.new')}
-            </button>
+            <PermissionGate permission="clients:edit">
+              <button
+                onClick={() => setIsCreateOpen(true)}
+                className="zd-btn zd-btn-primary"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                {t('contacts.new')}
+              </button>
+            </PermissionGate>
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.standaloneDesc')}</p>
         </div>
@@ -184,15 +187,17 @@ export function ContactsPage() {
                         <rect x="5.5" y="3" width="4" height="5" rx="1" stroke="currentColor" strokeWidth="1.1"/>
                       </svg>
                     </button>
-                    <button
-                      className="tb-icon-btn"
-                      onClick={() => setDeleteConfirm(contact)}
-                      title={t('contacts.actions.delete')}
-                      aria-label={t('contacts.actions.delete')}
-                      style={{ width: 26, height: 26, color: 'var(--red)' }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 3h8M4.5 3V2a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8v1M3.3 3l.4 6a.8.8 0 00.8.7h2.9a.8.8 0 00.8-.7l.4-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
+                    <PermissionGate permission="clients:delete">
+                      <button
+                        className="tb-icon-btn"
+                        onClick={() => setDeleteConfirm(contact)}
+                        title={t('contacts.actions.delete')}
+                        aria-label={t('contacts.actions.delete')}
+                        style={{ width: 26, height: 26, color: 'var(--red)' }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 3h8M4.5 3V2a.8.8 0 01.8-.8h1.4a.8.8 0 01.8.8v1M3.3 3l.4 6a.8.8 0 00.8.7h2.9a.8.8 0 00.8-.7l.4-6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </PermissionGate>
                   </div>
                 </div>
               );

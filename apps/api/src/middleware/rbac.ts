@@ -1,25 +1,54 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { UserRole } from '@ziradesk/shared';
+import type { Permission, Role } from '@ziradesk/shared';
+import { hasPermission } from '@ziradesk/shared';
 
-type AllowedRole = UserRole;
-
-/**
- * Retorna um preHandler que verifica se o usuário autenticado possui
- * ao menos um dos roles permitidos. Deve ser usado após authMiddleware.
- */
-export function hasRole(...allowedRoles: AllowedRole[]) {
-  return async function rbacHandler(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
+export function requirePermission(permission: Permission) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const user = request.user;
-
     if (!user) {
-      return reply.code(401).send({ error: 'Não autenticado' });
+      return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED' } });
     }
 
-    if (!allowedRoles.includes(user.role as AllowedRole)) {
-      return reply.code(403).send({ error: 'Permissão insuficiente' });
+    const role = user.role as Role;
+    if (!hasPermission(role, permission)) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Permissão insuficiente' },
+      });
+    }
+  };
+}
+
+export function requireAnyPermission(...permissions: Permission[]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const role = request.user?.role as Role;
+    if (!role) {
+      return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED' } });
+    }
+
+    const allowed = permissions.some((permission) => hasPermission(role, permission));
+    if (!allowed) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Permissão insuficiente' },
+      });
+    }
+  };
+}
+
+// Compatibilidade com módulos ainda não migrados para permissões.
+export function hasRole(...allowedRoles: Role[]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const role = request.user?.role as Role | undefined;
+    if (!role) {
+      return reply.status(401).send({ success: false, error: { code: 'UNAUTHORIZED' } });
+    }
+
+    if (!allowedRoles.includes(role)) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Permissão insuficiente' },
+      });
     }
   };
 }

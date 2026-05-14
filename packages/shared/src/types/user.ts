@@ -1,4 +1,6 @@
-export type UserRole = 'super_admin' | 'owner' | 'admin' | 'agent' | 'viewer';
+import type { Role } from './rbac.js';
+
+export type UserRole = Role;
 
 export interface User {
   id: string;

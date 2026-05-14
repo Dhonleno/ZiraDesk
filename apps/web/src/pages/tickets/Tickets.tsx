@@ -21,6 +21,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { adminApi, ticketsApi, type Ticket, type TicketPriority, type TicketStatus } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
+import { PermissionGate } from '../../components/ui/PermissionGate';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
@@ -433,12 +434,14 @@ export function TicketsPage() {
           </div>
 
           <div className="tickets-header-actions">
-            <button type="button" className="tickets-primary-btn" onClick={() => navigate('/tickets/new')}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              {t('tickets.new')}
-            </button>
+            <PermissionGate permission="tickets:edit">
+              <button type="button" className="tickets-primary-btn" onClick={() => navigate('/tickets/new')}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                {t('tickets.new')}
+              </button>
+            </PermissionGate>
 
             <div className="tickets-view-toggle" role="group" aria-label={t('tickets.view')}>
               <button

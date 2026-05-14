@@ -2,7 +2,7 @@ import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
-import { hasRole } from '../../middleware/rbac.js';
+import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import {
   createTicketSchema,
@@ -46,7 +46,10 @@ import {
   BusinessRuleError,
 } from './tickets.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const guard = [authMiddleware, tenantSchemaFromJwt];
+const ticketsViewGuard = [...guard, requirePermission('tickets:view')];
+const ticketsEditGuard = [...guard, requirePermission('tickets:edit')];
+const ticketsDeleteGuard = [...guard, requirePermission('tickets:delete')];
 const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
 
 async function ensureTicketRelationsInfrastructure(): Promise<void> {
@@ -83,7 +86,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets
-  app.get('/', { preHandler: guard }, async (request, reply) => {
+  app.get('/', { preHandler: ticketsViewGuard }, async (request, reply) => {
     const parsed = listTicketsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -96,13 +99,13 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/stats  — must be before /:id to avoid conflict
-  app.get('/stats', { preHandler: guard }, async (_request, reply) => {
+  app.get('/stats', { preHandler: ticketsViewGuard }, async (_request, reply) => {
     const stats = await getStats();
     return reply.send({ success: true, data: stats });
   });
 
   // GET /api/tickets/search?q=termo&exclude=id
-  app.get('/search', { preHandler: guard }, async (request, reply) => {
+  app.get('/search', { preHandler: ticketsViewGuard }, async (request, reply) => {
     await ensureTicketRelationsInfrastructure();
 
     const { q, exclude } = request.query as { q?: string; exclude?: string };
@@ -131,7 +134,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/duplicates?title=...&contact_id=...&organization_id=...
-  app.get('/duplicates', { preHandler: guard }, async (request, reply) => {
+  app.get('/duplicates', { preHandler: ticketsViewGuard }, async (request, reply) => {
     const parsed = findTicketDuplicatesQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -145,7 +148,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets
-  app.post('/', { preHandler: guard }, async (request, reply) => {
+  app.post('/', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = createTicketSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -165,7 +168,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/:id/relations
-  app.get<{ Params: { id: string } }>('/:id/relations', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/relations', { preHandler: ticketsViewGuard }, async (request, reply) => {
     await ensureTicketRelationsInfrastructure();
     const { id } = request.params;
 
@@ -216,7 +219,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets/:id/relations
-  app.post<{ Params: { id: string } }>('/:id/relations', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/relations', { preHandler: ticketsEditGuard }, async (request, reply) => {
     await ensureTicketRelationsInfrastructure();
     const { id } = request.params;
     const { related_id, relation_type } = request.body as {
@@ -333,7 +336,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id/relations/:relationId
   app.delete<{ Params: { id: string; relationId: string } }>(
     '/:id/relations/:relationId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       await ensureTicketRelationsInfrastructure();
       const { id, relationId } = request.params;
@@ -356,7 +359,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // GET /api/tickets/:id/timeline
-  app.get<{ Params: { id: string } }>('/:id/timeline', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/timeline', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const timeline = await getTicketTimeline(request.params.id, schemaName);
@@ -370,7 +373,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/:id
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const ticket = await getTicket(request.params.id, schemaName);
@@ -383,7 +386,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/tickets/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = updateTicketSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -404,10 +407,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/tickets/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
-    if (request.user.role !== 'owner' && request.user.role !== 'admin') {
-      return reply.code(403).send({ success: false, error: { message: 'Acesso negado' } });
-    }
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: ticketsDeleteGuard }, async (request, reply) => {
     try {
       const result = await deleteTicket(request.params.id, request.user.id, request.user.tenantId!);
       return reply.send({ success: true, data: result });
@@ -419,7 +419,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets/:id/assign
-  app.post<{ Params: { id: string } }>('/:id/assign', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/assign', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = assignTicketSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -443,7 +443,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/:id/comments
-  app.get<{ Params: { id: string } }>('/:id/comments', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/comments', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const comments = await listComments(request.params.id, schemaName);
@@ -456,7 +456,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/:id/checklist
-  app.get<{ Params: { id: string } }>('/:id/checklist', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/checklist', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const items = await listChecklistItems(request.params.id, schemaName);
@@ -470,7 +470,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets/:id/checklist
-  app.post<{ Params: { id: string } }>('/:id/checklist', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/checklist', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = createChecklistItemSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -493,7 +493,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /api/tickets/:id/checklist/:itemId
   app.patch<{ Params: { id: string; itemId: string } }>(
     '/:id/checklist/:itemId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       const parsed = updateChecklistItemSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -523,7 +523,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id/checklist/:itemId
   app.delete<{ Params: { id: string; itemId: string } }>(
     '/:id/checklist/:itemId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       try {
         const result = await deleteChecklistItem(request.params.id, request.params.itemId);
@@ -538,7 +538,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // GET /api/tickets/:id/time
-  app.get<{ Params: { id: string } }>('/:id/time', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/time', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const entries = await listTimeEntries(request.params.id, schemaName);
@@ -552,7 +552,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets/:id/time
-  app.post<{ Params: { id: string } }>('/:id/time', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/time', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = createTimeEntrySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -575,7 +575,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id/time/:entryId
   app.delete<{ Params: { id: string; entryId: string } }>(
     '/:id/time/:entryId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       try {
         const result = await deleteTimeEntry(
@@ -598,7 +598,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/tickets/:id/comments
-  app.post<{ Params: { id: string } }>('/:id/comments', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/comments', { preHandler: ticketsEditGuard }, async (request, reply) => {
     const parsed = createCommentSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -624,7 +624,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id/comments/:commentId
   app.patch<{ Params: { id: string; commentId: string } }>(
     '/:id/comments/:commentId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       const parsed = updateCommentSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -656,7 +656,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id/comments/:commentId
   app.delete<{ Params: { id: string; commentId: string } }>(
     '/:id/comments/:commentId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       try {
         const result = await deleteComment(
@@ -677,7 +677,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // GET /api/tickets/:id/attachments
-  app.get<{ Params: { id: string } }>('/:id/attachments', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/attachments', { preHandler: ticketsViewGuard }, async (request, reply) => {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const attachments = await listAttachments(request.params.id, schemaName);
@@ -691,7 +691,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/tickets/:id/attachments
-  app.post<{ Params: { id: string } }>('/:id/attachments', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/attachments', { preHandler: ticketsEditGuard }, async (request, reply) => {
     if (!request.isMultipart()) {
       return reply.code(400).send({
         success: false,
@@ -754,7 +754,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/attachments/:attachmentId
   app.delete<{ Params: { attachmentId: string } }>(
     '/attachments/:attachmentId',
-    { preHandler: guard },
+    { preHandler: ticketsEditGuard },
     async (request, reply) => {
       try {
         const result = await deleteAttachment(request.params.attachmentId, request.user.id);
@@ -774,7 +774,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/tickets/attachments/:attachmentId/content
   app.get<{ Params: { attachmentId: string } }>(
     '/attachments/:attachmentId/content',
-    { preHandler: guard },
+    { preHandler: ticketsViewGuard },
     async (request, reply) => {
       try {
         const { content, filename, mimeType } = await readAttachmentContent(request.params.attachmentId);

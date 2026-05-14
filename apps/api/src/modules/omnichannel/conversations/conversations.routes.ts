@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   listConversationsQuerySchema,
@@ -46,6 +47,9 @@ import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
+const conversationsViewGuard = [...guard, requirePermission('conversations:view')];
+const conversationsReplyGuard = [...guard, requirePermission('conversations:reply')];
+const conversationsManageGuard = [...guard, requirePermission('conversations:manage')];
 
 type TenantRawDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
 
@@ -181,7 +185,7 @@ async function getAgentName(schemaName: string, agentId: string): Promise<string
 
 export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/omnichannel/conversations
-  app.get('/', { preHandler: guard }, async (request, reply) => {
+  app.get('/', { preHandler: conversationsViewGuard }, async (request, reply) => {
     const parsed = listConversationsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -194,13 +198,13 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/omnichannel/conversations/counts
-  app.get('/counts', { preHandler: guard }, async (request, reply) => {
+  app.get('/counts', { preHandler: conversationsViewGuard }, async (request, reply) => {
     const counts = await getConversationCounts(request.user.id, request.user.tenantId);
     return reply.send({ success: true, data: counts });
   });
 
   // POST /api/omnichannel/conversations
-  app.post('/', { preHandler: guard }, async (request, reply) => {
+  app.post('/', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const parsed = createConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -242,7 +246,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/omnichannel/conversations/:id
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: conversationsViewGuard }, async (request, reply) => {
     try {
       const result = await getConversationWithMessages(request.params.id, request.user.tenantId);
       return reply.send({ success: true, data: result });
@@ -255,7 +259,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/omnichannel/conversations/:id/messages
-  app.get<{ Params: { id: string } }>('/:id/messages', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/messages', { preHandler: conversationsViewGuard }, async (request, reply) => {
     const parsed = listMessagesQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -276,7 +280,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/omnichannel/conversations/:id/messages
   app.post<{ Params: { id: string } }>(
     '/:id/messages',
-    { preHandler: guard },
+    { preHandler: conversationsReplyGuard },
     async (request, reply) => {
       const parsed = sendMessageBodySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -372,7 +376,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/omnichannel/conversations/:id/assign
   app.post<{ Params: { id: string } }>(
     '/:id/assign',
-    { preHandler: guard },
+    { preHandler: conversationsManageGuard },
     async (request, reply) => {
       const parsed = assignConversationBodySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -449,7 +453,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/omnichannel/conversations/:id/transfer
   app.post<{ Params: { id: string } }>(
     '/:id/transfer',
-    { preHandler: guard },
+    { preHandler: conversationsManageGuard },
     async (request, reply) => {
       const parsed = transferConversationBodySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -547,7 +551,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // PATCH /api/omnichannel/conversations/:id/resolve
-  app.patch<{ Params: { id: string } }>('/:id/resolve', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id/resolve', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const parsed = resolveConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -605,7 +609,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/omnichannel/conversations/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const parsed = updateConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -655,13 +659,13 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/omnichannel/conversations/:id/helpers
-  app.get<{ Params: { id: string } }>('/:id/helpers', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/helpers', { preHandler: conversationsViewGuard }, async (request, reply) => {
     const data = await getConversationHelpers(request.params.id, request.user.tenantId);
     return reply.send({ success: true, data });
   });
 
   // POST /api/omnichannel/conversations/:id/request-help
-  app.post<{ Params: { id: string } }>('/:id/request-help', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/request-help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const parsed = requestHelpBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -695,7 +699,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/omnichannel/conversations/:id/accept-help
-  app.post<{ Params: { id: string } }>('/:id/accept-help', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/accept-help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     try {
       const io = getSocketServer();
       const data = await acceptHelp(request.params.id, request.user.id, request.user.tenantId, io);
@@ -709,7 +713,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/omnichannel/conversations/:id/decline-help
-  app.post<{ Params: { id: string } }>('/:id/decline-help', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/decline-help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     try {
       const io = getSocketServer();
       const data = await declineHelp(request.params.id, request.user.id, request.user.tenantId, io);
@@ -723,7 +727,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/omnichannel/conversations/:id/help
-  app.delete<{ Params: { id: string } }>('/:id/help', { preHandler: guard }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id/help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const data = await endHelp(request.params.id, request.user.id, request.user.tenantId);
     return reply.send({ success: true, data });
   });

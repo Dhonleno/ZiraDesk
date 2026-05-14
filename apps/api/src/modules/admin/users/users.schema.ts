@@ -8,7 +8,7 @@ export const inviteUserSchema = z.object({
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  role: z.enum(['admin', 'agent', 'viewer']).optional(),
+  role: z.enum(['owner', 'admin', 'agent', 'viewer']).optional(),
   status: z.enum(['active', 'inactive']).optional(),
   max_conversations: z.number().int().min(1).max(500).nullable().optional(),
 });

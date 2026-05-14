@@ -20,6 +20,8 @@ import { MessageMedia } from './MessageMedia';
 import { RequestHelpModal } from './RequestHelpModal';
 import { TagDropdown } from './TagDropdown';
 import { MessageStatus } from './MessageStatus';
+import { PermissionGate } from '../ui/PermissionGate';
+import { usePermission } from '../../hooks/usePermission';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
@@ -326,7 +328,7 @@ export function ChatArea({ conversationId }: Props) {
   const currentAuthToken = useAuthStore((state) => state.token);
   const currentUserName = useAuthStore((state) => state.user?.name);
   const currentUserId = useAuthStore((state) => state.user?.id);
-  const currentUserRole = useAuthStore((state) => state.user?.role);
+  const { can } = usePermission();
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
@@ -1190,10 +1192,11 @@ export function ChatArea({ conversationId }: Props) {
   const acceptedHelpers = helpers.filter((helper) => helper.status === 'accepted');
   const isHelper = acceptedHelpers.some((helper) => helper.helper_user_id === currentUserId);
   const helperIndicator = acceptedHelpers[0] ?? null;
-  const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole ?? '');
-  const canSendMessage = (isAssignedToMe || isHelper) && !isClosedForComposer;
+  const canManageConversation = can('conversations:manage');
+  const canReplyConversation = can('conversations:reply');
+  const canSendMessage = canReplyConversation && (isAssignedToMe || isHelper) && !isClosedForComposer;
   const canAssume = isUnassigned && !isClosedForComposer;
-  const canTransfer = (isAssignedToMe || isOwnerOrAdmin) && !isClosedForComposer;
+  const canTransfer = canManageConversation && (isAssignedToMe || canManageConversation) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
   const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
   const organizationName = (
@@ -1474,28 +1477,30 @@ export function ChatArea({ conversationId }: Props) {
                 <span className="helper-indicator">{t('help.helping')}</span>
               )}
 
-              {canTransfer && (
-                <button
-                  title={t('chat.transfer')}
-                  onClick={() => setShowTransferModal(true)}
-                  style={{
-                    width: 30,
-                    height: 30,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'none',
-                    border: 'none',
-                    borderRadius: 'var(--r)',
-                    color: 'var(--txt-3)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              )}
+              <PermissionGate permission="conversations:manage">
+                {canTransfer && (
+                  <button
+                    title={t('chat.transfer')}
+                    onClick={() => setShowTransferModal(true)}
+                    style={{
+                      width: 30,
+                      height: 30,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'none',
+                      border: 'none',
+                      borderRadius: 'var(--r)',
+                      color: 'var(--txt-3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                      <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+              </PermissionGate>
 
               {isAssignedToMe && !isResolved && (
                 <button
@@ -1517,28 +1522,30 @@ export function ChatArea({ conversationId }: Props) {
                 </button>
               )}
 
-              {isAssignedToMe && !isResolved && (
-                <button
-                  onClick={() => setShowResolveModal(true)}
-                  disabled={endMutation.isPending}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '5px 11px',
-                    borderRadius: 'var(--r)',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: '1px solid var(--teal)',
-                    background: 'var(--teal)',
-                    color: '#0E1A18',
-                    opacity: endMutation.isPending ? 0.55 : 1,
-                  }}
-                >
-                  {t('chat.end', { defaultValue: 'Encerrar' })}
-                </button>
-              )}
+              <PermissionGate permission="conversations:manage">
+                {isAssignedToMe && !isResolved && (
+                  <button
+                    onClick={() => setShowResolveModal(true)}
+                    disabled={endMutation.isPending}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '5px 11px',
+                      borderRadius: 'var(--r)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: '1px solid var(--teal)',
+                      background: 'var(--teal)',
+                      color: '#0E1A18',
+                      opacity: endMutation.isPending ? 0.55 : 1,
+                    }}
+                  >
+                    {t('chat.end', { defaultValue: 'Encerrar' })}
+                  </button>
+                )}
+              </PermissionGate>
             </>
           )}
         </div>
@@ -2253,7 +2260,8 @@ export function ChatArea({ conversationId }: Props) {
             </div>
 
             {canSendMessage ? (
-              <>
+              <PermissionGate permission="conversations:reply">
+                <>
                 {mentioningMessage && (
                   <div
                     style={{
@@ -2579,7 +2587,8 @@ export function ChatArea({ conversationId }: Props) {
                   </span>
                 </button>
                 </div>
-              </>
+                </>
+              </PermissionGate>
             ) : !isClosedForComposer && isAssignedToOther && !isHelper ? (
               <div
                 style={{
@@ -2618,28 +2627,30 @@ export function ChatArea({ conversationId }: Props) {
                     Você pode visualizar mas não enviar mensagens
                   </div>
                 </div>
-                {isOwnerOrAdmin && (
-                  <button
-                    onClick={() => setShowTransferModal(true)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '7px 14px',
-                      borderRadius: 'var(--r)',
-                      background: 'var(--bg-4)',
-                      border: '1px solid var(--line-2)',
-                      color: 'var(--txt-2)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      fontFamily: 'var(--font)',
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                    }}
-                  >
-                    Transferir para mim
-                  </button>
-                )}
+                <PermissionGate permission="conversations:manage">
+                  {canManageConversation && (
+                    <button
+                      onClick={() => setShowTransferModal(true)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 14px',
+                        borderRadius: 'var(--r)',
+                        background: 'var(--bg-4)',
+                        border: '1px solid var(--line-2)',
+                        color: 'var(--txt-2)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontFamily: 'var(--font)',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Transferir para mim
+                    </button>
+                  )}
+                </PermissionGate>
               </div>
             ) : isClosedForComposer ? (
               <div

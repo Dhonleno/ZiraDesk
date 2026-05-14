@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
-import { hasRole } from '../../../middleware/rbac.js';
+import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   createClientSchema,
@@ -22,11 +22,14 @@ import {
   ConflictError,
 } from './clients.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const guard = [authMiddleware, tenantSchemaFromJwt];
+const clientsViewGuard = [...guard, requirePermission('clients:view')];
+const clientsEditGuard = [...guard, requirePermission('clients:edit')];
+const clientsDeleteGuard = [...guard, requirePermission('clients:delete')];
 
 export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/clients
-  app.get('/', { preHandler: guard }, async (request, reply) => {
+  app.get('/', { preHandler: clientsViewGuard }, async (request, reply) => {
     const parsed = listClientsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -39,7 +42,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/crm/clients
-  app.post('/', { preHandler: guard }, async (request, reply) => {
+  app.post('/', { preHandler: clientsEditGuard }, async (request, reply) => {
     const parsed = createClientSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -58,7 +61,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/clients/:id
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: clientsViewGuard }, async (request, reply) => {
     try {
       const client = await getClient(request.params.id);
       return reply.send({ success: true, data: client });
@@ -70,7 +73,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/crm/clients/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: clientsEditGuard }, async (request, reply) => {
     const parsed = updateClientSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -91,7 +94,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/crm/clients/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: clientsDeleteGuard }, async (request, reply) => {
     try {
       const client = await deleteClient(request.params.id, request.user.id);
       return reply.send({ success: true, data: client });
@@ -105,7 +108,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/clients/:id/timeline
   app.get<{ Params: { id: string } }>(
     '/:id/timeline',
-    { preHandler: guard },
+    { preHandler: clientsViewGuard },
     async (request, reply) => {
       try {
         const timeline = await getClientTimeline(request.params.id);
@@ -121,7 +124,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/clients/:id/stats
   app.get<{ Params: { id: string } }>(
     '/:id/stats',
-    { preHandler: guard },
+    { preHandler: clientsViewGuard },
     async (request, reply) => {
       try {
         const stats = await getClientStats(request.params.id, request.user.tenantId);
@@ -137,7 +140,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/crm/clients/:id/tags
   app.post<{ Params: { id: string } }>(
     '/:id/tags',
-    { preHandler: guard },
+    { preHandler: clientsEditGuard },
     async (request, reply) => {
       const parsed = tagBodySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -160,7 +163,7 @@ export async function clientsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/clients/:id/tags/:tag
   app.delete<{ Params: { id: string; tag: string } }>(
     '/:id/tags/:tag',
-    { preHandler: guard },
+    { preHandler: clientsEditGuard },
     async (request, reply) => {
       try {
         const client = await removeTag(request.params.id, request.params.tag);
