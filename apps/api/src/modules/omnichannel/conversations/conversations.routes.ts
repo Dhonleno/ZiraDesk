@@ -45,6 +45,7 @@ import {
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
+import { loadConversationSocketPayload } from './socket-payload.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const conversationsViewGuard = [...guard, requirePermission('conversations:view')];
@@ -294,9 +295,13 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         const tenantUser = request.user as AuthUser;
 
         const io = getSocketServer();
+        const conversation = tenantUser.schemaName
+          ? await loadConversationSocketPayload(prisma, tenantUser.schemaName, request.params.id)
+          : null;
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:new_message', {
           conversationId: request.params.id,
           message: result.message,
+          conversation: conversation ?? undefined,
         });
 
         if (result.channelCredentials) {
@@ -444,6 +449,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         if (err instanceof NotFoundError) {
           return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        if (err instanceof ConflictError) {
+          return reply.code(409).send({ success: false, error: { message: err.message } });
         }
         throw err;
       }

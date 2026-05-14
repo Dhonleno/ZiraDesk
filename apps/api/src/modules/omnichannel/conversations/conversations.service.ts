@@ -1240,6 +1240,21 @@ export async function assignConversation(
   assignToUserId: string,
   assignedBy: string,
 ): Promise<{ conversation: ConversationRow; previousAssignedTo: string | null }> {
+  const targetAgentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT u.id
+     FROM users u
+     JOIN agent_assignments aa ON aa.user_id = u.id
+     WHERE u.id = $1::uuid
+       AND u.status = 'active'
+       AND u.role IN ('owner', 'admin', 'agent')
+       AND aa.status = 'online'
+     LIMIT 1`,
+    assignToUserId,
+  );
+  if (!targetAgentRows[0]) {
+    throw new ConflictError('Agente não está online para receber atendimento');
+  }
+
   const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations

@@ -200,6 +200,7 @@ export async function ensureAgentBotSkillsInfrastructure(
 async function resolveAgentForAssignment(
   prisma: PrismaClient,
   schemaName: string,
+  io: Server,
   preferredAgentId?: string,
   requiredBotOptionId?: string,
   globalLimit?: number | null,
@@ -208,6 +209,27 @@ async function resolveAgentForAssignment(
   const usersRef = tableRef(schemaName, 'users');
   const botOptionsRef = tableRef(schemaName, 'bot_options');
   const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
+
+  const pickConnectedCandidate = async (
+    candidates: AgentCandidateRow[],
+  ): Promise<AgentCandidateRow | null> => {
+    for (const candidate of candidates) {
+      const connectedSockets = await io.in(`agent:${candidate.user_id}`).fetchSockets();
+      if (connectedSockets.length > 0) return candidate;
+
+      // Corrige estado stale para evitar novas atribuições em agente já desconectado.
+      await prisma.$executeRawUnsafe(
+        `UPDATE ${assignmentsRef}
+         SET status = 'offline',
+             is_available = false,
+             online_since = NULL
+         WHERE user_id = $1::uuid
+           AND status = 'online'`,
+        candidate.user_id,
+      );
+    }
+    return null;
+  };
 
   if (preferredAgentId) {
     const preferredRows = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
@@ -226,7 +248,8 @@ async function resolveAgentForAssignment(
       globalLimit ?? null,
     );
 
-    if (preferredRows[0]) return preferredRows[0];
+    const preferredConnected = await pickConnectedCandidate(preferredRows);
+    if (preferredConnected) return preferredConnected;
   }
 
   if (requiredBotOptionId?.trim()) {
@@ -252,12 +275,13 @@ async function resolveAgentForAssignment(
          AND abs.bot_option_id IN (SELECT id FROM option_scope)
          AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
        ORDER BY aa.last_assigned_at ASC
-       LIMIT 1`,
+       LIMIT 15`,
       requiredBotOptionId.trim(),
       globalLimit ?? null,
     );
 
-    if (rowsBySkill[0]) return rowsBySkill[0];
+    const connectedBySkill = await pickConnectedCandidate(rowsBySkill);
+    if (connectedBySkill) return connectedBySkill;
     return null;
   }
 
@@ -272,11 +296,11 @@ async function resolveAgentForAssignment(
        AND u.role IN ('owner', 'admin', 'agent')
        AND aa.active_conversations < COALESCE(aa.max_conversations, $1::integer, 999999)
      ORDER BY aa.last_assigned_at ASC
-     LIMIT 1`,
+     LIMIT 15`,
     globalLimit ?? null,
   );
 
-  return rows[0] ?? null;
+  return pickConnectedCandidate(rows);
 }
 
 async function syncAllActiveConversationCounters(
@@ -521,6 +545,7 @@ export async function autoAssignConversation(
   const nextAgent = await resolveAgentForAssignment(
     prisma,
     schemaName,
+    io,
     preferredAgentId,
     requiredBotOptionId,
     settings.max_conversations_per_agent,

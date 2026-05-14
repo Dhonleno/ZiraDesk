@@ -19,6 +19,7 @@ import {
   updateCallRecordingBySid,
   updateCallStatusBySid,
 } from './calls.service.js';
+import { loadConversationSocketPayload } from '../omnichannel/conversations/socket-payload.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
@@ -412,8 +413,15 @@ export async function callsRoutes(app: FastifyInstance): Promise<void> {
           recordingDuration,
         );
 
+        const conversation = await loadConversationSocketPayload(
+          prisma,
+          tenant.schemaName,
+          updated.conversation_id,
+        );
+
         io.to(`tenant:${tenant.id}`).emit('conversation:new_message', {
           conversationId: updated.conversation_id,
+          conversation: conversation ?? undefined,
         });
       }
     }

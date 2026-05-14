@@ -19,6 +19,7 @@ interface InactivityJobData {
 interface InactivityConversationRow {
   id: string;
   status: string;
+  metadata: Record<string, unknown> | null;
   assigned_to: string | null;
   last_message_at: Date | null;
   created_at: Date;
@@ -122,6 +123,7 @@ async function loadConversation(
     `SELECT
        c.id,
        c.status,
+       c.metadata,
        c.assigned_to,
        c.last_message_at,
        c.created_at,
@@ -193,6 +195,12 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
         senderType: 'bot',
         createdAt: new Date().toISOString(),
       },
+      conversation: {
+        id: conversation.id,
+        status: conversation.status,
+        metadata: conversation.metadata,
+        assigned_to: conversation.assigned_to,
+      },
     });
 
     await inactivityQueue.add(
@@ -223,6 +231,12 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
       content: closeText,
       senderType: 'bot',
       createdAt: new Date().toISOString(),
+    },
+    conversation: {
+      id: conversation.id,
+      status: conversation.status,
+      metadata: conversation.metadata,
+      assigned_to: conversation.assigned_to,
     },
   });
 

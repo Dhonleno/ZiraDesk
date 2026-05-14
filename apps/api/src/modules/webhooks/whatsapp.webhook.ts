@@ -20,6 +20,7 @@ import {
   callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
 } from '../omnichannel/conversations/protocols.js';
+import { loadConversationSocketPayload } from '../omnichannel/conversations/socket-payload.js';
 import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
 import { ensureConversationCsatInfrastructure } from '../omnichannel/conversations/csat.infrastructure.js';
 import {
@@ -1030,6 +1031,7 @@ async function processIncomingMessage(
         outsideBusinessHours,
         csatHandled: true,
         csatPayload,
+        conversationStatus: currentConversation?.status ?? null,
         refreshInactivityForAssignedConversation: false,
       };
     }
@@ -1254,13 +1256,35 @@ async function processIncomingMessage(
         && !isWaitingForHumanQueue,
       shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
+      conversationStatus: currentConversation?.status ?? null,
     };
   });
+
+  const io = getSocketServer();
+  const emitConversationNewMessage = async (payload: {
+    conversationId: string;
+    message: Record<string, unknown>;
+    contact?: { id?: string | null; name?: string | null };
+    conversation?: {
+      status?: string | null;
+      metadata?: Record<string, unknown> | null;
+      assigned_to?: string | null;
+    } | null;
+  }): Promise<void> => {
+    const conversation =
+      payload.conversation
+      ?? await loadConversationSocketPayload(prisma, schemaName, payload.conversationId);
+    io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+      conversationId: payload.conversationId,
+      message: payload.message,
+      contact: payload.contact,
+      conversation: conversation ?? undefined,
+    });
+  };
 
   if (result.closeByKeyword) {
     await cancelInactivityJobs(result.conversationId);
 
-    const io = getSocketServer();
     const resolvedAt = new Date().toISOString();
     io.to(`tenant:${tenantId}`).emit('conversation:updated', {
       conversationId: result.conversationId,
@@ -1287,27 +1311,32 @@ async function processIncomingMessage(
     }
   }
 
-  const io = getSocketServer();
   if (result.isNewConversation) {
+    const conversation = await loadConversationSocketPayload(
+      prisma,
+      schemaName,
+      result.conversationId,
+    );
     io.to(`tenant:${tenantId}`).emit('conversation:created', {
       conversationId: result.conversationId,
       contactName: result.contactName,
       organizationId: result.organizationId,
       outsideBusinessHours: result.outsideBusinessHours,
+      conversation: conversation ?? undefined,
     });
   }
-  io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+  await emitConversationNewMessage({
     conversationId: result.conversationId,
-    message: result.message,
+    message: result.message as Record<string, unknown>,
     contact: {
       id: result.contactId,
       name: result.contactName,
     },
   });
   if (result.botMessage) {
-    io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+    await emitConversationNewMessage({
       conversationId: result.conversationId,
-      message: result.botMessage,
+      message: result.botMessage as Record<string, unknown>,
       contact: {
         id: result.contactId,
         name: result.contactName,
@@ -1406,9 +1435,9 @@ async function processIncomingMessage(
       );
       await sendConversationWhatsAppText(channelCredentials, formattedPhone, greeting);
       if (greetRows[0]) {
-        io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+        await emitConversationNewMessage({
           conversationId: result.conversationId,
-          message: greetRows[0],
+          message: greetRows[0] as Record<string, unknown>,
           contact: { id: result.contactId, name: result.contactName },
         });
       }
@@ -1465,9 +1494,9 @@ async function processIncomingMessage(
           );
           await sendConversationWhatsAppText(channelCredentials, formattedPhone, transferMsg);
           if (xferRows[0]) {
-            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+            await emitConversationNewMessage({
               conversationId: result.conversationId,
-              message: xferRows[0],
+              message: xferRows[0] as Record<string, unknown>,
               contact: { id: result.contactId, name: result.contactName },
             });
           }
@@ -1500,9 +1529,9 @@ async function processIncomingMessage(
             );
             await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
             if (clarifyRows[0]) {
-              io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+              await emitConversationNewMessage({
                 conversationId: result.conversationId,
-                message: clarifyRows[0],
+                message: clarifyRows[0] as Record<string, unknown>,
                 contact: { id: result.contactId, name: result.contactName },
               });
             }
@@ -1542,9 +1571,9 @@ async function processIncomingMessage(
             );
             await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
             if (clarifyRows[0]) {
-              io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+              await emitConversationNewMessage({
                 conversationId: result.conversationId,
-                message: clarifyRows[0],
+                message: clarifyRows[0] as Record<string, unknown>,
                 contact: { id: result.contactId, name: result.contactName },
               });
             }
@@ -1582,9 +1611,9 @@ async function processIncomingMessage(
               );
               await sendConversationWhatsAppText(channelCredentials, formattedPhone, aiResult.response);
               if (aiMsgRows[0]) {
-                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                await emitConversationNewMessage({
                   conversationId: result.conversationId,
-                  message: aiMsgRows[0],
+                  message: aiMsgRows[0] as Record<string, unknown>,
                   contact: { id: result.contactId, name: result.contactName },
                 });
               }
@@ -1632,9 +1661,9 @@ async function processIncomingMessage(
           );
           await sendConversationWhatsAppText(channelCredentials, formattedPhone, msg);
           if (xferRows[0]) {
-            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+            await emitConversationNewMessage({
               conversationId: result.conversationId,
-              message: xferRows[0],
+              message: xferRows[0] as Record<string, unknown>,
               contact: { id: result.contactId, name: result.contactName },
             });
           }
@@ -1664,9 +1693,9 @@ async function processIncomingMessage(
           );
           await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
           if (clarifyRows[0]) {
-            io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+            await emitConversationNewMessage({
               conversationId: result.conversationId,
-              message: clarifyRows[0],
+              message: clarifyRows[0] as Record<string, unknown>,
               contact: { id: result.contactId, name: result.contactName },
             });
           }
@@ -1708,9 +1737,9 @@ async function processIncomingMessage(
               );
               await sendConversationWhatsAppText(channelCredentials, formattedPhone, clarification);
               if (clarifyRows[0]) {
-                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                await emitConversationNewMessage({
                   conversationId: result.conversationId,
-                  message: clarifyRows[0],
+                  message: clarifyRows[0] as Record<string, unknown>,
                   contact: { id: result.contactId, name: result.contactName },
                 });
               }
@@ -1757,9 +1786,9 @@ async function processIncomingMessage(
                   content: aiResult.response,
                   to: formattedPhone,
                 });
-                io.to(`tenant:${tenantId}`).emit('conversation:new_message', {
+                await emitConversationNewMessage({
                   conversationId: result.conversationId,
-                  message: aiMsgRows[0],
+                  message: aiMsgRows[0] as Record<string, unknown>,
                   contact: { id: result.contactId, name: result.contactName },
                 });
               }

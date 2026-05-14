@@ -5,6 +5,7 @@ import { verifyMetaSignature } from '../../middleware/meta-signature.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { getSocketServer } from '../../socket/index.js';
 import { ensureConversationProtocolInfrastructure } from '../omnichannel/conversations/protocols.js';
+import { loadConversationSocketPayload } from '../omnichannel/conversations/socket-payload.js';
 
 interface InstagramMessagingEntry {
   sender: { id: string };
@@ -163,9 +164,15 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
         });
 
         const io = getSocketServer();
+        const conversation = await loadConversationSocketPayload(
+          prisma,
+          tenant.schema_name,
+          result.conversationId,
+        );
         io.to(`tenant:${tenant.id}`).emit('conversation:message', {
           conversationId: result.conversationId,
           message: result.message,
+          conversation: conversation ?? undefined,
         });
       }
     }
