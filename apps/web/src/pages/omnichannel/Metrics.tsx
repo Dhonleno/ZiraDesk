@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import {
   omnichannelApi,
+  ticketsApi,
   type MetricsByAgentPoint,
   type MetricsByChannelPoint,
   type MetricsByDepartmentPoint,
@@ -29,6 +30,8 @@ import {
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { PageShell } from '../../components/layout/PageShell';
+
+type MetricsTab = 'omnichannel' | 'tickets';
 
 type PeriodKey = 'today' | '7' | '30' | '90' | 'custom';
 
@@ -441,9 +444,276 @@ function BreakdownSection({ eyebrow, data, emptyLabel, unitLabel }: BreakdownSec
   );
 }
 
+function formatTmr(minutes: number): string {
+  if (!minutes) return '—';
+  if (minutes < 60) return `${minutes}min`;
+  if (minutes < 1440) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h ${m}min` : `${h}h`;
+  }
+  const days = Math.floor(minutes / 1440);
+  return `${days} ${days === 1 ? 'dia' : 'dias'}`;
+}
+
+function resolutionRateColor(rate: number): string {
+  if (rate >= 70) return 'var(--teal)';
+  if (rate >= 40) return '#F59E0B';
+  return '#EF4444';
+}
+
+interface TicketsMetricsTabProps {
+  filters: { date_from: string; date_to: string };
+  agentId: string;
+  t: (key: string) => string;
+}
+
+function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
+  const [category, setCategory] = useState('');
+
+  const ticketFilters = useMemo(() => ({
+    date_from: filters.date_from,
+    date_to:   filters.date_to,
+    ...(agentId ? { agent_id: agentId } : {}),
+    ...(category ? { category } : {}),
+  }), [filters.date_from, filters.date_to, agentId, category]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['tickets-metrics', ticketFilters],
+    queryFn: () => ticketsApi.getMetrics(ticketFilters),
+  });
+
+  const overview = data?.overview;
+
+  const categories = useMemo(() => {
+    const seen = new Set<string>();
+    (data?.byCategory ?? []).forEach((item) => seen.add(item.category));
+    return Array.from(seen).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [data?.byCategory]);
+
+  const byAgentSorted = useMemo(
+    () => [...(data?.byAgent ?? [])].sort((a, b) => b.total - a.total),
+    [data?.byAgent],
+  );
+
+  if (isLoading) {
+    return <div className="tickets-loading">{t('metrics.tickets.overview')}</div>;
+  }
+
+  return (
+    <div className="metrics-tickets-tab">
+      {/* Extra filter: category */}
+      <div className="metrics-tickets-extra-filters">
+        <select
+          className="filter-select"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          aria-label={t('metrics.tickets.allCategories')}
+        >
+          <option value="">{t('metrics.tickets.allCategories')}</option>
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Overview cards */}
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.total')}</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--txt)', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {overview?.total ?? 0}
+          </div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.open')}</span>
+          </div>
+          <div className="metric-value" style={{ color: '#F59E0B', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {overview?.open ?? 0}
+          </div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.inProgress')}</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--teal)', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {overview?.inProgress ?? 0}
+          </div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.waiting')}</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--amber)', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {overview?.waiting ?? 0}
+          </div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.resolved')}</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--teal)', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {overview?.resolved ?? 0}
+          </div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-card-header">
+            <span className="metric-title">{t('metrics.tickets.avgResolution')}</span>
+          </div>
+          <div className="metric-value" style={{ color: 'var(--txt)', fontFamily: 'IBM Plex Mono, monospace' }}>
+            {formatTmr(overview?.avgResolutionMinutes ?? 0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Volume by period chart */}
+      {(data?.byPeriod?.length ?? 0) > 0 ? (
+        <div className="chart-card">
+          <h3 className="chart-title">{t('metrics.tickets.volumeByPeriod')}</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={data?.byPeriod ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: 'var(--txt-3)', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                tickFormatter={(d: string) => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              />
+              <YAxis tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--bg-2)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 8,
+                  color: 'var(--txt)',
+                }}
+                labelFormatter={(label) => new Date(String(label)).toLocaleDateString('pt-BR')}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="opened"
+                name={t('metrics.tickets.opened')}
+                stroke="#F59E0B"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="resolved"
+                name={t('metrics.tickets.resolved')}
+                stroke="#00C9A7"
+                strokeWidth={2}
+                dot={false}
+                strokeDasharray="4 2"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : null}
+
+      {/* By agent table */}
+      {byAgentSorted.length > 0 ? (
+        <div className="chart-card">
+          <h3 className="chart-title">{t('metrics.tickets.byAgent')}</h3>
+          <table className="metrics-table">
+            <thead>
+              <tr>
+                <th>{t('metrics.filters.agent')}</th>
+                <th>{t('metrics.tickets.total')}</th>
+                <th>{t('metrics.tickets.resolved')}</th>
+                <th>{t('metrics.tickets.openNow')}</th>
+                <th>{t('metrics.tickets.avgResolution')}</th>
+                <th>{t('metrics.tickets.resolutionRate')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byAgentSorted.map((agent) => {
+                const rate = agent.total > 0 ? Math.round((agent.resolved / agent.total) * 100) : 0;
+                return (
+                  <tr key={agent.agentId}>
+                    <td>{agent.agentName}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.total}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.resolved}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.openNow}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{formatTmr(agent.avgResolutionMinutes)}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace', color: resolutionRateColor(rate) }}>
+                      {agent.total > 0 ? `${rate}%` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {/* By category + by type grid */}
+      <div className="metrics-breakdown-grid">
+        <section className="metrics-breakdown-card">
+          <h3 className="metrics-breakdown-eyebrow">{t('metrics.tickets.byCategory')}</h3>
+          {(data?.byCategory?.length ?? 0) > 0 ? (
+            <div className="metrics-breakdown-list">
+              {(data?.byCategory ?? []).map((item) => (
+                <div className="metrics-breakdown-item" key={item.category}>
+                  <div className="metrics-breakdown-label">{item.category}</div>
+                  <div className="metrics-breakdown-bar" aria-hidden>
+                    <div
+                      className="metrics-breakdown-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, item.percentage))}%` }}
+                    />
+                  </div>
+                  <div className="metrics-breakdown-count" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {item.count} {t('metrics.tickets.tickets')}
+                  </div>
+                  <div className="metrics-breakdown-percentage" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {Math.round(item.percentage)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="metrics-breakdown-empty">{t('metrics.tickets.noData')}</p>
+          )}
+        </section>
+
+        <section className="metrics-breakdown-card">
+          <h3 className="metrics-breakdown-eyebrow">{t('metrics.tickets.byType')}</h3>
+          {(data?.byType?.length ?? 0) > 0 ? (
+            <div className="metrics-breakdown-list">
+              {(data?.byType ?? []).map((item) => (
+                <div className="metrics-breakdown-item" key={item.type}>
+                  <div className="metrics-breakdown-label">{item.type}</div>
+                  <div className="metrics-breakdown-bar" aria-hidden>
+                    <div
+                      className="metrics-breakdown-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, item.percentage))}%` }}
+                    />
+                  </div>
+                  <div className="metrics-breakdown-count" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {item.count} {t('metrics.tickets.tickets')}
+                  </div>
+                  <div className="metrics-breakdown-percentage" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {Math.round(item.percentage)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="metrics-breakdown-empty">{t('metrics.tickets.noData')}</p>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 export function MetricsPage() {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
+  const [metricsTab, setMetricsTab] = useState<MetricsTab>('omnichannel');
   const [period, setPeriod] = useState<PeriodKey>('7');
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
@@ -586,11 +856,30 @@ export function MetricsPage() {
         <div>
           <h1>{t('metrics.title')}</h1>
         </div>
-        <button className="zd-btn zd-btn-primary" onClick={exportCsv} type="button">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-            <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {t('metrics.export')}
+        {metricsTab === 'omnichannel' ? (
+          <button className="zd-btn zd-btn-primary" onClick={exportCsv} type="button">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {t('metrics.export')}
+          </button>
+        ) : null}
+      </div>
+
+      <div className="metrics-main-tabs">
+        <button
+          type="button"
+          className={`period-tab${metricsTab === 'omnichannel' ? ' active' : ''}`}
+          onClick={() => setMetricsTab('omnichannel')}
+        >
+          {t('metrics.tabs.omnichannel')}
+        </button>
+        <button
+          type="button"
+          className={`period-tab${metricsTab === 'tickets' ? ' active' : ''}`}
+          onClick={() => setMetricsTab('tickets')}
+        >
+          {t('metrics.tabs.tickets')}
         </button>
       </div>
 
@@ -669,106 +958,120 @@ export function MetricsPage() {
           ))}
         </select>
 
-        <select className="filter-select" aria-label="Filtrar por canal" value={channelType} onChange={(event) => setChannelType(event.target.value)}>
-          <option value="">{t('metrics.filters.allChannels')}</option>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="instagram">Instagram</option>
-          <option value="email">E-mail</option>
-          <option value="chat">Chat</option>
-          <option value="live_chat">Live Chat</option>
-        </select>
+        {metricsTab === 'omnichannel' ? (
+          <>
+            <select className="filter-select" aria-label="Filtrar por canal" value={channelType} onChange={(event) => setChannelType(event.target.value)}>
+              <option value="">{t('metrics.filters.allChannels')}</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="instagram">Instagram</option>
+              <option value="email">E-mail</option>
+              <option value="chat">Chat</option>
+              <option value="live_chat">Live Chat</option>
+            </select>
 
-        <select className="filter-select" aria-label="Filtrar por departamento" value={department} onChange={(event) => setDepartment(event.target.value)}>
-          <option value="">{t('metrics.filters.allDepartments')}</option>
-          {(data?.byDepartment ?? []).map((item) => (
-            <option key={item.department} value={item.department}>
-              {item.department}
-            </option>
-          ))}
-        </select>
+            <select className="filter-select" aria-label="Filtrar por departamento" value={department} onChange={(event) => setDepartment(event.target.value)}>
+              <option value="">{t('metrics.filters.allDepartments')}</option>
+              {(data?.byDepartment ?? []).map((item) => (
+                <option key={item.department} value={item.department}>
+                  {item.department}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
       </div>
 
-      <div className="metrics-grid">
-        <MetricCard
-          title={t('metrics.cards.total')}
-          value={String(data?.overview.total.total ?? 0)}
-          subtitle={`${data?.overview.total.open ?? 0} em aberto`}
-          icon={<MetricIcon kind="total" />}
-          color="var(--teal)"
-        />
-        <MetricCard
-          title={t('metrics.cards.tma')}
-          value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
-          subtitle="Tempo médio de atendimento"
-          icon={<MetricIcon kind="tma" />}
-          color="var(--blue)"
-        />
-        <MetricCard
-          title={t('metrics.cards.csat')}
-          value={csatAverage !== null && csatAverage !== undefined ? String(csatAverage) : '—'}
-          subtitle={`${data?.overview.csat.total_responses ?? 0} respostas`}
-          icon={<MetricIcon kind="csat" />}
-          color="var(--amber)"
-        />
-        <MetricCard
-          title={t('metrics.cards.resolved')}
-          value={formatPercent(resolvedRate)}
-          subtitle={`${data?.overview.total.resolved ?? 0} resolvidos`}
-          icon={<MetricIcon kind="resolved" />}
-          color="var(--green)"
-        />
-        <MetricCard
-          title={t('metrics.cards.firstResponse')}
-          value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
-          subtitle="Tempo médio de primeira resposta"
-          icon={<MetricIcon kind="firstResponse" />}
-          color="var(--purple)"
-        />
-      </div>
-
-      {noData ? (
-        <div className="chart-card">
-          <div className="zd-empty-state" style={{ minHeight: 220 }}>
-            <div className="zd-empty-icon" aria-hidden>
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <path d="M3 4h16v11H9l-4 3v-3H3V4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('metrics.noData')}</div>
-            <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste o período ou os filtros para visualizar dados.</div>
-          </div>
-        </div>
-      ) : (
+      {metricsTab === 'omnichannel' ? (
         <>
-          <VolumeChart data={data?.volume ?? []} title={t('metrics.charts.volume')} />
-
-          <div className="charts-row">
-            <AgentChart data={data?.byAgent ?? []} title={t('metrics.charts.byAgent')} />
-            <ChannelChart data={data?.byChannel ?? []} title={t('metrics.charts.byChannel')} />
+          <div className="metrics-grid">
+            <MetricCard
+              title={t('metrics.cards.total')}
+              value={String(data?.overview.total.total ?? 0)}
+              subtitle={`${data?.overview.total.open ?? 0} em aberto`}
+              icon={<MetricIcon kind="total" />}
+              color="var(--teal)"
+            />
+            <MetricCard
+              title={t('metrics.cards.tma')}
+              value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
+              subtitle="Tempo médio de atendimento"
+              icon={<MetricIcon kind="tma" />}
+              color="var(--blue)"
+            />
+            <MetricCard
+              title={t('metrics.cards.csat')}
+              value={csatAverage !== null && csatAverage !== undefined ? String(csatAverage) : '—'}
+              subtitle={`${data?.overview.csat.total_responses ?? 0} respostas`}
+              icon={<MetricIcon kind="csat" />}
+              color="var(--amber)"
+            />
+            <MetricCard
+              title={t('metrics.cards.resolved')}
+              value={formatPercent(resolvedRate)}
+              subtitle={`${data?.overview.total.resolved ?? 0} resolvidos`}
+              icon={<MetricIcon kind="resolved" />}
+              color="var(--green)"
+            />
+            <MetricCard
+              title={t('metrics.cards.firstResponse')}
+              value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
+              subtitle="Tempo médio de primeira resposta"
+              icon={<MetricIcon kind="firstResponse" />}
+              color="var(--purple)"
+            />
           </div>
 
-          <DepartmentChart data={data?.byDepartment ?? []} title={t('metrics.charts.byDepartment')} />
-          <PeakHoursHeatmap data={data?.peakHours ?? []} title={t('metrics.charts.peakHours')} />
-          <CsatChart data={csatDistribution} title={t('metrics.charts.csatDistribution')} />
-          <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />
+          {noData ? (
+            <div className="chart-card">
+              <div className="zd-empty-state" style={{ minHeight: 220 }}>
+                <div className="zd-empty-icon" aria-hidden>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                    <path d="M3 4h16v11H9l-4 3v-3H3V4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('metrics.noData')}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste o período ou os filtros para visualizar dados.</div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <VolumeChart data={data?.volume ?? []} title={t('metrics.charts.volume')} />
+
+              <div className="charts-row">
+                <AgentChart data={data?.byAgent ?? []} title={t('metrics.charts.byAgent')} />
+                <ChannelChart data={data?.byChannel ?? []} title={t('metrics.charts.byChannel')} />
+              </div>
+
+              <DepartmentChart data={data?.byDepartment ?? []} title={t('metrics.charts.byDepartment')} />
+              <PeakHoursHeatmap data={data?.peakHours ?? []} title={t('metrics.charts.peakHours')} />
+              <CsatChart data={csatDistribution} title={t('metrics.charts.csatDistribution')} />
+              <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />
+            </>
+          )}
+          {!isLoading ? (
+            <div className="metrics-breakdown-grid">
+              <BreakdownSection
+                eyebrow={t('metrics.byType')}
+                data={byTypeData}
+                emptyLabel={t('metrics.noDataPeriod')}
+                unitLabel={t('metrics.conversations')}
+              />
+              <BreakdownSection
+                eyebrow={t('metrics.byOutcome')}
+                data={byOutcomeData}
+                emptyLabel={t('metrics.noDataPeriod')}
+                unitLabel={t('metrics.conversations')}
+              />
+            </div>
+          ) : null}
         </>
+      ) : (
+        <TicketsMetricsTab
+          filters={{ date_from: dateFrom, date_to: dateTo }}
+          agentId={agentId}
+          t={t}
+        />
       )}
-      {!isLoading ? (
-        <div className="metrics-breakdown-grid">
-          <BreakdownSection
-            eyebrow={t('metrics.byType')}
-            data={byTypeData}
-            emptyLabel={t('metrics.noDataPeriod')}
-            unitLabel={t('metrics.conversations')}
-          />
-          <BreakdownSection
-            eyebrow={t('metrics.byOutcome')}
-            data={byOutcomeData}
-            emptyLabel={t('metrics.noDataPeriod')}
-            unitLabel={t('metrics.conversations')}
-          />
-        </div>
-      ) : null}
       </div>
     </PageShell>
   );

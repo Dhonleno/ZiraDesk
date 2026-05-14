@@ -38,7 +38,30 @@
     "noDataPeriod": "No data in selected period",
     "conversations": "conversations",
     "tmaUnit": "min",
-    "noData": "No data for the selected period"
+    "noData": "No data for the selected period",
+    "tabs": {
+      "omnichannel": "Omnichannel",
+      "tickets": "Tickets"
+    },
+    "tickets": {
+      "overview": "Overview",
+      "total": "Total",
+      "open": "Open",
+      "inProgress": "In progress",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "avgResolution": "Avg. resolution time",
+      "volumeByPeriod": "Volume by period",
+      "opened": "Opened",
+      "byAgent": "Agent performance",
+      "byCategory": "By category",
+      "byType": "By type",
+      "resolutionRate": "Resolution rate",
+      "openNow": "Open now",
+      "noData": "No data for the selected period",
+      "allCategories": "All categories",
+      "tickets": "tickets"
+    }
   },
   "new": "New conversation",
   "search": "Search conversation...",

@@ -2110,6 +2110,60 @@ export const onboardingApi = {
   },
 };
 
+// ── Tickets Metrics Types ─────────────────────────────────────────────────────
+
+export interface TicketsMetricsParams {
+  date_from: string;
+  date_to:   string;
+  agent_id?: string;
+  category?: string;
+}
+
+export interface TicketsMetricsOverview {
+  total:                number;
+  open:                 number;
+  inProgress:           number;
+  waiting:              number;
+  resolved:             number;
+  closed:               number;
+  avgResolutionMinutes: number;
+}
+
+export interface TicketsMetricsPeriodPoint {
+  date:     string;
+  opened:   number;
+  resolved: number;
+}
+
+export interface TicketsMetricsByAgentPoint {
+  agentId:              string;
+  agentName:            string;
+  total:                number;
+  resolved:             number;
+  avgResolutionMinutes: number;
+  openNow:              number;
+}
+
+export interface TicketsMetricsByCategoryPoint {
+  category:   string;
+  count:      number;
+  percentage: number;
+}
+
+export interface TicketsMetricsByTypePoint {
+  type:       string;
+  count:      number;
+  percentage: number;
+}
+
+export interface TicketsMetricsData {
+  overview:   TicketsMetricsOverview;
+  byPeriod:   TicketsMetricsPeriodPoint[];
+  byAgent:    TicketsMetricsByAgentPoint[];
+  byCategory: TicketsMetricsByCategoryPoint[];
+  byType:     TicketsMetricsByTypePoint[];
+}
+
 // ── Tickets Types ─────────────────────────────────────────────────────────────
 
 export const ticketsApi = {
@@ -2286,6 +2340,11 @@ export const ticketsApi = {
     const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(
       `/tickets/${ticketId}/time/${entryId}`,
     );
+    return res.data.data;
+  },
+
+  getMetrics: async (params: TicketsMetricsParams): Promise<TicketsMetricsData> => {
+    const res = await api.get<{ success: boolean; data: TicketsMetricsData }>('/tickets/metrics', { params });
     return res.data.data;
   },
 };

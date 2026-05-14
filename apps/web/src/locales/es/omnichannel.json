@@ -38,7 +38,30 @@
     "noDataPeriod": "Sin datos en el período",
     "conversations": "atenciones",
     "tmaUnit": "min",
-    "noData": "Sin datos para el período seleccionado"
+    "noData": "Sin datos para el período seleccionado",
+    "tabs": {
+      "omnichannel": "Omnichannel",
+      "tickets": "Tickets"
+    },
+    "tickets": {
+      "overview": "Resumen",
+      "total": "Total",
+      "open": "Abiertos",
+      "inProgress": "En progreso",
+      "waiting": "En espera",
+      "resolved": "Resueltos",
+      "avgResolution": "Tiempo promedio de resolución",
+      "volumeByPeriod": "Volumen por período",
+      "opened": "Abiertos",
+      "byAgent": "Rendimiento por agente",
+      "byCategory": "Por categoría",
+      "byType": "Por tipo",
+      "resolutionRate": "Tasa de resolución",
+      "openNow": "Abiertos ahora",
+      "noData": "Sin datos en el período seleccionado",
+      "allCategories": "Todas las categorías",
+      "tickets": "tickets"
+    }
   },
   "new": "Nueva atención",
   "search": "Buscar conversación...",
