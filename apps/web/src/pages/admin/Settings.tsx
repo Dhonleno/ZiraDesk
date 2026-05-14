@@ -5,13 +5,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { adminApi } from '../../services/api';
+import i18n from '@/i18n';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
 
 const settingsSchema = z.object({
-  name: z.string().min(1, 'Nome é obrigatório'),
+  name: z.string().min(1),
   language: z.enum(['pt-BR', 'en-US', 'es']),
   timezone: z.string().min(1),
   csat_enabled: z.boolean().default(true),
@@ -30,11 +31,13 @@ const settingsSchema = z.object({
 
 type SettingsForm = z.infer<typeof settingsSchema>;
 
-const LANGUAGES = [
-  { value: 'pt-BR', label: 'Português (Brasil)' },
-  { value: 'en-US', label: 'English (US)' },
-  { value: 'es', label: 'Español' },
-];
+function normalizeLanguage(value: string | undefined): SettingsForm['language'] {
+  if (!value) return 'pt-BR';
+  if (value === 'pt-BR' || value.toLowerCase().startsWith('pt')) return 'pt-BR';
+  if (value === 'en-US' || value.toLowerCase().startsWith('en')) return 'en-US';
+  if (value === 'es' || value.toLowerCase().startsWith('es')) return 'es';
+  return 'pt-BR';
+}
 
 const TIMEZONES = [
   'America/Sao_Paulo',
@@ -57,6 +60,15 @@ export function Settings() {
   const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const languages = [
+    { value: 'pt-BR', label: t('settings.languages.ptBR') },
+    { value: 'en-US', label: t('settings.languages.enUS') },
+    { value: 'es', label: t('settings.languages.es') },
+  ] as const;
+  const currentLang = normalizeLanguage(i18n.language);
+  const defaultInactivityWarning = t('settings.defaultInactivityWarning');
+  const defaultInactivityClose = t('settings.defaultInactivityClose');
+  const defaultBotAssignedMessage = t('settings.defaultBotAssignedMessage');
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'settings'],
@@ -73,25 +85,18 @@ export function Settings() {
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       name: '',
-      language: 'pt-BR',
+      language: currentLang,
       timezone: 'America/Sao_Paulo',
       csat_enabled: true,
       csat_message: '',
       inactivity_enabled: true,
       inactivity_warning_minutes: 30,
       inactivity_close_minutes: 60,
-      inactivity_warning_message:
-        'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
-      inactivity_close_message:
-        'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
+      inactivity_warning_message: defaultInactivityWarning,
+      inactivity_close_message: defaultInactivityClose,
       active_outbound_validity_mode: 'end_of_day',
       active_outbound_validity_hours: 24,
-      bot_assigned_message: [
-        'Seu atendimento foi aceito.',
-        '',
-        'Você está sendo atendido por *{{agent}}*.',
-        'Em breve entraremos em contato.',
-      ].join('\n'),
+      bot_assigned_message: defaultBotAssignedMessage,
     },
   });
 
@@ -99,7 +104,7 @@ export function Settings() {
     if (data) {
       reset({
         name: data.name,
-        language: (data.language as SettingsForm['language']) ?? 'pt-BR',
+        language: currentLang,
         timezone: data.timezone ?? 'America/Sao_Paulo',
         csat_enabled: data.csat_enabled ?? true,
         csat_message: data.csat_message ?? '',
@@ -109,23 +114,25 @@ export function Settings() {
         inactivity_close_minutes: data.inactivity_close_minutes ?? 60,
         inactivity_warning_message:
           data.inactivity_warning_message
-          ?? 'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.',
+          ?? defaultInactivityWarning,
         inactivity_close_message:
           data.inactivity_close_message
-          ?? 'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente.',
+          ?? defaultInactivityClose,
         active_outbound_validity_mode:
           (data.active_outbound_validity_mode as SettingsForm['active_outbound_validity_mode']) ?? 'end_of_day',
         active_outbound_validity_hours: data.active_outbound_validity_hours ?? 24,
-        bot_assigned_message: data.bot_assigned_message ?? [
-          'Seu atendimento foi aceito.',
-          '',
-          'Você está sendo atendido por *{{agent}}*.',
-          'Em breve entraremos em contato.',
-        ].join('\n'),
+        bot_assigned_message: data.bot_assigned_message ?? defaultBotAssignedMessage,
         max_conversations_per_agent: data.max_conversations_per_agent ?? null,
       });
     }
-  }, [data, reset]);
+  }, [
+    currentLang,
+    data,
+    defaultBotAssignedMessage,
+    defaultInactivityClose,
+    defaultInactivityWarning,
+    reset,
+  ]);
 
   const mutation = useMutation({
     mutationFn: (values: SettingsForm) =>
@@ -140,7 +147,10 @@ export function Settings() {
         bot_assigned_message: values.bot_assigned_message ?? '',
         max_conversations_per_agent: values.max_conversations_per_agent ?? null,
       }),
-    onSuccess: () => {
+    onSuccess: async (_, values) => {
+      const nextLanguage = normalizeLanguage(values.language);
+      await i18n.changeLanguage(nextLanguage);
+      localStorage.setItem('i18nextLng', nextLanguage);
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
       toast.success(t('tenantAdmin.settings.messages.saved'));
     },
@@ -153,16 +163,16 @@ export function Settings() {
     mutationFn: (file: File) => adminApi.uploadSettingsLogo(file),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
-      toast.success('Logo atualizada com sucesso');
+      toast.success(t('settings.logoUpdated'));
     },
-    onError: () => toast.error('Erro ao enviar logo'),
+    onError: () => toast.error(t('settings.logoUploadError')),
   });
 
   const removeLogoMutation = useMutation({
     mutationFn: () => adminApi.updateSettings({ logo_url: null }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
-      toast.success('Logo removida');
+      toast.success(t('settings.logoRemoved'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
@@ -171,11 +181,11 @@ export function Settings() {
     if (!file) return;
     const accepted = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
     if (!accepted.includes(file.type)) {
-      toast.error('Formato inválido. Use PNG, JPG, WEBP ou SVG.');
+      toast.error(t('settings.invalidImageFormat'));
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 2MB.');
+      toast.error(t('settings.imageMaxSize'));
       return;
     }
     uploadLogoMutation.mutate(file);
@@ -200,9 +210,9 @@ export function Settings() {
   const copySupportAddress = async () => {
     try {
       await navigator.clipboard.writeText(portalAddress);
-      toast.success('Endereço copiado');
+      toast.success(t('settings.addressCopied'));
     } catch {
-      toast.error('Não foi possível copiar o endereço');
+      toast.error(t('settings.addressCopyError'));
     }
   };
 
@@ -249,7 +259,7 @@ export function Settings() {
               }}
             >
                     <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)', marginBottom: 10 }}>
-                      Identidade visual
+                      {t('settings.visualIdentity')}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div
@@ -269,7 +279,7 @@ export function Settings() {
                         {data?.logo_url ? (
                           <img
                             src={data.logo_url}
-                            alt="Logo"
+                            alt={t('settings.logoAlt')}
                             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                           />
                         ) : (
@@ -291,7 +301,7 @@ export function Settings() {
                       cursor: uploadLogoMutation.isPending ? 'wait' : 'pointer',
                     }}
                         >
-                          {uploadLogoMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
+                          {uploadLogoMutation.isPending ? t('settings.uploadingImage') : t('settings.chooseImage')}
                         </label>
                         <input
                     id="logo-input"
@@ -316,12 +326,12 @@ export function Settings() {
                         padding: 0,
                       }}
                           >
-                            {removeLogoMutation.isPending ? 'Removendo...' : 'Remover logo'}
+                            {removeLogoMutation.isPending ? t('settings.removingImage') : t('settings.removeImage')}
                           </button>
                         )}
 
                         <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
-                          PNG, JPG, WEBP ou SVG. Máximo 2MB.
+                          {t('settings.imageHint')}
                         </span>
                       </div>
                     </div>
@@ -342,7 +352,7 @@ export function Settings() {
                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-0"
                 {...register('language')}
               >
-                {LANGUAGES.map((l) => (
+                {languages.map((l) => (
                   <option key={l.value} value={l.value}>
                     {l.label}
                   </option>

@@ -233,6 +233,16 @@
       "editUser": "Edit user",
       "resetPassword": "Reset password",
       "search": "Search user...",
+      "confirmDeactivate": "Deactivate user",
+      "confirmDeactivateMsg": "Are you sure you want to deactivate {{name}}? They will immediately lose access to the system.",
+      "confirmReactivate": "Reactivate user",
+      "confirmReactivateMsg": "Reactivate {{name}}? They will regain access to the system.",
+      "deactivateSuccess": "User deactivated successfully",
+      "reactivateSuccess": "User reactivated successfully",
+      "deactivateError": "Error changing user status",
+      "youBadge": "You",
+      "emptyTitle": "No users found",
+      "emptySubtitle": "Invite members to get started",
       "roles": {
         "owner": "Owner",
         "admin": "Administrator",
@@ -427,6 +437,82 @@
       }
     }
   },
+  "roles": {
+    "title": "Permissions and Access",
+    "subtitle": "Manage user access levels",
+    "usersTab": "Users",
+    "matrixTab": "Permission matrix",
+    "role": "Role",
+    "changeRole": "Change role",
+    "changeRoleSuccess": "Role updated successfully",
+    "changeRoleError": "Error updating role",
+    "cannotChangeSelf": "You cannot change your own role",
+    "cannotChangeOwner": "Only owners can assign the owner role",
+    "permissions": {
+      "tenant:manage": "System — Manage tenants",
+      "settings:manage": "Settings — Manage",
+      "users:manage": "Users — Manage",
+      "channels:manage": "Channels — Manage",
+      "clients:view": "Clients — View",
+      "clients:edit": "Clients — Edit",
+      "clients:delete": "Clients — Delete",
+      "conversations:view": "Conversations — View",
+      "conversations:reply": "Conversations — Reply",
+      "conversations:manage": "Conversations — Manage",
+      "tickets:view": "Tickets — View",
+      "tickets:edit": "Tickets — Edit",
+      "tickets:delete": "Tickets — Delete",
+      "metrics:view": "Metrics — View all",
+      "metrics:own": "Metrics — View own"
+    },
+    "roles": {
+      "owner": "Owner",
+      "admin": "Administrator",
+      "agent": "Agent",
+      "viewer": "Viewer"
+    }
+  },
+  "nav": {
+    "admin": "Administration",
+    "users": "Users",
+    "permissions": "Permissions and Access",
+    "channels": "Channels",
+    "businessHours": "Business Hours",
+    "supportBot": "Support Bot",
+    "autoDistribution": "Auto Distribution",
+    "skills": "Skills",
+    "pauseReasons": "Pause Reasons",
+    "quickReplies": "Quick Replies",
+    "ticketTypes": "Ticket Types",
+    "tags": "Tags",
+    "conversationClosing": "Conversation Closing",
+    "aiAgent": "AI Agent",
+    "settings": "Settings"
+  },
+  "settings": {
+    "visualIdentity": "Visual Identity",
+    "chooseImage": "Choose image",
+    "imageHint": "PNG, JPG, WEBP or SVG. Max 2MB.",
+    "languages": {
+      "ptBR": "Português (BR)",
+      "enUS": "English",
+      "es": "Español"
+    },
+    "defaultInactivityWarning": "Hello! Your conversation has been inactive for {{time}} minutes. If there is no reply in {{remaining}} minutes, we will close it automatically.",
+    "defaultInactivityClose": "We closed this conversation due to inactivity. If needed, reply to this message to resume.",
+    "defaultBotAssignedMessage": "Great! I will transfer you to a specialist now.",
+    "uploadingImage": "Uploading...",
+    "removeImage": "Remove logo",
+    "removingImage": "Removing...",
+    "logoAlt": "Logo",
+    "logoUpdated": "Logo updated successfully",
+    "logoRemoved": "Logo removed",
+    "logoUploadError": "Error uploading logo",
+    "invalidImageFormat": "Invalid format. Use PNG, JPG, WEBP or SVG.",
+    "imageMaxSize": "Image size must be up to 2MB.",
+    "addressCopied": "Address copied",
+    "addressCopyError": "Unable to copy address"
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {
@@ -492,6 +578,3 @@
     }
   }
 }
-
-
-

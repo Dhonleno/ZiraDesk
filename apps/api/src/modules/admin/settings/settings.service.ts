@@ -91,7 +91,7 @@ export async function getSettings(tenantId: string) {
       name: true,
       settings: true,
       createdAt: true,
-      plan: { select: { id: true, name: true, slug: true, priceMonth: true } },
+      plan: { select: { id: true, name: true, slug: true, priceMonth: true, features: true } },
     },
   });
   if (!tenant) throw new Error('Tenant não encontrado');

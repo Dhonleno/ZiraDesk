@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../hooks/useAuth';
+import { usePermission } from '../hooks/usePermission';
 
 type AdminNavItemProps = { to: string; end?: true; children: React.ReactNode; label: string };
 
@@ -31,8 +31,8 @@ function AdminNavItem({ to, end, children, label }: AdminNavItemProps) {
 
 export function AdminLayout() {
   const { t } = useTranslation('admin');
-  const { user } = useAuth();
-  const canManageUsers = user?.role === 'owner' || user?.role === 'admin';
+  const { canAny } = usePermission();
+  const canManageUsers = canAny('users:manage');
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -49,20 +49,11 @@ export function AdminLayout() {
         overflowY: 'auto',
       }}>
         <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', padding: '0 12px 8px' }}>
-          Administração
+          {t('nav.admin')}
         </p>
 
-        <AdminNavItem to="/admin/dashboard" label={t('tenantAdmin.nav.dashboard')}>
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
-            <rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-            <rect x="8.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-            <rect x="1.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-            <rect x="8.5" y="8.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-        </AdminNavItem>
-
         {canManageUsers && (
-          <AdminNavItem to="/admin/users" label={t('tenantAdmin.nav.users')}>
+          <AdminNavItem to="/admin/users" label={t('nav.users')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <circle cx="7.5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
               <path d="M2 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -70,21 +61,30 @@ export function AdminLayout() {
           </AdminNavItem>
         )}
 
-        <AdminNavItem to="/admin/channels" label={t('tenantAdmin.nav.channels')}>
+        {canManageUsers && (
+          <AdminNavItem to="/admin/roles" label={t('nav.permissions')}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M9 1.8L3.4 4v4.7c0 3.5 2.4 6.7 5.6 7.6 3.2-.9 5.6-4.1 5.6-7.6V4L9 1.8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+              <path d="M6.8 8.9 8.3 10.4 11.2 7.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </AdminNavItem>
+        )}
+
+        <AdminNavItem to="/admin/channels" label={t('nav.channels')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M2.5 11V5L7.5 2l5 3v6h-10z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
             <path d="M5.5 11V8.5h4V11" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
           </svg>
         </AdminNavItem>
 
-        <AdminNavItem to="/admin/business-hours" label={t('tenantAdmin.nav.businessHours')}>
+        <AdminNavItem to="/admin/business-hours" label={t('nav.businessHours')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.3" />
             <path d="M7.5 4.2v3.4l2.4 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </AdminNavItem>
 
-        <AdminNavItem to="/admin/bot" label={t('tenantAdmin.nav.bot')}>
+        <AdminNavItem to="/admin/bot" label={t('nav.supportBot')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <rect x="2.5" y="4" width="10" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.3" />
             <path d="M5 7h.01M10 7h.01M5.5 9.5h4M7.5 2v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -92,7 +92,7 @@ export function AdminLayout() {
         </AdminNavItem>
 
         {canManageUsers && (
-          <AdminNavItem to="/admin/auto-assign" label={t('tenantAdmin.nav.autoAssign')}>
+          <AdminNavItem to="/admin/auto-assign" label={t('nav.autoDistribution')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <path d="M3 11.5h9M4 9l2-2 1.5 1.5L10.5 5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="4" cy="5" r="1.2" stroke="currentColor" strokeWidth="1.2" />
@@ -102,7 +102,7 @@ export function AdminLayout() {
         )}
 
         {canManageUsers && (
-          <AdminNavItem to="/admin/skills" label={t('tenantAdmin.nav.skills')}>
+          <AdminNavItem to="/admin/skills" label={t('nav.skills')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <path d="M2 11.5h11M3.5 9l2-2 1.8 1.2 3-3 1.2 1.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="3.5" cy="4.2" r="1.2" stroke="currentColor" strokeWidth="1.2" />
@@ -112,7 +112,7 @@ export function AdminLayout() {
         )}
 
         {canManageUsers && (
-          <AdminNavItem to="/admin/pause-reasons" label={t('tenantAdmin.nav.pauseReasons')}>
+          <AdminNavItem to="/admin/pause-reasons" label={t('nav.pauseReasons')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <rect x="4.2" y="3.2" width="2.1" height="8.6" rx="1" stroke="currentColor" strokeWidth="1.3" />
               <rect x="8.7" y="3.2" width="2.1" height="8.6" rx="1" stroke="currentColor" strokeWidth="1.3" />
@@ -121,20 +121,20 @@ export function AdminLayout() {
           </AdminNavItem>
         )}
 
-        <AdminNavItem to="/admin/quick-replies" label={t('tenantAdmin.nav.quickReplies')}>
+        <AdminNavItem to="/admin/quick-replies" label={t('nav.quickReplies')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M8.8 1.5L3 8.2h4.2L5.8 13.5l6.2-7H7.6L8.8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </AdminNavItem>
 
-        <AdminNavItem to="/admin/ticket-types" label={t('tenantAdmin.nav.ticketTypes')}>
+        <AdminNavItem to="/admin/ticket-types" label={t('nav.ticketTypes')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M3.2 4.2h8.6a1.2 1.2 0 0 1 1.2 1.2v1.1a1 1 0 0 0-.8.9.98.98 0 0 0 .8.9v1.2a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 9.6V8.4a1 1 0 0 0 .8-.9 1 1 0 0 0-.8-.9V5.4a1.2 1.2 0 0 1 1.2-1.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
             <path d="M6 6.4h3M6 8.6h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         </AdminNavItem>
 
-        <AdminNavItem to="/admin/conversation-tags" label={t('tenantAdmin.nav.conversationTags')}>
+        <AdminNavItem to="/admin/conversation-tags" label={t('nav.tags')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M1.8 2h5l6.2 6.2-4.8 4.8L2 6.8V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
             <circle cx="4.8" cy="4.8" r="1" fill="currentColor" />
@@ -142,7 +142,7 @@ export function AdminLayout() {
         </AdminNavItem>
 
         {canManageUsers && (
-          <AdminNavItem to="/admin/close-config" label={t('tenantAdmin.nav.closeConfig')}>
+          <AdminNavItem to="/admin/close-config" label={t('nav.conversationClosing')}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
               <path d="M3 4h9M3 7.5h9M3 11h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
               <circle cx="5.1" cy="4" r="1.2" stroke="currentColor" strokeWidth="1.2" />
@@ -152,7 +152,7 @@ export function AdminLayout() {
           </AdminNavItem>
         )}
 
-        <AdminNavItem to="/admin/ai-agent" label={t('tenantAdmin.nav.aiAgent')}>
+        <AdminNavItem to="/admin/ai-agent" label={t('nav.aiAgent')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <path d="M7.5 2.5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z" stroke="currentColor" strokeWidth="1.3" />
             <path d="M5.5 7.5c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2Z" stroke="currentColor" strokeWidth="1.2" />
@@ -161,7 +161,7 @@ export function AdminLayout() {
           </svg>
         </AdminNavItem>
 
-        <AdminNavItem to="/admin/settings" label={t('tenantAdmin.nav.settings')}>
+        <AdminNavItem to="/admin/settings" label={t('nav.settings')}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
             <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
             <path

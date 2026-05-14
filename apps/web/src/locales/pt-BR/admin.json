@@ -250,6 +250,16 @@
       "editUser": "Editar usuário",
       "resetPassword": "Redefinir senha",
       "search": "Buscar usuário...",
+      "confirmDeactivate": "Desativar usuário",
+      "confirmDeactivateMsg": "Tem certeza que deseja desativar {{name}}? Ele perderá acesso imediato ao sistema.",
+      "confirmReactivate": "Reativar usuário",
+      "confirmReactivateMsg": "Reativar {{name}}? Ele voltará a ter acesso ao sistema.",
+      "deactivateSuccess": "Usuário desativado com sucesso",
+      "reactivateSuccess": "Usuário reativado com sucesso",
+      "deactivateError": "Erro ao alterar status do usuário",
+      "youBadge": "Você",
+      "emptyTitle": "Nenhum usuário encontrado",
+      "emptySubtitle": "Convide membros para começar",
       "roles": {
         "owner": "Proprietário",
         "admin": "Administrador",
@@ -438,6 +448,82 @@
       "getApiKey": "Obter chave em platform.openai.com →"
     }
   },
+  "roles": {
+    "title": "Permissões e Acessos",
+    "subtitle": "Gerencie os níveis de acesso dos usuários",
+    "usersTab": "Usuários",
+    "matrixTab": "Matriz de permissões",
+    "role": "Perfil",
+    "changeRole": "Alterar perfil",
+    "changeRoleSuccess": "Perfil atualizado com sucesso",
+    "changeRoleError": "Erro ao atualizar perfil",
+    "cannotChangeSelf": "Você não pode alterar seu próprio perfil",
+    "cannotChangeOwner": "Apenas owners podem atribuir o perfil owner",
+    "permissions": {
+      "tenant:manage": "Sistema — Gerenciar tenants",
+      "settings:manage": "Configurações — Gerenciar",
+      "users:manage": "Usuários — Gerenciar",
+      "channels:manage": "Canais — Gerenciar",
+      "clients:view": "Clientes — Visualizar",
+      "clients:edit": "Clientes — Editar",
+      "clients:delete": "Clientes — Excluir",
+      "conversations:view": "Atendimentos — Visualizar",
+      "conversations:reply": "Atendimentos — Responder",
+      "conversations:manage": "Atendimentos — Gerenciar",
+      "tickets:view": "Tickets — Visualizar",
+      "tickets:edit": "Tickets — Editar",
+      "tickets:delete": "Tickets — Excluir",
+      "metrics:view": "Métricas — Visualizar todas",
+      "metrics:own": "Métricas — Visualizar próprias"
+    },
+    "roles": {
+      "owner": "Proprietário",
+      "admin": "Administrador",
+      "agent": "Agente",
+      "viewer": "Visualizador"
+    }
+  },
+  "nav": {
+    "admin": "Administração",
+    "users": "Usuários",
+    "permissions": "Permissões e Acessos",
+    "channels": "Canais",
+    "businessHours": "Horário de atendimento",
+    "supportBot": "Bot de Atendimento",
+    "autoDistribution": "Distribuição Automática",
+    "skills": "Habilidades",
+    "pauseReasons": "Motivos de Pausa",
+    "quickReplies": "Respostas Rápidas",
+    "ticketTypes": "Tipos de Ticket",
+    "tags": "Etiquetas",
+    "conversationClosing": "Encerramento de Atendimento",
+    "aiAgent": "Agente de IA",
+    "settings": "Configurações"
+  },
+  "settings": {
+    "visualIdentity": "Identidade Visual",
+    "chooseImage": "Escolher imagem",
+    "imageHint": "PNG, JPG, WEBP ou SVG. Máximo 2MB.",
+    "languages": {
+      "ptBR": "Português (BR)",
+      "enUS": "English",
+      "es": "Español"
+    },
+    "defaultInactivityWarning": "Olá! Seu atendimento está inativo há {{time}} minutos. Se não houver resposta em {{remaining}} minutos, iremos encerrar automaticamente.",
+    "defaultInactivityClose": "Encerramos este atendimento por inatividade. Se precisar, responda esta mensagem para retomar.",
+    "defaultBotAssignedMessage": "Perfeito! Vou transferir você para um especialista agora.",
+    "uploadingImage": "Enviando...",
+    "removeImage": "Remover logo",
+    "removingImage": "Removendo...",
+    "logoAlt": "Logo",
+    "logoUpdated": "Logo atualizada com sucesso",
+    "logoRemoved": "Logo removida",
+    "logoUploadError": "Erro ao enviar logo",
+    "invalidImageFormat": "Formato inválido. Use PNG, JPG, WEBP ou SVG.",
+    "imageMaxSize": "A imagem deve ter no máximo 2MB.",
+    "addressCopied": "Endereço copiado",
+    "addressCopyError": "Não foi possível copiar o endereço"
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {
@@ -503,6 +589,3 @@
     }
   }
 }
-
-
-

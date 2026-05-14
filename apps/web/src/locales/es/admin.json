@@ -233,6 +233,16 @@
       "editUser": "Editar usuario",
       "resetPassword": "Restablecer contraseña",
       "search": "Buscar usuario...",
+      "confirmDeactivate": "Desactivar usuario",
+      "confirmDeactivateMsg": "¿Seguro que quieres desactivar a {{name}}? Perderá el acceso inmediato al sistema.",
+      "confirmReactivate": "Reactivar usuario",
+      "confirmReactivateMsg": "¿Reactivar a {{name}}? Volverá a tener acceso al sistema.",
+      "deactivateSuccess": "Usuario desactivado con éxito",
+      "reactivateSuccess": "Usuario reactivado con éxito",
+      "deactivateError": "Error al cambiar el estado del usuario",
+      "youBadge": "Tú",
+      "emptyTitle": "No se encontraron usuarios",
+      "emptySubtitle": "Invita miembros para comenzar",
       "roles": {
         "owner": "Propietario",
         "admin": "Administrador",
@@ -427,6 +437,82 @@
       }
     }
   },
+  "roles": {
+    "title": "Permisos y Accesos",
+    "subtitle": "Gestiona los niveles de acceso de los usuarios",
+    "usersTab": "Usuarios",
+    "matrixTab": "Matriz de permisos",
+    "role": "Perfil",
+    "changeRole": "Cambiar perfil",
+    "changeRoleSuccess": "Perfil actualizado con éxito",
+    "changeRoleError": "Error al actualizar el perfil",
+    "cannotChangeSelf": "No puedes cambiar tu propio perfil",
+    "cannotChangeOwner": "Solo los owners pueden asignar el perfil owner",
+    "permissions": {
+      "tenant:manage": "Sistema — Gestionar tenants",
+      "settings:manage": "Configuraciones — Gestionar",
+      "users:manage": "Usuarios — Gestionar",
+      "channels:manage": "Canales — Gestionar",
+      "clients:view": "Clientes — Visualizar",
+      "clients:edit": "Clientes — Editar",
+      "clients:delete": "Clientes — Eliminar",
+      "conversations:view": "Atenciones — Visualizar",
+      "conversations:reply": "Atenciones — Responder",
+      "conversations:manage": "Atenciones — Gestionar",
+      "tickets:view": "Tickets — Visualizar",
+      "tickets:edit": "Tickets — Editar",
+      "tickets:delete": "Tickets — Eliminar",
+      "metrics:view": "Métricas — Visualizar todas",
+      "metrics:own": "Métricas — Visualizar propias"
+    },
+    "roles": {
+      "owner": "Propietario",
+      "admin": "Administrador",
+      "agent": "Agente",
+      "viewer": "Visualizador"
+    }
+  },
+  "nav": {
+    "admin": "Administración",
+    "users": "Usuarios",
+    "permissions": "Permisos y Acceso",
+    "channels": "Canales",
+    "businessHours": "Horario de atención",
+    "supportBot": "Bot de atención",
+    "autoDistribution": "Distribución automática",
+    "skills": "Habilidades",
+    "pauseReasons": "Motivos de pausa",
+    "quickReplies": "Respuestas rápidas",
+    "ticketTypes": "Tipos de ticket",
+    "tags": "Etiquetas",
+    "conversationClosing": "Cierre de atención",
+    "aiAgent": "Agente de IA",
+    "settings": "Configuración"
+  },
+  "settings": {
+    "visualIdentity": "Identidad visual",
+    "chooseImage": "Elegir imagen",
+    "imageHint": "PNG, JPG, WEBP o SVG. Máx. 2MB.",
+    "languages": {
+      "ptBR": "Português (BR)",
+      "enUS": "English",
+      "es": "Español"
+    },
+    "defaultInactivityWarning": "¡Hola! Tu atención está inactiva desde hace {{time}} minutos. Si no hay respuesta en {{remaining}} minutos, la cerraremos automáticamente.",
+    "defaultInactivityClose": "Cerramos esta atención por inactividad. Si lo necesitas, responde este mensaje para retomarla.",
+    "defaultBotAssignedMessage": "¡Perfecto! Te voy a transferir con un especialista ahora.",
+    "uploadingImage": "Subiendo...",
+    "removeImage": "Eliminar logo",
+    "removingImage": "Eliminando...",
+    "logoAlt": "Logo",
+    "logoUpdated": "Logo actualizada con éxito",
+    "logoRemoved": "Logo eliminada",
+    "logoUploadError": "Error al subir el logo",
+    "invalidImageFormat": "Formato inválido. Usa PNG, JPG, WEBP o SVG.",
+    "imageMaxSize": "La imagen debe tener como máximo 2MB.",
+    "addressCopied": "Dirección copiada",
+    "addressCopyError": "No fue posible copiar la dirección"
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {
@@ -492,6 +578,3 @@
     }
   }
 }
-
-
-

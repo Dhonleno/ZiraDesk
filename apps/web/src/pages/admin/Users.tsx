@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
+import { useAuthStore } from '../../stores/auth.store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { PermissionGate } from '../../components/ui/PermissionGate';
 import { InviteUserModal } from '../../components/admin/InviteUserModal';
 import { EditUserModal } from '../../components/admin/EditUserModal';
 import { ResetPasswordModal } from '../../components/admin/ResetPasswordModal';
@@ -77,6 +79,8 @@ const STATUS_TABS = ['all', 'active', 'inactive'] as const;
 
 type RoleFilter = (typeof ROLE_TABS)[number];
 type StatusFilter = (typeof STATUS_TABS)[number];
+type UserStatus = 'active' | 'inactive';
+type ConfirmStatusAction = { user: TenantUser; nextStatus: UserStatus } | null;
 
 function FilterTabs<T extends string>({
   tabs,
@@ -109,10 +113,130 @@ function FilterTabs<T extends string>({
   );
 }
 
+function ConfirmModal({
+  open,
+  title,
+  message,
+  confirmLabel,
+  confirmColor,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmColor: 'var(--red)' | 'var(--teal)';
+  loading?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation('admin');
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setEntered(false);
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--overlay, var(--backdrop))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1200,
+        opacity: entered ? 1 : 0,
+        transition: 'opacity 200ms ease-out',
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: 'min(400px, calc(100vw - 32px))',
+          borderRadius: 12,
+          border: '1px solid var(--line)',
+          background: 'var(--surface, var(--bg-2))',
+          boxShadow: 'var(--shadow-pop)',
+          transform: entered ? 'scale(1)' : 'scale(0.96)',
+          opacity: entered ? 1 : 0,
+          transition: 'transform 200ms ease-out, opacity 200ms ease-out',
+        }}
+      >
+        <div style={{ padding: '16px 18px 10px' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>{title}</h3>
+          <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--txt-2)' }}>{message}</p>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 8,
+            padding: '14px 18px 16px',
+            borderTop: '1px solid var(--line)',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              border: '1px solid var(--line-2)',
+              background: 'var(--btn-ghost, var(--bg-3))',
+              color: 'var(--txt-2)',
+              borderRadius: 'var(--r)',
+              fontSize: 12,
+              fontWeight: 500,
+              padding: '7px 12px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {t('tenantAdmin.common.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              border: `1px solid ${confirmColor === 'var(--red)' ? 'var(--danger, var(--red))' : 'var(--teal)'}`,
+              background: confirmColor === 'var(--red)' ? 'var(--danger, var(--red))' : 'var(--teal)',
+              color: 'var(--on-teal)',
+              borderRadius: 'var(--r)',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '7px 12px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.75 : 1,
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Users() {
   const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const loggedUserId = useAuthStore((state) => state.user?.id);
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -121,6 +245,7 @@ export function Users() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editUser, setEditUser] = useState<TenantUser | null>(null);
   const [resetUser, setResetUser] = useState<TenantUser | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmStatusAction>(null);
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -142,25 +267,19 @@ export function Users() {
     if ('search' in changes) setSearch(changes.search!);
   }
 
-  const deactivateMutation = useMutation({
-    mutationFn: (id: string) => adminApi.deleteUser(id),
-    onSuccess: () => {
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: UserStatus }) => adminApi.updateUser(id, { status }),
+    onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success(t('tenantAdmin.users.messages.deactivated'));
+      toast.success(
+        variables.status === 'inactive'
+          ? t('tenantAdmin.users.deactivateSuccess')
+          : t('tenantAdmin.users.reactivateSuccess'),
+      );
+      setConfirmAction(null);
     },
     onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
-    },
-  });
-
-  const reactivateMutation = useMutation({
-    mutationFn: (id: string) => adminApi.updateUser(id, { status: 'active' }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success(t('tenantAdmin.users.messages.reactivated'));
-    },
-    onError: () => {
-      toast.error(t('tenantAdmin.common.errorSave'));
+      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.users.deactivateError'));
     },
   });
 
@@ -186,6 +305,16 @@ export function Users() {
 
   const meta = data?.meta;
   const users: TenantUser[] = data?.data ?? [];
+  const confirmTitle = confirmAction?.nextStatus === 'inactive'
+    ? t('tenantAdmin.users.confirmDeactivate')
+    : t('tenantAdmin.users.confirmReactivate');
+  const confirmMessage = confirmAction
+    ? (
+      confirmAction.nextStatus === 'inactive'
+        ? t('tenantAdmin.users.confirmDeactivateMsg', { name: confirmAction.user.name })
+        : t('tenantAdmin.users.confirmReactivateMsg', { name: confirmAction.user.name })
+    )
+    : '';
 
   const TABLE_HEADERS = [
     t('tenantAdmin.users.fields.name'),
@@ -205,9 +334,7 @@ export function Users() {
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)' }}>
             {t('tenantAdmin.users.title')}
           </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-            {meta ? `${meta.total} ${meta.total === 1 ? 'membro' : 'membros'} no total` : t('tenantAdmin.users.subtitle')}
-          </p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>{t('tenantAdmin.users.subtitle')}</p>
         </div>
         <Button onClick={() => setInviteOpen(true)}>
           <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
@@ -290,7 +417,25 @@ export function Users() {
                           {initials(user.name)}
                         </div>
                         <div>
-                          <p className="font-medium" style={{ color: 'var(--txt)' }}>{user.name}</p>
+                          <p className="font-medium" style={{ color: 'var(--txt)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {user.name}
+                            {user.id === loggedUserId && (
+                              <span
+                                style={{
+                                  background: 'var(--teal-dim)',
+                                  color: 'var(--teal)',
+                                  borderRadius: 'var(--r-pill)',
+                                  border: '1px solid var(--teal)',
+                                  fontSize: 11,
+                                  fontWeight: 500,
+                                  padding: '1px 7px',
+                                  lineHeight: 1.2,
+                                }}
+                              >
+                                {t('tenantAdmin.users.youBadge')}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{user.email}</p>
                         </div>
                       </div>
@@ -308,35 +453,39 @@ export function Users() {
                       {formatDate(user.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      {user.role !== 'owner' && (
-                        <div className="flex items-center justify-end gap-1">
-                          {user.status === 'active' ? (
-                            <>
-                              <ActionButton onClick={() => setEditUser(user)}>
-                                {t('tenantAdmin.common.edit')}
-                              </ActionButton>
-                              <ActionButton onClick={() => setResetUser(user)} color="var(--txt-2)">
-                                {t('tenantAdmin.users.resetPassword')}
-                              </ActionButton>
+                      <PermissionGate permission="users:manage">
+                        {user.role !== 'owner' && (
+                          <div className="flex items-center justify-end gap-1">
+                            {user.status === 'active' ? (
+                              <>
+                                <ActionButton onClick={() => setEditUser(user)}>
+                                  {t('tenantAdmin.common.edit')}
+                                </ActionButton>
+                                <ActionButton onClick={() => setResetUser(user)} color="var(--txt-2)">
+                                  {t('tenantAdmin.users.resetPassword')}
+                                </ActionButton>
+                                <ActionButton
+                                  disabled={user.id === loggedUserId}
+                                  onClick={() => setConfirmAction({ user, nextStatus: 'inactive' })}
+                                  color="var(--red)"
+                                  hoverBg="var(--red-dim)"
+                                >
+                                  {t('tenantAdmin.common.deactivate')}
+                                </ActionButton>
+                              </>
+                            ) : (
                               <ActionButton
-                                onClick={() => deactivateMutation.mutate(user.id)}
-                                color="var(--red)"
-                                hoverBg="var(--red-dim)"
+                                disabled={user.id === loggedUserId}
+                                onClick={() => setConfirmAction({ user, nextStatus: 'active' })}
+                                color="var(--teal)"
+                                hoverBg="var(--teal-dim)"
                               >
-                                {t('tenantAdmin.common.deactivate')}
+                                {t('tenantAdmin.common.reactivate')}
                               </ActionButton>
-                            </>
-                          ) : (
-                            <ActionButton
-                              onClick={() => reactivateMutation.mutate(user.id)}
-                              color="var(--green)"
-                              hoverBg="var(--green-dim)"
-                            >
-                              {t('tenantAdmin.common.reactivate')}
-                            </ActionButton>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
+                      </PermissionGate>
                     </td>
                   </tr>
                 ))}
@@ -346,14 +495,22 @@ export function Users() {
         {!isLoading && users.length === 0 && (
           <div style={{ padding: 16, minHeight: 260 }}>
             <div className="zd-empty-state">
-              <div className="zd-empty-icon" aria-hidden>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <circle cx="11" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.3" />
-                  <path d="M4.8 18c0-3 2.5-4.8 6.2-4.8S17.2 15 17.2 18" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <div className="zd-empty-icon" aria-hidden style={{ width: 56, height: 56, color: 'var(--txt-3)', background: 'var(--bg-3)', border: '1px solid var(--line-2)' }}>
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                  <circle cx="24" cy="18" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M12.5 35c0-5 4.2-8.2 11.5-8.2S35.5 30 35.5 35" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.users.noUsers')}</div>
-              <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste os filtros ou convide um novo usuário.</div>
+              <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.users.emptyTitle')}</div>
+              <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('tenantAdmin.users.emptySubtitle')}</div>
+              <PermissionGate permission="users:manage">
+                <Button onClick={() => setInviteOpen(true)}>
+                  <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  {t('tenantAdmin.users.invite')}
+                </Button>
+              </PermissionGate>
             </div>
           </div>
         )}
@@ -404,6 +561,19 @@ export function Users() {
       <InviteUserModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
       <EditUserModal open={!!editUser} onClose={() => setEditUser(null)} user={editUser} />
       <ResetPasswordModal open={!!resetUser} onClose={() => setResetUser(null)} user={resetUser} />
+      <ConfirmModal
+        open={!!confirmAction}
+        title={confirmTitle}
+        message={confirmMessage}
+        confirmLabel={confirmAction?.nextStatus === 'inactive' ? t('tenantAdmin.common.deactivate') : t('tenantAdmin.common.reactivate')}
+        confirmColor={confirmAction?.nextStatus === 'inactive' ? 'var(--red)' : 'var(--teal)'}
+        loading={statusMutation.isPending}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          if (!confirmAction) return;
+          statusMutation.mutate({ id: confirmAction.user.id, status: confirmAction.nextStatus });
+        }}
+      />
       </div>
     </PageShell>
   );
@@ -411,11 +581,13 @@ export function Users() {
 
 function ActionButton({
   onClick,
+  disabled = false,
   color = 'var(--txt-2)',
   hoverBg = 'var(--bg-4)',
   children,
 }: {
   onClick: () => void;
+  disabled?: boolean;
   color?: string;
   hoverBg?: string;
   children: React.ReactNode;
@@ -423,14 +595,17 @@ function ActionButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className="rounded px-2 py-1 text-xs transition-colors"
-      style={{ color, background: 'transparent' }}
+      style={{ color: disabled ? 'var(--txt-3)' : color, background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer' }}
       onMouseEnter={(e) => {
+        if (disabled) return;
         e.currentTarget.style.background = hoverBg;
         if (color === 'var(--txt-2)') e.currentTarget.style.color = 'var(--txt)';
       }}
       onMouseLeave={(e) => {
+        if (disabled) return;
         e.currentTarget.style.background = 'transparent';
         if (color === 'var(--txt-2)') e.currentTarget.style.color = 'var(--txt-2)';
       }}
