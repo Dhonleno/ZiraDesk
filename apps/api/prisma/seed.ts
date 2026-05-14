@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_QUICK_REPLIES } from '../src/database/seeds/quickReplies.seed.js';
 import { createTenant } from '../src/modules/super-admin/tenants/tenants.service.js';
 
 const prisma = new PrismaClient();
@@ -283,16 +284,7 @@ async function seedDemoQuickReplies() {
     )
   `);
 
-  const quickReplies = [
-    { title: 'Saudação inicial', shortcut: 'oi', content: 'Olá! Tudo bem? Como posso te ajudar hoje?', category: 'greeting' },
-    { title: 'Enviar proposta', shortcut: 'proposta', content: 'Perfeito! Vou preparar a proposta e te envio em seguida.', category: 'commercial' },
-    { title: 'Agendar ligação', shortcut: 'ligacao', content: 'Claro! Me diga o melhor horário para agendarmos uma ligação.', category: 'service' },
-    { title: 'Link de pagamento', shortcut: 'pagamento', content: 'Segue o link de pagamento para darmos continuidade: {{link}}', category: 'commercial' },
-    { title: 'Aguardar retorno', shortcut: 'retorno', content: 'Sem problemas. Vou aguardar seu retorno por aqui.', category: 'closing' },
-    { title: 'Encerramento', shortcut: 'tchau', content: 'Fico à disposição. Qualquer coisa, é só me chamar.', category: 'closing' },
-  ];
-
-  for (const reply of quickReplies) {
+  for (const reply of DEFAULT_QUICK_REPLIES) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO "${s}".quick_replies (title, shortcut, content, category)
        VALUES ($1, $2, $3, $4)
@@ -308,7 +300,7 @@ async function seedDemoQuickReplies() {
     );
   }
 
-  console.log(`  ✓ ${quickReplies.length} respostas rápidas`);
+  console.log(`  ✓ ${DEFAULT_QUICK_REPLIES.length} respostas rápidas`);
 }
 
 async function main() {

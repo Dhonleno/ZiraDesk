@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database.js';
 import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
+import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
 import type { CreateTenantInput, UpdateTenantInput, ListTenantsQuery } from './tenants.schema.js';
 
 export class NotFoundError extends Error {
@@ -789,6 +790,7 @@ export async function createTenant(data: CreateTenantInput): Promise<{
 
     await createTenantTables(schemaName);
     await seedCloseConfig(prisma, schemaName);
+    await seedQuickReplies(prisma, schemaName);
 
     // Gera senha temporária (12 chars base64url)
     const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
