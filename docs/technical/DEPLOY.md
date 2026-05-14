@@ -15,6 +15,10 @@
 Configurar todas as variáveis de apps/api/.env.production.example
 no serviço da API no Railway.
 
+Obrigatórias para webhooks Meta:
+- META_APP_SECRET
+- WHATSAPP_VERIFY_TOKEN
+
 Para o Web, configurar:
 VITE_API_URL=https://api.ziradesk.com.br
 VITE_SOCKET_URL=https://api.ziradesk.com.br

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { verifyMetaSignature } from '../../middleware/meta-signature.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { getSocketServer } from '../../socket/index.js';
 import { ensureConversationProtocolInfrastructure } from '../omnichannel/conversations/protocols.js';
@@ -71,7 +72,10 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
   });
 
   // POST /api/webhooks/instagram — receive messages
-  app.post<{ Body: InstagramPayload }>('/instagram', async (request, reply) => {
+  app.post<{ Body: InstagramPayload }>('/instagram', {
+    config: { rawBody: true },
+    preHandler: [verifyMetaSignature],
+  }, async (request, reply) => {
     const payload = request.body;
 
     for (const entry of payload.entry ?? []) {

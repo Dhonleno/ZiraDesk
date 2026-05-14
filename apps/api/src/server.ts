@@ -9,6 +9,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
 import { prisma } from './config/database.js';
 import { redis } from './config/redis.js';
@@ -98,6 +99,13 @@ async function bootstrap(): Promise<void> {
 
   await app.register(cookie, {
     secret: env.JWT_SECRET,
+  });
+
+  await app.register(rawBody, {
+    field: 'rawBody',
+    global: false,
+    encoding: false,
+    runFirst: true,
   });
 
   // Detecta idioma em todas as requisições via Accept-Language
