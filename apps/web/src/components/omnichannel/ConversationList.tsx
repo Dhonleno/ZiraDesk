@@ -27,8 +27,6 @@ interface ConversationItem {
   contact_name?: string | null;
   contact_email?: string | null;
   organization_name?: string | null;
-  client_name: string | null;
-  client_email: string | null;
   assigned_to?: string | null;
   assigned_name: string | null;
   channel_name: string | null;
@@ -59,8 +57,6 @@ interface SocketConversationPayload {
   metadata?: Record<string, unknown> | null;
   contact_name?: string | null;
   contactName?: string | null;
-  client_name?: string | null;
-  clientName?: string | null;
 }
 
 interface ConversationMessageEventPayload {
@@ -472,10 +468,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
           ?? data.contactName
           ?? data.conversation?.contact_name
           ?? data.conversation?.contactName
-          ?? data.conversation?.client_name
-          ?? data.conversation?.clientName
           ?? cachedConversation?.contact_name
-          ?? cachedConversation?.client_name
           ?? t('notifications.newMessage');
         const content = message?.content?.trim() || t('notifications.newMessage');
 
@@ -494,10 +487,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
           ?? data.contactName
           ?? data.conversation?.contact_name
           ?? data.conversation?.contactName
-          ?? data.conversation?.client_name
-          ?? data.conversation?.clientName
           ?? cachedConversation?.contact_name
-          ?? cachedConversation?.client_name
           ?? t('notifications.newMessage');
         const content = message?.content?.trim() || t('notifications.newMessage');
         useNotificationStore.getState().addMessage({
@@ -539,7 +529,6 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
         const cachedConversation = getConversationFromCache(conversationId);
         const contactName =
           cachedConversation?.contact_name
-          ?? cachedConversation?.client_name
           ?? t('notifications.newMessage');
         showNotification(
           t('notifications.assigned'),
@@ -1157,12 +1146,9 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
             )
           : (data ?? []).map((conv) => {
               const isActive = selectedId === conv.id;
-              const displayName = conv.contact_name ?? conv.client_name ?? 'Visitante';
-              const organizationName = (
-                conv.organization_name
-                ?? (conv.contact_name && conv.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
-              )?.trim() ?? null;
-              const avatarName = conv.contact_name ?? conv.client_name;
+              const displayName = conv.contact_name ?? 'Visitante';
+              const organizationName = conv.organization_name?.trim() ?? null;
+              const avatarName = conv.contact_name ?? null;
               const hasUnread = (conv.unread_count ?? 0) > 0;
               const hasNewActivity = newActivity.has(conv.id);
               const isNewConversation = newConversations.has(conv.id);

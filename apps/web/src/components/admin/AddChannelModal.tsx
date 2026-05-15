@@ -160,16 +160,9 @@ export function AddChannelModal({ open, onClose }: Props) {
 
           {selectedType === 'email' && (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="SMTP Host" placeholder="smtp.gmail.com" {...register('smtp_host')} />
-                <Input label="SMTP Port" placeholder="587" {...register('smtp_port')} />
-              </div>
-              <Input label="SMTP User" type="email" {...register('smtp_user')} />
-              <Input label="SMTP Password" type="password" {...register('smtp_password')} />
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="From Name" {...register('from_name')} />
-                <Input label="From Email" type="email" {...register('from_email')} />
-              </div>
+              <Input label="E-mail de envio" type="email" required placeholder="suporte@empresa.com" {...register('fromEmail')} />
+              <Input label="Nome de exibição" placeholder="Suporte ZiraDesk" {...register('fromName')} />
+              <Input label="API Key Resend (opcional — usa variável de ambiente se omitido)" type="password" {...register('resendApiKey')} />
             </>
           )}
 

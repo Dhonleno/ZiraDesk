@@ -17,6 +17,7 @@ const settingsSchema = z.object({
   timezone: z.string().min(1),
   csat_enabled: z.boolean().default(true),
   csat_message: z.string().max(2000).optional(),
+  csat_expiration_hours: z.number().int().min(1).max(720).default(48),
   email_confirmation: z.boolean().default(true),
   inactivity_enabled: z.boolean().default(true),
   inactivity_warning_minutes: z.number().int().min(1).max(1440),
@@ -89,6 +90,7 @@ export function Settings() {
       timezone: 'America/Sao_Paulo',
       csat_enabled: true,
       csat_message: '',
+      csat_expiration_hours: 48,
       inactivity_enabled: true,
       inactivity_warning_minutes: 30,
       inactivity_close_minutes: 60,
@@ -108,6 +110,7 @@ export function Settings() {
         timezone: data.timezone ?? 'America/Sao_Paulo',
         csat_enabled: data.csat_enabled ?? true,
         csat_message: data.csat_message ?? '',
+        csat_expiration_hours: data.csat_expiration_hours ?? 48,
         email_confirmation: data.email_confirmation ?? true,
         inactivity_enabled: data.inactivity_enabled ?? true,
         inactivity_warning_minutes: data.inactivity_warning_minutes ?? 30,
@@ -496,6 +499,18 @@ export function Settings() {
                 }}
               />
             </div>
+
+            <Input
+              type="number"
+              label={t('tenantAdmin.settings.csat.expirationHours')}
+              min={1}
+              max={720}
+              error={errors.csat_expiration_hours?.message}
+              {...register('csat_expiration_hours', { valueAsNumber: true })}
+            />
+            <p className="text-xs -mt-3" style={{ color: 'var(--txt-3)' }}>
+              {t('tenantAdmin.settings.csat.expirationHint')}
+            </p>
 
             <div
               style={{

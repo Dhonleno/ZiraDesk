@@ -321,6 +321,13 @@ interface Props {
   conversationId: string;
 }
 
+function requiresWhatsappTemplateMessage(conversation: Conversation | undefined): boolean {
+  if (!conversation || conversation.channel_type !== 'whatsapp') return false;
+  if (conversation.status === 'active_outbound') return true;
+  if (!conversation.metadata || typeof conversation.metadata !== 'object') return false;
+  return conversation.metadata.whatsapp_reengagement_required === true;
+}
+
 export function ChatArea({ conversationId }: Props) {
   const { t } = useTranslation('omnichannel');
   const { t: tAdmin } = useTranslation('admin');
@@ -888,6 +895,13 @@ export function ChatArea({ conversationId }: Props) {
       void loadLatestMessages(true);
     },
     onError: (error: unknown) => {
+      const statusCode = (
+        error as {
+          response?: {
+            status?: number;
+          };
+        }
+      )?.response?.status;
       const apiMessage = (
         error as {
           response?: {
@@ -897,6 +911,13 @@ export function ChatArea({ conversationId }: Props) {
           };
         }
       )?.response?.data?.error?.message;
+
+      if (statusCode === 409 && requiresWhatsappTemplateMessage(data?.conversation as Conversation | undefined)) {
+        setUseTemplateMessage(true);
+        setIsInternal(false);
+        setTemplateError(apiMessage ?? t('chat.templateHint'));
+      }
+
       toast.error(apiMessage ?? `${t('chat.send')} — erro`);
     },
   });
@@ -985,6 +1006,14 @@ export function ChatArea({ conversationId }: Props) {
   function handleSend() {
     if (!canSendMessage) return;
     if (sendMutation.isPending) return;
+    if (requiresWhatsappTemplateMessage(data?.conversation as Conversation | undefined) && !useTemplateMessage) {
+      const templateRequiredMessage = t('chat.templateHint');
+      setUseTemplateMessage(true);
+      setIsInternal(false);
+      setTemplateError(templateRequiredMessage);
+      toast.error(templateRequiredMessage);
+      return;
+    }
 
     if (useTemplateMessage) {
       const resolvedTemplateName = templateName.trim();
@@ -1049,7 +1078,7 @@ export function ChatArea({ conversationId }: Props) {
 
   function applyQuickReply(reply: QuickReply) {
     const resolved = resolveVariables(reply.content, {
-      contactName: data?.conversation?.contact_name ?? data?.conversation?.client_name ?? '',
+      contactName: data?.conversation?.contact_name ?? '',
       organizationName: data?.conversation?.organization_name ?? '',
       protocolNumber: data?.conversation?.protocol_number ?? '',
       agentName: currentUserName ?? '',
@@ -1198,15 +1227,13 @@ export function ChatArea({ conversationId }: Props) {
   const canAssume = isUnassigned && !isClosedForComposer;
   const canTransfer = canManageConversation && (isAssignedToMe || canManageConversation) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
-  const displayName = conv?.contact_name ?? conv?.client_name ?? 'Visitante';
-  const organizationName = (
-    conv?.organization_name
-    ?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
-  )?.trim() ?? null;
-  const avatarName = conv?.contact_name ?? conv?.client_name ?? null;
+  const displayName = conv?.contact_name ?? 'Visitante';
+  const organizationName = conv?.organization_name?.trim() ?? null;
+  const avatarName = conv?.contact_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
+  const requiresWhatsappTemplate = requiresWhatsappTemplateMessage(conv);
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
   const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
@@ -1234,6 +1261,12 @@ export function ChatArea({ conversationId }: Props) {
     setUseTemplateMessage(false);
     setTemplateError(null);
   }, [isWhatsappConversation]);
+
+  useEffect(() => {
+    if (!requiresWhatsappTemplate) return;
+    setUseTemplateMessage(true);
+    setIsInternal(false);
+  }, [requiresWhatsappTemplate]);
 
   const grouped = useMemo(() => {
     const list: Array<{ date: string; msgs: Message[] }> = [];
@@ -1676,10 +1709,7 @@ export function ChatArea({ conversationId }: Props) {
                 const showMessageContent = Boolean(msg.content) && !hideAudioLabel && !isCallRecording;
                 const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
                 const contactDisplayName = displayName;
-                const organizationDisplayName = (
-                  conv?.organization_name
-                  ?? (conv?.contact_name && conv?.client_name && conv.client_name !== conv.contact_name ? conv.client_name : null)
-                )?.trim();
+                const organizationDisplayName = conv?.organization_name?.trim();
                 const clientLabel = organizationDisplayName
                   ? `${contactDisplayName} - ${organizationDisplayName}`
                   : contactDisplayName;
@@ -2204,6 +2234,10 @@ export function ChatArea({ conversationId }: Props) {
                         tooltip="Template WhatsApp"
                         active={useTemplateMessage}
                         onClick={() => {
+                          if (useTemplateMessage && requiresWhatsappTemplate) {
+                            setTemplateError(t('chat.templateHint'));
+                            return;
+                          }
                           const next = !useTemplateMessage;
                           setUseTemplateMessage(next);
                           setTemplateError(null);

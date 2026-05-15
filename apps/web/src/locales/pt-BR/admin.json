@@ -113,7 +113,9 @@
         "enabled": "Enviar CSAT automaticamente",
         "enabledHint": "Envia avaliação ao cliente ao resolver atendimentos",
         "message": "Mensagem inicial do CSAT",
-        "messagePlaceholder": "Seu atendimento foi encerrado!..."
+        "messagePlaceholder": "Seu atendimento foi encerrado!...",
+        "expirationHours": "Expiração do CSAT (horas)",
+        "expirationHint": "Tempo em horas até o link de avaliação expirar. Padrão: 48h."
       },
       "inactivity": {
         "title": "Inatividade de Atendimento",
@@ -412,7 +414,7 @@
       "summary": "Resumo",
       "stats": {
         "users": "Usuários ativos",
-        "clients": "Clientes",
+        "clients": "Contatos",
         "openConversations": "Conversas abertas",
         "openTickets": "Tickets abertos",
         "totalConversations": "Total de conversas",
@@ -464,9 +466,12 @@
       "settings:manage": "Configurações — Gerenciar",
       "users:manage": "Usuários — Gerenciar",
       "channels:manage": "Canais — Gerenciar",
-      "clients:view": "Clientes — Visualizar",
-      "clients:edit": "Clientes — Editar",
-      "clients:delete": "Clientes — Excluir",
+      "contacts:view": "Contatos — Visualizar",
+      "contacts:edit": "Contatos — Editar",
+      "contacts:delete": "Contatos — Excluir",
+      "organizations:view": "Organizações — Visualizar",
+      "organizations:edit": "Organizações — Editar",
+      "organizations:delete": "Organizações — Excluir",
       "conversations:view": "Atendimentos — Visualizar",
       "conversations:reply": "Atendimentos — Responder",
       "conversations:manage": "Atendimentos — Gerenciar",
@@ -530,16 +535,25 @@
       "title": "Tenants",
       "new": "Novo Tenant",
       "search": "Buscar tenant...",
+      "totalFound": "{{count}} tenants encontrados",
+      "empty": "Nenhum tenant encontrado",
       "status": {
         "active": "Ativo",
         "trial": "Trial",
         "suspended": "Suspenso",
         "cancelled": "Cancelado"
       },
+      "stats": {
+        "total": "Total de Tenants",
+        "active": "Tenants Ativos",
+        "trialsExpiring": "Trials expirando",
+        "mrr": "MRR Estimado"
+      },
       "fields": {
         "name": "Nome da empresa",
         "slug": "Subdomínio",
         "plan": "Plano",
+        "actions": "Ações",
         "status": "Status",
         "createdAt": "Criado em",
         "owner": "Responsável",
@@ -547,6 +561,10 @@
         "trialDays": "Dias de trial"
       },
       "actions": {
+        "viewDetails": "Ver detalhes",
+        "impersonate": "Acessar como Admin",
+        "editPlan": "Editar plano",
+        "cancel": "Cancelar tenant",
         "suspend": "Suspender",
         "activate": "Ativar",
         "delete": "Excluir",
@@ -557,7 +575,72 @@
         "updated": "Tenant atualizado",
         "suspended": "Tenant suspenso",
         "activated": "Tenant ativado",
+        "cancelled": "Tenant cancelado",
         "deleteConfirm": "Tem certeza? Esta ação não pode ser desfeita."
+      },
+      "impersonateBanner": "Você está acessando como {{tenant}}",
+      "backToSuperAdmin": "Voltar ao Super Admin",
+      "cancelConfirmTitle": "Cancelar tenant",
+      "cancelConfirmMsg": "Esta ação não pode ser desfeita. Digite o nome do tenant para confirmar.",
+      "cancelConfirmFullMessage": "Tem certeza? O tenant {{name}} perderá acesso imediatamente. Esta ação não pode ser desfeita.",
+      "cancelConfirmPlaceholder": "Digite {{name}} para confirmar",
+      "trialEndsAt": "Trial até",
+      "users": "Usuários",
+      "conversations": "Conversas",
+      "createWizard": {
+        "stepsAriaLabel": "Etapas de criação de tenant",
+        "steps": {
+          "company": "Empresa",
+          "plan": "Plano",
+          "owner": "Responsável"
+        },
+        "actions": {
+          "back": "Voltar",
+          "next": "Próximo",
+          "create": "Criar tenant"
+        },
+        "placeholders": {
+          "name": "Acme Corp",
+          "slug": "acme-corp",
+          "plan": "Selecione um plano",
+          "trialDays": "14",
+          "owner": "João Silva",
+          "ownerEmail": "joao@acme.com"
+        },
+        "slug": {
+          "idleHint": "Use apenas letras minúsculas, números e hífen.",
+          "invalidHint": "Formato inválido para subdomínio.",
+          "checkingHint": "Verificando disponibilidade...",
+          "takenHint": "Este subdomínio já está em uso.",
+          "availableHint": "Subdomínio disponível."
+        },
+        "validation": {
+          "nameRequired": "Informe o nome da empresa",
+          "slugMin": "Subdomínio deve ter ao menos 2 caracteres",
+          "slugMax": "Subdomínio deve ter no máximo 50 caracteres",
+          "slugFormat": "Use apenas letras minúsculas, números e hífen",
+          "slugTaken": "Este subdomínio já está em uso",
+          "planRequired": "Selecione um plano",
+          "trialDaysInt": "Informe um número inteiro",
+          "trialDaysMin": "Dias de trial deve ser no mínimo 1",
+          "trialDaysMax": "Dias de trial deve ser no máximo 365",
+          "ownerNameRequired": "Informe o nome do responsável",
+          "ownerEmailInvalid": "Informe um e-mail válido"
+        },
+        "review": {
+          "title": "Revisão"
+        },
+        "messages": {
+          "createError": "Erro ao criar tenant"
+        },
+        "planSelected": "Plano selecionado: {{plan}}"
+      },
+      "credentialsModal": {
+        "title": "Tenant criado",
+        "description": "Use estas credenciais iniciais para o responsável do tenant {{tenant}}.",
+        "ownerEmail": "E-mail",
+        "tempPassword": "Senha temporária",
+        "note": "Anote antes de fechar."
       }
     },
     "plans": {
@@ -586,6 +669,25 @@
       "suspendedTenants": "Suspensos",
       "newLast7Days": "Novos (7 dias)",
       "newLast30Days": "Novos (30 dias)"
+    },
+    "dashboard": {
+      "systemOverview": "Visão geral do sistema",
+      "metricsLoadError": "Falha ao carregar métricas. Verifique se a API está rodando e tente novamente.",
+      "tenantsByPlan": "Tenants por plano",
+      "recentTenants": "Últimos tenants",
+      "trialsExpiring": "Trials expirando",
+      "noTrialsExpiring": "Nenhum trial expirando em breve",
+      "convert": "Converter",
+      "view": "Ver →",
+      "viewAll": "Ver todos →",
+      "createdAgo_one": "há {{count}} dia",
+      "createdAgo_other": "há {{count}} dias",
+      "createdToday": "hoje",
+      "expiredAgo_one": "expirou há {{count}} dia",
+      "expiredAgo_other": "expirou há {{count}} dias",
+      "expiresToday": "expira hoje",
+      "expiresInDays_one": "expira em {{count}} dia",
+      "expiresInDays_other": "expira em {{count}} dias"
     }
   }
 }

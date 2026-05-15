@@ -6,9 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
-import { Button } from '../ui/Button';
 import { ticketsApi, contactsApi, organizationsApi, adminApi } from '../../services/api';
-import type { CrmContact, CrmOrganization, FindTicketDuplicatesParams } from '../../services/api';
+import type { CrmContact, CrmOrganization } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -55,19 +54,6 @@ const selectStyle: React.CSSProperties = {
   height: '2.5rem', borderRadius: 'var(--r)', padding: '0 0.75rem',
   fontSize: '0.875rem', width: '100%', outline: 'none', fontFamily: 'var(--font)',
 };
-const STATUS_LABEL: Record<'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed', string> = {
-  open: 'Aberto',
-  in_progress: 'Em andamento',
-  waiting: 'Aguardando',
-  resolved: 'Resolvido',
-  closed: 'Fechado',
-};
-const PRIORITY_LABEL: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
-};
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: Props) {
@@ -98,11 +84,11 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     defaultValues: { priority: initialPrefs.priority, status: initialPrefs.status, tags: [], type_id: initialPrefs.type_id },
   });
 
-  const debouncedTitle = useDebounce(watch('title') ?? '', 300);
   const tags = watch('tags');
   const status = watch('status');
   const priority = watch('priority');
   const selectedTypeId = watch('type_id');
+  const categoryValue = watch('category');
   const hasSourceConversation = Boolean(defaultValues?.source_conversation_id);
   const contactReadonly = hasSourceConversation;
   const organizationReadonly = hasSourceConversation;
@@ -183,18 +169,20 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     enabled: debouncedOrganizationSearch.length > 1 && showOrganizationDropdown,
     staleTime: 10_000,
   });
-
-  const { data: duplicateSuggestions = [] } = useQuery({
-    queryKey: ['ticket-modal-duplicates', debouncedTitle.trim(), selectedContactId, selectedOrganizationId],
-    queryFn: () => {
-      const params: FindTicketDuplicatesParams = { title: debouncedTitle.trim() };
-      if (selectedContactId) params.contact_id = selectedContactId;
-      if (selectedOrganizationId) params.organization_id = selectedOrganizationId;
-      return ticketsApi.findDuplicates(params);
-    },
-    enabled: open && debouncedTitle.trim().length >= 3,
-    staleTime: 15_000,
+  const { data: categoriesData } = useQuery({
+    queryKey: ['ticket-categories-options'],
+    queryFn: () => ticketsApi.list({ per_page: 100, sort_by: 'updated_at', sort_order: 'desc' }),
+    staleTime: 60_000,
+    enabled: open,
   });
+  const categoryOptions = useMemo(() => {
+    const values = new Set<string>();
+    (categoriesData?.data ?? []).forEach((item) => {
+      if (item.category) values.add(item.category);
+    });
+    if (categoryValue) values.add(categoryValue);
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [categoriesData?.data, categoryValue]);
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -278,7 +266,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
       setSelectedOrganizationId(contact.organization_id);
       setSelectedOrganizationName(
         contact.organization_name
-          ?? t('tickets.form.organizationLinked', { defaultValue: 'Organizacao vinculada' }),
+          ?? t('tickets.form.organizationLinked'),
       );
       setOrganizationSearch('');
       setShowOrganizationDropdown(false);
@@ -329,6 +317,9 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
   }
 
   const users = usersData?.data ?? [];
+  const filesLabel = files.length > 0
+    ? (files.length === 1 ? files[0]?.name ?? '' : t('tickets.filesSelected', { count: files.length }))
+    : t('tickets.noFileSelected');
 
   return (
     <Modal open={open} onClose={onClose} title={t('tickets.form.create')} maxWidth="md">
@@ -363,48 +354,6 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             }}>
               {conditional.hints.map((hint) => (
                 <p key={hint} style={{ margin: 0, fontSize: 11, color: 'var(--txt-2)' }}>{hint}</p>
-              ))}
-            </div>
-          ) : null}
-
-          {duplicateSuggestions.length > 0 ? (
-            <div style={{
-              border: '1px solid rgba(245,158,11,.35)',
-              background: 'var(--amber-dim)',
-              borderRadius: 'var(--r)',
-              padding: '8px 10px',
-              display: 'grid',
-              gap: 6,
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                Possíveis tickets duplicados
-              </div>
-              {duplicateSuggestions.map((item) => (
-                <a
-                  key={item.id}
-                  href={`/tickets/${item.id}`}
-                  style={{
-                    display: 'grid',
-                    gap: 2,
-                    textDecoration: 'none',
-                    padding: '7px 8px',
-                    borderRadius: 'var(--r)',
-                    border: '1px solid var(--line)',
-                    background: 'var(--bg-2)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: 'var(--teal)', fontFamily: 'var(--mono)' }}>#{item.id.slice(-6).toUpperCase()}</span>
-                    <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>Score {item.score}</span>
-                  </div>
-                  <span style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{item.title}</span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-2)' }}>
-                    {STATUS_LABEL[item.status as keyof typeof STATUS_LABEL] ?? item.status}
-                    {' · '}
-                    {PRIORITY_LABEL[item.priority as keyof typeof PRIORITY_LABEL] ?? item.priority}
-                    {item.category ? ` · ${item.category}` : ''}
-                  </span>
-                </a>
               ))}
             </div>
           ) : null}
@@ -452,7 +401,9 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             </label>
             {selectedContactId ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-                borderRadius: 'var(--r)', background: 'var(--teal-dim)', border: '1px solid var(--teal)',
+                borderRadius: 'var(--r)',
+                background: contactReadonly ? 'var(--bg-3)' : 'var(--teal-dim)',
+                border: '1px solid var(--teal)',
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedContactName}</span>
                 {!contactReadonly ? (
@@ -498,11 +449,13 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
           {/* Organization search (optional) */}
           <div style={{ position: 'relative' }}>
             <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
-              {t('tickets.fields.organization', { defaultValue: 'Organizacao' })}
+              {t('tickets.organization')}
             </label>
             {selectedOrganizationId ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
-                borderRadius: 'var(--r)', background: 'var(--blue-dim)', border: '1px solid var(--blue)',
+                borderRadius: 'var(--r)',
+                background: organizationReadonly ? 'var(--bg-3)' : 'var(--blue-dim)',
+                border: `1px solid ${organizationReadonly ? 'var(--teal)' : 'var(--blue)'}`,
                 fontSize: 13, color: 'var(--txt)' }}>
                 <span style={{ flex: 1 }}>{selectedOrganizationName}</span>
                 {!organizationReadonly ? (
@@ -518,7 +471,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             ) : (
               <input
                 type="text"
-                placeholder={t('tickets.form.searchOrganization', { defaultValue: 'Buscar organizacao...' })}
+                placeholder={t('tickets.form.searchOrganization')}
                 value={organizationSearch}
                 onChange={(e) => {
                   setOrganizationSearch(e.target.value);
@@ -575,10 +528,26 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 ))}
               </select>
             </div>
-            <Input
-              label={conditional.categoryRequired ? `${t('tickets.fields.category')} *` : t('tickets.fields.category')}
-              {...register('category')}
-            />
+            {categoryOptions.length > 0 ? (
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
+                  {conditional.categoryRequired ? `${t('tickets.fields.category')} *` : t('tickets.fields.category')}
+                </label>
+                <select style={selectStyle} {...register('category')}>
+                  <option value="">{t('tickets.form.selectCategory', { defaultValue: 'Selecione a categoria' })}</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <Input
+                label={conditional.categoryRequired ? `${t('tickets.fields.category')} *` : t('tickets.fields.category')}
+                {...register('category')}
+              />
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -587,7 +556,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 {t('tickets.fields.dueDate')}
               </label>
               {conditional.dueDateRequired ? (
-                <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 6 }}>Obrigatório para prioridade urgente</div>
+                <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 6 }}>{t('tickets.form.urgentDueDateRequired')}</div>
               ) : null}
               <input type="date" {...register('due_date')} style={selectStyle} />
             </div>
@@ -619,16 +588,23 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 ))}
               </div>
             )}
-            <input type="text" placeholder="Digite e pressione Enter" value={tagInput}
+            <input type="text" placeholder={t('tickets.form.tagPlaceholder')} value={tagInput}
               onChange={(e) => setTagInput(e.target.value)} onKeyDown={addTag}
               style={{ ...selectStyle, display: 'block' }} />
           </div>
 
           <div>
             <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
-              Anexos na abertura
+              {t('tickets.form.attachments')}
             </label>
-            <input type="file" multiple onChange={handleFilesChange} style={{ ...selectStyle, display: 'block', padding: '8px 10px', height: 'auto' }} />
+            <label className="file-upload-btn">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M11 6.5 6 11.5a3.5 3.5 0 1 1-5-5l5.5-5.5a2 2 0 1 1 2.8 2.8L4 9.1a1 1 0 1 1-1.4-1.4l4.6-4.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>{t('tickets.chooseFile')}</span>
+              <input type="file" hidden multiple onChange={handleFilesChange} />
+            </label>
+            <div className="file-upload-meta">{filesLabel}</div>
             {files.length > 0 ? (
               <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
                 {files.map((file, index) => (
@@ -643,11 +619,11 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
             ) : null}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
-            <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" loading={mutation.isPending}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+            <button type="button" className="zd-btn" onClick={onClose}>{t('tickets.cancel')}</button>
+            <button type="submit" className="zd-btn zd-btn-primary" disabled={mutation.isPending}>
               {mutation.isPending ? t('tickets.form.creating') : t('tickets.form.create')}
-            </Button>
+            </button>
           </div>
 
         </div>

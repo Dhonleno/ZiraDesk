@@ -94,11 +94,15 @@ function attachLifecycleHandlers(): void {
 
   socket.on('disconnect', (reason) => {
     stopHeartbeat();
-    console.warn('[Socket] disconnected:', reason);
+    if (import.meta.env.DEV) {
+      console.warn('[Socket] disconnected:', reason);
+    }
   });
 
   socket.io.on('reconnect', (attemptNumber) => {
-    console.info('[Socket] reconnected after', attemptNumber, 'attempts');
+    if (import.meta.env.DEV) {
+      console.info('[Socket] reconnected after', attemptNumber, 'attempts');
+    }
     emitPresenceOnline();
     startHeartbeat();
   });

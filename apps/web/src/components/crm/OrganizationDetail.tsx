@@ -128,7 +128,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     { key: 'notes',         label: t('organizations.tabs.notes') },
   ];
 
-  type OrgConv = { id: string; channel_type: string; channel_name: string | null; client_name: string | null; last_message: string | null; last_message_at: string | null; status: string; created_at: string };
+  type OrgConv = { id: string; channel_type: string; channel_name: string | null; contact_name: string | null; last_message: string | null; last_message_at: string | null; status: string; created_at: string };
   type OrgTicket = { id: string; title: string; status: string; priority: string; created_at: string };
 
   const rawConvData = convData as { data?: OrgConv[] } | OrgConv[] | undefined;
@@ -327,7 +327,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--txt)' }}>{conv.client_name ?? '—'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--txt)' }}>{conv.contact_name ?? '—'}</span>
                           <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0, marginLeft: 8 }}>
                             {conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString('pt-BR') : ''}
                           </span>

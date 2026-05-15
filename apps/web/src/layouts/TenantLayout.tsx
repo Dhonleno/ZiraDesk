@@ -15,6 +15,7 @@ import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
+import { useAuthStore, type AuthUser } from '../stores/auth.store';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -239,6 +240,7 @@ export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { canAny } = usePermission();
   const { user, token, logout, isLoggingOut } = useAuth();
+  const setAuth = useAuthStore((state) => state.setAuth);
   const toast = useToast();
   const { pathname } = useLocation();
   const showFloatingBubble = !pathname.startsWith('/omnichannel');
@@ -248,12 +250,14 @@ export function TenantLayout() {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
+  const [impersonatedTenantName, setImpersonatedTenantName] = useState<string | null>(null);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
   const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
   const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
   const canViewAdminNav = canAny('settings:manage', 'users:manage');
+  const isImpersonating = !!impersonatedTenantName;
   const roleLabel =
     user?.role === 'owner'
       ? 'Owner'
@@ -272,6 +276,16 @@ export function TenantLayout() {
     isEndingPause,
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
+
+  useEffect(() => {
+    const tenantName = sessionStorage.getItem('impersonated_tenant_name');
+    const hasSuperAdminToken = sessionStorage.getItem('superadmin_token');
+    if (tenantName && hasSuperAdminToken) {
+      setImpersonatedTenantName(tenantName);
+      return;
+    }
+    setImpersonatedTenantName(null);
+  }, []);
 
   useEffect(() => {
     if (!canToggleAvailability) return;
@@ -380,8 +394,6 @@ export function TenantLayout() {
     interface SocketConversationPayload {
       contact_name?: string | null;
       contactName?: string | null;
-      client_name?: string | null;
-      clientName?: string | null;
       status?: string | null;
       metadata?: Record<string, unknown> | null;
       assigned_to?: string | null;
@@ -432,8 +444,6 @@ export function TenantLayout() {
         ?? data.contactName
         ?? data.conversation?.contact_name
         ?? data.conversation?.contactName
-        ?? data.conversation?.client_name
-        ?? data.conversation?.clientName
         ?? t('floatingBubble.newConversation', { ns: 'common' });
 
       const messageText = data.message?.content?.trim() || t('notifications.newMessage', { ns: 'omnichannel' });
@@ -540,8 +550,38 @@ export function TenantLayout() {
     logout();
   };
 
+  const handleBackToSuperAdmin = () => {
+    const superAdminToken = sessionStorage.getItem('superadmin_token');
+    const superAdminUserRaw = sessionStorage.getItem('superadmin_user');
+    if (!superAdminToken || !superAdminUserRaw) {
+      logout();
+      return;
+    }
+
+    try {
+      const parsedUser = JSON.parse(superAdminUserRaw) as AuthUser;
+      setAuth({ user: parsedUser, token: superAdminToken });
+      sessionStorage.removeItem('superadmin_token');
+      sessionStorage.removeItem('superadmin_user');
+      sessionStorage.removeItem('impersonated_tenant_slug');
+      sessionStorage.removeItem('impersonated_tenant_name');
+      setImpersonatedTenantName(null);
+      navigate('/super-admin', { replace: true });
+    } catch {
+      logout();
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)', paddingTop: isImpersonating ? 36 : 0 }}>
+      {isImpersonating && (
+        <div className="impersonation-banner">
+          <span>{t('superAdmin.tenants.impersonateBanner', { tenant: impersonatedTenantName })}</span>
+          <button type="button" onClick={handleBackToSuperAdmin}>
+            {t('superAdmin.tenants.backToSuperAdmin')}
+          </button>
+        </div>
+      )}
 
       {/* ── Topbar ── */}
       <header style={{

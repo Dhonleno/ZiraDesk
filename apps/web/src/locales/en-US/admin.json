@@ -113,7 +113,9 @@
         "enabled": "Send CSAT automatically",
         "enabledHint": "Sends a customer survey when conversations are resolved",
         "message": "CSAT opening message",
-        "messagePlaceholder": "Your service was closed!..."
+        "messagePlaceholder": "Your service was closed!...",
+        "expirationHours": "CSAT expiration (hours)",
+        "expirationHint": "Time in hours until the rating link expires. Default: 48h."
       },
       "inactivity": {
         "title": "Conversation Inactivity",
@@ -428,7 +430,7 @@
       "summary": "Summary",
       "stats": {
         "users": "Active users",
-        "clients": "Clients",
+        "clients": "Contacts",
         "openConversations": "Open conversations",
         "openTickets": "Open tickets",
         "totalConversations": "Total conversations",
@@ -453,9 +455,12 @@
       "settings:manage": "Settings — Manage",
       "users:manage": "Users — Manage",
       "channels:manage": "Channels — Manage",
-      "clients:view": "Clients — View",
-      "clients:edit": "Clients — Edit",
-      "clients:delete": "Clients — Delete",
+      "contacts:view": "Contacts — View",
+      "contacts:edit": "Contacts — Edit",
+      "contacts:delete": "Contacts — Delete",
+      "organizations:view": "Organizations — View",
+      "organizations:edit": "Organizations — Edit",
+      "organizations:delete": "Organizations — Delete",
       "conversations:view": "Conversations — View",
       "conversations:reply": "Conversations — Reply",
       "conversations:manage": "Conversations — Manage",
@@ -519,16 +524,25 @@
       "title": "Tenants",
       "new": "New Tenant",
       "search": "Search tenant...",
+      "totalFound": "{{count}} tenants found",
+      "empty": "No tenants found",
       "status": {
         "active": "Active",
         "trial": "Trial",
         "suspended": "Suspended",
         "cancelled": "Cancelled"
       },
+      "stats": {
+        "total": "Total Tenants",
+        "active": "Active Tenants",
+        "trialsExpiring": "Trials expiring",
+        "mrr": "Estimated MRR"
+      },
       "fields": {
         "name": "Company name",
         "slug": "Subdomain",
         "plan": "Plan",
+        "actions": "Actions",
         "status": "Status",
         "createdAt": "Created at",
         "owner": "Owner",
@@ -536,6 +550,10 @@
         "trialDays": "Trial days"
       },
       "actions": {
+        "viewDetails": "View details",
+        "impersonate": "Access as Admin",
+        "editPlan": "Edit plan",
+        "cancel": "Cancel tenant",
         "suspend": "Suspend",
         "activate": "Activate",
         "delete": "Delete",
@@ -546,7 +564,72 @@
         "updated": "Tenant updated",
         "suspended": "Tenant suspended",
         "activated": "Tenant activated",
+        "cancelled": "Tenant cancelled",
         "deleteConfirm": "Are you sure? This action cannot be undone."
+      },
+      "impersonateBanner": "You are accessing as {{tenant}}",
+      "backToSuperAdmin": "Back to Super Admin",
+      "cancelConfirmTitle": "Cancel tenant",
+      "cancelConfirmMsg": "This action cannot be undone. Type the tenant name to confirm.",
+      "cancelConfirmFullMessage": "Are you sure? Tenant {{name}} will lose access immediately. This action cannot be undone.",
+      "cancelConfirmPlaceholder": "Type {{name}} to confirm",
+      "trialEndsAt": "Trial until",
+      "users": "Users",
+      "conversations": "Conversations",
+      "createWizard": {
+        "stepsAriaLabel": "Tenant creation steps",
+        "steps": {
+          "company": "Company",
+          "plan": "Plan",
+          "owner": "Owner"
+        },
+        "actions": {
+          "back": "Back",
+          "next": "Next",
+          "create": "Create tenant"
+        },
+        "placeholders": {
+          "name": "Acme Corp",
+          "slug": "acme-corp",
+          "plan": "Select a plan",
+          "trialDays": "14",
+          "owner": "John Doe",
+          "ownerEmail": "john@acme.com"
+        },
+        "slug": {
+          "idleHint": "Use lowercase letters, numbers, and hyphens only.",
+          "invalidHint": "Invalid subdomain format.",
+          "checkingHint": "Checking availability...",
+          "takenHint": "This subdomain is already in use.",
+          "availableHint": "Subdomain is available."
+        },
+        "validation": {
+          "nameRequired": "Enter the company name",
+          "slugMin": "Subdomain must have at least 2 characters",
+          "slugMax": "Subdomain must have at most 50 characters",
+          "slugFormat": "Use lowercase letters, numbers, and hyphens only",
+          "slugTaken": "This subdomain is already in use",
+          "planRequired": "Select a plan",
+          "trialDaysInt": "Enter a whole number",
+          "trialDaysMin": "Trial days must be at least 1",
+          "trialDaysMax": "Trial days must be at most 365",
+          "ownerNameRequired": "Enter the owner name",
+          "ownerEmailInvalid": "Enter a valid email"
+        },
+        "review": {
+          "title": "Review"
+        },
+        "messages": {
+          "createError": "Error creating tenant"
+        },
+        "planSelected": "Selected plan: {{plan}}"
+      },
+      "credentialsModal": {
+        "title": "Tenant created",
+        "description": "Use these initial credentials for tenant {{tenant}} owner.",
+        "ownerEmail": "Email",
+        "tempPassword": "Temporary password",
+        "note": "Write this down before closing."
       }
     },
     "plans": {
@@ -575,6 +658,25 @@
       "suspendedTenants": "Suspended",
       "newLast7Days": "New (7 days)",
       "newLast30Days": "New (30 days)"
+    },
+    "dashboard": {
+      "systemOverview": "System overview",
+      "metricsLoadError": "Failed to load metrics. Check if the API is running and try again.",
+      "tenantsByPlan": "Tenants by plan",
+      "recentTenants": "Latest tenants",
+      "trialsExpiring": "Trials expiring",
+      "noTrialsExpiring": "No trials expiring soon",
+      "convert": "Convert",
+      "view": "View →",
+      "viewAll": "View all →",
+      "createdAgo_one": "{{count}} day ago",
+      "createdAgo_other": "{{count}} days ago",
+      "createdToday": "today",
+      "expiredAgo_one": "expired {{count}} day ago",
+      "expiredAgo_other": "expired {{count}} days ago",
+      "expiresToday": "expires today",
+      "expiresInDays_one": "expires in {{count}} day",
+      "expiresInDays_other": "expires in {{count}} days"
     }
   }
 }

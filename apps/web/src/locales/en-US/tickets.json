@@ -68,6 +68,9 @@
       "edit": "Edit",
       "delete": "Delete"
     },
+    "chooseFile": "Choose files",
+    "noFileSelected": "No file selected",
+    "filesSelected": "{{count}} files selected",
     "form": {
       "create": "Create ticket",
       "creating": "Creating...",
@@ -80,10 +83,16 @@
       "selectPriority": "Select priority",
       "selectStatus": "Select status",
       "selectType": "Select type",
+      "selectCategory": "Select category",
       "searchClient": "Search contact...",
       "noClient": "No contact",
       "searchUser": "Search user...",
-      "noUser": "No assignee"
+      "noUser": "No assignee",
+      "searchOrganization": "Search organization...",
+      "organizationLinked": "Linked organization",
+      "urgentDueDateRequired": "Required for urgent priority",
+      "tagPlaceholder": "Type and press Enter",
+      "attachments": "Attachments on open"
     },
     "timeline": {
       "title": "History",

@@ -16,6 +16,7 @@ interface TenantSettings {
   away_message_enabled?: boolean;
   csat_enabled?: boolean;
   csat_message?: string | null;
+  csat_expiration_hours?: number;
   inactivity_enabled?: boolean;
   inactivity_warning_minutes?: number;
   inactivity_close_minutes?: number;
@@ -479,6 +480,14 @@ function shouldProactivelyRefreshToken(token: string): boolean {
   return payload.exp <= now + TOKEN_REFRESH_LEEWAY_SECONDS;
 }
 
+function getDevImpersonatedTenantSlug(): string | null {
+  if (typeof window === 'undefined') return null;
+  const host = window.location.hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  if (!isLocal) return null;
+  return sessionStorage.getItem('impersonated_tenant_slug');
+}
+
 async function refreshAccessTokenOnce(): Promise<string> {
   if (proactiveRefreshPromise) return proactiveRefreshPromise;
 
@@ -511,6 +520,11 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  const impersonatedTenantSlug = getDevImpersonatedTenantSlug();
+  if (impersonatedTenantSlug) {
+    config.headers['X-Tenant-Slug'] = impersonatedTenantSlug;
   }
 
   // Deixa o browser definir o boundary automaticamente para multipart/form-data
@@ -1321,7 +1335,6 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface Ticket {
   id:              string;
-  client_id:       string | null;
   contact_id?:     string | null;
   organization_id?: string | null;
   conversation_id: string | null;
@@ -1346,10 +1359,8 @@ export interface Ticket {
   updated_at:      string;
   assignee_name:   string | null;
   assignee_avatar: string | null;
-  client_name:     string | null;
   contact_name?:   string | null;
   organization_name?: string | null;
-  client_email:    string | null;
 }
 
 export interface TicketComment {
@@ -1432,19 +1443,6 @@ export interface TicketSearchResult {
   priority: TicketPriority | string;
 }
 
-export interface TicketDuplicateSuggestion {
-  id: string;
-  title: string;
-  status: TicketStatus | string;
-  priority: TicketPriority | string;
-  category: string | null;
-  contact_name: string | null;
-  organization_name: string | null;
-  created_at: string;
-  updated_at: string;
-  score: number;
-}
-
 export interface AddTicketRelationPayload {
   related_id: string;
   relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by';
@@ -1475,7 +1473,6 @@ export interface ListTicketsParams {
   priority?:    TicketPriority;
   assigned_to?: string;
   source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
-  client_id?:   string;
   contact_id?:  string;
   organization_id?: string;
   category?:    string;
@@ -1497,13 +1494,6 @@ export interface CreateTicketPayload {
   source_conversation_id?: string;
   due_date?:       string;
   tags?:           string[];
-}
-
-export interface FindTicketDuplicatesParams {
-  title: string;
-  contact_id?: string;
-  organization_id?: string;
-  exclude_id?: string;
 }
 
 export interface CreateCommentPayload {
@@ -1559,13 +1549,8 @@ export interface OmnichannelConversation {
   csat_sent_at?: string | null;
   csat_responded_at?: string | null;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
-  client_id: string | null;
   contact_id?: string | null;
   organization_id?: string | null;
-  client_name: string | null;
-  client_email: string | null;
-  client_phone: string | null;
-  client_whatsapp?: string | null;
   contact_name?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
@@ -1619,7 +1604,6 @@ export interface ListConversationsParams {
   status?: string;
   assigned_to_me?: boolean;
   agent_id?: string;
-  client_id?: string;
   contact_id?: string;
   organization_id?: string;
   tag_id?: string;
@@ -2234,13 +2218,6 @@ export const ticketsApi = {
   search: async (q: string, exclude?: string): Promise<TicketSearchResult[]> => {
     const res = await api.get<{ success: boolean; data: TicketSearchResult[] }>('/tickets/search', {
       params: { q, ...(exclude ? { exclude } : {}) },
-    });
-    return res.data.data;
-  },
-
-  findDuplicates: async (params: FindTicketDuplicatesParams): Promise<TicketDuplicateSuggestion[]> => {
-    const res = await api.get<{ success: boolean; data: TicketDuplicateSuggestion[] }>('/tickets/duplicates', {
-      params,
     });
     return res.data.data;
   },

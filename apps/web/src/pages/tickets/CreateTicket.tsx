@@ -9,12 +9,10 @@ import {
   ticketsApi,
   type CrmContact,
   type CrmOrganization,
-  type FindTicketDuplicatesParams,
   type TicketPriority,
 } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
-import { useDebounce } from '../../hooks/useDebounce';
 import {
   buildCreateTicketPayload,
   getTicketConditionalRequirements,
@@ -40,25 +38,6 @@ interface CreateTicketForm {
 }
 
 type SubmitMode = 'open' | 'new';
-const STATUS_LABEL: Record<TicketCreateStatus, string> = {
-  open: 'Aberto',
-  in_progress: 'Em andamento',
-  waiting: 'Aguardando',
-};
-const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
-};
-
-function formatDuplicateStatus(status: string): string {
-  return STATUS_LABEL[status as TicketCreateStatus] ?? status;
-}
-
-function formatDuplicatePriority(priority: string): string {
-  return PRIORITY_LABEL[priority as TicketPriority] ?? priority;
-}
 
 function buildDraft(form: CreateTicketForm): TicketCreateDraft {
   return {
@@ -106,7 +85,6 @@ export default function CreateTicket() {
   const [contactName, setContactName] = useState(searchParams.get('contact_name') ?? '');
   const [orgName, setOrgName] = useState(searchParams.get('org_name') ?? '');
   const [files, setFiles] = useState<File[]>([]);
-  const debouncedTitle = useDebounce(form.title, 300);
 
   const { data: ticketTypes = [] } = useQuery({
     queryKey: ['ticket-types'],
@@ -163,18 +141,6 @@ export default function CreateTicket() {
     staleTime: 10_000,
   });
   const orgs = orgsData?.data ?? [];
-
-  const { data: duplicateSuggestions = [] } = useQuery({
-    queryKey: ['ticket-create-duplicates', debouncedTitle.trim(), form.contact_id, form.organization_id],
-    queryFn: () => {
-      const params: FindTicketDuplicatesParams = { title: debouncedTitle.trim() };
-      if (form.contact_id) params.contact_id = form.contact_id;
-      if (form.organization_id) params.organization_id = form.organization_id;
-      return ticketsApi.findDuplicates(params);
-    },
-    enabled: debouncedTitle.trim().length >= 3,
-    staleTime: 15_000,
-  });
 
   const createMutation = useMutation({
     mutationFn: async (mode: SubmitMode) => {
@@ -437,27 +403,6 @@ export default function CreateTicket() {
           </div>
 
           <aside className="create-ticket-sidebar">
-            {duplicateSuggestions.length > 0 ? (
-              <div className="ct-duplicates-warning">
-                <div className="ct-duplicates-title">Possíveis tickets duplicados</div>
-                <div className="ct-duplicates-list">
-                  {duplicateSuggestions.map((item) => (
-                    <a key={item.id} className="ct-duplicate-item" href={`/tickets/${item.id}`}>
-                      <div className="ct-duplicate-head">
-                        <span className="ct-duplicate-ticket-id">#{item.id.slice(-6).toUpperCase()}</span>
-                        <span className="ct-duplicate-score">Score {item.score}</span>
-                      </div>
-                      <div className="ct-duplicate-title">{item.title}</div>
-                      <div className="ct-duplicate-meta">
-                        {formatDuplicateStatus(item.status)} · {formatDuplicatePriority(item.priority)}
-                        {item.category ? ` · ${item.category}` : ''}
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
             {conditional.hints.length > 0 ? (
               <div className="ct-conditional-hints">
                 {conditional.hints.map((hint) => (

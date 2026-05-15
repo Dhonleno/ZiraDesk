@@ -38,7 +38,7 @@ function flatten(data: GlobalSearchResult | undefined): FlatResult[] {
       type: 'contact' as const,
       title: client.name,
       subtitle: client.email ?? client.phone ?? 'Contato',
-      href: `/crm/contacts?contact=${client.id}`,
+      href: `/crm/contacts?id=${client.id}`,
     })),
     ...data.tickets.map((ticket) => ({
       key: `ticket:${ticket.id}`,

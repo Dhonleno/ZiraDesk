@@ -849,8 +849,8 @@ export function TicketDetailPage() {
               <h2>{t('tickets.detail.sections.contact')}</h2>
               <div className="ticket-sidebar-contact">
                 <Link to={ticket.contact_id ? `/crm/contacts/${ticket.contact_id}?id=${ticket.contact_id}` : '/crm/contacts'}>
-                  <ContactAvatar id={ticket.contact_id ?? ticket.id} name={ticket.contact_name ?? ticket.client_name ?? t('tickets.fields.noClient')} size={26} />
-                  <span>{ticket.contact_name ?? ticket.client_name ?? t('tickets.fields.noClient')}</span>
+                  <ContactAvatar id={ticket.contact_id ?? ticket.id} name={ticket.contact_name ?? t('tickets.fields.noClient')} size={26} />
+                  <span>{ticket.contact_name ?? t('tickets.fields.noClient')}</span>
                 </Link>
                 {ticket.organization_name ? <small>{ticket.organization_name}</small> : null}
               </div>

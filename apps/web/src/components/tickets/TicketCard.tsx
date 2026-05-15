@@ -46,7 +46,7 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
   const due    = dueStatus(ticket.due_date);
   const dueCol = due === 'overdue' ? 'var(--red)' : due === 'soon' ? 'var(--amber)' : 'var(--txt-3)';
   const ticketKey = ticket.id.slice(-6).toUpperCase();
-  const ticketContactName = ticket.contact_name ?? ticket.client_name;
+  const ticketContactName = ticket.contact_name;
   const lastSeen = localStorage.getItem(`zd_ticket_seen_${ticket.id}`);
   const hasUnread = !lastSeen || new Date(ticket.updated_at).getTime() > new Date(lastSeen).getTime();
 

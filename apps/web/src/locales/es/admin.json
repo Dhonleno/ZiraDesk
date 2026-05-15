@@ -113,7 +113,9 @@
         "enabled": "Enviar CSAT automáticamente",
         "enabledHint": "Envía una encuesta al cliente al resolver conversaciones",
         "message": "Mensaje inicial del CSAT",
-        "messagePlaceholder": "¡Tu atención fue finalizada!..."
+        "messagePlaceholder": "¡Tu atención fue finalizada!...",
+        "expirationHours": "Expiración del CSAT (horas)",
+        "expirationHint": "Tiempo en horas hasta que el enlace de valoración expire. Por defecto: 48h."
       },
       "inactivity": {
         "title": "Inactividad de Atención",
@@ -428,7 +430,7 @@
       "summary": "Resumen",
       "stats": {
         "users": "Usuarios activos",
-        "clients": "Clientes",
+        "clients": "Contactos",
         "openConversations": "Conversaciones abiertas",
         "openTickets": "Tickets abiertos",
         "totalConversations": "Total de conversaciones",
@@ -453,9 +455,12 @@
       "settings:manage": "Configuraciones — Gestionar",
       "users:manage": "Usuarios — Gestionar",
       "channels:manage": "Canales — Gestionar",
-      "clients:view": "Clientes — Visualizar",
-      "clients:edit": "Clientes — Editar",
-      "clients:delete": "Clientes — Eliminar",
+      "contacts:view": "Contactos — Visualizar",
+      "contacts:edit": "Contactos — Editar",
+      "contacts:delete": "Contactos — Eliminar",
+      "organizations:view": "Organizaciones — Visualizar",
+      "organizations:edit": "Organizaciones — Editar",
+      "organizations:delete": "Organizaciones — Eliminar",
       "conversations:view": "Atenciones — Visualizar",
       "conversations:reply": "Atenciones — Responder",
       "conversations:manage": "Atenciones — Gestionar",
@@ -519,16 +524,25 @@
       "title": "Tenants",
       "new": "Nuevo Tenant",
       "search": "Buscar tenant...",
+      "totalFound": "{{count}} tenants encontrados",
+      "empty": "No se encontraron tenants",
       "status": {
         "active": "Activo",
         "trial": "Prueba",
         "suspended": "Suspendido",
         "cancelled": "Cancelado"
       },
+      "stats": {
+        "total": "Total de Tenants",
+        "active": "Tenants Activos",
+        "trialsExpiring": "Trials por vencer",
+        "mrr": "MRR Estimado"
+      },
       "fields": {
         "name": "Nombre de la empresa",
         "slug": "Subdominio",
         "plan": "Plan",
+        "actions": "Acciones",
         "status": "Estado",
         "createdAt": "Creado en",
         "owner": "Responsable",
@@ -536,6 +550,10 @@
         "trialDays": "Días de prueba"
       },
       "actions": {
+        "viewDetails": "Ver detalles",
+        "impersonate": "Acceder como Admin",
+        "editPlan": "Editar plan",
+        "cancel": "Cancelar tenant",
         "suspend": "Suspender",
         "activate": "Activar",
         "delete": "Eliminar",
@@ -546,7 +564,72 @@
         "updated": "Tenant actualizado",
         "suspended": "Tenant suspendido",
         "activated": "Tenant activado",
+        "cancelled": "Tenant cancelado",
         "deleteConfirm": "¿Estás seguro? Esta acción no se puede deshacer."
+      },
+      "impersonateBanner": "Estás accediendo como {{tenant}}",
+      "backToSuperAdmin": "Volver al Super Admin",
+      "cancelConfirmTitle": "Cancelar tenant",
+      "cancelConfirmMsg": "Esta acción no se puede deshacer. Escribe el nombre del tenant para confirmar.",
+      "cancelConfirmFullMessage": "¿Estás seguro? El tenant {{name}} perderá acceso inmediatamente. Esta acción no se puede deshacer.",
+      "cancelConfirmPlaceholder": "Escribe {{name}} para confirmar",
+      "trialEndsAt": "Trial hasta",
+      "users": "Usuarios",
+      "conversations": "Conversaciones",
+      "createWizard": {
+        "stepsAriaLabel": "Pasos de creación del tenant",
+        "steps": {
+          "company": "Empresa",
+          "plan": "Plan",
+          "owner": "Responsable"
+        },
+        "actions": {
+          "back": "Volver",
+          "next": "Siguiente",
+          "create": "Crear tenant"
+        },
+        "placeholders": {
+          "name": "Acme Corp",
+          "slug": "acme-corp",
+          "plan": "Selecciona un plan",
+          "trialDays": "14",
+          "owner": "Juan Pérez",
+          "ownerEmail": "juan@acme.com"
+        },
+        "slug": {
+          "idleHint": "Usa solo letras minúsculas, números y guion.",
+          "invalidHint": "Formato de subdominio inválido.",
+          "checkingHint": "Verificando disponibilidad...",
+          "takenHint": "Este subdominio ya está en uso.",
+          "availableHint": "Subdominio disponible."
+        },
+        "validation": {
+          "nameRequired": "Ingresa el nombre de la empresa",
+          "slugMin": "El subdominio debe tener al menos 2 caracteres",
+          "slugMax": "El subdominio debe tener como máximo 50 caracteres",
+          "slugFormat": "Usa solo letras minúsculas, números y guion",
+          "slugTaken": "Este subdominio ya está en uso",
+          "planRequired": "Selecciona un plan",
+          "trialDaysInt": "Ingresa un número entero",
+          "trialDaysMin": "Los días de prueba deben ser al menos 1",
+          "trialDaysMax": "Los días de prueba deben ser como máximo 365",
+          "ownerNameRequired": "Ingresa el nombre del responsable",
+          "ownerEmailInvalid": "Ingresa un correo válido"
+        },
+        "review": {
+          "title": "Revisión"
+        },
+        "messages": {
+          "createError": "Error al crear el tenant"
+        },
+        "planSelected": "Plan seleccionado: {{plan}}"
+      },
+      "credentialsModal": {
+        "title": "Tenant creado",
+        "description": "Usa estas credenciales iniciales para el responsable del tenant {{tenant}}.",
+        "ownerEmail": "Correo",
+        "tempPassword": "Contraseña temporal",
+        "note": "Anótalo antes de cerrar."
       }
     },
     "plans": {
@@ -575,6 +658,25 @@
       "suspendedTenants": "Suspendidos",
       "newLast7Days": "Nuevos (7 días)",
       "newLast30Days": "Nuevos (30 días)"
+    },
+    "dashboard": {
+      "systemOverview": "Resumen del sistema",
+      "metricsLoadError": "Error al cargar métricas. Verifica si la API está en ejecución e inténtalo nuevamente.",
+      "tenantsByPlan": "Tenants por plan",
+      "recentTenants": "Últimos tenants",
+      "trialsExpiring": "Trials por vencer",
+      "noTrialsExpiring": "Ningún trial por vencer pronto",
+      "convert": "Convertir",
+      "view": "Ver →",
+      "viewAll": "Ver todos →",
+      "createdAgo_one": "hace {{count}} día",
+      "createdAgo_other": "hace {{count}} días",
+      "createdToday": "hoy",
+      "expiredAgo_one": "expiró hace {{count}} día",
+      "expiredAgo_other": "expiró hace {{count}} días",
+      "expiresToday": "expira hoy",
+      "expiresInDays_one": "expira en {{count}} día",
+      "expiresInDays_other": "expira en {{count}} días"
     }
   }
 }

@@ -14,13 +14,8 @@ interface Conversation {
   id: string;
   status: string;
   channel_type: string;
-  client_id: string | null;
   contact_id?: string | null;
   organization_id?: string | null;
-  client_name: string | null;
-  client_email: string | null;
-  client_phone: string | null;
-  client_whatsapp?: string | null;
   contact_name?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
@@ -219,7 +214,7 @@ export function InfoPanel({ conversationId }: Props) {
   });
 
   const conv = data?.conversation;
-  const contactId = conv?.contact_id ?? conv?.client_id ?? null;
+  const contactId = conv?.contact_id ?? null;
 
   const { data: contactData } = useQuery({
     queryKey: ['crm-contact', contactId],
@@ -291,12 +286,10 @@ export function InfoPanel({ conversationId }: Props) {
     contactData?.whatsapp?.trim()
     || contactData?.phone?.trim()
     || conv?.contact_whatsapp?.trim()
-    || conv?.client_whatsapp?.trim()
     || conv?.contact_phone?.trim()
-    || conv?.client_phone?.trim()
     || null;
-  const contactEmail = contactData?.email ?? conv?.contact_email ?? conv?.client_email ?? null;
-  const contactName = (contactData?.name ?? conv?.contact_name ?? conv?.client_name ?? null)?.trim();
+  const contactEmail = contactData?.email ?? conv?.contact_email ?? null;
+  const contactName = (contactData?.name ?? conv?.contact_name ?? null)?.trim();
   const organizationId = contactData?.organization_id ?? conv?.organization_id ?? null;
   const organizationName = (contactData?.organization_name ?? conv?.organization_name ?? null)?.trim() || null;
   const name = contactName || 'Contato não identificado';
@@ -336,7 +329,7 @@ export function InfoPanel({ conversationId }: Props) {
     };
 
     if (contactId) nextData.contact_id = contactId;
-    if (conv.contact_name ?? conv.client_name) nextData.contact_name = conv.contact_name ?? conv.client_name ?? '';
+    if (conv.contact_name) nextData.contact_name = conv.contact_name;
     if (conv.organization_id) nextData.organization_id = conv.organization_id;
     if (conv.organization_name) nextData.organization_name = conv.organization_name;
 

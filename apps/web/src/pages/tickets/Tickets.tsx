@@ -154,7 +154,7 @@ function TicketCard({
 
       <div className="tickets-card-bottom">
         <div className="tickets-avatar-stack" aria-hidden>
-          <StackAvatar name={ticket.contact_name ?? ticket.client_name ?? null} />
+          <StackAvatar name={ticket.contact_name ?? null} />
           <StackAvatar
             name={ticket.assignee_name ?? null}
             src={ticket.assignee_avatar}

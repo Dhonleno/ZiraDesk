@@ -7,11 +7,16 @@ interface ModalProps {
   title: string;
   children: ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg';
+  maxWidthPx?: number;
 }
 
-const widthClasses = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg' };
+const widthBySize: Record<NonNullable<ModalProps['maxWidth']>, number> = {
+  sm: 420,
+  md: 560,
+  lg: 720,
+};
 
-export function Modal({ open, onClose, title, children, maxWidth = 'md' }: ModalProps) {
+export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidthPx }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -22,9 +27,21 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md' }: Modal
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+      }}
+    >
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1000,
+          background: 'var(--backdrop)',
+          backdropFilter: 'blur(6px)',
+        }}
         onClick={onClose}
         aria-hidden
       />
@@ -32,26 +49,68 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md' }: Modal
         role="dialog"
         aria-modal
         aria-labelledby="modal-title"
-        className={[
-          'relative z-10 w-full rounded-2xl border border-line bg-bg-3 shadow-2xl',
-          widthClasses[maxWidth],
-        ].join(' ')}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: maxWidthPx ?? widthBySize[maxWidth],
+          maxWidth: 'calc(100vw - 32px)',
+          maxHeight: '90vh',
+          borderRadius: 'var(--r-xl)',
+          border: '1px solid var(--line)',
+          background: 'var(--bg-2)',
+          boxShadow: 'var(--shadow-pop)',
+          zIndex: 1001,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
       >
-        <div className="flex items-center justify-between border-b border-line px-6 py-4">
-          <h2 id="modal-title" className="text-base font-semibold text-txt">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid var(--line)',
+            padding: '16px 24px',
+          }}
+        >
+          <h2 id="modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--txt)' }}>
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-txt-3 hover:bg-bg-4 hover:text-txt-2 transition-colors"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              borderRadius: 'var(--r)',
+              padding: 4,
+              color: 'var(--txt-3)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
             aria-label="Fechar"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden>
+            <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden>
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div
+          className="modal-body"
+          style={{
+            padding: '20px 24px',
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'var(--bg-5) transparent',
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>,
     document.body,

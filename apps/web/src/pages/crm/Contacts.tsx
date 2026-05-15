@@ -108,7 +108,7 @@ export function ContactsPage() {
               </span>
             ) : null}
             <div style={{ flex: 1 }} />
-            <PermissionGate permission="clients:edit">
+            <PermissionGate permission="contacts:edit">
               <button
                 onClick={() => setIsCreateOpen(true)}
                 className="zd-btn zd-btn-primary"
@@ -187,7 +187,7 @@ export function ContactsPage() {
                         <rect x="5.5" y="3" width="4" height="5" rx="1" stroke="currentColor" strokeWidth="1.1"/>
                       </svg>
                     </button>
-                    <PermissionGate permission="clients:delete">
+                    <PermissionGate permission="contacts:delete">
                       <button
                         className="tb-icon-btn"
                         onClick={() => setDeleteConfirm(contact)}

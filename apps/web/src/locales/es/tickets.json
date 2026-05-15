@@ -68,6 +68,9 @@
       "edit": "Editar",
       "delete": "Eliminar"
     },
+    "chooseFile": "Elegir archivos",
+    "noFileSelected": "Ningún archivo",
+    "filesSelected": "{{count}} archivos seleccionados",
     "form": {
       "create": "Crear ticket",
       "creating": "Creando...",
@@ -80,10 +83,16 @@
       "selectPriority": "Seleccionar prioridad",
       "selectStatus": "Seleccionar estado",
       "selectType": "Seleccione el tipo",
+      "selectCategory": "Seleccione la categoría",
       "searchClient": "Buscar contacto...",
       "noClient": "Sin contacto",
       "searchUser": "Buscar usuario...",
-      "noUser": "Sin asignación"
+      "noUser": "Sin asignación",
+      "searchOrganization": "Buscar organización...",
+      "organizationLinked": "Organización vinculada",
+      "urgentDueDateRequired": "Obligatorio para prioridad urgente",
+      "tagPlaceholder": "Escribe y presiona Enter",
+      "attachments": "Adjuntos al abrir"
     },
     "timeline": {
       "title": "Historial",
