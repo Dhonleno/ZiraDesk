@@ -20,7 +20,25 @@ export const createOrganizationSchema = z.object({
   notes:          z.string().optional(),
 });
 
-export const updateOrganizationSchema = createOrganizationSchema.partial();
+export const updateOrganizationSchema = z.object({
+  type:           z.enum(['company', 'person']).optional(),
+  name:           z.string().min(2).max(150).optional(),
+  document:       z.string().max(20).nullable().optional(),
+  email:          z.string().email().nullable().optional(),
+  phone:          z.string().max(30).nullable().optional(),
+  website:        z.string().max(255).nullable().optional(),
+  status:         z.enum(['lead', 'prospect', 'client', 'inactive']).optional(),
+  address_street: z.string().max(200).nullable().optional(),
+  address_city:   z.string().max(100).nullable().optional(),
+  address_state:  z.string().max(2).nullable().optional(),
+  address_zip:    z.string().max(10).nullable().optional(),
+  segment:        z.string().max(100).nullable().optional(),
+  lead_source:    z.string().max(100).nullable().optional(),
+  responsible_id: z.string().uuid().nullable().optional(),
+  tags:           z.array(z.string()).nullable().optional(),
+  custom_fields:  z.record(z.unknown()).nullable().optional(),
+  notes:          z.string().nullable().optional(),
+});
 
 export const listOrganizationsQuerySchema = z.object({
   page:           z.coerce.number().int().positive().default(1),

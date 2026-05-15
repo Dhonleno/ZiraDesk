@@ -27,6 +27,7 @@ import { portalModuleRoutes } from './modules/portal/index.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
+import { logger } from './config/logger.js';
 
 const app = Fastify({
   ignoreTrailingSlash: true,
@@ -166,7 +167,7 @@ async function bootstrap(): Promise<void> {
 const signals = ['SIGTERM', 'SIGINT'] as const;
 signals.forEach((signal) => {
   process.on(signal, async () => {
-    console.log(`[Server] Received ${signal}, shutting down gracefully`);
+    app.log.info(`[Server] Received ${signal}, shutting down gracefully`);
     await app.close();
     await prisma.$disconnect();
     redis.disconnect();
@@ -175,6 +176,6 @@ signals.forEach((signal) => {
 });
 
 bootstrap().catch((err) => {
-  console.error(err);
+  logger.error({ err: err instanceof Error ? err.message : String(err) }, '[Server] Fatal startup error');
   process.exit(1);
 });

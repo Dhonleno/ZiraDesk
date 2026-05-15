@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Server } from 'socket.io';
 import { quoteIdent } from './protocols.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
+import { logger } from '../../../config/logger.js';
 import { sendWhatsAppTextMessage } from './csat.service.js';
 import { PRESENCE_TIMEOUT_MS } from '../presence.constants.js';
 import { getSocketServer } from '../../../socket/index.js';
@@ -424,11 +425,7 @@ async function persistAutoAssignment(
       );
     }
   } catch (error) {
-    console.error('[AutoAssign] Failed to notify customer after assignment', {
-      conversationId,
-      agentId,
-      error,
-    });
+    logger.error({ conversationId, agentId, err: error instanceof Error ? error.message : String(error) }, '[AutoAssign] Failed to notify customer after assignment');
   }
 
   return true;
@@ -552,7 +549,7 @@ export async function autoAssignConversation(
   );
   if (!nextAgent) {
     if (requiredBotOptionId) {
-      console.log(`[AutoAssign] No agent with skill for option ${requiredBotOptionId}. Keeping in queue.`);
+      logger.info({ optionId: requiredBotOptionId }, '[AutoAssign] No agent with skill for option, keeping in queue');
     }
     return null;
   }

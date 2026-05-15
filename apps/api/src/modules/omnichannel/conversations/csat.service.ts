@@ -1,5 +1,6 @@
 import { prisma } from '../../../config/database.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
+import { logger } from '../../../config/logger.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 
 type CsatDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
@@ -88,10 +89,7 @@ export async function sendWhatsAppTextMessage({
 
   if (!response.ok) {
     const details = await response.text().catch(() => '');
-    console.error('[CSAT] Failed to send WhatsApp message', {
-      status: response.status,
-      details: details.substring(0, 500),
-    });
+    logger.error({ status: response.status, details: details.substring(0, 500) }, '[CSAT] Failed to send WhatsApp message');
     return false;
   }
 
@@ -138,6 +136,13 @@ export async function sendCsatMessage(
   const settings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
   if (settings.csat_enabled === false) return;
 
+  const csatExpirationHours =
+    typeof settings.csatExpirationHours === 'number' &&
+    settings.csatExpirationHours >= 1 &&
+    settings.csatExpirationHours <= 720
+      ? Math.trunc(settings.csatExpirationHours)
+      : 48;
+
   const csatText =
     typeof settings.csat_message === 'string' && settings.csat_message.trim()
       ? settings.csat_message.trim()
@@ -165,11 +170,11 @@ export async function sendCsatMessage(
     `UPDATE conversations
      SET csat_sent_at = NOW(),
          csat_stage = 'sent',
-         csat_expires_at = NOW() + INTERVAL '48 hours'
-     WHERE id = $1::uuid`,
+         csat_expires_at = NOW() + ($1 * INTERVAL '1 hour')
+     WHERE id = $2::uuid`,
+    csatExpirationHours,
     conversationId,
   );
-  // TODO: mover 48h para settings.csatExpirationHours por tenant.
 
   await db.$executeRawUnsafe(
     `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
@@ -178,5 +183,5 @@ export async function sendCsatMessage(
     csatText,
   );
 
-  console.log(`[CSAT] Sent to conversation ${conversationId}`);
+  logger.info({ conversationId }, '[CSAT] Sent');
 }

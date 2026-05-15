@@ -5,9 +5,12 @@ export type Permission =
   | 'settings:manage'
   | 'users:manage'
   | 'channels:manage'
-  | 'clients:view'
-  | 'clients:edit'
-  | 'clients:delete'
+  | 'contacts:view'
+  | 'contacts:edit'
+  | 'contacts:delete'
+  | 'organizations:view'
+  | 'organizations:edit'
+  | 'organizations:delete'
   | 'conversations:view'
   | 'conversations:reply'
   | 'conversations:manage'
@@ -23,9 +26,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'settings:manage',
     'users:manage',
     'channels:manage',
-    'clients:view',
-    'clients:edit',
-    'clients:delete',
+    'contacts:view',
+    'contacts:edit',
+    'contacts:delete',
+    'organizations:view',
+    'organizations:edit',
+    'organizations:delete',
     'conversations:view',
     'conversations:reply',
     'conversations:manage',
@@ -39,9 +45,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'settings:manage',
     'users:manage',
     'channels:manage',
-    'clients:view',
-    'clients:edit',
-    'clients:delete',
+    'contacts:view',
+    'contacts:edit',
+    'contacts:delete',
+    'organizations:view',
+    'organizations:edit',
+    'organizations:delete',
     'conversations:view',
     'conversations:reply',
     'conversations:manage',
@@ -52,8 +61,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'metrics:own',
   ],
   agent: [
-    'clients:view',
-    'clients:edit',
+    'contacts:view',
+    'contacts:edit',
+    'organizations:view',
+    'organizations:edit',
     'conversations:view',
     'conversations:reply',
     'conversations:manage',
@@ -62,7 +73,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'metrics:own',
   ],
   viewer: [
-    'clients:view',
+    'contacts:view',
+    'organizations:view',
     'conversations:view',
     'tickets:view',
   ],

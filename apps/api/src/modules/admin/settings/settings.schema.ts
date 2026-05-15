@@ -10,6 +10,7 @@ export const updateSettingsSchema = z.object({
   away_message_enabled: z.boolean().optional(),
   csat_enabled: z.boolean().optional(),
   csat_message: z.string().max(2000).optional(),
+  csat_expiration_hours: z.number().int().min(1, 'Mínimo 1 hora').max(720, 'Máximo 30 dias').optional(),
   email_confirmation: z.boolean().optional(),
   inactivity_enabled: z.boolean().optional(),
   inactivity_warning_minutes: z.number().int().min(1).max(1440).optional(),

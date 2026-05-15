@@ -7,7 +7,6 @@ import type {
   CreateTicketInput,
   UpdateTicketInput,
   ListTicketsQuery,
-  FindTicketDuplicatesQuery,
   CreateCommentInput,
   UpdateCommentInput,
   UpdateChecklistItemInput,
@@ -147,19 +146,6 @@ interface TicketEventRow {
   created_at: Date;
   user_name: string | null;
   avatar_url: string | null;
-}
-
-interface TicketDuplicateRow {
-  id: string;
-  title: string;
-  status: string;
-  priority: string;
-  category: string | null;
-  contact_name: string | null;
-  organization_name: string | null;
-  created_at: Date;
-  updated_at: Date;
-  score: number;
 }
 
 interface TicketTypeRuleRow {
@@ -580,51 +566,6 @@ export async function getTicket(id: string, schemaName?: string, db?: RawExecuto
   );
   if (!rows[0]) throw new NotFoundError('Ticket');
   return rows[0];
-}
-
-/* ── findPotentialDuplicates ────────────────────────────────────────────── */
-export async function findTicketDuplicates(query: FindTicketDuplicatesQuery) {
-  await ensureTicketInfrastructure();
-
-  const title = query.title.trim();
-  if (title.length < 3) return [];
-
-  const rows = await prisma.$queryRawUnsafe<TicketDuplicateRow[]>(
-    `SELECT
-       t.id,
-       t.title,
-       t.status,
-       t.priority,
-       t.category,
-       ct.name AS contact_name,
-       o.name AS organization_name,
-       t.created_at,
-       t.updated_at,
-       (
-         CASE WHEN LOWER(t.title) = LOWER($1) THEN 35 ELSE 0 END +
-         CASE WHEN t.title ILIKE '%' || $1 || '%' THEN 20 ELSE 0 END +
-         CASE WHEN $2::uuid IS NOT NULL AND t.contact_id = $2::uuid THEN 35 ELSE 0 END +
-         CASE WHEN $3::uuid IS NOT NULL AND t.organization_id = $3::uuid THEN 25 ELSE 0 END
-       )::integer AS score
-     FROM tickets t
-     LEFT JOIN contacts ct ON ct.id = t.contact_id
-     LEFT JOIN organizations o ON o.id = t.organization_id
-     WHERE t.status IN ('open', 'in_progress', 'waiting', 'resolved')
-       AND ($4::uuid IS NULL OR t.id <> $4::uuid)
-       AND (
-         t.title ILIKE '%' || $1 || '%'
-         OR ($2::uuid IS NOT NULL AND t.contact_id = $2::uuid)
-         OR ($3::uuid IS NOT NULL AND t.organization_id = $3::uuid)
-       )
-     ORDER BY score DESC, t.updated_at DESC
-     LIMIT 5`,
-    title,
-    query.contact_id ?? null,
-    query.organization_id ?? null,
-    query.exclude_id ?? null,
-  );
-
-  return rows;
 }
 
 /* ── createTicket ────────────────────────────────────────────────────────── */

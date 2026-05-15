@@ -97,30 +97,30 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           );
           await ensureConversationProtocolInfrastructure(tx, tenant.schema_name);
 
-          const clientRows = await tx.$queryRawUnsafe<[{ id: string }]>(
-            `SELECT id FROM clients WHERE custom_fields->>'instagram_id' = $1 LIMIT 1`,
+          const contactRows = await tx.$queryRawUnsafe<[{ id: string }]>(
+            `SELECT id FROM contacts WHERE custom_fields->>'instagram_id' = $1 LIMIT 1`,
             senderId,
           );
 
-          let clientId: string;
-          if (clientRows[0]) {
-            clientId = clientRows[0].id;
+          let contactId: string;
+          if (contactRows[0]) {
+            contactId = contactRows[0].id;
           } else {
-            const newClient = await tx.$queryRawUnsafe<[{ id: string }]>(
-              `INSERT INTO clients (name, status, custom_fields)
-               VALUES ($1, 'lead', $2::jsonb) RETURNING id`,
+            const newContact = await tx.$queryRawUnsafe<[{ id: string }]>(
+              `INSERT INTO contacts (name, custom_fields)
+               VALUES ($1, $2::jsonb) RETURNING id`,
               `Instagram user ${senderId}`,
               JSON.stringify({ instagram_id: senderId }),
             );
-            clientId = newClient[0]!.id;
+            contactId = newContact[0]!.id;
           }
 
           const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
             `SELECT id FROM conversations
-             WHERE client_id = $1 AND channel_id = $2 AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+             WHERE contact_id = $1 AND channel_id = $2 AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
              ORDER BY created_at DESC
              LIMIT 1`,
-            clientId,
+            contactId,
             channel.id,
           );
 
@@ -129,10 +129,10 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             conversationId = convRows[0].id;
           } else {
             const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
-              `INSERT INTO conversations (client_id, channel_id, channel_type, conversation_type, status, metadata)
+              `INSERT INTO conversations (contact_id, channel_id, channel_type, conversation_type, status, metadata)
                VALUES ($1, $2, 'instagram', 'inbound', 'open', '{"type": "inbound"}'::jsonb)
                RETURNING id`,
-              clientId,
+              contactId,
               channel.id,
             );
             conversationId = newConv[0]!.id;
@@ -145,7 +145,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
              VALUES ($1, 'client', $2, $3, 'text', $4, 'delivered')
              RETURNING id, content, created_at, sender_type`,
             conversationId,
-            clientId,
+            contactId,
             text,
             externalId ?? null,
           );

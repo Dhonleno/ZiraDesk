@@ -1,10 +1,13 @@
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import type { Prisma } from '@prisma/client';
+import { env } from '../../../config/env.js';
 import { prisma } from '../../../config/database.js';
 import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
 import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
-import type { CreateTenantInput, UpdateTenantInput, ListTenantsQuery } from './tenants.schema.js';
+import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
+import type { CreateTenantInput, UpdateTenantInput, ListTenantsQuery, SlugAvailabilityQuery } from './tenants.schema.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -18,6 +21,18 @@ export class ConflictError extends Error {
     super(message);
     this.name = 'ConflictError';
   }
+}
+
+export async function checkTenantSlugAvailability(query: SlugAvailabilityQuery) {
+  const existing = await prisma.tenant.findUnique({
+    where: { slug: query.slug },
+    select: { id: true },
+  });
+
+  return {
+    slug: query.slug,
+    available: !existing,
+  };
 }
 
 function toSchemaName(slug: string): string {
@@ -160,17 +175,17 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_contacts_organization"
+    CREATE INDEX IF NOT EXISTS "idx_contacts_organization"
     ON "${schemaName}".contacts(organization_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_contacts_whatsapp"
+    CREATE INDEX IF NOT EXISTS "idx_contacts_whatsapp"
     ON "${schemaName}".contacts(whatsapp)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_contacts_phone"
+    CREATE INDEX IF NOT EXISTS "idx_contacts_phone"
     ON "${schemaName}".contacts(phone)
   `);
 
@@ -289,12 +304,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_bot_options_parent"
+    CREATE INDEX IF NOT EXISTS "idx_bot_options_parent"
     ON "${schemaName}".bot_options(parent_option_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX "${schemaName}_idx_bot_options_unique_parent_number"
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_bot_options_parent_number"
     ON "${schemaName}".bot_options(
       bot_menu_id,
       COALESCE(parent_option_id, '00000000-0000-0000-0000-000000000000'::uuid),
@@ -303,24 +318,28 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".agent_bot_skills (
+    CREATE TABLE IF NOT EXISTS "${schemaName}".agent_bot_skills (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
       bot_option_id UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
       level VARCHAR(20) DEFAULT 'intermediate',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, bot_option_id)
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_agent_bot_skills_user"
+    CREATE INDEX IF NOT EXISTS "idx_agent_bot_skills_user"
     ON "${schemaName}".agent_bot_skills(user_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_agent_bot_skills_option"
+    CREATE INDEX IF NOT EXISTS "idx_agent_bot_skills_option"
     ON "${schemaName}".agent_bot_skills(bot_option_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_agent_bot_skills_user_option"
+    ON "${schemaName}".agent_bot_skills(user_id, bot_option_id)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -385,12 +404,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_conversations_close_type"
+    CREATE INDEX IF NOT EXISTS "idx_conversations_close_type"
     ON "${schemaName}".conversations(close_type_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_conversations_close_outcome"
+    CREATE INDEX IF NOT EXISTS "idx_conversations_close_outcome"
     ON "${schemaName}".conversations(close_outcome_id)
   `);
 
@@ -449,7 +468,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_call_records_conversation"
+    CREATE INDEX IF NOT EXISTS "idx_call_records_conversation"
     ON "${schemaName}".call_records(conversation_id)
   `);
 
@@ -503,7 +522,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_tag_assignments_conv"
+    CREATE INDEX IF NOT EXISTS "idx_tag_assignments_conv"
     ON "${schemaName}".conversation_tag_assignments(conversation_id)
   `);
 
@@ -535,7 +554,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX "${schemaName}_idx_ticket_types_name_unique"
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_ticket_types_name"
     ON "${schemaName}".ticket_types (LOWER(name))
   `);
 
@@ -565,12 +584,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_tickets_type_id"
+    CREATE INDEX IF NOT EXISTS "idx_tickets_type_id"
     ON "${schemaName}".tickets(type_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX "${schemaName}_idx_tickets_email_message_id"
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_tickets_email_message_id"
     ON "${schemaName}".tickets(email_message_id)
     WHERE email_message_id IS NOT NULL
   `);
@@ -589,7 +608,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_ticket_events_ticket"
+    CREATE INDEX IF NOT EXISTS "idx_ticket_events_ticket"
     ON "${schemaName}".ticket_events(ticket_id)
   `);
 
@@ -607,12 +626,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_ticket_relations_ticket"
+    CREATE INDEX IF NOT EXISTS "idx_ticket_relations_ticket"
     ON "${schemaName}".ticket_relations(ticket_id)
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_ticket_relations_related"
+    CREATE INDEX IF NOT EXISTS "idx_ticket_relations_related"
     ON "${schemaName}".ticket_relations(related_id)
   `);
 
@@ -644,7 +663,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_ticket_attachments_ticket"
+    CREATE INDEX IF NOT EXISTS "idx_ticket_attachments_ticket"
     ON "${schemaName}".ticket_attachments(ticket_id)
   `);
 
@@ -662,7 +681,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_ticket_checklists_ticket"
+    CREATE INDEX IF NOT EXISTS "idx_ticket_checklists_ticket"
     ON "${schemaName}".ticket_checklists(ticket_id)
   `);
 
@@ -679,7 +698,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_idx_time_entries_ticket"
+    CREATE INDEX IF NOT EXISTS "idx_time_entries_ticket"
     ON "${schemaName}".ticket_time_entries(ticket_id)
   `);
 
@@ -728,7 +747,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE INDEX "${schemaName}_knowledge_chunks_embedding_idx"
+    CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_embedding"
     ON "${schemaName}".knowledge_chunks USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100)
   `);
@@ -850,7 +869,7 @@ export async function listTenants(query: ListTenantsQuery) {
   const [tenants, total] = await Promise.all([
     prisma.tenant.findMany({
       where,
-      include: { plan: { select: { id: true, name: true, slug: true } } },
+      include: { plan: { select: { id: true, name: true, slug: true, maxUsers: true, priceMonth: true } } },
       orderBy: { createdAt: 'desc' },
       skip,
       take: perPage,
@@ -858,8 +877,30 @@ export async function listTenants(query: ListTenantsQuery) {
     prisma.tenant.count({ where }),
   ]);
 
+  const tenantsWithUsage = await Promise.all(
+    tenants.map(async (tenant) => {
+      const schemaRef = quoteIdent(tenant.schemaName);
+      const usage = await prisma.$queryRawUnsafe<Array<{ users_count: number; conversations_this_month: number }>>(
+        `SELECT
+           (SELECT COUNT(*)::int FROM ${schemaRef}.users WHERE status = 'active') AS users_count,
+           (SELECT COUNT(*)::int
+              FROM ${schemaRef}.conversations
+             WHERE created_at >= date_trunc('month', now())
+               AND created_at < date_trunc('month', now()) + interval '1 month') AS conversations_this_month`,
+      );
+
+      const row = usage[0] ?? { users_count: 0, conversations_this_month: 0 };
+      return {
+        ...tenant,
+        usersCount: Number(row.users_count ?? 0),
+        usersLimit: tenant.plan.maxUsers,
+        conversationsThisMonth: Number(row.conversations_this_month ?? 0),
+      };
+    }),
+  );
+
   return {
-    data: tenants,
+    data: tenantsWithUsage,
     meta: {
       total,
       page,
@@ -910,4 +951,94 @@ export async function suspendTenant(id: string) {
 export async function activateTenant(id: string) {
   await getTenant(id);
   return prisma.tenant.update({ where: { id }, data: { status: 'active' } });
+}
+
+export async function getSuperAdminTenantStats() {
+  const now = new Date();
+  const nextSevenDays = new Date(now);
+  nextSevenDays.setDate(nextSevenDays.getDate() + 7);
+
+  const [totalTenants, activeTenants, trialsExpiringSoon, activeTenantsWithPlan] = await Promise.all([
+    prisma.tenant.count(),
+    prisma.tenant.count({ where: { status: 'active' } }),
+    prisma.tenant.count({
+      where: {
+        status: 'trial',
+        trialEndsAt: { lte: nextSevenDays },
+      },
+    }),
+    prisma.tenant.findMany({
+      where: { status: 'active' },
+      select: { plan: { select: { priceMonth: true } } },
+    }),
+  ]);
+
+  const estimatedMRR = activeTenantsWithPlan.reduce((sum, tenant) => (
+    sum + Number(tenant.plan.priceMonth ?? 0)
+  ), 0);
+
+  return {
+    totalTenants,
+    activeTenants,
+    trialsExpiringSoon,
+    estimatedMRR,
+  };
+}
+
+export async function impersonateTenantAsAdmin(tenantId: string, superAdminId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, name: true, slug: true, schemaName: true },
+  });
+
+  if (!tenant) throw new NotFoundError('Tenant');
+
+  const schemaRef = quoteIdent(tenant.schemaName);
+  const users = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; email: string; role: string }>>(
+    `SELECT id, name, email, role
+       FROM ${schemaRef}.users
+      WHERE status = 'active'
+        AND role IN ('owner', 'admin')
+      ORDER BY
+        CASE WHEN role = 'owner' THEN 0 ELSE 1 END,
+        created_at ASC
+      LIMIT 1`,
+  );
+
+  const ownerUser = users[0];
+  if (!ownerUser) {
+    throw new ConflictError('Tenant sem usuário owner/admin ativo para impersonação');
+  }
+
+  const token = jwt.sign(
+    {
+      sub: ownerUser.id,
+      email: ownerUser.email,
+      name: ownerUser.name,
+      role: ownerUser.role,
+      tenantId: tenant.id,
+      schemaName: tenant.schemaName,
+      tenantSlug: tenant.slug,
+      impersonatedBy: superAdminId,
+      isSuperAdmin: false,
+    },
+    env.JWT_SECRET,
+    { expiresIn: '2h' },
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${schemaRef}.audit_logs (user_id, action, entity, new_data)
+     VALUES (NULL, 'impersonate', 'tenant', $1::jsonb)`,
+    JSON.stringify({
+      action: 'impersonate',
+      superAdminId,
+      tenantId: tenant.id,
+    }),
+  );
+
+  return {
+    token,
+    tenantSlug: tenant.slug,
+    tenantName: tenant.name,
+  };
 }

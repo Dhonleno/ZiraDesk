@@ -303,36 +303,67 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
     await assertUniqueOrganizationDocument(normalizedDocument, id);
   }
 
-  const tagsLiteral    = data.tags !== undefined ? toPgArray(data.tags) : null;
-  const customFieldsJson = data.custom_fields !== undefined ? JSON.stringify(data.custom_fields) : null;
+  const tagsLiteral = data.tags === undefined ? undefined : toPgArray(data.tags ?? []);
+  const customFieldsJson = data.custom_fields === undefined ? undefined : JSON.stringify(data.custom_fields);
+
+  const hasType = Object.prototype.hasOwnProperty.call(data, 'type');
+  const hasName = Object.prototype.hasOwnProperty.call(data, 'name');
+  const hasDocument = Object.prototype.hasOwnProperty.call(data, 'document');
+  const hasEmail = Object.prototype.hasOwnProperty.call(data, 'email');
+  const hasPhone = Object.prototype.hasOwnProperty.call(data, 'phone');
+  const hasWebsite = Object.prototype.hasOwnProperty.call(data, 'website');
+  const hasStatus = Object.prototype.hasOwnProperty.call(data, 'status');
+  const hasAddressStreet = Object.prototype.hasOwnProperty.call(data, 'address_street');
+  const hasAddressCity = Object.prototype.hasOwnProperty.call(data, 'address_city');
+  const hasAddressState = Object.prototype.hasOwnProperty.call(data, 'address_state');
+  const hasAddressZip = Object.prototype.hasOwnProperty.call(data, 'address_zip');
+  const hasSegment = Object.prototype.hasOwnProperty.call(data, 'segment');
+  const hasLeadSource = Object.prototype.hasOwnProperty.call(data, 'lead_source');
+  const hasResponsibleId = Object.prototype.hasOwnProperty.call(data, 'responsible_id');
+  const hasTags = Object.prototype.hasOwnProperty.call(data, 'tags');
+  const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
+  const hasNotes = Object.prototype.hasOwnProperty.call(data, 'notes');
 
   const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
     `UPDATE organizations SET
-       type            = COALESCE($1,          type),
-       name            = COALESCE($2,          name),
-       document        = COALESCE($3,          document),
-       email           = COALESCE($4,          email),
-       phone           = COALESCE($5,          phone),
-       website         = COALESCE($6,          website),
-       status          = COALESCE($7,          status),
-       address_street  = COALESCE($8,          address_street),
-       address_city    = COALESCE($9,          address_city),
-       address_state   = COALESCE($10,         address_state),
-       address_zip     = COALESCE($11,         address_zip),
-       segment         = COALESCE($12,         segment),
-       lead_source     = COALESCE($13,         lead_source),
-       responsible_id  = COALESCE($14::uuid,   responsible_id),
-       tags            = COALESCE($15::text[], tags),
-       custom_fields   = COALESCE($16::jsonb,  custom_fields),
-       notes           = COALESCE($17,         notes),
+       type            = CASE WHEN $1::boolean THEN $2 ELSE type END,
+       name            = CASE WHEN $3::boolean THEN $4 ELSE name END,
+       document        = CASE WHEN $5::boolean THEN $6 ELSE document END,
+       email           = CASE WHEN $7::boolean THEN $8 ELSE email END,
+       phone           = CASE WHEN $9::boolean THEN $10 ELSE phone END,
+       website         = CASE WHEN $11::boolean THEN $12 ELSE website END,
+       status          = CASE WHEN $13::boolean THEN $14 ELSE status END,
+       address_street  = CASE WHEN $15::boolean THEN $16 ELSE address_street END,
+       address_city    = CASE WHEN $17::boolean THEN $18 ELSE address_city END,
+       address_state   = CASE WHEN $19::boolean THEN $20 ELSE address_state END,
+       address_zip     = CASE WHEN $21::boolean THEN $22 ELSE address_zip END,
+       segment         = CASE WHEN $23::boolean THEN $24 ELSE segment END,
+       lead_source     = CASE WHEN $25::boolean THEN $26 ELSE lead_source END,
+       responsible_id  = CASE WHEN $27::boolean THEN $28::uuid ELSE responsible_id END,
+       tags            = CASE WHEN $29::boolean THEN $30::text[] ELSE tags END,
+       custom_fields   = CASE WHEN $31::boolean THEN $32::jsonb ELSE custom_fields END,
+       notes           = CASE WHEN $33::boolean THEN $34 ELSE notes END,
        updated_at      = NOW()
-     WHERE id = $18::uuid
+     WHERE id = $35::uuid
      RETURNING *`,
-    data.type ?? null, data.name ?? null, normalizedDocument ?? null, normalizedEmail ?? null,
-    data.phone ?? null, data.website ?? null, data.status ?? null,
-    data.address_street ?? null, data.address_city ?? null, data.address_state ?? null, data.address_zip ?? null,
-    data.segment ?? null, data.lead_source ?? null, data.responsible_id ?? null,
-    tagsLiteral, customFieldsJson, data.notes ?? null, id,
+    hasType, data.type ?? null,
+    hasName, data.name ?? null,
+    hasDocument, normalizedDocument ?? null,
+    hasEmail, normalizedEmail ?? null,
+    hasPhone, data.phone ?? null,
+    hasWebsite, data.website ?? null,
+    hasStatus, data.status ?? null,
+    hasAddressStreet, data.address_street ?? null,
+    hasAddressCity, data.address_city ?? null,
+    hasAddressState, data.address_state ?? null,
+    hasAddressZip, data.address_zip ?? null,
+    hasSegment, data.segment ?? null,
+    hasLeadSource, data.lead_source ?? null,
+    hasResponsibleId, data.responsible_id ?? null,
+    hasTags, tagsLiteral ?? null,
+    hasCustomFields, customFieldsJson ?? null,
+    hasNotes, data.notes ?? null,
+    id,
   );
 
   if (!rows[0]) throw new NotFoundError('Organização');

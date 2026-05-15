@@ -49,15 +49,6 @@ function normalizeAgentStatus(status: string): 'online' | 'paused' | 'offline' {
   return 'offline';
 }
 
-function isLegacySchemaError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return (
-    (message.includes('column') && message.includes('does not exist'))
-    || (message.includes('relation') && message.includes('does not exist'))
-  );
-}
-
 interface TvAgentCardsItem {
   id: string;
   name: string;
@@ -95,7 +86,7 @@ interface TvQueryRow {
   conversation_cards: TvConversationCard[] | null;
 }
 
-async function queryTvRow(tx: TxClient, legacyMode = false): Promise<TvQueryRow | undefined> {
+async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
   const modernSql = `WITH conversation_cards AS (
       SELECT
         c.id,
@@ -205,107 +196,7 @@ async function queryTvRow(tx: TxClient, legacyMode = false): Promise<TvQueryRow 
     FROM conversations c
     LEFT JOIN first_response fr ON fr.id = c.id`;
 
-  const legacySql = `WITH conversation_cards AS (
-      SELECT
-        c.id,
-        UPPER(SUBSTRING(REPLACE(c.id::text, '-', '') FROM 1 FOR 12)) AS protocol,
-        c.channel_type AS channel_type,
-        COALESCE(NULLIF(TRIM(cl.name), ''), 'Sem nome') AS contact_name,
-        COALESCE(NULLIF(TRIM(cl.phone), ''), '') AS contact_phone,
-        u.name AS agent_name,
-        NULL::timestamptz AS assigned_at,
-        c.created_at,
-        c.status,
-        FLOOR(EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 60)::integer AS wait_time
-      FROM conversations c
-      LEFT JOIN clients cl ON cl.id = c.client_id
-      LEFT JOIN users u ON u.id = c.assigned_to
-      WHERE (
-        c.assigned_to IS NULL
-        AND c.status IN ('open', 'pending', 'bot')
-      ) OR (
-        c.assigned_to IS NOT NULL
-        AND c.status IN ('open', 'in_service', 'pending', 'bot')
-      )
-    ),
-    first_response AS (
-      SELECT
-        c.id,
-        MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
-      FROM conversations c
-      LEFT JOIN messages m
-        ON m.conversation_id = c.id
-        AND m.sender_type = 'agent'
-        AND m.is_internal = false
-      WHERE c.created_at::date = CURRENT_DATE
-      GROUP BY c.id
-    )
-    SELECT
-      COUNT(*) FILTER (
-        WHERE c.assigned_to IS NULL
-          AND c.status IN ('open', 'pending', 'bot')
-      )::integer AS queued,
-      COUNT(*) FILTER (
-        WHERE c.assigned_to IS NOT NULL
-          AND c.status IN ('open', 'in_service', 'pending', 'bot')
-      )::integer AS in_service,
-      COUNT(*) FILTER (
-        WHERE c.status = 'resolved'
-          AND c.resolved_at IS NOT NULL
-          AND c.resolved_at::date = CURRENT_DATE
-      )::integer AS resolved_today,
-      COUNT(*) FILTER (
-        WHERE c.status = 'closed'
-          AND c.resolved_at IS NULL
-          AND c.created_at::date = CURRENT_DATE
-      )::integer AS abandoned,
-      NULL::integer AS tme,
-      ROUND(AVG(EXTRACT(EPOCH FROM (c.resolved_at - c.created_at)) / 60.0)
-        FILTER (
-          WHERE c.status = 'resolved'
-            AND c.resolved_at IS NOT NULL
-            AND c.resolved_at::date = CURRENT_DATE
-        ))::integer AS tma,
-      ROUND(
-        AVG(c.csat_score) FILTER (
-          WHERE c.csat_score IS NOT NULL
-            AND COALESCE(c.resolved_at, c.created_at)::date = CURRENT_DATE
-        )::numeric,
-        1
-      ) AS csat,
-      ROUND(
-        COUNT(fr.id) FILTER (
-          WHERE fr.first_response_seconds IS NOT NULL
-            AND fr.first_response_seconds <= 300
-        ) * 100.0 / NULLIF(COUNT(fr.id), 0),
-        1
-      ) AS sla,
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', cc.id,
-              'protocol', cc.protocol,
-              'channelType', cc.channel_type,
-              'contactName', cc.contact_name,
-              'contactPhone', cc.contact_phone,
-              'agentName', cc.agent_name,
-              'assignedAt', cc.assigned_at,
-              'createdAt', cc.created_at,
-              'status', cc.status,
-              'waitTime', cc.wait_time
-            )
-            ORDER BY cc.created_at ASC
-          )
-          FROM conversation_cards cc
-        ),
-        '[]'::json
-      ) AS conversation_cards
-    FROM conversations c
-    LEFT JOIN first_response fr ON fr.id = c.id`;
-
-  const sql = legacyMode ? legacySql : modernSql;
-  const rows = await tx.$queryRawUnsafe<TvQueryRow[]>(sql);
+  const rows = await tx.$queryRawUnsafe<TvQueryRow[]>(modernSql);
   return rows[0];
 }
 
@@ -371,14 +262,7 @@ export async function getTvSnapshot(
     (agent) => agent.status === 'online' && agent.isAvailable,
   ).length;
 
-  const row = await withTenantSchema(db, schemaName, async (tx) => {
-    try {
-      return await queryTvRow(tx, false);
-    } catch (error) {
-      if (!isLegacySchemaError(error)) throw error;
-      return queryTvRow(tx, true);
-    }
-  });
+  const row = await withTenantSchema(db, schemaName, async (tx) => queryTvRow(tx));
 
   const conversationCards = (row?.conversation_cards ?? []).map((item: TvConversationCard) => ({
     ...item,

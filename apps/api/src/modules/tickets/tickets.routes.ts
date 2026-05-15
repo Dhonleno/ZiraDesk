@@ -8,7 +8,6 @@ import {
   createTicketSchema,
   updateTicketSchema,
   listTicketsQuerySchema,
-  findTicketDuplicatesQuerySchema,
   createCommentSchema,
   updateCommentSchema,
   assignTicketSchema,
@@ -40,7 +39,6 @@ import {
   deleteTimeEntry,
   getTicketTimeline,
   getStats,
-  findTicketDuplicates,
   NotFoundError,
   ForbiddenError,
   BusinessRuleError,
@@ -131,20 +129,6 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return reply.send({ success: true, data: rows });
-  });
-
-  // GET /api/tickets/duplicates?title=...&contact_id=...&organization_id=...
-  app.get('/duplicates', { preHandler: ticketsViewGuard }, async (request, reply) => {
-    const parsed = findTicketDuplicatesQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Query inválida', details: parsed.error.flatten() },
-      });
-    }
-
-    const data = await findTicketDuplicates(parsed.data);
-    return reply.send({ success: true, data });
   });
 
   // POST /api/tickets

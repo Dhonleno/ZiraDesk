@@ -17,6 +17,13 @@ export class ConflictError extends Error {
   }
 }
 
+export class PlanLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PlanLimitError';
+  }
+}
+
 interface ContactRow {
   id: string;
   organization_id: string | null;
@@ -135,6 +142,28 @@ async function assertUniqueContactEmail(email: string | null, ignoreContactId?: 
 
   if (rows[0]) {
     throw new ConflictError(`Já existe um contato com este e-mail (${rows[0].name}).`);
+  }
+}
+
+async function assertContactPlanLimit(tenantId?: string): Promise<void> {
+  if (!tenantId) return;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    include: { plan: { select: { maxContacts: true } } },
+  });
+  if (!tenant) throw new NotFoundError('Tenant');
+
+  const maxContacts = tenant.plan.maxContacts;
+  if (maxContacts < 0) return;
+
+  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+    `SELECT COUNT(*) AS count FROM contacts`,
+  );
+  const currentContacts = Number(countRows[0]?.count ?? 0);
+
+  if (currentContacts >= maxContacts) {
+    throw new PlanLimitError(`Limite de ${maxContacts} contatos atingido para o seu plano`);
   }
 }
 
@@ -259,17 +288,15 @@ export async function findByWhatsapp(number: string) {
 }
 
 /* ── createContact ───────────────────────────────────────────────────────── */
-export async function createContact(data: CreateContactInput, createdBy: string) {
+export async function createContact(data: CreateContactInput, createdBy: string, tenantId?: string) {
   let normalizedPhone: string | null = null;
   let normalizedWhatsapp: string | null = null;
   const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
   const normalizedEmail = normalizeEmailForComparison(data.email ?? null);
 
   try {
-    const unifiedInput = data.phone ?? data.whatsapp ?? null;
-    const normalizedUnified = normalizePhoneForStorage(unifiedInput);
-    normalizedPhone = normalizedUnified;
-    normalizedWhatsapp = normalizedUnified;
+    normalizedPhone = normalizePhoneForStorage(data.phone ?? null);
+    normalizedWhatsapp = normalizePhoneForStorage(data.whatsapp ?? data.phone ?? null);
   } catch (err) {
     if (err instanceof PhoneNormalizationError) {
       throw new ConflictError(err.message);
@@ -288,8 +315,12 @@ export async function createContact(data: CreateContactInput, createdBy: string)
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
   await assertUniqueContactPhone(normalizedPhone);
+  if (normalizedWhatsapp !== normalizedPhone) {
+    await assertUniqueContactPhone(normalizedWhatsapp);
+  }
   await assertUniqueContactDocument(normalizedDocument);
   await assertUniqueContactEmail(normalizedEmail);
+  await assertContactPlanLimit(tenantId);
 
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
     `INSERT INTO contacts (
@@ -327,13 +358,10 @@ export async function updateContact(id: string, data: UpdateContactInput, update
   let normalizedWhatsapp: string | null | undefined = undefined;
   try {
     if (data.phone !== undefined) {
-      const normalizedUnified = normalizePhoneForStorage(data.phone ?? null);
-      normalizedPhone = normalizedUnified;
-      normalizedWhatsapp = normalizedUnified;
-    } else if (data.whatsapp !== undefined) {
-      const normalizedUnified = normalizePhoneForStorage(data.whatsapp ?? null);
-      normalizedPhone = normalizedUnified;
-      normalizedWhatsapp = normalizedUnified;
+      normalizedPhone = normalizePhoneForStorage(data.phone ?? null);
+    }
+    if (data.whatsapp !== undefined) {
+      normalizedWhatsapp = normalizePhoneForStorage(data.whatsapp ?? null);
     }
   } catch (err) {
     if (err instanceof PhoneNormalizationError) {
@@ -352,11 +380,16 @@ export async function updateContact(id: string, data: UpdateContactInput, update
     }
   }
 
-  const tagsLiteral    = data.tags === undefined ? null : toPgArray(data.tags ?? []);
-  const customFieldsJson = data.custom_fields !== undefined ? JSON.stringify(data.custom_fields) : null;
+  const tagsLiteral = data.tags === undefined ? undefined : toPgArray(data.tags ?? []);
+  const customFieldsJson = data.custom_fields === undefined
+    ? undefined
+    : JSON.stringify(data.custom_fields);
 
   if (normalizedPhone !== undefined) {
     await assertUniqueContactPhone(normalizedPhone, id);
+  }
+  if (normalizedWhatsapp !== undefined && normalizedWhatsapp !== normalizedPhone) {
+    await assertUniqueContactPhone(normalizedWhatsapp, id);
   }
   if (normalizedDocument !== undefined) {
     await assertUniqueContactDocument(normalizedDocument, id);
@@ -365,26 +398,49 @@ export async function updateContact(id: string, data: UpdateContactInput, update
     await assertUniqueContactEmail(normalizedEmail, id);
   }
 
+  const hasOrganizationId = Object.prototype.hasOwnProperty.call(data, 'organization_id');
+  const hasName = Object.prototype.hasOwnProperty.call(data, 'name');
+  const hasEmail = Object.prototype.hasOwnProperty.call(data, 'email');
+  const hasPhone = Object.prototype.hasOwnProperty.call(data, 'phone');
+  const hasWhatsapp = Object.prototype.hasOwnProperty.call(data, 'whatsapp');
+  const hasDocument = Object.prototype.hasOwnProperty.call(data, 'document');
+  const hasRole = Object.prototype.hasOwnProperty.call(data, 'role');
+  const hasDepartment = Object.prototype.hasOwnProperty.call(data, 'department');
+  const hasIsPrimary = Object.prototype.hasOwnProperty.call(data, 'is_primary') && data.is_primary !== null;
+  const hasTags = Object.prototype.hasOwnProperty.call(data, 'tags');
+  const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
+  const hasNotes = Object.prototype.hasOwnProperty.call(data, 'notes');
+
   const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
     `UPDATE contacts SET
-       organization_id = COALESCE($1::uuid,   organization_id),
-       name            = COALESCE($2,          name),
-       email           = COALESCE($3,          email),
-       phone           = COALESCE($4,          phone),
-       whatsapp        = COALESCE($5,          whatsapp),
-       document        = COALESCE($6,          document),
-       role            = COALESCE($7,          role),
-       department      = COALESCE($8,          department),
-       is_primary      = COALESCE($9,          is_primary),
-       tags            = COALESCE($10::text[], tags),
-       custom_fields   = COALESCE($11::jsonb,  custom_fields),
-       notes           = COALESCE($12,         notes),
+       organization_id = CASE WHEN $1::boolean THEN $2::uuid ELSE organization_id END,
+       name            = CASE WHEN $3::boolean THEN $4 ELSE name END,
+       email           = CASE WHEN $5::boolean THEN $6 ELSE email END,
+       phone           = CASE WHEN $7::boolean THEN $8 ELSE phone END,
+       whatsapp        = CASE WHEN $9::boolean THEN $10 ELSE whatsapp END,
+       document        = CASE WHEN $11::boolean THEN $12 ELSE document END,
+       role            = CASE WHEN $13::boolean THEN $14 ELSE role END,
+       department      = CASE WHEN $15::boolean THEN $16 ELSE department END,
+       is_primary      = CASE WHEN $17::boolean THEN $18::boolean ELSE is_primary END,
+       tags            = CASE WHEN $19::boolean THEN $20::text[] ELSE tags END,
+       custom_fields   = CASE WHEN $21::boolean THEN $22::jsonb ELSE custom_fields END,
+       notes           = CASE WHEN $23::boolean THEN $24 ELSE notes END,
        updated_at      = NOW()
-     WHERE id = $13::uuid
+     WHERE id = $25::uuid
      RETURNING *`,
-    data.organization_id ?? null, data.name ?? null, normalizedEmail ?? null, normalizedPhone ?? null,
-    normalizedWhatsapp ?? null, normalizedDocument ?? null, data.role ?? null, data.department ?? null,
-    data.is_primary ?? null, tagsLiteral, customFieldsJson, data.notes ?? null, id,
+    hasOrganizationId, data.organization_id ?? null,
+    hasName, data.name ?? null,
+    hasEmail, normalizedEmail ?? null,
+    hasPhone, normalizedPhone ?? null,
+    hasWhatsapp, normalizedWhatsapp ?? null,
+    hasDocument, normalizedDocument ?? null,
+    hasRole, data.role ?? null,
+    hasDepartment, data.department ?? null,
+    hasIsPrimary, data.is_primary ?? null,
+    hasTags, tagsLiteral ?? null,
+    hasCustomFields, customFieldsJson ?? null,
+    hasNotes, data.notes ?? null,
+    id,
   );
 
   if (!rows[0]) throw new NotFoundError('Contato');

@@ -1,15 +1,23 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
-import { createTenantSchema, updateTenantSchema, listTenantsQuerySchema } from './tenants.schema.js';
+import {
+  createTenantSchema,
+  updateTenantSchema,
+  listTenantsQuerySchema,
+  slugAvailabilityQuerySchema,
+} from './tenants.schema.js';
 import {
   createTenant,
   listTenants,
+  checkTenantSlugAvailability,
   getTenant,
   updateTenant,
   deleteTenant,
   suspendTenant,
   activateTenant,
+  getSuperAdminTenantStats,
+  impersonateTenantAsAdmin,
   NotFoundError,
   ConflictError,
 } from './tenants.service.js';
@@ -17,6 +25,21 @@ import {
 const guard = [authMiddleware, hasRole('super_admin')];
 
 export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/check-slug', { preHandler: guard }, async (request, reply) => {
+    const parsed = slugAvailabilityQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
+    }
+
+    const result = await checkTenantSlugAvailability(parsed.data);
+    return reply.send({ success: true, data: result });
+  });
+
+  app.get('/stats', { preHandler: guard }, async (_request, reply) => {
+    const stats = await getSuperAdminTenantStats();
+    return reply.send({ success: true, data: stats });
+  });
+
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const parsed = listTenantsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -91,6 +114,17 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({ success: true, data: tenant });
     } catch (err) {
       if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/impersonate', { preHandler: guard }, async (request, reply) => {
+    try {
+      const result = await impersonateTenantAsAdmin(request.params.id, request.user.id);
+      return reply.send({ success: true, data: result });
+    } catch (err) {
+      if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ConflictError) return reply.code(409).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

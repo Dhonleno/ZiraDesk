@@ -17,6 +17,7 @@ export const updateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   planId: z.string().cuid().optional(),
   status: z.enum(['active', 'suspended', 'trial', 'cancelled']).optional(),
+  trialEndsAt: z.coerce.date().nullable().optional(),
   settings: z.record(z.unknown()).optional(),
 });
 
@@ -27,6 +28,15 @@ export const listTenantsQuerySchema = z.object({
   search: z.string().optional(),
 });
 
+export const slugAvailabilityQuerySchema = z.object({
+  slug: z
+    .string()
+    .min(2)
+    .max(50)
+    .regex(/^[a-z0-9-]+$/, 'Slug deve conter apenas letras minúsculas, números e hífens'),
+});
+
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 export type ListTenantsQuery = z.infer<typeof listTenantsQuerySchema>;
+export type SlugAvailabilityQuery = z.infer<typeof slugAvailabilityQuerySchema>;

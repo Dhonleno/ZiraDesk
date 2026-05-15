@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { verifyMetaSignature } from '../../middleware/meta-signature.js';
@@ -356,7 +357,6 @@ async function findChannelByPhoneNumberId(
     for (const channel of channels) {
       const credentials = decryptCredentials(channel.credentials);
       const channelPhoneNumberId = getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id');
-      console.log(`[WhatsApp] Channel ${channel.id} decrypted keys: [${Object.keys(credentials).join(', ')}] | phoneNumberId="${channelPhoneNumberId ?? 'undefined'}" (seeking: "${phoneNumberId}")`);
       if (channelPhoneNumberId === phoneNumberId) {
         return {
           tenantId: tenant.id,
@@ -378,12 +378,12 @@ async function findChannelByPhoneNumberId(
   }
 
   if (envFallbackMatches.length === 1) {
-    console.warn(`[WhatsApp] Using .env fallback for phoneNumberId ${phoneNumberId}; channel credentials are missing phoneNumberId`);
+    logger.warn({ phoneNumberId }, '[WhatsApp] Using .env fallback — channel credentials are missing phoneNumberId');
     return envFallbackMatches[0]!;
   }
 
   if (envFallbackMatches.length > 1) {
-    console.warn(`[WhatsApp] Ambiguous .env fallback for phoneNumberId ${phoneNumberId}; ${envFallbackMatches.length} channels without phoneNumberId`);
+    logger.warn({ phoneNumberId, count: envFallbackMatches.length }, '[WhatsApp] Ambiguous .env fallback');
   }
 
   return null;
@@ -604,7 +604,7 @@ async function processIncomingMessage(
 ) {
   const found = await findChannelByPhoneNumberId(phoneNumberId);
   if (!found) {
-    console.warn(`[WhatsApp] No channel found for phoneNumberId: ${phoneNumberId}`);
+    logger.warn({ phoneNumberId }, '[WhatsApp] No channel found for phoneNumberId');
     return;
   }
 
@@ -728,7 +728,6 @@ async function processIncomingMessage(
       organizationId = null;
     }
 
-    console.log('[WhatsApp] contactId:', contactId, 'channelId:', channelId);
     if (!isUuid(contactId) || !isUuid(channelId)) {
       throw new Error(`[WhatsApp] Invalid UUID for contact/channel: ${contactId}/${channelId}`);
     }
@@ -738,8 +737,6 @@ async function processIncomingMessage(
       contactId,
       channelId,
     );
-
-    console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
 
     await tx.$executeRawUnsafe(
       `UPDATE conversations
@@ -784,8 +781,6 @@ async function processIncomingMessage(
       contactId,
       channelId,
     );
-
-    console.log('[WhatsApp Webhook] Found conversation:', convRows[0] ?? null);
 
     let conversationId: string;
     let isNewConversation = false;
@@ -1622,7 +1617,7 @@ async function processIncomingMessage(
         }
       }
     } catch (err) {
-      console.error('[AI Agent] Erro ao processar conversa ativa:', err instanceof Error ? err.message : err);
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, '[AI Agent] Error processing active conversation');
     }
   }
 
@@ -1797,7 +1792,7 @@ async function processIncomingMessage(
         }
       }
     } catch (err) {
-      console.error('[AI Agent] Erro ao processar mensagem:', err instanceof Error ? err.message : err);
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, '[AI Agent] Error processing message');
     }
   }
 
@@ -1828,7 +1823,6 @@ async function processIncomingMessage(
     });
   }
 
-  console.log(`[WhatsApp] Message processed: ${senderName} → ${content.substring(0, 50)}`);
 }
 
 async function processStatusUpdate(
@@ -1948,14 +1942,13 @@ async function processStatusUpdate(
       }
 
       if (status.status === 'failed') {
-        console.error('[WhatsApp Status] Delivery failed', JSON.stringify({
+        logger.error({
           tenantId: tenant.id,
           messageId: result[0].id,
           conversationId: result[0].conversation_id,
           externalId: status.id,
-          recipientId: status.recipient_id,
           errors: status.errors ?? null,
-        }, null, 2));
+        }, '[WhatsApp Status] Delivery failed');
       }
 
       const io = getSocketServer();

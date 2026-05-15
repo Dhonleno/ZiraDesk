@@ -110,6 +110,7 @@ export async function getSettings(tenantId: string) {
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    csat_expiration_hours: typeof s.csatExpirationHours === 'number' ? Math.trunc(s.csatExpirationHours) : 48,
     email_confirmation: (s.email_confirmation as boolean | undefined) ?? true,
     inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
     inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,
@@ -149,6 +150,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       : {}),
     ...(data.csat_enabled !== undefined ? { csat_enabled: data.csat_enabled } : {}),
     ...(data.csat_message !== undefined ? { csat_message: data.csat_message } : {}),
+    ...(data.csat_expiration_hours !== undefined ? { csatExpirationHours: data.csat_expiration_hours } : {}),
     ...(data.email_confirmation !== undefined ? { email_confirmation: data.email_confirmation } : {}),
     ...(data.inactivity_enabled !== undefined ? { inactivity_enabled: data.inactivity_enabled } : {}),
     ...(data.inactivity_warning_minutes !== undefined
@@ -201,6 +203,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     away_message_enabled: (s.away_message_enabled as boolean | undefined) ?? true,
     csat_enabled: (s.csat_enabled as boolean | undefined) ?? true,
     csat_message: (s.csat_message as string | undefined) ?? null,
+    csat_expiration_hours: typeof s.csatExpirationHours === 'number' ? Math.trunc(s.csatExpirationHours) : 48,
     email_confirmation: (s.email_confirmation as boolean | undefined) ?? true,
     inactivity_enabled: (s.inactivity_enabled as boolean | undefined) ?? true,
     inactivity_warning_minutes: (s.inactivity_warning_minutes as number | undefined) ?? 30,

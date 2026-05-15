@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
-import { hasRole } from '../../../middleware/rbac.js';
+import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import { createContactSchema, updateContactSchema, listContactsQuerySchema, linkOrganizationSchema } from './contacts.schema.js';
@@ -16,30 +16,22 @@ import {
   revokePortalAccess,
   NotFoundError,
   ConflictError,
+  PlanLimitError,
 } from './contacts.service.js';
 
 const guard = [
   authMiddleware,
   tenantSchemaFromJwt,
   ensureCrmInfrastructureMiddleware,
-  hasRole('owner', 'admin', 'agent'),
 ];
-const deleteGuard = [
-  authMiddleware,
-  tenantSchemaFromJwt,
-  ensureCrmInfrastructureMiddleware,
-  hasRole('owner', 'admin'),
-];
-const managePortalGuard = [
-  authMiddleware,
-  tenantSchemaFromJwt,
-  ensureCrmInfrastructureMiddleware,
-  hasRole('owner', 'admin'),
-];
+const contactsViewGuard = [...guard, requirePermission('contacts:view')];
+const contactsEditGuard = [...guard, requirePermission('contacts:edit')];
+const contactsDeleteGuard = [...guard, requirePermission('contacts:delete')];
+const managePortalGuard = [...guard, requirePermission('contacts:edit')];
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts
-  app.get('/', { preHandler: guard }, async (request, reply) => {
+  app.get('/', { preHandler: contactsViewGuard }, async (request, reply) => {
     const parsed = listContactsQuerySchema.safeParse(request.query);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
@@ -48,22 +40,24 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/crm/contacts
-  app.post('/', { preHandler: guard }, async (request, reply) => {
+  app.post('/', { preHandler: contactsEditGuard }, async (request, reply) => {
     const parsed = createContactSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await createContact(parsed.data, request.user.id);
+      const contact = await createContact(parsed.data, request.user.id, request.user.tenantId ?? undefined);
       return reply.code(201).send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof ConflictError)
         return reply.code(409).send({ success: false, error: { message: err.message } });
+      if (err instanceof PlanLimitError)
+        return reply.code(402).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });
 
   // GET /api/crm/contacts/:id
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: contactsViewGuard }, async (request, reply) => {
     try {
       const contact = await getContact(request.params.id);
       return reply.send({ success: true, data: contact });
@@ -77,7 +71,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts/:id/stats
   app.get<{ Params: { id: string } }>(
     '/:id/stats',
-    { preHandler: guard },
+    { preHandler: contactsViewGuard },
     async (request, reply) => {
       try {
         const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
@@ -96,7 +90,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // PATCH /api/crm/contacts/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: contactsEditGuard }, async (request, reply) => {
     const parsed = updateContactSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
@@ -113,7 +107,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/crm/contacts/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: deleteGuard }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: contactsDeleteGuard }, async (request, reply) => {
     try {
       const contact = await deleteContact(request.params.id, request.user.id);
       return reply.send({ success: true, data: contact });
@@ -127,7 +121,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/crm/contacts/:id/link-organization
-  app.post<{ Params: { id: string } }>('/:id/link-organization', { preHandler: guard }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/:id/link-organization', { preHandler: contactsEditGuard }, async (request, reply) => {
     const parsed = linkOrganizationSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });

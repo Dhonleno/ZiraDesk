@@ -2,6 +2,7 @@ import { Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
+import { logger } from '../config/logger.js';
 
 interface SendMessageJob {
   messageId: string;
@@ -45,23 +46,6 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
-function sanitizeCredentials(credentials: Record<string, string>): Record<string, string> {
-  const hidden = '***';
-  return {
-    ...credentials,
-    ...(credentials.accessToken ? { accessToken: hidden } : {}),
-    ...(credentials.access_token ? { access_token: hidden } : {}),
-    ...(credentials.verifyToken ? { verifyToken: hidden } : {}),
-    ...(credentials.verify_token ? { verify_token: hidden } : {}),
-  };
-}
-
-function sanitizeJobData(job: SendMessageJob): Record<string, unknown> {
-  return {
-    ...job,
-    channelCredentials: sanitizeCredentials(job.channelCredentials),
-  };
-}
 
 async function resolveSchemaName(job: SendMessageJob): Promise<string | null> {
   if (job.tenantSchema) return job.tenantSchema;
@@ -78,11 +62,7 @@ async function resolveSchemaName(job: SendMessageJob): Promise<string | null> {
 async function persistExternalId(job: SendMessageJob, externalId: string): Promise<void> {
   const schemaName = await resolveSchemaName(job);
   if (!schemaName) {
-    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist external_id', {
-      tenantId: job.tenantId,
-      messageId: job.messageId,
-      externalId,
-    });
+    logger.warn({ tenantId: job.tenantId, messageId: job.messageId }, '[WhatsApp Worker] Could not resolve tenant schema to persist external_id');
     return;
   }
 
@@ -101,10 +81,7 @@ async function persistFailedStatus(
 ): Promise<void> {
   const schemaName = await resolveSchemaName(job);
   if (!schemaName) {
-    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist failed status', {
-      tenantId: job.tenantId,
-      messageId: job.messageId,
-    });
+    logger.warn({ tenantId: job.tenantId, messageId: job.messageId }, '[WhatsApp Worker] Could not resolve tenant schema to persist failed status');
     return;
   }
 
@@ -262,8 +239,7 @@ const worker = new Worker<SendMessageJob>(
   'ziradesk-messages',
   async (job) => {
     const { channelType, channelCredentials } = job.data;
-    console.log('[WhatsApp Worker] Executing job:', job.id);
-    console.log('[WhatsApp Worker] Job data:', JSON.stringify(sanitizeJobData(job.data)));
+    logger.info({ jobId: job.id, channelType }, '[WhatsApp Worker] Executing job');
 
     switch (channelType) {
       case 'whatsapp': {
@@ -284,11 +260,6 @@ const worker = new Worker<SendMessageJob>(
         const replyExternalId = await resolveReplyExternalId(job.data);
         const body = buildWhatsAppBody(job.data, sanitizedPhone, replyExternalId);
 
-        console.log('[WhatsApp Send] Job data:', JSON.stringify(sanitizeJobData(job.data), null, 2));
-        console.log('[WhatsApp Send] PhoneNumberId:', phoneNumberId);
-        console.log('[WhatsApp Send] Sending to:', sanitizedPhone);
-        console.log('[WhatsApp Send] Payload:', JSON.stringify(body, null, 2));
-
         const response = await fetch(
           `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
           {
@@ -301,7 +272,6 @@ const worker = new Worker<SendMessageJob>(
           },
         );
         const responseText = await response.text();
-        console.log('[WhatsApp Send] Response:', responseText);
 
         if (!response.ok) {
           let metaErrorCode: number | null = null;
@@ -332,10 +302,7 @@ const worker = new Worker<SendMessageJob>(
           const wamid = result.messages?.[0]?.id;
           if (wamid) {
             await persistExternalId(job.data, wamid);
-            console.log('[WhatsApp Worker] external_id persisted:', {
-              messageId: job.data.messageId,
-              externalId: wamid,
-            });
+            logger.info({ jobId: job.id, messageId: job.data.messageId, externalId: wamid }, '[WhatsApp Worker] Message sent');
           }
           return result;
         } catch {
@@ -343,31 +310,226 @@ const worker = new Worker<SendMessageJob>(
         }
       }
 
-      case 'instagram':
-        console.log('[Instagram] send not implemented yet');
-        break;
+      case 'instagram': {
+        const pageId =
+          channelCredentials['page_id'] ??
+          channelCredentials['pageId'];
+        const accessToken =
+          channelCredentials['access_token'] ??
+          channelCredentials['accessToken'];
 
-      case 'email':
-        console.log('[Email] send not implemented yet');
-        break;
+        if (!pageId || !accessToken) {
+          logger.error({ jobId: job.id }, '[Instagram] Missing credentials');
+          await persistFailedStatus(job.data, { instagram_send_error: 'missing_credentials' });
+          return;
+        }
+
+        const recipientPsid = job.data.to?.trim();
+        if (!recipientPsid) {
+          logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Instagram] Missing recipient PSID');
+          await persistFailedStatus(job.data, { instagram_send_error: 'missing_recipient_psid' });
+          return;
+        }
+
+        let messagePayload: Record<string, unknown>;
+        if (job.data.mediaId && job.data.mediaType) {
+          // Instagram uses 'file' for document attachments
+          const igType = job.data.mediaType === 'document' ? 'file' : job.data.mediaType;
+          messagePayload = {
+            recipient: { id: recipientPsid },
+            message: {
+              attachment: {
+                type: igType,
+                payload: { url: job.data.mediaId, is_reusable: true },
+              },
+            },
+          };
+        } else {
+          messagePayload = {
+            recipient: { id: recipientPsid },
+            message: { text: job.data.content ?? '' },
+          };
+        }
+
+        const igResponse = await fetch(
+          `https://graph.facebook.com/v19.0/${pageId}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(messagePayload),
+          },
+        );
+        const igText = await igResponse.text();
+
+        if (!igResponse.ok) {
+          let igErrorCode: number | null = null;
+          let igErrorMessage: string | null = null;
+          try {
+            const parsed = JSON.parse(igText) as MetaApiErrorResponse;
+            igErrorCode = typeof parsed.error?.code === 'number' ? parsed.error.code : null;
+            igErrorMessage = parsed.error?.message?.trim() ?? null;
+          } catch { /* not JSON */ }
+
+          // Permanent errors — do not retry
+          const permanentCodes = new Set([10, 100, 190, 200, 368]);
+          if (igErrorCode !== null && permanentCodes.has(igErrorCode)) {
+            logger.error(
+              { jobId: job.id, code: igErrorCode },
+              '[Instagram] Permanent error — no retry',
+            );
+            await persistFailedStatus(job.data, {
+              instagram_send_http_status: igResponse.status,
+              instagram_send_error_code: igErrorCode,
+              instagram_send_error_message: igErrorMessage,
+              instagram_send_failed_at: new Date().toISOString(),
+            });
+            return;
+          }
+
+          throw new Error(`[Instagram] API error: ${igText}`);
+        }
+
+        try {
+          const igResult = JSON.parse(igText) as { message_id?: string };
+          if (igResult.message_id) {
+            await persistExternalId(job.data, igResult.message_id);
+          }
+          logger.info(
+            { jobId: job.id, messageId: job.data.messageId, igMessageId: igResult.message_id },
+            '[Instagram] Message sent',
+          );
+          return igResult;
+        } catch {
+          return { ok: true, raw: igText };
+        }
+      }
+
+      case 'email': {
+        const fromEmail =
+          channelCredentials['fromEmail'] ??
+          channelCredentials['from_email'] ??
+          env.RESEND_FROM_EMAIL;
+        const fromName =
+          channelCredentials['fromName'] ??
+          channelCredentials['from_name'] ??
+          '';
+        const resendApiKey =
+          channelCredentials['resendApiKey'] ??
+          channelCredentials['resend_api_key'] ??
+          env.RESEND_API_KEY;
+
+        if (!fromEmail || !resendApiKey) {
+          logger.error({ jobId: job.id }, '[Email] Missing credentials (fromEmail or resendApiKey)');
+          await persistFailedStatus(job.data, { email_send_error: 'missing_credentials' });
+          return;
+        }
+
+        const toEmail = job.data.to?.trim();
+        if (!toEmail) {
+          logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Missing recipient email');
+          await persistFailedStatus(job.data, { email_send_error: 'missing_recipient_email' });
+          return;
+        }
+
+        // Fetch conversation subject for email thread
+        const emailSchemaName = await resolveSchemaName(job.data);
+        let emailSubject = `Re: Atendimento ${job.data.conversationId.slice(0, 8)}`;
+        if (emailSchemaName) {
+          const convRows = await prisma.$queryRawUnsafe<Array<{ subject: string | null }>>(
+            `SELECT subject FROM ${quoteIdent(emailSchemaName)}.conversations WHERE id = $1::uuid LIMIT 1`,
+            job.data.conversationId,
+          );
+          if (convRows[0]?.subject?.trim()) {
+            emailSubject = convRows[0].subject.trim();
+          }
+        }
+
+        const textContent = job.data.content ?? '';
+        const htmlBody = textContent
+          .split('\n')
+          .map((line) => `<p>${line}</p>`)
+          .join('');
+
+        const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+        const emailResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify({
+            from,
+            to: [toEmail],
+            subject: emailSubject,
+            html: htmlBody,
+            text: textContent,
+            headers: {
+              'X-Conversation-Id': job.data.conversationId,
+              ...(job.data.tenantId ? { 'X-Tenant-Id': job.data.tenantId } : {}),
+            },
+          }),
+        });
+        const emailText = await emailResponse.text();
+
+        if (!emailResponse.ok) {
+          let emailErrorMessage: string | null = null;
+          try {
+            const parsed = JSON.parse(emailText) as { name?: string; message?: string };
+            emailErrorMessage = parsed.message?.trim() ?? null;
+          } catch { /* not JSON */ }
+
+          // Permanent errors — do not retry
+          const permanentEmailStatuses = new Set([400, 403, 422]);
+          if (permanentEmailStatuses.has(emailResponse.status)) {
+            logger.error(
+              { jobId: job.id, status: emailResponse.status, error: emailErrorMessage },
+              '[Email] Permanent error — no retry',
+            );
+            await persistFailedStatus(job.data, {
+              email_send_http_status: emailResponse.status,
+              email_send_error_message: emailErrorMessage,
+              email_send_failed_at: new Date().toISOString(),
+            });
+            return;
+          }
+
+          // Temporary errors (429, 500, 502, 503) — let BullMQ retry
+          throw new Error(`[Email] Resend API error ${emailResponse.status}: ${emailErrorMessage ?? emailText}`);
+        }
+
+        try {
+          const emailResult = JSON.parse(emailText) as { id?: string };
+          if (emailResult.id) {
+            await persistExternalId(job.data, emailResult.id);
+          }
+          logger.info(
+            { jobId: job.id, messageId: job.data.messageId, resendId: emailResult.id },
+            '[Email] Message sent',
+          );
+          return emailResult;
+        } catch {
+          return { ok: true, raw: emailText };
+        }
+      }
     }
   },
   { connection: redis },
 );
 
 worker.on('failed', (job, err) => {
-  console.error(`[WhatsApp Worker] Job ${job?.id} FAILED:`, err);
-  if (job?.data) {
-    console.error('[WhatsApp Worker] Job data was:', sanitizeJobData(job.data));
-  }
+  logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[WhatsApp Worker] Job failed');
 });
 
 worker.on('active', (job) => {
-  console.log(`[WhatsApp Worker] Processing job ${job.id}:`, job.data);
+  logger.info({ jobId: job.id }, '[WhatsApp Worker] Processing');
 });
 
 worker.on('completed', (job) => {
-  console.log(`[WhatsApp Worker] Job ${job.id} completed successfully`);
+  logger.info({ jobId: job.id }, '[WhatsApp Worker] Completed');
 });
 
 export { worker };

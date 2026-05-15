@@ -23,15 +23,6 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
-function isLegacySchemaError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return (
-    (message.includes('column') && message.includes('does not exist')) ||
-    (message.includes('relation') && message.includes('does not exist'))
-  );
-}
-
 export async function globalSearch(q: string, limit: number, schemaName: string) {
   const term = q.trim();
   if (!term) {
@@ -39,59 +30,29 @@ export async function globalSearch(q: string, limit: number, schemaName: string)
   }
   const schemaPrefix = `${quoteIdent(schemaName)}.`;
 
-  let contacts: SearchContactRow[] = [];
-  let conversations: SearchConversationRow[] = [];
+  const contacts = await prisma.$queryRawUnsafe<SearchContactRow[]>(
+    `SELECT id, name, email, phone
+     FROM ${schemaPrefix}contacts
+     WHERE name ILIKE '%' || $1 || '%'
+        OR email ILIKE '%' || $1 || '%'
+        OR phone ILIKE '%' || $1 || '%'
+        OR whatsapp ILIKE '%' || $1 || '%'
+     ORDER BY updated_at DESC
+     LIMIT $2`,
+    term,
+    limit,
+  );
 
-  try {
-    contacts = await prisma.$queryRawUnsafe<SearchContactRow[]>(
-      `SELECT id, name, email, phone
-       FROM ${schemaPrefix}contacts
-       WHERE name ILIKE '%' || $1 || '%'
-          OR email ILIKE '%' || $1 || '%'
-          OR phone ILIKE '%' || $1 || '%'
-          OR whatsapp ILIKE '%' || $1 || '%'
-       ORDER BY updated_at DESC
-       LIMIT $2`,
-      term,
-      limit,
-    );
-
-    conversations = await prisma.$queryRawUnsafe<SearchConversationRow[]>(
-      `SELECT c.id, c.last_message, ct.name AS contact_name
-       FROM ${schemaPrefix}conversations c
-       LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
-       WHERE c.last_message ILIKE '%' || $1 || '%'
-       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
-       LIMIT $2`,
-      term,
-      limit,
-    );
-  } catch (error) {
-    if (!isLegacySchemaError(error)) throw error;
-
-    contacts = await prisma.$queryRawUnsafe<SearchContactRow[]>(
-      `SELECT id, name, email, phone
-       FROM ${schemaPrefix}clients
-       WHERE name ILIKE '%' || $1 || '%'
-          OR email ILIKE '%' || $1 || '%'
-          OR phone ILIKE '%' || $1 || '%'
-       ORDER BY updated_at DESC
-       LIMIT $2`,
-      term,
-      limit,
-    );
-
-    conversations = await prisma.$queryRawUnsafe<SearchConversationRow[]>(
-      `SELECT c.id, c.last_message, cl.name AS contact_name
-       FROM ${schemaPrefix}conversations c
-       LEFT JOIN ${schemaPrefix}clients cl ON cl.id = c.client_id
-       WHERE c.last_message ILIKE '%' || $1 || '%'
-       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
-       LIMIT $2`,
-      term,
-      limit,
-    );
-  }
+  const conversations = await prisma.$queryRawUnsafe<SearchConversationRow[]>(
+    `SELECT c.id, c.last_message, ct.name AS contact_name
+     FROM ${schemaPrefix}conversations c
+     LEFT JOIN ${schemaPrefix}contacts ct ON ct.id = c.contact_id
+     WHERE c.last_message ILIKE '%' || $1 || '%'
+     ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
+     LIMIT $2`,
+    term,
+    limit,
+  );
 
   let tickets: SearchTicketRow[] = [];
   try {
@@ -105,7 +66,14 @@ export async function globalSearch(q: string, limit: number, schemaName: string)
       limit,
     );
   } catch (error) {
-    if (!isLegacySchemaError(error)) throw error;
+    if (!(error instanceof Error)) throw error;
+    const message = error.message.toLowerCase();
+    if (
+      !(message.includes('column') && message.includes('does not exist')) &&
+      !(message.includes('relation') && message.includes('does not exist'))
+    ) {
+      throw error;
+    }
   }
 
   return { contacts, tickets, conversations };

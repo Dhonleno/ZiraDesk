@@ -1,6 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 import { getSocketServer } from '../socket/index.js';
 import { PRESENCE_TIMEOUT_MS } from '../modules/omnichannel/presence.constants.js';
 import { ensureAgentAssignmentsInfrastructure } from '../modules/omnichannel/conversations/auto-assign.service.js';
@@ -71,7 +72,7 @@ export const presenceCleanupWorker = new Worker<PresenceCleanupJobData>(
 );
 
 presenceCleanupWorker.on('failed', (job, err) => {
-  console.error(`[Presence Cleanup] Job ${job?.id} failed`, err);
+  logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[Presence Cleanup] Job failed');
 });
 
 void presenceCleanupQueue.add(
@@ -84,5 +85,5 @@ void presenceCleanupQueue.add(
     removeOnFail: true,
   },
 ).catch((err) => {
-  console.error('[Presence Cleanup] Failed to schedule cleanup job', err);
+  logger.error({ err: err instanceof Error ? err.message : String(err) }, '[Presence Cleanup] Failed to schedule cleanup job');
 });

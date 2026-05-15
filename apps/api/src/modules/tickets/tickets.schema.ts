@@ -38,13 +38,6 @@ export const listTicketsQuerySchema = z.object({
   sort_order:  z.enum(['asc', 'desc']).default('desc'),
 });
 
-export const findTicketDuplicatesQuerySchema = z.object({
-  title: z.string().trim().min(3).max(255),
-  contact_id: z.string().uuid().optional(),
-  organization_id: z.string().uuid().optional(),
-  exclude_id: z.string().uuid().optional(),
-});
-
 export const createCommentSchema = z.object({
   content:     z.string().min(1),
   is_internal: z.boolean().default(false),
@@ -78,7 +71,6 @@ export const createTimeEntrySchema = z.object({
 export type CreateTicketInput  = z.infer<typeof createTicketSchema>;
 export type UpdateTicketInput  = z.infer<typeof updateTicketSchema>;
 export type ListTicketsQuery   = z.infer<typeof listTicketsQuerySchema>;
-export type FindTicketDuplicatesQuery = z.infer<typeof findTicketDuplicatesQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;

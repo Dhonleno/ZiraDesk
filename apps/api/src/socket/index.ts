@@ -3,6 +3,7 @@ import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
+import { logger } from '../config/logger.js';
 import { redis } from '../config/redis.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 
@@ -200,10 +201,7 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
 
       const presencePayload = parsePresencePayload(payload);
       if (presencePayload.userId && presencePayload.userId !== userId) {
-        console.warn('[Socket] Invalid user:online payload userId mismatch', {
-          socketUserId: userId,
-          payloadUserId: presencePayload.userId,
-        });
+        logger.warn({ socketUserId: userId, payloadUserId: presencePayload.userId }, '[Socket] Invalid user:online payload userId mismatch');
         return;
       }
 
@@ -227,14 +225,14 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
 
     if (schemaName) {
       void handlePresenceOnline().catch((err: unknown) => {
-        console.error('[Socket] Connect handler error:', err);
+        logger.error({ err }, '[Socket] Connect handler error');
       });
     }
 
     socket.on('user:online', (payload: unknown) => {
       if (!schemaName) return;
       void handlePresenceOnline(payload).catch((err: unknown) => {
-        console.error('[Socket] user:online handler error:', err);
+        logger.error({ err }, '[Socket] user:online handler error');
       });
     });
 
@@ -242,17 +240,14 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
       if (!schemaName) return;
       const heartbeatPayload = parsePresencePayload(payload);
       if (heartbeatPayload.userId && heartbeatPayload.userId !== userId) {
-        console.warn('[Socket] Invalid user:heartbeat payload userId mismatch', {
-          socketUserId: userId,
-          payloadUserId: heartbeatPayload.userId,
-        });
+        logger.warn({ socketUserId: userId, payloadUserId: heartbeatPayload.userId }, '[Socket] Invalid user:heartbeat payload userId mismatch');
         return;
       }
 
       void refreshAgentPresence(schemaName, userId)
         .then(() => renewPresenceKey(tenantId, userId))
         .catch((err: unknown) => {
-          console.error('[Socket] user:heartbeat handler error:', err);
+          logger.error({ err }, '[Socket] user:heartbeat handler error');
         });
     });
 
@@ -261,7 +256,7 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
       void refreshAgentPresence(schemaName, userId)
         .then(() => renewPresenceKey(tenantId, userId))
         .catch((err: unknown) => {
-          console.error('[Socket] Heartbeat handler error:', err);
+          logger.error({ err }, '[Socket] Heartbeat handler error');
         });
     });
 
@@ -299,9 +294,9 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
 
             await redis.del(presenceRedisKey(tenantId, userId));
             socketServer.to(`tenant:${tenantId}`).emit('agent:offline', { userId });
-            console.log(`[Socket] Agent ${userId} went offline`);
+            logger.info({ userId }, '[Socket] Agent went offline');
           } catch (err) {
-            console.error('[Socket] Disconnect handler error:', err);
+            logger.error({ err }, '[Socket] Disconnect handler error');
           }
         })();
       }, DISCONNECT_GRACE_MS);

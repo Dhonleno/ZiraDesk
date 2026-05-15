@@ -145,19 +145,19 @@ async function seedDemoConversations() {
   const agentId = 'b0000001-0000-0000-0000-000000000001';
   console.log('  ✓ Agente extra');
 
-  // ── Clientes ─────────────────────────────────────────────────────────────────
+  // ── Contatos ─────────────────────────────────────────────────────────────────
   await prisma.$executeRawUnsafe(`
-    INSERT INTO "${s}".clients (id, name, email, phone, status) VALUES
-      ('c0000001-0000-0000-0000-000000000001', 'Ana Paula Lima',   'ana.lima@empresa.com.br',     '+55 11 98765-4321', 'cliente'),
-      ('c0000001-0000-0000-0000-000000000002', 'João Mendes',      'joao.mendes@outlook.com',     '+55 21 99887-6543', 'cliente'),
-      ('c0000001-0000-0000-0000-000000000003', 'Fernanda Costa',   'fernanda@techcorp.io',        '+55 31 97654-3210', 'lead'),
-      ('c0000001-0000-0000-0000-000000000004', 'Roberto Alves',    'roberto.alves@gmail.com',     '+55 11 91234-5678', 'cliente'),
-      ('c0000001-0000-0000-0000-000000000005', 'Mariana Santos',   'mariana.s@hotmail.com',       '+55 85 98888-1234', 'lead'),
-      ('c0000001-0000-0000-0000-000000000006', 'Pedro Oliveira',   'pedro.oliveira@empresa.net',  '+55 41 96543-2109', 'cliente'),
-      ('c0000001-0000-0000-0000-000000000007', 'Camila Ferreira',  'camila.f@startup.com.br',     '+55 19 97777-8888', 'cliente'),
-      ('c0000001-0000-0000-0000-000000000008', 'Lucas Rodrigues',  'lucas.rodrigues@yahoo.com',   '+55 62 98765-0000', 'lead')
+    INSERT INTO "${s}".contacts (id, name, email, phone, whatsapp) VALUES
+      ('c0000001-0000-0000-0000-000000000001', 'Ana Paula Lima',   'ana.lima@empresa.com.br',     '+55 11 98765-4321', '+55 11 98765-4321'),
+      ('c0000001-0000-0000-0000-000000000002', 'João Mendes',      'joao.mendes@outlook.com',     '+55 21 99887-6543', '+55 21 99887-6543'),
+      ('c0000001-0000-0000-0000-000000000003', 'Fernanda Costa',   'fernanda@techcorp.io',        '+55 31 97654-3210', '+55 31 97654-3210'),
+      ('c0000001-0000-0000-0000-000000000004', 'Roberto Alves',    'roberto.alves@gmail.com',     '+55 11 91234-5678', '+55 11 91234-5678'),
+      ('c0000001-0000-0000-0000-000000000005', 'Mariana Santos',   'mariana.s@hotmail.com',       '+55 85 98888-1234', '+55 85 98888-1234'),
+      ('c0000001-0000-0000-0000-000000000006', 'Pedro Oliveira',   'pedro.oliveira@empresa.net',  '+55 41 96543-2109', '+55 41 96543-2109'),
+      ('c0000001-0000-0000-0000-000000000007', 'Camila Ferreira',  'camila.f@startup.com.br',     '+55 19 97777-8888', '+55 19 97777-8888'),
+      ('c0000001-0000-0000-0000-000000000008', 'Lucas Rodrigues',  'lucas.rodrigues@yahoo.com',   '+55 62 98765-0000', '+55 62 98765-0000')
   `);
-  console.log('  ✓ Clientes');
+  console.log('  ✓ Contatos');
 
   // ── Conversas ─────────────────────────────────────────────────────────────────
   // Shorthand aliases
@@ -167,17 +167,17 @@ async function seedDemoConversations() {
 
   const conversations = [
     // open — sem agente
-    { id: 'd0000001-0000-0000-0000-000000000001', clientId: 'c0000001-0000-0000-0000-000000000001', channelId: wpp,  channelType: 'whatsapp',  status: 'open',       assignedTo: null,    subject: 'Problema com boleto', lastMsg: 'Oi, não consigo gerar o boleto do meu plano.', ago: '2 hours' },
-    { id: 'd0000001-0000-0000-0000-000000000002', clientId: 'c0000001-0000-0000-0000-000000000003', channelId: mail, channelType: 'email',     status: 'open',       assignedTo: null,    subject: 'Solicitação de proposta', lastMsg: 'Gostaria de receber uma proposta comercial para minha equipe.', ago: '5 hours' },
-    { id: 'd0000001-0000-0000-0000-000000000003', clientId: 'c0000001-0000-0000-0000-000000000005', channelId: chat, channelType: 'live_chat', status: 'open',       assignedTo: null,    subject: null, lastMsg: 'Olá, tenho uma dúvida sobre o plano Enterprise.', ago: '30 minutes' },
+    { id: 'd0000001-0000-0000-0000-000000000001', contactId: 'c0000001-0000-0000-0000-000000000001', channelId: wpp,  channelType: 'whatsapp',  status: 'open',       assignedTo: null,    subject: 'Problema com boleto', lastMsg: 'Oi, não consigo gerar o boleto do meu plano.', ago: '2 hours' },
+    { id: 'd0000001-0000-0000-0000-000000000002', contactId: 'c0000001-0000-0000-0000-000000000003', channelId: mail, channelType: 'email',     status: 'open',       assignedTo: null,    subject: 'Solicitação de proposta', lastMsg: 'Gostaria de receber uma proposta comercial para minha equipe.', ago: '5 hours' },
+    { id: 'd0000001-0000-0000-0000-000000000003', contactId: 'c0000001-0000-0000-0000-000000000005', channelId: chat, channelType: 'live_chat', status: 'open',       assignedTo: null,    subject: null, lastMsg: 'Olá, tenho uma dúvida sobre o plano Enterprise.', ago: '30 minutes' },
     // in_service — com agente
-    { id: 'd0000001-0000-0000-0000-000000000004', clientId: 'c0000001-0000-0000-0000-000000000002', channelId: wpp,  channelType: 'whatsapp',  status: 'in_service', assignedTo: ownerId, subject: 'Integração WhatsApp', lastMsg: 'Pode me enviar o QR code de novo, por favor?', ago: '1 hour' },
-    { id: 'd0000001-0000-0000-0000-000000000005', clientId: 'c0000001-0000-0000-0000-000000000004', channelId: mail, channelType: 'email',     status: 'in_service', assignedTo: agentId, subject: 'Erro ao importar contatos', lastMsg: 'Arquivo CSV em anexo — consegue verificar?', ago: '3 hours' },
-    { id: 'd0000001-0000-0000-0000-000000000006', clientId: 'c0000001-0000-0000-0000-000000000007', channelId: chat, channelType: 'live_chat', status: 'in_service', assignedTo: agentId, subject: null, lastMsg: 'Vou verificar e já retorno.', ago: '45 minutes' },
+    { id: 'd0000001-0000-0000-0000-000000000004', contactId: 'c0000001-0000-0000-0000-000000000002', channelId: wpp,  channelType: 'whatsapp',  status: 'in_service', assignedTo: ownerId, subject: 'Integração WhatsApp', lastMsg: 'Pode me enviar o QR code de novo, por favor?', ago: '1 hour' },
+    { id: 'd0000001-0000-0000-0000-000000000005', contactId: 'c0000001-0000-0000-0000-000000000004', channelId: mail, channelType: 'email',     status: 'in_service', assignedTo: agentId, subject: 'Erro ao importar contatos', lastMsg: 'Arquivo CSV em anexo — consegue verificar?', ago: '3 hours' },
+    { id: 'd0000001-0000-0000-0000-000000000006', contactId: 'c0000001-0000-0000-0000-000000000007', channelId: chat, channelType: 'live_chat', status: 'in_service', assignedTo: agentId, subject: null, lastMsg: 'Vou verificar e já retorno.', ago: '45 minutes' },
     // resolved
-    { id: 'd0000001-0000-0000-0000-000000000007', clientId: 'c0000001-0000-0000-0000-000000000006', channelId: wpp,  channelType: 'whatsapp',  status: 'resolved',   assignedTo: ownerId, subject: 'Atualização de cadastro', lastMsg: 'Perfeito, obrigado pelo atendimento!', ago: '1 day' },
-    { id: 'd0000001-0000-0000-0000-000000000008', clientId: 'c0000001-0000-0000-0000-000000000008', channelId: mail, channelType: 'email',     status: 'resolved',   assignedTo: agentId, subject: 'Cancelamento de conta', lastMsg: 'Cancelamento processado com sucesso.', ago: '2 days' },
-    { id: 'd0000001-0000-0000-0000-000000000009', clientId: 'c0000001-0000-0000-0000-000000000001', channelId: chat, channelType: 'live_chat', status: 'resolved',   assignedTo: ownerId, subject: 'Dúvida sobre relatórios', lastMsg: 'Entendido! Muito obrigada.', ago: '3 days' },
+    { id: 'd0000001-0000-0000-0000-000000000007', contactId: 'c0000001-0000-0000-0000-000000000006', channelId: wpp,  channelType: 'whatsapp',  status: 'resolved',   assignedTo: ownerId, subject: 'Atualização de cadastro', lastMsg: 'Perfeito, obrigado pelo atendimento!', ago: '1 day' },
+    { id: 'd0000001-0000-0000-0000-000000000008', contactId: 'c0000001-0000-0000-0000-000000000008', channelId: mail, channelType: 'email',     status: 'resolved',   assignedTo: agentId, subject: 'Cancelamento de conta', lastMsg: 'Cancelamento processado com sucesso.', ago: '2 days' },
+    { id: 'd0000001-0000-0000-0000-000000000009', contactId: 'c0000001-0000-0000-0000-000000000001', channelId: chat, channelType: 'live_chat', status: 'resolved',   assignedTo: ownerId, subject: 'Dúvida sobre relatórios', lastMsg: 'Entendido! Muito obrigada.', ago: '3 days' },
   ];
 
   for (const c of conversations) {
@@ -186,10 +186,10 @@ async function seedDemoConversations() {
     const resolvedSql = c.status === 'resolved' ? `NOW() - INTERVAL '${c.ago}'` : 'NULL';
     await prisma.$executeRawUnsafe(`
       INSERT INTO "${s}".conversations
-        (id, client_id, channel_id, channel_type, status, assigned_to, subject, last_message, last_message_at, resolved_at, created_at)
+        (id, contact_id, channel_id, channel_type, conversation_type, status, assigned_to, subject, last_message, last_message_at, resolved_at, created_at)
       VALUES (
-        '${c.id}', '${c.clientId}', '${c.channelId}', '${c.channelType}',
-        '${c.status}', ${assignedSql}, ${subjectSql},
+        '${c.id}', '${c.contactId}', '${c.channelId}', '${c.channelType}',
+        'inbound', '${c.status}', ${assignedSql}, ${subjectSql},
         '${c.lastMsg.replace(/'/g, "''")}',
         NOW() - INTERVAL '${c.ago}',
         ${resolvedSql},

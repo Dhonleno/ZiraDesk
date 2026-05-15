@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
-import { hasRole } from '../../../middleware/rbac.js';
+import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import { createOrganizationSchema, updateOrganizationSchema, listOrganizationsQuerySchema } from './organizations.schema.js';
@@ -22,12 +22,14 @@ const guard = [
   authMiddleware,
   tenantSchemaFromJwt,
   ensureCrmInfrastructureMiddleware,
-  hasRole('owner', 'admin', 'agent'),
 ];
+const organizationsViewGuard = [...guard, requirePermission('organizations:view')];
+const organizationsEditGuard = [...guard, requirePermission('organizations:edit')];
+const organizationsDeleteGuard = [...guard, requirePermission('organizations:delete')];
 
 export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations
-  app.get('/', { preHandler: guard }, async (request, reply) => {
+  app.get('/', { preHandler: organizationsViewGuard }, async (request, reply) => {
     const parsed = listOrganizationsQuerySchema.safeParse(request.query);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
@@ -36,7 +38,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/crm/organizations
-  app.post('/', { preHandler: guard }, async (request, reply) => {
+  app.post('/', { preHandler: organizationsEditGuard }, async (request, reply) => {
     const parsed = createOrganizationSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
@@ -51,7 +53,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/organizations/:id
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const org = await getOrganization(request.params.id);
       return reply.send({ success: true, data: org });
@@ -63,7 +65,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/crm/organizations/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: organizationsEditGuard }, async (request, reply) => {
     const parsed = updateOrganizationSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
@@ -80,7 +82,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/crm/organizations/:id
-  app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: organizationsDeleteGuard }, async (request, reply) => {
     try {
       const org = await deleteOrganization(request.params.id, request.user.id);
       return reply.send({ success: true, data: org });
@@ -92,7 +94,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/organizations/:id/stats
-  app.get<{ Params: { id: string } }>('/:id/stats', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/stats', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const stats = await getOrganizationStats(request.params.id);
       return reply.send({ success: true, data: stats });
@@ -104,7 +106,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/organizations/:id/contacts
-  app.get<{ Params: { id: string } }>('/:id/contacts', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/contacts', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const contacts = await getOrganizationContacts(request.params.id);
       return reply.send({ success: true, data: contacts });
@@ -116,7 +118,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/organizations/:id/conversations
-  app.get<{ Params: { id: string } }>('/:id/conversations', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/conversations', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const convs = await getOrganizationConversations(request.params.id);
       return reply.send({ success: true, data: convs });
@@ -128,7 +130,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/crm/organizations/:id/tickets
-  app.get<{ Params: { id: string } }>('/:id/tickets', { preHandler: guard }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/tickets', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const tickets = await getOrganizationTickets(request.params.id);
       return reply.send({ success: true, data: tickets });

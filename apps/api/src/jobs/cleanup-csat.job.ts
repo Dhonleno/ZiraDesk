@@ -1,6 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 
 interface CsatCleanupJobData {}
 
@@ -49,7 +50,7 @@ async function cleanupExpiredCsat(): Promise<void> {
   }
 
   if (totalUpdated > 0) {
-    console.log(`[CSAT Cleanup] Updated ${totalUpdated} expired CSAT records`);
+    logger.info({ totalUpdated }, '[CSAT Cleanup] Updated expired CSAT records');
   }
 }
 
@@ -62,7 +63,7 @@ export const csatCleanupWorker = new Worker<CsatCleanupJobData>(
 );
 
 csatCleanupWorker.on('failed', (job, err) => {
-  console.error(`[CSAT Cleanup] Job ${job?.id} failed`, err);
+  logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[CSAT Cleanup] Job failed');
 });
 
 void csatCleanupQueue.add(
@@ -75,5 +76,5 @@ void csatCleanupQueue.add(
     removeOnFail: true,
   },
 ).catch((err) => {
-  console.error('[CSAT Cleanup] Failed to schedule hourly cleanup job', err);
+  logger.error({ err: err instanceof Error ? err.message : String(err) }, '[CSAT Cleanup] Failed to schedule hourly cleanup job');
 });

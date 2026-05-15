@@ -1,6 +1,7 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { sendWhatsAppTextMessage } from '../modules/omnichannel/conversations/csat.service.js';
@@ -256,7 +257,7 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
     status: 'closed',
   });
 
-  console.log(`[Inactivity] Conversation ${conversationId} closed`);
+  logger.info({ conversationId }, '[Inactivity] Conversation closed');
 }
 
 const inactivityWorker = new Worker<InactivityJobData>(
@@ -268,7 +269,7 @@ const inactivityWorker = new Worker<InactivityJobData>(
 );
 
 inactivityWorker.on('failed', (job, err) => {
-  console.error(`[Inactivity] Job ${job?.id} failed`, err);
+  logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[Inactivity] Job failed');
 });
 
 export async function cancelInactivityJobs(conversationId: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 import { indexArticle, getAIAgentConfig } from '../modules/ai/ai.service.js';
 import { decryptCredentials } from '../utils/crypto.js';
 
@@ -39,5 +40,5 @@ export const knowledgeIndexWorker = new Worker<KnowledgeIndexJobData>(
 );
 
 knowledgeIndexWorker.on('failed', (job, err) => {
-  console.error(`[KnowledgeIndex] Job ${job?.id} failed:`, err.message);
+  logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[KnowledgeIndex] Job failed');
 });
