@@ -11,6 +11,8 @@ import { ContactDetail } from '../../components/crm/ContactDetail';
 import { CreateContactModal } from '../../components/crm/CreateContactModal';
 import { EditContactModal } from '../../components/crm/EditContactModal';
 import { LinkOrganizationModal } from '../../components/crm/LinkOrganizationModal';
+import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
+import { CrmSearchField } from '../../components/crm/CrmSearchField';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
@@ -21,7 +23,7 @@ export function ContactsPage() {
   const queryClient = useQueryClient();
   const { id: routeId } = useParams<{ id?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchRaw, setSearchRaw] = useState('');
+  const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editContact, setEditContact] = useState<CrmContact | null>(null);
   const [linkContact, setLinkContact] = useState<CrmContact | null>(null);
@@ -48,19 +50,39 @@ export function ContactsPage() {
   useEffect(() => {
     const id = searchParams.get('id') ?? routeId ?? null;
     setSelectedId(id);
+    setSearchRaw((prev) => {
+      const nextSearch = searchParams.get('q') ?? '';
+      return prev === nextSearch ? prev : nextSearch;
+    });
   }, [routeId, searchParams]);
 
   useEffect(() => {
     if (!selectedId && contacts.length > 0) {
       const next = contacts[0]!.id;
       setSelectedId(next);
-      setSearchParams({ id: next }, { replace: true });
+      const params: Record<string, string> = { id: next };
+      if (searchRaw.trim()) params.q = searchRaw.trim();
+      setSearchParams(params, { replace: true });
     }
-  }, [contacts, selectedId, setSearchParams]);
+  }, [contacts, selectedId, setSearchParams, searchRaw]);
 
   function handleSelectContact(id: string) {
     setSelectedId(id);
-    setSearchParams({ id }, { replace: true });
+    const params: Record<string, string> = { id };
+    if (searchRaw.trim()) params.q = searchRaw.trim();
+    setSearchParams(params, { replace: true });
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchRaw(value);
+    const params: Record<string, string> = {};
+    if (selectedId) params.id = selectedId;
+    if (value.trim()) params.q = value.trim();
+    setSearchParams(params, { replace: true });
+  }
+
+  function clearSearch() {
+    handleSearchChange('');
   }
 
   async function handleDelete() {
@@ -78,10 +100,14 @@ export function ContactsPage() {
         const remaining = contacts.filter((item) => item.id !== deletedId);
         if (remaining[0]) {
           setSelectedId(remaining[0].id);
-          setSearchParams({ id: remaining[0].id }, { replace: true });
+          const params: Record<string, string> = { id: remaining[0].id };
+          if (searchRaw.trim()) params.q = searchRaw.trim();
+          setSearchParams(params, { replace: true });
         } else {
           setSelectedId(null);
-          setSearchParams({}, { replace: true });
+          const params: Record<string, string> = {};
+          if (searchRaw.trim()) params.q = searchRaw.trim();
+          setSearchParams(params, { replace: true });
         }
       }
     } catch (error: unknown) {
@@ -99,15 +125,11 @@ export function ContactsPage() {
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
       <div style={{ borderRight: '1px solid var(--line)', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '18px 14px 12px', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ margin: 0, fontSize: 18, color: 'var(--txt)' }}>{t('contacts.standalone')}</h1>
-            {meta ? (
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)', border: '1px solid var(--line)', borderRadius: 'var(--r-pill)', padding: '2px 8px', background: 'var(--bg-3)' }}>
-                {meta.total}
-              </span>
-            ) : null}
-            <div style={{ flex: 1 }} />
+        <CrmSidebarHeader
+          title={t('contacts.standalone')}
+          count={meta?.total ?? null}
+          subtitle={t('contacts.standaloneDesc')}
+          action={(
             <PermissionGate permission="contacts:edit">
               <button
                 onClick={() => setIsCreateOpen(true)}
@@ -117,17 +139,16 @@ export function ContactsPage() {
                 {t('contacts.new')}
               </button>
             </PermissionGate>
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.standaloneDesc')}</p>
-        </div>
+          )}
+        />
 
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)' }}>
-          <input
-            type="text"
+          <CrmSearchField
             value={searchRaw}
-            onChange={(event) => setSearchRaw(event.target.value)}
+            onChange={handleSearchChange}
             placeholder={t('contacts.search')}
-            className="zd-input"
+            clearLabel={t('contacts.clearSearch')}
+            onClear={clearSearch}
           />
         </div>
 

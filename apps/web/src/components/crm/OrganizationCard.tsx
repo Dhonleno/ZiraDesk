@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { CrmOrganization } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { OrgStatusBadge } from './ContactBadge';
@@ -9,21 +10,21 @@ interface OrganizationCardProps {
   onClick: () => void;
 }
 
-function relativeTime(dateStr: string | null | undefined): string {
+function relativeTime(dateStr: string | null | undefined, locale: string, t: TFunction<'crm'>): string {
   if (!dateStr) return '—';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'agora';
-  if (mins < 60) return `${mins}m atrás`;
+  if (mins < 1) return t('organizations.time.now');
+  if (mins < 60) return t('organizations.time.minutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h atrás`;
+  if (hrs < 24) return t('organizations.time.hoursAgo', { count: hrs });
   const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d atrás`;
-  return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  if (days < 7) return t('organizations.time.daysAgo', { count: days });
+  return new Date(dateStr).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
 }
 
 export function OrganizationCard({ org, selected, onClick }: OrganizationCardProps) {
-  const { t } = useTranslation('crm');
+  const { t, i18n } = useTranslation('crm');
   const statusLabels: Record<string, string> = {
     lead:     t('organizations.status.lead'),
     prospect: t('organizations.status.prospect'),
@@ -85,7 +86,7 @@ export function OrganizationCard({ org, selected, onClick }: OrganizationCardPro
               {org.responsible_name ?? t('organizations.fields.notInformed')}
             </span>
             <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0, marginLeft: 8 }}>
-              {relativeTime(org.updated_at)}
+              {relativeTime(org.updated_at, i18n.language, t)}
             </span>
           </div>
         </div>

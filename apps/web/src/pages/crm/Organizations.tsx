@@ -2,40 +2,136 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { organizationsApi } from '../../services/api';
+import { adminApi, organizationsApi } from '../../services/api';
 import type { CrmOrganization } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { OrganizationCard } from '../../components/crm/OrganizationCard';
 import { OrganizationDetail } from '../../components/crm/OrganizationDetail';
 import { CreateOrganizationModal } from '../../components/crm/CreateOrganizationModal';
+import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
+import { CrmSearchField } from '../../components/crm/CrmSearchField';
+import { CrmActiveFilterChips } from '../../components/crm/CrmActiveFilterChips';
 import { PageShell } from '../../components/layout/PageShell';
 
 type StatusFilter = 'all' | 'lead' | 'prospect' | 'client' | 'inactive';
+type SortBy = 'updated_at' | 'created_at' | 'name';
+type SortOrder = 'asc' | 'desc';
 
 const STATUS_TABS: StatusFilter[] = ['all', 'lead', 'prospect', 'client', 'inactive'];
+const SORT_OPTIONS: SortBy[] = ['updated_at', 'created_at', 'name'];
+
+function parseStatusFilter(value: string | null): StatusFilter {
+  return STATUS_TABS.includes(value as StatusFilter) ? (value as StatusFilter) : 'all';
+}
+
+function parseSortBy(value: string | null): SortBy {
+  return SORT_OPTIONS.includes(value as SortBy) ? (value as SortBy) : 'updated_at';
+}
+
+function parseSortOrder(value: string | null): SortOrder {
+  return value === 'asc' || value === 'desc' ? value : 'desc';
+}
+
+function parsePage(value: string | null): number {
+  const page = Number(value ?? 1);
+  if (!Number.isFinite(page) || page < 1) return 1;
+  return Math.floor(page);
+}
 
 export function OrganizationsPage() {
   const { t } = useTranslation('crm');
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchRaw, setSearchRaw] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
+  const [segmentRaw, setSegmentRaw] = useState(searchParams.get('segment') ?? '');
+  const [tagRaw, setTagRaw] = useState(searchParams.get('tag') ?? '');
+  const [responsibleId, setResponsibleId] = useState(searchParams.get('responsible_id') ?? '');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(parseStatusFilter(searchParams.get('status')));
+  const [sortBy, setSortBy] = useState<SortBy>(parseSortBy(searchParams.get('sort_by')));
+  const [sortOrder, setSortOrder] = useState<SortOrder>(parseSortOrder(searchParams.get('sort_order')));
+  const [page, setPage] = useState<number>(parsePage(searchParams.get('page')));
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const search = useDebounce(searchRaw, 300);
+  const segment = useDebounce(segmentRaw, 300);
+  const tag = useDebounce(tagRaw, 300);
 
   useEffect(() => {
     const id = searchParams.get('id');
-    if (id) setSelectedId(id);
+    const q = searchParams.get('q') ?? '';
+    const nextSegment = searchParams.get('segment') ?? '';
+    const nextTag = searchParams.get('tag') ?? '';
+    const nextResponsibleId = searchParams.get('responsible_id') ?? '';
+    const nextStatus = parseStatusFilter(searchParams.get('status'));
+    const nextSortBy = parseSortBy(searchParams.get('sort_by'));
+    const nextSortOrder = parseSortOrder(searchParams.get('sort_order'));
+    const nextPage = parsePage(searchParams.get('page'));
+
+    setSelectedId(id);
+    setSearchRaw((prev) => (prev === q ? prev : q));
+    setSegmentRaw((prev) => (prev === nextSegment ? prev : nextSegment));
+    setTagRaw((prev) => (prev === nextTag ? prev : nextTag));
+    setResponsibleId((prev) => (prev === nextResponsibleId ? prev : nextResponsibleId));
+    setStatusFilter((prev) => (prev === nextStatus ? prev : nextStatus));
+    setSortBy((prev) => (prev === nextSortBy ? prev : nextSortBy));
+    setSortOrder((prev) => (prev === nextSortOrder ? prev : nextSortOrder));
+    setPage((prev) => (prev === nextPage ? prev : nextPage));
   }, [searchParams]);
 
+  function updateParams(next: {
+    id?: string | null;
+    q?: string;
+    status?: StatusFilter;
+    segment?: string;
+    tag?: string;
+    responsibleId?: string;
+    sortBy?: SortBy;
+    sortOrder?: SortOrder;
+    page?: number;
+  }) {
+    const nextId = next.id ?? selectedId;
+    const nextQ = next.q ?? searchRaw;
+    const nextStatus = next.status ?? statusFilter;
+    const nextSegment = next.segment ?? segmentRaw;
+    const nextTag = next.tag ?? tagRaw;
+    const nextResponsibleId = next.responsibleId ?? responsibleId;
+    const nextSortBy = next.sortBy ?? sortBy;
+    const nextSortOrder = next.sortOrder ?? sortOrder;
+    const nextPage = next.page ?? page;
+    const params: Record<string, string> = {};
+
+    if (nextId) params.id = nextId;
+    if (nextQ.trim()) params.q = nextQ.trim();
+    if (nextStatus !== 'all') params.status = nextStatus;
+    if (nextSegment.trim()) params.segment = nextSegment.trim();
+    if (nextTag.trim()) params.tag = nextTag.trim();
+    if (nextResponsibleId) params.responsible_id = nextResponsibleId;
+    if (nextSortBy !== 'updated_at') params.sort_by = nextSortBy;
+    if (nextSortOrder !== 'desc') params.sort_order = nextSortOrder;
+    if (nextPage > 1) params.page = String(nextPage);
+
+    setSearchParams(params, { replace: true });
+  }
+
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['crm-organizations', search, statusFilter],
+    queryKey: ['crm-organizations', search, statusFilter, segment, tag, responsibleId, sortBy, sortOrder, page],
     queryFn: () => organizationsApi.list({
-      per_page: 50,
+      page,
+      per_page: 20,
+      sort_by: sortBy,
+      sort_order: sortOrder,
       ...(search ? { search } : {}),
       ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+      ...(segment ? { segment } : {}),
+      ...(tag ? { tag } : {}),
+      ...(responsibleId ? { responsible_id: responsibleId } : {}),
     }),
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ['crm-organizations-users-filter'],
+    queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
+    staleTime: 60_000,
   });
 
   const { data: selectedOrg, isLoading: detailLoading } = useQuery({
@@ -47,13 +143,76 @@ export function OrganizationsPage() {
   const organizations = listData?.data ?? [];
   const meta = listData?.meta;
 
+  useEffect(() => {
+    if (organizations.length === 0) {
+      setSelectedId((current) => {
+        if (!current) return current;
+        updateParams({ id: null });
+        return null;
+      });
+      return;
+    }
+
+    const selectedExists = selectedId ? organizations.some((org) => org.id === selectedId) : false;
+    if (!selectedExists) {
+      const firstId = organizations[0]!.id;
+      setSelectedId(firstId);
+      updateParams({ id: firstId });
+    }
+  }, [organizations, selectedId]);
+
   function selectOrg(id: string) {
     setSelectedId(id);
-    setSearchParams(id ? { id } : {}, { replace: true });
+    updateParams({ id });
   }
 
-  function handleSearch(val: string) {
+  function handleSearchChange(val: string) {
     setSearchRaw(val);
+    setPage(1);
+    updateParams({ q: val, page: 1 });
+  }
+
+  function handleStatusChange(nextStatus: StatusFilter) {
+    setStatusFilter(nextStatus);
+    setPage(1);
+    updateParams({ status: nextStatus, page: 1 });
+  }
+
+  function handleSegmentChange(nextSegment: string) {
+    setSegmentRaw(nextSegment);
+    setPage(1);
+    updateParams({ segment: nextSegment, page: 1 });
+  }
+
+  function handleTagChange(nextTag: string) {
+    setTagRaw(nextTag);
+    setPage(1);
+    updateParams({ tag: nextTag, page: 1 });
+  }
+
+  function handleResponsibleChange(nextResponsibleId: string) {
+    setResponsibleId(nextResponsibleId);
+    setPage(1);
+    updateParams({ responsibleId: nextResponsibleId, page: 1 });
+  }
+
+  function handleSortByChange(nextSortBy: SortBy) {
+    setSortBy(nextSortBy);
+    setPage(1);
+    updateParams({ sortBy: nextSortBy, page: 1 });
+  }
+
+  function handleSortOrderToggle() {
+    const nextOrder: SortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    setSortOrder(nextOrder);
+    setPage(1);
+    updateParams({ sortOrder: nextOrder, page: 1 });
+  }
+
+  function handlePageChange(nextPage: number) {
+    const safePage = Math.max(1, nextPage);
+    setPage(safePage);
+    updateParams({ page: safePage });
   }
 
   const statusTabLabels: Record<StatusFilter, string> = {
@@ -63,6 +222,56 @@ export function OrganizationsPage() {
     client:   t('organizations.status.client'),
     inactive: t('organizations.status.inactive'),
   };
+  const sortByLabels: Record<SortBy, string> = {
+    updated_at: t('organizations.sort.updatedAt'),
+    created_at: t('organizations.sort.createdAt'),
+    name: t('organizations.sort.name'),
+  };
+  const responsibleName = (usersData?.data ?? []).find((user) => user.id === responsibleId)?.name ?? null;
+  const activeFilters: Array<{ key: string; label: string; onRemove: () => void }> = [
+    ...(searchRaw.trim()
+      ? [{ key: 'q', label: `${t('organizations.search')}: ${searchRaw.trim()}`, onRemove: () => handleSearchChange('') }]
+      : []),
+    ...(statusFilter !== 'all'
+      ? [{ key: 'status', label: `${t('organizations.fields.status')}: ${statusTabLabels[statusFilter]}`, onRemove: () => handleStatusChange('all') }]
+      : []),
+    ...(segmentRaw.trim()
+      ? [{ key: 'segment', label: `${t('organizations.filters.segment')}: ${segmentRaw.trim()}`, onRemove: () => handleSegmentChange('') }]
+      : []),
+    ...(tagRaw.trim()
+      ? [{ key: 'tag', label: `${t('organizations.filters.tag')}: ${tagRaw.trim()}`, onRemove: () => handleTagChange('') }]
+      : []),
+    ...(responsibleId
+      ? [{
+          key: 'responsible_id',
+          label: `${t('organizations.filters.responsible')}: ${responsibleName ?? t('organizations.filters.responsibleAll')}`,
+          onRemove: () => handleResponsibleChange(''),
+        }]
+      : []),
+  ];
+  const canGoPrev = page > 1;
+  const canGoNext = page < (meta?.total_pages ?? 1);
+
+  function clearAllFilters() {
+    setSearchRaw('');
+    setSegmentRaw('');
+    setTagRaw('');
+    setResponsibleId('');
+    setStatusFilter('all');
+    setSortBy('updated_at');
+    setSortOrder('desc');
+    setPage(1);
+    updateParams({
+      q: '',
+      segment: '',
+      tag: '',
+      responsibleId: '',
+      status: 'all',
+      sortBy: 'updated_at',
+      sortOrder: 'desc',
+      page: 1,
+    });
+  }
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
@@ -72,39 +281,145 @@ export function OrganizationsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--line)', background: 'var(--bg)' }}>
 
         {/* Header */}
-        <div style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-          <h1 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--txt)', margin: 0 }}>
-            {t('organizations.title')}
-          </h1>
-          {meta && (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)', padding: '2px 8px', borderRadius: 'var(--r-pill)', background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
-              {meta.total}
-            </span>
+        <CrmSidebarHeader
+          title={t('organizations.title')}
+          count={meta?.total ?? null}
+          action={(
+            <button
+              onClick={() => setIsCreateOpen(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 'var(--r)', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+              {t('organizations.new')}
+            </button>
           )}
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={() => setIsCreateOpen(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 'var(--r)', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            {t('organizations.new')}
-          </button>
-        </div>
+        />
 
         {/* Search */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--bg-3)', border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '7px 10px' }}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: 'var(--txt-3)', flexShrink: 0 }} aria-hidden>
-              <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-              <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
+          <CrmSearchField
+            value={searchRaw}
+            onChange={handleSearchChange}
+            placeholder={t('organizations.search')}
+            clearLabel={t('organizations.filters.clearSearch')}
+            onClear={() => handleSearchChange('')}
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <select
+              value={sortBy}
+              onChange={(e) => handleSortByChange(e.target.value as SortBy)}
+              style={{
+                height: 30,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt-2)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                padding: '0 9px',
+                outline: 'none',
+              }}
+              aria-label={t('organizations.sort.label')}
+              title={t('organizations.sort.label')}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {sortByLabels[option]}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleSortOrderToggle}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                height: 30,
+                minWidth: 32,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt-2)',
+                cursor: 'pointer',
+                padding: '0 9px',
+              }}
+              aria-label={sortOrder === 'asc' ? t('organizations.sort.orderAsc') : t('organizations.sort.orderDesc')}
+              title={sortOrder === 'asc' ? t('organizations.sort.orderAsc') : t('organizations.sort.orderDesc')}
+            >
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                {sortOrder === 'asc' ? (
+                  <path d="M5.5 1.5v8M2.7 4.3L5.5 1.5l2.8 2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                ) : (
+                  <path d="M5.5 9.5v-8M2.7 6.7L5.5 9.5l2.8-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+              </svg>
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
             <input
               type="text"
-              placeholder={t('organizations.search')}
-              value={searchRaw}
-              onChange={(e) => handleSearch(e.target.value)}
-              style={{ background: 'none', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'var(--font)', color: 'var(--txt)', width: '100%' }}
+              value={segmentRaw}
+              onChange={(e) => handleSegmentChange(e.target.value)}
+              placeholder={t('organizations.filters.segmentPlaceholder')}
+              style={{
+                height: 30,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                padding: '0 9px',
+                outline: 'none',
+              }}
+              aria-label={t('organizations.filters.segment')}
             />
+            <input
+              type="text"
+              value={tagRaw}
+              onChange={(e) => handleTagChange(e.target.value)}
+              placeholder={t('organizations.filters.tagPlaceholder')}
+              style={{
+                height: 30,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                padding: '0 9px',
+                outline: 'none',
+              }}
+              aria-label={t('organizations.filters.tag')}
+            />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <select
+              value={responsibleId}
+              onChange={(e) => handleResponsibleChange(e.target.value)}
+              style={{
+                width: '100%',
+                height: 30,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt-2)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                padding: '0 9px',
+                outline: 'none',
+              }}
+              aria-label={t('organizations.filters.responsible')}
+            >
+              <option value="">{t('organizations.filters.responsibleAll')}</option>
+              {(usersData?.data ?? []).map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -113,7 +428,7 @@ export function OrganizationsPage() {
           {STATUS_TABS.map((tab) => (
             <button
               key={tab}
-              onClick={() => setStatusFilter(tab)}
+              onClick={() => handleStatusChange(tab)}
               style={{
                 padding: '8px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
                 border: 'none', borderBottom: `2px solid ${statusFilter === tab ? 'var(--teal)' : 'transparent'}`,
@@ -126,6 +441,12 @@ export function OrganizationsPage() {
             </button>
           ))}
         </div>
+        <CrmActiveFilterChips
+          filters={activeFilters}
+          removeLabel={t('organizations.filters.removeFilter')}
+          clearAllLabel={t('organizations.filters.clearAll')}
+          onClearAll={clearAllFilters}
+        />
 
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
@@ -154,6 +475,53 @@ export function OrganizationsPage() {
             ))
           )}
         </div>
+        {meta && meta.total_pages > 1 ? (
+          <div style={{ borderTop: '1px solid var(--line)', padding: '9px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => handlePageChange(page - 1)}
+              disabled={!canGoPrev}
+              style={{
+                height: 28,
+                minWidth: 28,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: canGoPrev ? 'var(--bg-3)' : 'var(--bg-2)',
+                color: canGoPrev ? 'var(--txt-2)' : 'var(--txt-3)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                cursor: canGoPrev ? 'pointer' : 'not-allowed',
+                padding: '0 9px',
+              }}
+              aria-label={t('organizations.pagination.prev')}
+            >
+              {t('organizations.pagination.prev')}
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+              {t('organizations.pagination.pageOf', { page, total: meta.total_pages })}
+            </span>
+            <button
+              type="button"
+              onClick={() => handlePageChange(page + 1)}
+              disabled={!canGoNext}
+              style={{
+                height: 28,
+                minWidth: 28,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: canGoNext ? 'var(--bg-3)' : 'var(--bg-2)',
+                color: canGoNext ? 'var(--txt-2)' : 'var(--txt-3)',
+                fontFamily: 'var(--font)',
+                fontSize: 11,
+                cursor: canGoNext ? 'pointer' : 'not-allowed',
+                padding: '0 9px',
+              }}
+              aria-label={t('organizations.pagination.next')}
+            >
+              {t('organizations.pagination.next')}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* ── Right panel: detail ── */}
