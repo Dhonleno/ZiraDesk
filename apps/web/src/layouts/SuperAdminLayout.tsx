@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { BrandLogo } from '../components/layout/BrandLogo';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -41,30 +42,6 @@ function ThemeToggle() {
         />
       </svg>
     </button>
-  );
-}
-
-/* ── Logo SVG ─────────────────────────────────────────────────────────────── */
-function Logo() {
-  return (
-    <svg width="120" height="28" viewBox="0 0 160 36" style={{ display: 'block' }} aria-label="ZiraDesk">
-      <rect x="0" y="0" width="36" height="36" rx="8" className="brand-logo-bg" />
-      <rect x="0" y="0" width="36" height="36" rx="8" fill="none" className="brand-logo-stroke" strokeWidth="1" />
-      <path
-        d="M9 10 L27 10 L9 26 L27 26"
-        fill="none"
-        className="brand-logo-z"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <text x="46" y="23" fontFamily="'IBM Plex Sans',system-ui" fontSize="16" fontWeight="700" className="brand-logo-zira" letterSpacing="-0.3">
-        Zira
-      </text>
-      <text x="82" y="23" fontFamily="'IBM Plex Sans',system-ui" fontSize="16" fontWeight="300" className="brand-logo-desk" letterSpacing="-0.3">
-        Desk
-      </text>
-    </svg>
   );
 }
 
@@ -128,7 +105,7 @@ export function SuperAdminLayout() {
         zIndex: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingRight: 16, borderRight: '1px solid var(--line)', marginRight: 6 }}>
-          <Logo />
+          <BrandLogo className="brand-logo" width={132} height={30} />
         </div>
 
         <div style={{ flex: 1 }}>
