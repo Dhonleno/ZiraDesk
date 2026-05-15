@@ -3,15 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import type { CrmContact } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { PrimaryBadge } from './ContactBadge';
+import { PermissionGate } from '../ui/PermissionGate';
 
 interface ContactCardProps {
   contact: CrmContact;
   onEdit?: (contact: CrmContact) => void;
   onStartConversation?: (contact: CrmContact) => void;
+  onUnlink?: (contact: CrmContact) => void;
+  onTransfer?: (contact: CrmContact) => void;
   showOrgLink?: boolean;
 }
 
-export function ContactCard({ contact, onEdit, onStartConversation, showOrgLink }: ContactCardProps) {
+export function ContactCard({ contact, onEdit, onStartConversation, onUnlink, onTransfer, showOrgLink }: ContactCardProps) {
   const { t } = useTranslation('crm');
   const navigate = useNavigate();
 
@@ -51,28 +54,62 @@ export function ContactCard({ contact, onEdit, onStartConversation, showOrgLink 
         )}
       </div>
       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-        {onStartConversation && (
-          <button
-            title={t('contacts.actions.startConversation')}
-            onClick={() => onStartConversation(contact)}
-            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <path d="M2 8.5V3.5a1 1 0 011-1h6a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2v-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        )}
-        {onEdit && (
-          <button
-            title={t('contacts.actions.edit')}
-            onClick={() => onEdit(contact)}
-            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        )}
+        <PermissionGate permission="contacts:edit">
+          <>
+            {onStartConversation && (
+              <button
+                className="row-action-btn"
+                title={t('contacts.actions.startConversation')}
+                aria-label={t('contacts.actions.startConversation')}
+                onClick={() => onStartConversation(contact)}
+                style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M2 8.5V3.5a1 1 0 011-1h6a1 1 0 011 1V7a1 1 0 01-1 1H5l-3 2v-1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {onTransfer && (
+              <button
+                className="row-action-btn"
+                title={t('transferContact')}
+                aria-label={t('transferContact')}
+                onClick={() => onTransfer(contact)}
+                style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M7.5 2.5L10 5l-2.5 2.5M10 5H4M4.5 9.5L2 7l2.5-2.5M2 7h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {onUnlink && (
+              <button
+                className="row-action-btn"
+                title={t('unlinkContact')}
+                aria-label={t('unlinkContact')}
+                onClick={() => onUnlink(contact)}
+                style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M4.2 4.2l3.6 3.6M7.8 4.2L4.2 7.8M3 3l1-1a1.6 1.6 0 012.3 0l.7.7M9 9l-1 1a1.6 1.6 0 01-2.3 0L5 9.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {onEdit && (
+              <button
+                className="row-action-btn"
+                title={t('contacts.actions.edit')}
+                aria-label={t('contacts.actions.edit')}
+                onClick={() => onEdit(contact)}
+                style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', cursor: 'pointer' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+          </>
+        </PermissionGate>
       </div>
     </div>
   );

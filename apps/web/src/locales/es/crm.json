@@ -19,6 +19,36 @@
       "client": "Cliente",
       "inactive": "Inactivo"
     },
+    "filters": {
+      "segment": "Segmento",
+      "segmentPlaceholder": "Filtrar por segmento",
+      "tag": "Etiqueta",
+      "tagPlaceholder": "Filtrar por etiqueta",
+      "responsible": "Responsable",
+      "responsibleAll": "Todos los responsables",
+      "clearSearch": "Limpiar",
+      "removeFilter": "Quitar filtro",
+      "clearAll": "Limpiar filtros"
+    },
+    "sort": {
+      "label": "Ordenar por",
+      "updatedAt": "Última actualización",
+      "createdAt": "Fecha de creación",
+      "name": "Nombre",
+      "orderAsc": "Orden ascendente",
+      "orderDesc": "Orden descendente"
+    },
+    "pagination": {
+      "prev": "Anterior",
+      "next": "Siguiente",
+      "pageOf": "{{page}} / {{total}}"
+    },
+    "time": {
+      "now": "ahora",
+      "minutesAgo": "hace {{count}}m",
+      "hoursAgo": "hace {{count}}h",
+      "daysAgo": "hace {{count}}d"
+    },
     "fields": {
       "name": "Nombre",
       "document": "RFC / ID",
@@ -95,25 +125,68 @@
       "lastMessage": "Último mensaje",
       "status": "Estado",
       "open": "Abierta",
+      "noPreview": "Sin vista previa del mensaje",
+      "statuses": {
+        "open": "Abierta",
+        "inProgress": "En progreso",
+        "waiting": "En espera",
+        "resolved": "Resuelta",
+        "closed": "Cerrada"
+      },
       "openIn": "Abrir en Omnicanal"
     },
     "tickets": {
       "empty": "No se encontraron tickets",
       "title": "Título",
       "status": "Estado",
-      "priority": "Prioridad"
+      "priority": "Prioridad",
+      "statuses": {
+        "open": "Abierto",
+        "inProgress": "En progreso",
+        "waiting": "En espera",
+        "resolved": "Resuelto",
+        "closed": "Cerrado"
+      },
+      "priorities": {
+        "low": "Baja",
+        "medium": "Media",
+        "high": "Alta",
+        "urgent": "Urgente"
+      },
+      "openTicket": "Abrir"
+    },
+    "channels": {
+      "whatsapp": "WhatsApp",
+      "instagram": "Instagram",
+      "email": "Correo",
+      "liveChat": "Chat"
+    },
+    "messages": {
+      "notesSaved": "Notas guardadas",
+      "notesSaveError": "Error al guardar notas",
+      "addContactFirst": "Agregue un contacto antes de iniciar la conversación",
+      "conversationStartError": "No se pudo iniciar la conversación",
+      "contactActionError": "No se pudo actualizar el contacto"
     },
     "notes": {
       "placeholder": "Agregar notas sobre esta organización...",
       "hint": "Las notas se guardan al hacer clic en Guardar"
     }
   },
+  "unlinkContact": "Desvincular contacto",
+  "unlinkContactConfirm": "¿Seguro que deseas desvincular a {{name}} de esta organización?",
+  "transferContact": "Transferir a otra organización",
+  "transferContactTitle": "Transferir contacto",
+  "searchOrganization": "Buscar organización...",
+  "unlinkSuccess": "Contacto desvinculado con éxito",
+  "transferSuccess": "Contacto transferido con éxito",
   "contacts": {
     "title": "Contactos",
     "standalone": "Contactos independientes",
     "standaloneDesc": "Contactos sin organización vinculada",
     "new": "Nuevo contacto",
     "search": "Buscar contacto...",
+    "clearSearch": "Limpiar",
     "noResults": "No se encontraron contactos",
     "loading": "Cargando...",
     "total": "{{n}} contactos",

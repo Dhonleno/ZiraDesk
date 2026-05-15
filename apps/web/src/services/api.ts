@@ -659,6 +659,18 @@ export interface CrmOrganizationStats {
   last_contact_at: string | null;
 }
 
+export interface CrmOrganizationConversation {
+  id: string;
+  status: string;
+  channel_type: string | null;
+  protocol: string | null;
+  subject: string | null;
+  bot_department: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  created_at: string;
+}
+
 export interface CrmTimelineEvent {
   id: string;
   type: 'audit' | 'conversation' | 'ticket';
@@ -723,8 +735,8 @@ export const organizationsApi = {
     const res = await api.get<{ success: boolean; data: CrmContact[] }>(`/crm/organizations/${id}/contacts`);
     return res.data.data;
   },
-  getConversations: async (id: string) => {
-    const res = await api.get(`/crm/organizations/${id}/conversations`);
+  getConversations: async (id: string): Promise<{ success: boolean; data: CrmOrganizationConversation[] }> => {
+    const res = await api.get<{ success: boolean; data: CrmOrganizationConversation[] }>(`/crm/organizations/${id}/conversations`);
     return res.data;
   },
   getTickets: async (id: string) => {
