@@ -1739,10 +1739,23 @@
   justify-content: space-between;
 }
 
+.portal-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-brand-logo {
+  display: block;
+  flex-shrink: 0;
+}
+
 .portal-brand-name {
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--txt);
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .portal-user-menu {

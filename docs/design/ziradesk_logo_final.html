@@ -1,0 +1,170 @@
+
+<style>
+  .lf-wrap { padding: 0 0 24px; font-family: system-ui, sans-serif; }
+  .lf-section { margin-bottom: 28px; }
+  .lf-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-secondary); margin-bottom: 12px; }
+  .lf-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .lf-box { border: 1.5px solid var(--color-border-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 24px 32px; }
+  .lf-box.dark { background: #0F172A; border-color: #1E293B; }
+  .lf-box.light { background: #F8FAFC; }
+  .lf-box.white { background: #ffffff; }
+  .lf-size-label { font-size: 11px; color: var(--color-text-tertiary); margin-top: 6px; text-align: center; }
+  .lf-divider { border: none; border-top: 1px solid var(--color-border-tertiary); margin: 4px 0 24px; }
+  .lf-note { font-size: 12px; color: var(--color-text-secondary); margin-top: 8px; line-height: 1.5; }
+</style>
+
+<div class="lf-wrap">
+
+  <!-- Versão principal -->
+  <div class="lf-section">
+    <div class="lf-label">Versão principal — fundo claro</div>
+    <div class="lf-box white">
+      <svg width="260" height="56" viewBox="0 0 260 56">
+        <rect x="0" y="0" width="56" height="56" rx="12" fill="#0F172A"/>
+        <path d="M14 16 L42 16 L14 40 L42 40" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="72" y="24" font-family="system-ui" font-size="22" font-weight="700" fill="#0F172A" letter-spacing="-0.5">Zira</text>
+        <text x="118" y="24" font-family="system-ui" font-size="22" font-weight="300" fill="#64748B" letter-spacing="-0.5">Desk</text>
+        <text x="72" y="42" font-family="system-ui" font-size="8.5" font-weight="500" fill="#94A3B8" letter-spacing="0.18em">BUSINESS PLATFORM</text>
+      </svg>
+    </div>
+  </div>
+  <hr class="lf-divider">
+
+  <!-- Versão dark -->
+  <div class="lf-section">
+    <div class="lf-label">Versão dark — fundo escuro</div>
+    <div class="lf-box dark">
+      <svg width="260" height="56" viewBox="0 0 260 56">
+        <rect x="0" y="0" width="56" height="56" rx="12" fill="#1E293B"/>
+        <rect x="0" y="0" width="56" height="56" rx="12" fill="none" stroke="#334155" stroke-width="1"/>
+        <path d="M14 16 L42 16 L14 40 L42 40" fill="none" stroke="#F1F5F9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="72" y="24" font-family="system-ui" font-size="22" font-weight="700" fill="#F1F5F9" letter-spacing="-0.5">Zira</text>
+        <text x="118" y="24" font-family="system-ui" font-size="22" font-weight="300" fill="#94A3B8" letter-spacing="-0.5">Desk</text>
+        <text x="72" y="42" font-family="system-ui" font-size="8.5" font-weight="500" fill="#475569" letter-spacing="0.18em">BUSINESS PLATFORM</text>
+      </svg>
+    </div>
+  </div>
+  <hr class="lf-divider">
+
+  <!-- Ícone em tamanhos -->
+  <div class="lf-section">
+    <div class="lf-label">Ícone isolado — escalas</div>
+    <div class="lf-row">
+
+      <div>
+        <div class="lf-box white" style="padding:16px">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="#0F172A"/>
+            <path d="M16 18 L48 18 L16 46 L48 46" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="lf-size-label">64px — app</div>
+      </div>
+
+      <div>
+        <div class="lf-box white" style="padding:16px">
+          <svg width="40" height="40" viewBox="0 0 64 64">
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="#0F172A"/>
+            <path d="M16 18 L48 18 L16 46 L48 46" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="lf-size-label">40px — sidebar</div>
+      </div>
+
+      <div>
+        <div class="lf-box white" style="padding:16px">
+          <svg width="28" height="28" viewBox="0 0 64 64">
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="#0F172A"/>
+            <path d="M16 18 L48 18 L16 46 L48 46" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="lf-size-label">28px — navbar</div>
+      </div>
+
+      <div>
+        <div class="lf-box white" style="padding:16px">
+          <svg width="16" height="16" viewBox="0 0 64 64">
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="#0F172A"/>
+            <path d="M16 18 L48 18 L16 46 L48 46" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="lf-size-label">16px — favicon</div>
+      </div>
+
+      <div>
+        <div class="lf-box dark" style="padding:16px">
+          <svg width="40" height="40" viewBox="0 0 64 64">
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="#1E293B"/>
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
+            <path d="M16 18 L48 18 L16 46 L48 46" fill="none" stroke="#F1F5F9" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="lf-size-label">dark mode</div>
+      </div>
+
+    </div>
+  </div>
+  <hr class="lf-divider">
+
+  <!-- Versão compacta horizontal -->
+  <div class="lf-section">
+    <div class="lf-label">Versão compacta — navbar e sidebar recolhida</div>
+    <div class="lf-row">
+      <div class="lf-box white" style="padding:14px 20px">
+        <svg width="160" height="36" viewBox="0 0 160 36">
+          <rect x="0" y="0" width="36" height="36" rx="8" fill="#0F172A"/>
+          <path d="M9 10 L27 10 L9 26 L27 26" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="46" y="23" font-family="system-ui" font-size="16" font-weight="700" fill="#0F172A" letter-spacing="-0.3">Zira</text>
+          <text x="82" y="23" font-family="system-ui" font-size="16" font-weight="300" fill="#64748B" letter-spacing="-0.3">Desk</text>
+        </svg>
+      </div>
+      <div class="lf-box dark" style="padding:14px 20px">
+        <svg width="160" height="36" viewBox="0 0 160 36">
+          <rect x="0" y="0" width="36" height="36" rx="8" fill="#1E293B"/>
+          <rect x="0" y="0" width="36" height="36" rx="8" fill="none" stroke="#334155" stroke-width="1"/>
+          <path d="M9 10 L27 10 L9 26 L27 26" fill="none" stroke="#F1F5F9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="46" y="23" font-family="system-ui" font-size="16" font-weight="700" fill="#F1F5F9" letter-spacing="-0.3">Zira</text>
+          <text x="82" y="23" font-family="system-ui" font-size="16" font-weight="300" fill="#94A3B8" letter-spacing="-0.3">Desk</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <hr class="lf-divider">
+
+  <!-- Paleta oficial -->
+  <div class="lf-section">
+    <div class="lf-label">Paleta oficial da marca</div>
+    <div class="lf-row">
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#0F172A"></div>
+        <div class="lf-size-label">Primary<br>#0F172A</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#1E293B"></div>
+        <div class="lf-size-label">Dark<br>#1E293B</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#334155"></div>
+        <div class="lf-size-label">Mid<br>#334155</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#64748B"></div>
+        <div class="lf-size-label">Muted<br>#64748B</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#94A3B8"></div>
+        <div class="lf-size-label">Subtle<br>#94A3B8</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#F1F5F9"></div>
+        <div class="lf-size-label">Light<br>#F1F5F9</div>
+      </div>
+      <div>
+        <div style="width:52px;height:52px;border-radius:10px;background:#F8FAFC;border:1px solid #E2E8F0"></div>
+        <div class="lf-size-label">Surface<br>#F8FAFC</div>
+      </div>
+    </div>
+    <div class="lf-note">A paleta é monocromática — toda em tons de preto, cinza e branco. Isso garante que a cor do cliente (primary, secondary, accent) se destaque sem conflito com a identidade da marca ZiraDesk.</div>
+  </div>
+
+</div>

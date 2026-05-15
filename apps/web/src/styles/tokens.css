@@ -96,11 +96,17 @@
 }
 
 /* ── Logo — classes temáveis ──────────────────────────────────────────────── */
-.brand-logo-bg     { fill: var(--txt); }
-.brand-logo-stroke { stroke: var(--line-2); }
-.brand-logo-z      { stroke: var(--bg-2); }
-.brand-logo-zira   { fill: var(--txt); }
-.brand-logo-desk   { fill: var(--txt-2); }
+.brand-logo-bg     { fill: #1E293B; }
+.brand-logo-stroke { stroke: #334155; }
+.brand-logo-z      { stroke: #F1F5F9; }
+.brand-logo-zira   { fill: #F1F5F9; }
+.brand-logo-desk   { fill: #94A3B8; }
+
+[data-theme="light"] .brand-logo-bg     { fill: #14171C; }
+[data-theme="light"] .brand-logo-stroke { stroke: #14171C; }
+[data-theme="light"] .brand-logo-z      { stroke: #FFFFFF; }
+[data-theme="light"] .brand-logo-zira   { fill: #14171C; }
+[data-theme="light"] .brand-logo-desk   { fill: #54606E; }
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 .theme-toggle .icon-sun  { display: none; }
