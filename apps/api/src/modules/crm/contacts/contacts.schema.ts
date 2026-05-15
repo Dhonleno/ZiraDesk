@@ -26,8 +26,9 @@ export const createContactSchema = z.object({
   notes:           z.string().optional(),
 });
 
-export const updateContactSchema = z.object({
+const updateContactSchemaBase = z.object({
   organization_id: z.string().uuid().nullable().optional(),
+  organizationId:  z.string().uuid().nullable().optional(),
   name:            z.string().min(2).max(150).nullable().optional(),
   email:           z.string().email().nullable().optional(),
   phone:           z.string().max(30).nullable().optional().refine(isValidOptionalPhone, { message: 'Número de telefone inválido' }),
@@ -40,6 +41,11 @@ export const updateContactSchema = z.object({
   custom_fields:   z.record(z.unknown()).nullable().optional(),
   notes:           z.string().nullable().optional(),
 });
+
+export const updateContactSchema = updateContactSchemaBase.transform(({ organizationId, organization_id, ...rest }) => ({
+  ...rest,
+  organization_id: organizationId ?? organization_id,
+}));
 
 export const listContactsQuerySchema = z.object({
   page:            z.coerce.number().int().positive().default(1),

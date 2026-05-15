@@ -238,9 +238,31 @@ export async function getOrganizationContacts(id: string) {
 /* ── getOrganizationConversations ────────────────────────────────────────── */
 export async function getOrganizationConversations(id: string) {
   await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{ id: string; status: string; subject: string | null; last_message: string | null; created_at: Date }>>(
-    `SELECT id, status, subject, last_message, created_at
-     FROM conversations WHERE organization_id = $1::uuid ORDER BY created_at DESC LIMIT 20`,
+  return prisma.$queryRawUnsafe<Array<{
+    id: string;
+    status: string;
+    channel_type: string | null;
+    protocol: string | null;
+    subject: string | null;
+    bot_department: string | null;
+    last_message: string | null;
+    last_message_at: Date | null;
+    created_at: Date;
+  }>>(
+    `SELECT
+       cv.id,
+       cv.status,
+       cv.channel_type,
+       cv.protocol_number AS protocol,
+       cv.subject,
+       cv.metadata->>'bot_department' AS bot_department,
+       cv.last_message,
+       cv.last_message_at,
+       cv.created_at
+     FROM conversations cv
+     WHERE cv.organization_id = $1::uuid
+     ORDER BY cv.created_at DESC
+     LIMIT 20`,
     id,
   );
 }
