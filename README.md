@@ -60,5 +60,7 @@ packages/
 |---|---|
 | `/login` | Login (super admin ou tenant) |
 | `/super-admin` | Painel do super administrador |
-| `/conversations` | Atendimento omnichannel |
+| `/omnichannel/conversations` | Atendimento omnichannel |
+| `/crm/organizations` | CRM de organizações |
+| `/crm/contacts` | CRM de contatos |
 | `/admin/*` | Configurações do tenant |

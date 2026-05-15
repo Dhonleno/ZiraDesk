@@ -1,5 +1,39 @@
 # Changelog — ZiraDesk
 
+## [0.7.0] — Sessão atual — Evolução pós-MVP
+### Adicionado
+- RBAC completo: middleware backend (requirePermission/requireAnyPermission),
+  hook usePermission, PermissionGate, ProtectedRoute, tela de Permissões e Acessos
+- Tipos compartilhados de permissões em packages/shared (Role, Permission, ROLE_PERMISSIONS)
+- Validação x-hub-signature-256 nos webhooks Meta (WhatsApp + Instagram)
+- Instagram outbound via Meta Graph API com retry inteligente e erros permanentes
+- Email outbound via Resend com fallback de credenciais para .env
+- CSAT expiration configurável por tenant (campo csatExpirationHours nas settings)
+- Logger estruturado Pino com redact de dados sensíveis (substitui console.* de runtime)
+- Super Admin Tenants: KPIs globais, colunas Usuários/Conversas/Trial até,
+  dropdown de ações, impersonate, modal editar plano, confirmação de cancelamento
+- Super Admin Dashboard: seções "Últimos tenants" e "Trials expirando em breve"
+- Monitor em tempo real: subtítulo, contexto no SLA, CSAT com estrela
+- Tela de Usuários: modal de confirmação Desativar/Reativar, badge "Você", estado vazio
+- i18n Admin completo: nav lateral e Settings sem textos hardcoded
+- Correção de presença: reconnect robusto, heartbeat manual 25s,
+  grace period 5s, Page Visibility API
+- Fix de logout involuntário na atribuição: auto-assign valida socket ativo,
+  atribuição manual bloqueia agente offline (409)
+- Filtros de notificação: sem notificação para conversas no bot (status=bot)
+  e para conversas de outros agentes
+- Balões de mensagem curtos: min-width e padding consistentes
+- Remoção de Dashboard do painel Admin (redirect para Usuários)
+- Remoção de EditClientModal.tsx órfão
+
+### Corrigido
+- Badge "Aguardando" em âmbar (era roxo) nas métricas de tickets
+- i18n: pluralização "há 1 dia" (era "há 1 dias")
+- Coluna Usuários: limite ilimitado exibe "—" em vez de "∞"
+- Idioma padrão nas Settings agora aplica i18n.changeLanguage() imediatamente
+
+---
+
 ## [0.6.1] — Sprint 6B — Preparação para produção
 ### Adicionado
 - Code splitting com manualChunks (bundle < 500kB)
@@ -37,10 +71,10 @@
 - Respostas rápidas como chips clicáveis no chat
 - Auto-resize do textarea de mensagem
 - Painel de info do contato com tabs: Contato, Canais, Histórico
-- Mini-stats do cliente: mensagens, atendimentos, 1º contato, engajamento
-- Botão "Ver perfil completo" navegando para /crm/clients/:id
+- Mini-stats do contato: mensagens, atendimentos, 1º contato, engajamento
+- Botão "Ver perfil completo" navegando para /crm/contacts?id=:id
 - Ações rápidas: criar proposta, agendar, ver tickets, criar ticket
-- Modal de criação de nova conversa (busca de cliente + seleção de canal + assunto + mensagem inicial)
+- Modal de criação de nova conversa (busca de contato + seleção de canal + assunto + mensagem inicial)
 - Filtro "Meus atendimentos" com toggle animado na lista
 - Unread dot e nome/preview em negrito para conversas com mensagens não lidas
 - Badge de contagem de conversas no header da lista

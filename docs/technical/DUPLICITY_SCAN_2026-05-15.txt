@@ -1,0 +1,107 @@
+# grep output (post-removal)
+# command: rg -n "duplicate|similar|score|Score|similarTickets|duplicateTickets" apps/web/src apps/api/src -g "*.ts" -g "*.tsx"
+
+apps/api/src\scripts\reset-tenant-demo.ts:159:    ADD COLUMN IF NOT EXISTS csat_score INTEGER,
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:29:  buildCsatInvalidScoreMessage,
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:141:  csat_score?: number | null;
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:760:      `SELECT id, status, csat_stage, csat_score, csat_expires_at
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:849:    const currentCsatScore = currentConversation?.csat_score ?? null;
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:943:      let csatPayload: { csat_score: number | null; csat_comment?: string | null } | null = null;
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:946:        const score = Number.parseInt(normalized, 10);
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:947:        if (score >= 1 && score <= 5) {
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:950:             SET csat_score = $1,
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:954:            score,
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:957:          replyText = buildCsatCommentRequestMessage(score);
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:958:          csatPayload = { csat_score: score };
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:960:          replyText = buildCsatInvalidScoreMessage();
+apps/api/src\modules\webhooks\whatsapp.webhook.ts:974:        csatPayload = { csat_score: currentCsatScore ?? null, csat_comment: csatComment };
+apps/web/src\services\api.ts:1430:  relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by' | string;
+apps/web/src\services\api.ts:1448:  relation_type: 'relates_to' | 'duplicates' | 'blocks' | 'is_blocked_by';
+apps/web/src\services\api.ts:1547:  csat_score?: number | null;
+apps/web/src\services\api.ts:1672:    avg_score: number | null;
+apps/web/src\services\api.ts:1713:  score: number;
+apps/web/src\services\api.ts:1895:      csat_score?: number;
+apps/web/src\services\api.ts:1908:    payload?: { csat_score?: number; csat_comment?: string },
+apps/web/src\services\api.ts:1912:      csat_score?: number;
+apps/web/src\services\api.ts:1917:    if (payload?.csat_score !== undefined) body.csat_score = payload.csat_score;
+apps/api/src\modules\ai\ai.service.ts:24:  similarity: number;
+apps/api/src\modules\ai\ai.service.ts:233:            1 - (kc.embedding <=> $1::vector) AS similarity
+apps/api/src\modules\ai\ai.service.ts:294:    chunks.length > 0 ? chunks.reduce((sum, c) => sum + c.similarity, 0) / chunks.length : 0;
+apps/api/src\modules\tickets\tickets.routes.ts:51:const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
+apps/api/src\modules\admin\conversation-tags\conversation-tags.service.ts:166:      error.message.includes('duplicate key value')
+apps/api/src\modules\admin\conversation-tags\conversation-tags.service.ts:208:      error.message.includes('duplicate key value')
+apps/api/src\modules\admin\close-config\close-config.service.ts:97:  return (maybeError.message ?? '').toLowerCase().includes('duplicate key value violates unique constraint');
+apps/api/src\modules\admin\close-config\close-config.service.ts:234:      EXCEPTION WHEN duplicate_object THEN
+apps/api/src\modules\admin\close-config\close-config.service.ts:249:      EXCEPTION WHEN duplicate_object THEN
+apps/api/src\modules\super-admin\tenants\tenants.service.ts:395:      csat_score      INTEGER CHECK (csat_score BETWEEN 1 AND 5),
+apps/web/src\components\omnichannel\AgentStatsModal.tsx:44:function formatCsat(score: number | string | null | undefined): string {
+apps/web/src\components\omnichannel\AgentStatsModal.tsx:45:  if (score == null) return '—';
+apps/web/src\components\omnichannel\AgentStatsModal.tsx:46:  return Number(score).toFixed(1);
+apps/web/src\components\omnichannel\InfoPanel.tsx:32:  csat_score?: number | null;
+apps/web/src\components\omnichannel\InfoPanel.tsx:195:      csat_score?: number | null;
+apps/web/src\components\omnichannel\InfoPanel.tsx:567:            {(conv?.csat_score || conv?.csat_stage === 'sent' || conv?.csat_stage === 'waiting_comment') ? (
+apps/web/src\components\omnichannel\InfoPanel.tsx:571:                {conv.csat_stage === 'sent' && !conv.csat_score ? (
+apps/web/src\components\omnichannel\InfoPanel.tsx:599:                {conv.csat_score ? (
+apps/web/src\components\omnichannel\InfoPanel.tsx:607:                            color: item <= conv.csat_score! ? '#F59E0B' : 'var(--line-2)',
+apps/web/src\components\omnichannel\InfoPanel.tsx:615:                        {t('csat.score', { score: conv.csat_score, defaultValue: `${conv.csat_score}/5` })}
+apps/web/src\components\omnichannel\ConversationList.tsx:24:  csat_score?: number | null;
+apps/web/src\components\omnichannel\ConversationList.tsx:1379:                      {activeTab === 'closed' && conv.csat_score ? (
+apps/web/src\components\omnichannel\ConversationList.tsx:1386:                          {'⭐'.repeat(conv.csat_score)} {conv.csat_score}/5
+apps/web/src\components\tickets\TicketRelations.tsx:18:  duplicates: 'Duplicata de',
+apps/web/src\components\tickets\TicketRelations.tsx:25:  duplicates: 'var(--amber)',
+apps/web/src\components\tickets\TicketRelations.tsx:142:            <option value="duplicates">Duplicata de</option>
+apps/web/src\pages\profile\Profile.tsx:158:    let score = 0;
+apps/web/src\pages\profile\Profile.tsx:159:    if (password.length >= 8) score += 1;
+apps/web/src\pages\profile\Profile.tsx:160:    if (password.length >= 12) score += 1;
+apps/web/src\pages\profile\Profile.tsx:161:    if (/[A-Z]/.test(password)) score += 1;
+apps/web/src\pages\profile\Profile.tsx:162:    if (/[0-9]/.test(password)) score += 1;
+apps/web/src\pages\profile\Profile.tsx:163:    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+apps/web/src\pages\profile\Profile.tsx:164:    return score;
+apps/web/src\pages\omnichannel\Metrics.tsx:95:function buildCsatDistribution(data: MetricsCsatPoint[]): Array<{ score: number; total: number }> {
+apps/web/src\pages\omnichannel\Metrics.tsx:96:  const byScore = new Map<number, number>();
+apps/web/src\pages\omnichannel\Metrics.tsx:97:  for (const item of data) byScore.set(Number(item.score), Number(item.total));
+apps/web/src\pages\omnichannel\Metrics.tsx:98:  return [1, 2, 3, 4, 5].map((score) => ({
+apps/web/src\pages\omnichannel\Metrics.tsx:99:    score,
+apps/web/src\pages\omnichannel\Metrics.tsx:100:    total: byScore.get(score) ?? 0,
+apps/web/src\pages\omnichannel\Metrics.tsx:332:  data: Array<{ score: number; total: number }>;
+apps/web/src\pages\omnichannel\Metrics.tsx:348:          <XAxis dataKey="score" tickFormatter={(score: number) => String(score)} tick={{ fill: 'var(--txt-3)', fontSize: 12 }} />
+apps/web/src\pages\omnichannel\Metrics.tsx:352:              const score = Number((point?.payload as { score?: number } | undefined)?.score ?? 0);
+apps/web/src\pages\omnichannel\Metrics.tsx:353:              return [`${Number(value ?? 0)} avaliações`, labels[score] ?? ''];
+apps/web/src\pages\omnichannel\Metrics.tsx:364:                key={entry.score}
+apps/web/src\pages\omnichannel\Metrics.tsx:366:                  entry.score >= 4
+apps/web/src\pages\omnichannel\Metrics.tsx:368:                    : entry.score === 3
+apps/web/src\pages\omnichannel\Metrics.tsx:775:  const csatAverage = data?.overview.csat.avg_score;
+apps/web/src\pages\omnichannel\Metrics.tsx:813:        ['CSAT médio', overview.csat.avg_score ?? '—'],
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:136:  csat_score: number | null;
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:492:       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:618:       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:1378:  const hasCsatScore = 'csat_score' in body;
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:1386:       csat_score = CASE WHEN $5::boolean THEN $6::integer ELSE csat_score END,
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:1399:    hasCsatScore,
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:1400:    body.csat_score ?? null,
+apps/api/src\modules\omnichannel\conversations\conversations.service.ts:1413:        csat_score: body.csat_score ?? null,
+apps/api/src\modules\omnichannel\conversations\csat.service.ts:39:export function buildCsatCommentRequestMessage(score: number): string {
+apps/api/src\modules\omnichannel\conversations\csat.service.ts:40:  const stars = '⭐'.repeat(score);
+apps/api/src\modules\omnichannel\conversations\csat.service.ts:50:export function buildCsatInvalidScoreMessage(): string {
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:165:    const csatWhere: string[] = ['csat_score IS NOT NULL'];
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:171:      avg_score: number | null;
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:176:         ROUND(AVG(csat_score)::numeric, 1) AS avg_score,
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:178:         COUNT(*) FILTER (WHERE csat_score >= 4) AS positive
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:245:        avg_score: csat?.avg_score ?? null,
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:335:         ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:393:         ROUND(AVG(csat_score)::numeric, 1) AS avg_csat
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:466:         ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat,
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:515:    const where: string[] = ['csat_score IS NOT NULL'];
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:520:    const rows = await tx.$queryRawUnsafe<Array<{ score: number; total: bigint }>>(
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:522:         csat_score AS score,
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:526:       GROUP BY csat_score
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:527:       ORDER BY csat_score ASC`,
+apps/api/src\modules\omnichannel\metrics\metrics.service.ts:532:      score: row.score,
+apps/api/src\modules\omnichannel\conversations\conversations.schema.ts:95:    csat_score: z.number().min(1).max(5).optional(),
+apps/api/src\modules\omnichannel\conversations\conversations.schema.ts:98:  .refine((data) => data.status !== undefined || data.assignedTo !== undefined || data.csat_score !== undefined || data.csat_comment !== undefined, {
+apps/api/src\modules\omnichannel\tv.service.ts:160:        AVG(c.csat_score) FILTER (
+apps/api/src\modules\omnichannel\tv.service.ts:161:          WHERE c.csat_score IS NOT NULL
+apps/api/src\modules\omnichannel\conversations\csat.infrastructure.ts:14:     ADD COLUMN IF NOT EXISTS csat_score INTEGER`,
+apps/api/src\modules\omnichannel\conversations\csat.infrastructure.ts:43:        WHERE conname = 'conversations_csat_score_check'
+apps/api/src\modules\omnichannel\conversations\csat.infrastructure.ts:47:        ADD CONSTRAINT conversations_csat_score_check
+apps/api/src\modules\omnichannel\conversations\csat.infrastructure.ts:48:        CHECK (csat_score IS NULL OR (csat_score BETWEEN 1 AND 5));

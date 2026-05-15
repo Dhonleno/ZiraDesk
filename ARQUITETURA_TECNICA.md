@@ -6,12 +6,12 @@
 
 ## 1. VISÃO GERAL
 
-Sistema SaaS multitenant de CRM com módulos de omnichannel, gestão de clientes, tickets e administração. Modelo de isolamento: **Schema-per-tenant no PostgreSQL**.
+Sistema SaaS multitenant de CRM com módulos de omnichannel, gestão de organizações/contatos, tickets e administração. Modelo de isolamento: **Schema-per-tenant no PostgreSQL**.
 
 ### Módulos do MVP
 - Super Admin (gestão de tenants e planos)
 - Painel Admin do Tenant (configurações, usuários, integrações)
-- CRM (perfil 360 de clientes)
+- CRM (perfil 360 de organizações e contatos)
 - Omnichannel (chat unificado: WhatsApp, Instagram, E-mail)
 - Gestão de Tickets
 
@@ -378,7 +378,7 @@ public/
 
 tenant_{slug}/          ← criado automaticamente no cadastro
   users
-  clients
+  organizations
   contacts
   conversations
   messages
@@ -491,29 +491,50 @@ CREATE TABLE users (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Clientes (CRM)
-CREATE TABLE clients (
+-- Organizações (CRM)
+CREATE TABLE organizations (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  type            VARCHAR(20) DEFAULT 'person', -- person | company
+  type            VARCHAR(20) DEFAULT 'company', -- company | person
   name            VARCHAR(150) NOT NULL,
+  document        VARCHAR(20),                  -- CPF ou CNPJ
   email           VARCHAR(255),
   phone           VARCHAR(30),
-  document        VARCHAR(20),                  -- CPF ou CNPJ
   website         VARCHAR(255),
   status          VARCHAR(30) DEFAULT 'lead',   -- lead | prospect | client | inactive
   address_street  VARCHAR(200),
   address_city    VARCHAR(100),
   address_state   VARCHAR(2),
   address_zip     VARCHAR(10),
-  birth_date      DATE,
-  gender          VARCHAR(20),
-  occupation      VARCHAR(100),
-  income          DECIMAL(12,2),
   segment         VARCHAR(100),
   lead_source     VARCHAR(100),
-  responsible_id  UUID REFERENCES users(id),
+  responsible_id  UUID REFERENCES users(id) ON DELETE SET NULL,
   tags            TEXT[] DEFAULT '{}',
   custom_fields   JSONB DEFAULT '{}',
+  notes           TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Contatos (CRM)
+CREATE TABLE contacts (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+  name            VARCHAR(150) NOT NULL,
+  email           VARCHAR(255),
+  phone           VARCHAR(30),
+  whatsapp        VARCHAR(30),
+  document        VARCHAR(20),
+  role            VARCHAR(100),
+  department      VARCHAR(100),
+  is_primary      BOOLEAN DEFAULT false,
+  avatar_url      VARCHAR(500),
+  portal_enabled  BOOLEAN DEFAULT false,
+  portal_password_hash VARCHAR(255),
+  portal_last_login TIMESTAMPTZ,
+  portal_invited_at TIMESTAMPTZ,
+  tags            TEXT[] DEFAULT '{}',
+  custom_fields   JSONB DEFAULT '{}',
+  notes           TEXT,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -532,7 +553,8 @@ CREATE TABLE channels (
 -- Conversas (omnichannel)
 CREATE TABLE conversations (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id     UUID REFERENCES clients(id),
+  contact_id    UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   channel_id    UUID REFERENCES channels(id),
   channel_type  VARCHAR(30) NOT NULL,
   external_id   VARCHAR(255),              -- ID da conversa no canal externo
@@ -565,7 +587,8 @@ CREATE TABLE messages (
 -- Tickets
 CREATE TABLE tickets (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id     UUID REFERENCES clients(id),
+  contact_id    UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   conversation_id UUID REFERENCES conversations(id),
   title         VARCHAR(255) NOT NULL,
   description   TEXT,
@@ -644,14 +667,24 @@ CREATE TABLE audit_logs (
     GET    /stats/overview
 
   /crm
-    GET    /clients           ← lista com filtros e paginação
-    POST   /clients
-    GET    /clients/:id
-    PATCH  /clients/:id
-    DELETE /clients/:id
-    GET    /clients/:id/conversations
-    GET    /clients/:id/tickets
-    GET    /clients/:id/timeline
+    GET    /organizations           ← lista com filtros e paginação
+    POST   /organizations
+    GET    /organizations/:id
+    PATCH  /organizations/:id
+    DELETE /organizations/:id
+    GET    /organizations/:id/stats
+    GET    /organizations/:id/contacts
+    GET    /organizations/:id/conversations
+    GET    /organizations/:id/tickets
+    GET    /contacts
+    POST   /contacts
+    GET    /contacts/:id
+    PATCH  /contacts/:id
+    DELETE /contacts/:id
+    GET    /contacts/:id/stats
+    POST   /contacts/:id/link-organization
+    POST   /contacts/:id/portal-access
+    DELETE /contacts/:id/portal-access
 
   /omnichannel
     GET    /conversations     ← lista com filtros
@@ -791,10 +824,10 @@ ziradesk/
 │       │   │   │   ├── Users.tsx
 │       │   │   │   └── Channels.tsx
 │       │   │   ├── crm/
-│       │   │   │   ├── Clients.tsx
-│       │   │   │   └── ClientProfile.tsx  ← tela já criada ✓
+│       │   │   │   ├── Organizations.tsx
+│       │   │   │   └── Contacts.tsx
 │       │   │   ├── omnichannel/
-│       │   │   │   └── Chat.tsx           ← tela já criada ✓
+│       │   │   │   └── Conversations.tsx
 │       │   │   └── tickets/
 │       │   │       ├── Tickets.tsx
 │       │   │       └── TicketDetail.tsx
@@ -859,12 +892,12 @@ ziradesk/
 - [ ] Tela de Admin (frontend)
 
 ### Sprint 3 — CRM (4-5 dias)
-- [ ] CRUD completo de clientes
+- [ ] CRUD completo de organizações e contatos
 - [ ] Filtros, busca e paginação
-- [ ] Timeline do cliente
+- [ ] Vinculação contato ↔ organização
 - [ ] Tags e campos customizados
-- [ ] Tela Perfil do Cliente → converter HTML criado para React ✓
-- [ ] Lista de clientes (frontend)
+- [ ] Tela de Organizações (frontend)
+- [ ] Tela de Contatos (frontend)
 
 ### Sprint 4 — Tickets (3-4 dias)
 - [ ] CRUD de tickets
@@ -903,7 +936,7 @@ ziradesk/
 - JWT com expiração curta (15min) + refresh token (7 dias) em httpOnly cookie
 - Rate limiting por IP e por tenant
 - Credenciais de canais criptografadas no banco (AES-256)
-- Audit log de todas as alterações em dados de clientes
+- Audit log de todas as alterações em dados de organizações e contatos
 - HTTPS obrigatório (Cloudflare)
 - Validação de input em todas as rotas com Zod
 - Sanitização para prevenir SQL Injection e XSS
