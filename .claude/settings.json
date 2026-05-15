@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm -C apps/api type-check)",
+      "Bash(Remove-Item \"d:\\\\Projetos\\\\ZiraDesk\\\\apps\\\\web\\\\src\\\\components\\\\crm\\\\EditClientModal.tsx\")",
+      "Bash(pnpm -C apps/web type-check)"
+    ],
+    "defaultMode": "bypassPermissions"
+  }
+}

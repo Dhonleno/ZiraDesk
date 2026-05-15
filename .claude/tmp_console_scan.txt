@@ -1,0 +1,108 @@
+apps\api\prisma\seed.ts:49:    console.log(`  ✓ Plano "${plan.name}"`);
+apps\api\prisma\seed.ts:59:    console.log(`  · Super Admin já existe (${email})`);
+apps\api\prisma\seed.ts:67:  console.log(`  ✓ Super Admin criado`);
+apps\api\prisma\seed.ts:68:  console.log(`    email:  ${email}`);
+apps\api\prisma\seed.ts:69:  console.log(`    senha:  ${password}`);
+apps\api\prisma\seed.ts:76:    console.log(`  · Tenant demo já existe (slug: ${slug})`);
+apps\api\prisma\seed.ts:99:  console.log(`  ✓ Tenant demo criado (schema: ${tenant.schemaName})`);
+apps\api\prisma\seed.ts:100:  console.log(`    email:  ${ownerEmail}`);
+apps\api\prisma\seed.ts:101:  console.log(`    senha:  ${tempPassword}`);
+apps\api\prisma\seed.ts:102:  console.log(`    slug:   ${slug}  ← use como "Workspace" no login em dev`);
+apps\api\prisma\seed.ts:108:    console.log('  · Tenant demo não encontrado, pulando');
+apps\api\prisma\seed.ts:119:    console.log(`  · Conversas mock já existem (${count})`);
+apps\api\prisma\seed.ts:130:  console.log('  ✓ Canais');
+apps\api\prisma\seed.ts:146:  console.log('  ✓ Agente extra');
+apps\api\prisma\seed.ts:160:  console.log('  ✓ Contatos');
+apps\api\prisma\seed.ts:200:  console.log(`  ✓ ${conversations.length} conversas`);
+apps\api\prisma\seed.ts:263:  console.log(`  ✓ ${messages.length} mensagens`);
+apps\api\prisma\seed.ts:269:    console.log('  · Tenant demo não encontrado para respostas rápidas, pulando');
+apps\api\prisma\seed.ts:303:  console.log(`  ✓ ${DEFAULT_QUICK_REPLIES.length} respostas rápidas`);
+apps\api\prisma\seed.ts:307:  console.log('\n━━━ ZiraDesk Seed ━━━\n');
+apps\api\prisma\seed.ts:309:  console.log('Planos:');
+apps\api\prisma\seed.ts:312:  console.log('\nSuper Admin:');
+apps\api\prisma\seed.ts:315:  console.log('\nTenant Demo:');
+apps\api\prisma\seed.ts:318:  console.log('\nConversas Mock:');
+apps\api\prisma\seed.ts:321:  console.log('\nRespostas rápidas:');
+apps\api\prisma\seed.ts:324:  console.log('\n━━━ Seed concluído ━━━\n');
+apps\api\prisma\seed.ts:329:    console.error('\n✗ Seed falhou:', err.message ?? err);
+apps\api\src\server.ts:169:    console.log(`[Server] Received ${signal}, shutting down gracefully`);
+apps\api\src\server.ts:178:  console.error(err);
+apps\api\src\scripts\reset-tenant-demo.ts:31:  console.log(`Limpando dados do ${SCHEMA}...`);
+apps\api\src\scripts\reset-tenant-demo.ts:284:  console.log(`${SCHEMA} resetado com sucesso!`);
+apps\api\src\scripts\reset-tenant-demo.ts:285:  console.log('Tabelas criadas: organizations, contacts');
+apps\api\src\scripts\reset-tenant-demo.ts:286:  console.log('Tabelas atualizadas: conversations (contact_id, organization_id), tickets (contact_id, organization_id, source_conversation_id)');
+apps\api\src\scripts\reset-tenant-demo.ts:287:  console.log('Tabela removida: clients, skills, agent_skills');
+apps\api\src\scripts\reset-tenant-demo.ts:288:  console.log('Tabelas criadas: agent_bot_skills, ticket_events');
+apps\api\src\scripts\reset-tenant-demo.ts:294:  console.error('Erro no reset:', err);
+apps\api\src\scripts\normalize-contact-phones.ts:27:      console.log(`[${schema}] contatos: tabela inexistente, pulando`);
+apps\api\src\scripts\normalize-contact-phones.ts:88:    console.log(`[${schema}] contatos analisados=${contacts.length} atualizados=${updatedInSchema}`);
+apps\api\src\scripts\normalize-contact-phones.ts:91:  console.log(`Total analisados=${totalScanned} | Total atualizados=${totalUpdated}`);
+apps\api\src\scripts\normalize-contact-phones.ts:94:    console.log('Contatos com valores inválidos (não alterados):');
+apps\api\src\scripts\normalize-contact-phones.ts:96:      console.log(`- [${row.schema}] contato=${row.contactId} campo=${row.field} valor="${row.value}" erro="${row.error}"`);
+apps\api\src\scripts\normalize-contact-phones.ts:103:    console.error(err);
+apps\api\src\config\env.ts:31:  console.error('❌ Variáveis de ambiente inválidas:');
+apps\api\src\config\env.ts:32:  console.error(parsed.error.flatten().fieldErrors);
+apps\api\src\scripts\generate-missing-protocols.ts:27:    console.log(`[${tenant.slug}] ${conversations.length} conversas sem protocolo`);
+apps\api\src\scripts\generate-missing-protocols.ts:40:    console.log(`[${tenant.slug}] Protocolos gerados OK`);
+apps\api\src\scripts\generate-missing-protocols.ts:46:    console.error('Falha ao gerar protocolos:', error);
+apps\api\src\scripts\encrypt-channel.ts:44:      console.log(`Channel ${channel.id} credentials already encrypted or invalid; skipped`);
+apps\api\src\scripts\encrypt-channel.ts:54:    console.log(`Channel ${channel.id} credentials encrypted`);
+apps\api\src\scripts\encrypt-channel.ts:60:    console.error(error);
+apps\web\src\hooks\useTwilioCall.ts:70:            console.log('[Twilio] Device registered');
+apps\web\src\hooks\useTwilioCall.ts:75:          console.error('[Twilio] Device error:', error);
+apps\web\src\hooks\useTwilioCall.ts:109:        console.error('[Twilio] Init error:', error);
+apps\web\src\hooks\useTwilioCall.ts:168:      console.error('[Twilio] Call error:', error);
+apps\api\src\jobs\send-message.job.ts:81:    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist external_id', {
+apps\api\src\jobs\send-message.job.ts:104:    console.warn('[WhatsApp Worker] Could not resolve tenant schema to persist failed status', {
+apps\api\src\jobs\send-message.job.ts:265:    console.log('[WhatsApp Worker] Executing job:', job.id);
+apps\api\src\jobs\send-message.job.ts:266:    console.log('[WhatsApp Worker] Job data:', JSON.stringify(sanitizeJobData(job.data)));
+apps\api\src\jobs\send-message.job.ts:287:        console.log('[WhatsApp Send] Job data:', JSON.stringify(sanitizeJobData(job.data), null, 2));
+apps\api\src\jobs\send-message.job.ts:288:        console.log('[WhatsApp Send] PhoneNumberId:', phoneNumberId);
+apps\api\src\jobs\send-message.job.ts:289:        console.log('[WhatsApp Send] Sending to:', sanitizedPhone);
+apps\api\src\jobs\send-message.job.ts:290:        console.log('[WhatsApp Send] Payload:', JSON.stringify(body, null, 2));
+apps\api\src\jobs\send-message.job.ts:304:        console.log('[WhatsApp Send] Response:', responseText);
+apps\api\src\jobs\send-message.job.ts:335:            console.log('[WhatsApp Worker] external_id persisted:', {
+apps\api\src\jobs\send-message.job.ts:347:        console.log('[Instagram] send not implemented yet');
+apps\api\src\jobs\send-message.job.ts:351:        console.log('[Email] send not implemented yet');
+apps\api\src\jobs\send-message.job.ts:359:  console.error(`[WhatsApp Worker] Job ${job?.id} FAILED:`, err);
+apps\api\src\jobs\send-message.job.ts:361:    console.error('[WhatsApp Worker] Job data was:', sanitizeJobData(job.data));
+apps\api\src\jobs\send-message.job.ts:366:  console.log(`[WhatsApp Worker] Processing job ${job.id}:`, job.data);
+apps\api\src\jobs\send-message.job.ts:370:  console.log(`[WhatsApp Worker] Job ${job.id} completed successfully`);
+apps\api\src\jobs\presence-cleanup.job.ts:74:  console.error(`[Presence Cleanup] Job ${job?.id} failed`, err);
+apps\api\src\jobs\presence-cleanup.job.ts:87:  console.error('[Presence Cleanup] Failed to schedule cleanup job', err);
+apps\api\src\socket\index.ts:203:        console.warn('[Socket] Invalid user:online payload userId mismatch', {
+apps\api\src\socket\index.ts:230:        console.error('[Socket] Connect handler error:', err);
+apps\api\src\socket\index.ts:237:        console.error('[Socket] user:online handler error:', err);
+apps\api\src\socket\index.ts:245:        console.warn('[Socket] Invalid user:heartbeat payload userId mismatch', {
+apps\api\src\socket\index.ts:255:          console.error('[Socket] user:heartbeat handler error:', err);
+apps\api\src\socket\index.ts:264:          console.error('[Socket] Heartbeat handler error:', err);
+apps\api\src\socket\index.ts:302:            console.log(`[Socket] Agent ${userId} went offline`);
+apps\api\src\socket\index.ts:304:            console.error('[Socket] Disconnect handler error:', err);
+apps\api\src\jobs\knowledge-index.job.ts:42:  console.error(`[KnowledgeIndex] Job ${job?.id} failed:`, err.message);
+apps\api\src\jobs\inactivity.job.ts:259:  console.log(`[Inactivity] Conversation ${conversationId} closed`);
+apps\api\src\jobs\inactivity.job.ts:271:  console.error(`[Inactivity] Job ${job?.id} failed`, err);
+apps\api\src\jobs\cleanup-csat.job.ts:52:    console.log(`[CSAT Cleanup] Updated ${totalUpdated} expired CSAT records`);
+apps\api\src\jobs\cleanup-csat.job.ts:65:  console.error(`[CSAT Cleanup] Job ${job?.id} failed`, err);
+apps\api\src\jobs\cleanup-csat.job.ts:78:  console.error('[CSAT Cleanup] Failed to schedule hourly cleanup job', err);
+apps\web\src\services\socket.ts:97:    console.warn('[Socket] disconnected:', reason);
+apps\web\src\services\socket.ts:107:    console.error('[Socket] reconnection failed — showing offline warning');
+apps\api\src\modules\calls\calls.routes.ts:135:        console.error('[Twilio] Error checking tenant conversation', {
+apps\api\src\modules\calls\calls.routes.ts:191:        console.error('[Twilio] Error checking tenant call record', {
+apps\web\src\components\ui\ErrorBoundary.tsx:19:    console.error('Erro capturado pelo ErrorBoundary:', error, info);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:359:      console.log(`[WhatsApp] Channel ${channel.id} decrypted keys: [${Object.keys(credentials).join(', ')}] | phoneNumberId="${channelPhoneNumberId ?? 'undefined'}" (seeking: "${phoneNumberId}")`);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:381:    console.warn(`[WhatsApp] Using .env fallback for phoneNumberId ${phoneNumberId}; channel credentials are missing phoneNumberId`);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:386:    console.warn(`[WhatsApp] Ambiguous .env fallback for phoneNumberId ${phoneNumberId}; ${envFallbackMatches.length} channels without phoneNumberId`);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:607:    console.warn(`[WhatsApp] No channel found for phoneNumberId: ${phoneNumberId}`);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:731:    console.log('[WhatsApp] contactId:', contactId, 'channelId:', channelId);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:742:    console.log('[WhatsApp Webhook] Looking for conversation:', { contactId, channelId });
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:788:    console.log('[WhatsApp Webhook] Found conversation:', convRows[0] ?? null);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:1625:      console.error('[AI Agent] Erro ao processar conversa ativa:', err instanceof Error ? err.message : err);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:1800:      console.error('[AI Agent] Erro ao processar mensagem:', err instanceof Error ? err.message : err);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:1831:  console.log(`[WhatsApp] Message processed: ${senderName} → ${content.substring(0, 50)}`);
+apps\api\src\modules\webhooks\whatsapp.webhook.ts:1951:        console.error('[WhatsApp Status] Delivery failed', JSON.stringify({
+apps\api\src\modules\omnichannel\conversations\auto-assign.service.ts:427:    console.error('[AutoAssign] Failed to notify customer after assignment', {
+apps\api\src\modules\omnichannel\conversations\auto-assign.service.ts:555:      console.log(`[AutoAssign] No agent with skill for option ${requiredBotOptionId}. Keeping in queue.`);
+apps\api\src\modules\omnichannel\conversations\csat.service.ts:91:    console.error('[CSAT] Failed to send WhatsApp message', {
+apps\api\src\modules\omnichannel\conversations\csat.service.ts:181:  console.log(`[CSAT] Sent to conversation ${conversationId}`);
+apps\web\src\components\omnichannel\AudioRecorder.tsx:413:        console.error('[AudioRecorder] preload failed:', err);
+apps\web\src\components\omnichannel\AudioRecorder.tsx:670:        console.error('[AudioRecorder] send failed:', error);
