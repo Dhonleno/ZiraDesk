@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { BrandLogo } from '../../components/layout/BrandLogo';
 
 export function Login() {
   const { t } = useTranslation('auth');
@@ -34,35 +35,15 @@ export function Login() {
 
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 12,
-              background: '#0F172A',
-              border: '1px solid #1E293B',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
-              <path
-                d="M6 8 L26 8 L6 24 L26 24"
-                fill="none"
-                stroke="#F1F5F9"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+        <div className="mb-8 flex flex-col items-center gap-3.5">
+          <div className="flex items-center gap-3">
+            <BrandLogo variant="icon" tone="dark" width={40} height={40} ariaLabel="ZiraDesk" />
+            <span className="text-[30px] leading-none tracking-[-0.5px]" style={{ color: '#F1F5F9' }}>
+              <span style={{ fontWeight: 700 }}>Zira</span>
+              <span style={{ fontWeight: 300, color: '#94A3B8' }}>Desk</span>
+            </span>
           </div>
-          <span className="text-2xl tracking-tight" style={{ color: '#F1F5F9' }}>
-            <span style={{ fontWeight: 700 }}>Zira</span>
-            <span style={{ fontWeight: 300 }}>Desk</span>
-          </span>
-          <p className="text-sm text-gray-500">{t('login.subtitle')}</p>
+          <p className="mt-1 text-sm text-gray-400">{t('login.subtitle')}</p>
         </div>
 
         <Card>
