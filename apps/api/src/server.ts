@@ -46,6 +46,7 @@ function corsOrigin() {
 }
 
 function rateLimitMax(requestUrl: string) {
+  if (requestUrl.startsWith('/api/auth/refresh')) return 60;
   if (requestUrl.startsWith('/api/auth/')) return 10;
   if (requestUrl.startsWith('/api/webhooks/')) return 1000;
   return 200;

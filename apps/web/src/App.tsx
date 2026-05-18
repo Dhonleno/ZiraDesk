@@ -35,6 +35,7 @@ import { CloseConfig as AdminCloseConfig } from './pages/admin/CloseConfig';
 import { AIAgentPage as AdminAIAgent } from './pages/admin/AIAgent';
 import { Webhooks as AdminWebhooks } from './pages/admin/Webhooks';
 import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
+import { Templates as AdminTemplates } from './pages/admin/Templates';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -175,6 +176,7 @@ export function App() {
               <Route path="pause-reasons" element={<AdminPauseReasons />} />
               <Route path="skills" element={<AdminSkills />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
+              <Route path="templates" element={<AdminTemplates />} />
               <Route path="ticket-types" element={<AdminTicketTypes />} />
               <Route path="conversation-tags" element={<AdminConversationTags />} />
               <Route path="close-config" element={<AdminCloseConfig />} />

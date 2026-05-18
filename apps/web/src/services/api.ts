@@ -454,7 +454,7 @@ export const api = axios.create({
 });
 
 const TOKEN_REFRESH_LEEWAY_SECONDS = 15;
-let proactiveRefreshPromise: Promise<string> | null = null;
+let sharedRefreshPromise: Promise<string> | null = null;
 
 interface JwtPayloadWithExp {
   exp?: number;
@@ -488,10 +488,16 @@ function getDevImpersonatedTenantSlug(): string | null {
   return sessionStorage.getItem('impersonated_tenant_slug');
 }
 
-async function refreshAccessTokenOnce(): Promise<string> {
-  if (proactiveRefreshPromise) return proactiveRefreshPromise;
+function shouldLogoutAfterRefreshFailure(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return status === 401 || status === 403;
+}
 
-  proactiveRefreshPromise = api
+async function refreshAccessToken(): Promise<string> {
+  if (sharedRefreshPromise) return sharedRefreshPromise;
+
+  sharedRefreshPromise = api
     .post<{ accessToken: string }>('/auth/refresh')
     .then(({ data }) => {
       const newToken = data.accessToken;
@@ -499,14 +505,16 @@ async function refreshAccessTokenOnce(): Promise<string> {
       return newToken;
     })
     .catch((error: unknown) => {
-      useAuthStore.getState().logout();
+      if (shouldLogoutAfterRefreshFailure(error)) {
+        useAuthStore.getState().logout();
+      }
       throw error;
     })
     .finally(() => {
-      proactiveRefreshPromise = null;
+      sharedRefreshPromise = null;
     });
 
-  return proactiveRefreshPromise;
+  return sharedRefreshPromise;
 }
 
 // Injeta o access token em cada requisição
@@ -515,7 +523,14 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const isRefreshRequest = config.url?.includes('/auth/refresh') ?? false;
 
   if (token && !isRefreshRequest && shouldProactivelyRefreshToken(token)) {
-    token = await refreshAccessTokenOnce();
+    try {
+      token = await refreshAccessToken();
+    } catch (error) {
+      if (shouldLogoutAfterRefreshFailure(error)) {
+        throw error;
+      }
+      // Em falhas transitórias (ex: 429), mantém token atual para não derrubar sessão.
+    }
   }
 
   if (token) {
@@ -536,27 +551,12 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let isRefreshing = false;
-let refreshQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (error: unknown) => void;
-}> = [];
-
-function resolveQueue(token: string) {
-  refreshQueue.forEach(({ resolve }) => resolve(token));
-  refreshQueue = [];
-}
-
-function rejectQueue(error: unknown) {
-  refreshQueue.forEach(({ reject }) => reject(error));
-  refreshQueue = [];
-}
-
 // Interceptor de resposta: tenta refresh automático em 401
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    if (!original) return Promise.reject(error);
 
     // Só tenta refresh uma vez e apenas para rotas que não sejam de auth
     if (
@@ -567,33 +567,14 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
-        refreshQueue.push({ resolve, reject });
-      }).then((token) => {
-        original.headers.Authorization = `Bearer ${token}`;
-        return api(original);
-      });
-    }
-
     original._retry = true;
-    isRefreshing = true;
 
     try {
-      const { data } = await api.post<{ accessToken: string }>('/auth/refresh');
-      const newToken = data.accessToken;
-
-      useAuthStore.getState().setAuth({ token: newToken });
-      resolveQueue(newToken);
-
+      const newToken = await refreshAccessToken();
       original.headers.Authorization = `Bearer ${newToken}`;
       return api(original);
     } catch (refreshError) {
-      rejectQueue(refreshError);
-      useAuthStore.getState().logout();
-      return Promise.reject(error);
-    } finally {
-      isRefreshing = false;
+      return Promise.reject(refreshError);
     }
   },
 );
@@ -860,6 +841,7 @@ export interface RedmineIntegrationConfig {
   is_active: boolean;
   sync_comments: boolean;
   sync_status: boolean;
+  sync_company: boolean;
   status_map: Record<string, number>;
   last_sync_at: string | null;
   created_at: string;
@@ -876,6 +858,7 @@ export interface SaveRedmineIntegrationPayload {
   isActive?: boolean;
   syncComments?: boolean;
   syncStatus?: boolean;
+  syncCompany?: boolean;
   statusMap?: Record<string, number>;
 }
 
@@ -887,7 +870,61 @@ export interface UpdateRedmineIntegrationPayload {
   isActive?: boolean;
   syncComments?: boolean;
   syncStatus?: boolean;
+  syncCompany?: boolean;
   statusMap?: Record<string, number>;
+}
+
+export type WhatsAppTemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+export type WhatsAppTemplateLanguage = 'pt_BR' | 'en_US' | 'es';
+export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected';
+
+export interface WhatsAppTemplateVariable {
+  index: string;
+  example: string;
+}
+
+export interface WhatsAppTemplate {
+  id: string;
+  channel_id: string;
+  name: string;
+  display_name: string;
+  language: WhatsAppTemplateLanguage;
+  category: WhatsAppTemplateCategory;
+  body: string;
+  header: string | null;
+  footer: string | null;
+  variables: WhatsAppTemplateVariable[];
+  status: WhatsAppTemplateStatus;
+  meta_template_id: string | null;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWhatsAppTemplatePayload {
+  channelId: string;
+  technicalName: string;
+  displayName: string;
+  language: WhatsAppTemplateLanguage;
+  category: WhatsAppTemplateCategory;
+  body: string;
+  header?: string;
+  footer?: string;
+  variables?: WhatsAppTemplateVariable[];
+  status?: WhatsAppTemplateStatus;
+}
+
+export interface UpdateWhatsAppTemplatePayload {
+  channelId?: string;
+  technicalName?: string;
+  displayName?: string;
+  language?: WhatsAppTemplateLanguage;
+  category?: WhatsAppTemplateCategory;
+  body?: string;
+  header?: string;
+  footer?: string;
+  variables?: WhatsAppTemplateVariable[];
+  status?: WhatsAppTemplateStatus;
 }
 
 export const adminApi = {
@@ -1371,6 +1408,41 @@ export const adminApi = {
     },
   },
 
+  templates: {
+    list: async (params?: { channel_id?: string }): Promise<WhatsAppTemplate[]> => {
+      const res = await api.get<{ success: boolean; data: WhatsAppTemplate[] }>('/admin/templates', { params });
+      return res.data.data;
+    },
+
+    get: async (id: string): Promise<WhatsAppTemplate> => {
+      const res = await api.get<{ success: boolean; data: WhatsAppTemplate }>(`/admin/templates/${id}`);
+      return res.data.data;
+    },
+
+    create: async (data: CreateWhatsAppTemplatePayload): Promise<WhatsAppTemplate> => {
+      const res = await api.post<{ success: boolean; data: WhatsAppTemplate }>('/admin/templates', data);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: UpdateWhatsAppTemplatePayload): Promise<WhatsAppTemplate> => {
+      const res = await api.patch<{ success: boolean; data: WhatsAppTemplate }>(`/admin/templates/${id}`, data);
+      return res.data.data;
+    },
+
+    remove: async (id: string): Promise<WhatsAppTemplate> => {
+      const res = await api.delete<{ success: boolean; data: WhatsAppTemplate }>(`/admin/templates/${id}`);
+      return res.data.data;
+    },
+
+    sync: async (channelId: string): Promise<{ count: number; templates: WhatsAppTemplate[] }> => {
+      const res = await api.post<{ success: boolean; data: { count: number; templates: WhatsAppTemplate[] } }>(
+        '/admin/templates/sync',
+        { channelId },
+      );
+      return res.data.data;
+    },
+  },
+
   integrations: {
     redmine: {
       get: async (): Promise<RedmineIntegrationConfig | null> => {
@@ -1792,13 +1864,7 @@ export interface CreateConversationPayload {
   };
 }
 
-export interface ActiveOutboundTemplate {
-  name: string;
-  language: string;
-  body: string | null;
-  category: string | null;
-  components: Array<Record<string, unknown>>;
-}
+export interface ActiveOutboundTemplate extends WhatsAppTemplate {}
 
 export interface CreateActiveOutboundPayload {
   contactId: string;
@@ -2033,9 +2099,17 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  listActiveOutboundTemplates: async (): Promise<ActiveOutboundTemplate[]> => {
-    const res = await api.get<{ success: boolean; data: ActiveOutboundTemplate[] }>('/omnichannel/templates');
+  listActiveOutboundTemplates: async (channelId?: string): Promise<ActiveOutboundTemplate[]> => {
+    const params = channelId ? { channel_id: channelId } : undefined;
+    const res = await api.get<{ success: boolean; data: ActiveOutboundTemplate[] }>('/omnichannel/templates', { params });
     return res.data.data;
+  },
+
+  listTemplates: async (channelId: string): Promise<{ data: ActiveOutboundTemplate[] }> => {
+    const res = await api.get<{ success: boolean; data: ActiveOutboundTemplate[] }>('/omnichannel/templates', {
+      params: { channel_id: channelId },
+    });
+    return { data: res.data.data };
   },
 
   createActiveOutbound: async (payload: CreateActiveOutboundPayload): Promise<OmnichannelConversation> => {

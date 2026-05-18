@@ -90,6 +90,7 @@ function Breadcrumb() {
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
+    '/admin/templates': t('tenantAdmin.nav.templates'),
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/close-config': t('tenantAdmin.closeConfig.title'),
@@ -873,12 +874,14 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Monitor */}
-          <NavItem to="/monitor" title="Monitor">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </NavItem>
+          {isManager && (
+            <NavItem to="/monitor" title="Monitor">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
 
           {/* Métricas */}
           {canViewMetricsNav && (
