@@ -24,6 +24,7 @@ import { notificationsRoutes } from './modules/notifications/notifications.route
 import { searchRoutes } from './modules/search/search.routes.js';
 import { callsRoutes } from './modules/calls/calls.routes.js';
 import { portalModuleRoutes } from './modules/portal/index.js';
+import { redmineWebhookRoutes } from './modules/integrations/redmine/redmine.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
@@ -114,6 +115,7 @@ async function bootstrap(): Promise<void> {
 
   // Webhooks sem auth JWT e sem tenant middleware — registrar primeiro
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
+  await app.register(redmineWebhookRoutes, { prefix: '/api' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });

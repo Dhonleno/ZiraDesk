@@ -14,6 +14,8 @@ import { conversationTagsAdminRoutes } from './conversation-tags/conversation-ta
 import { adminTicketTypesRoutes } from './ticket-types/index.js';
 import { closeConfigRoutes } from './close-config/close-config.routes.js';
 import { aiAdminRoutes } from './ai/ai-admin.routes.js';
+import { webhooksRoutes } from './webhooks/webhooks.routes.js';
+import { redmineAdminRoutes } from './redmine/redmine.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -31,4 +33,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);
   await app.register(aiAdminRoutes, { prefix: '/ai' });
+  await app.register(webhooksRoutes, { prefix: '/webhooks' });
+  await app.register(redmineAdminRoutes, { prefix: '/integrations/redmine' });
 }

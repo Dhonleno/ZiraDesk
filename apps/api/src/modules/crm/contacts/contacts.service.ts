@@ -2,6 +2,7 @@ import { prisma } from '../../../config/database.js';
 import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contacts.schema.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhoneForStorage, PhoneNormalizationError } from '../../../utils/phone.js';
+import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -340,6 +341,12 @@ export async function createContact(data: CreateContactInput, createdBy: string,
      VALUES ($1::uuid, 'contact.created', 'contact', $2::uuid, $3::jsonb)`,
     createdBy, contact.id, JSON.stringify(contact),
   );
+
+  if (tenantId) {
+    void dispatchWebhook(tenantId, 'contact.created', {
+      contact: { id: contact.id, name: contact.name, email: contact.email, phone: contact.phone },
+    });
+  }
 
   return contact;
 }

@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database.js';
 import { getSocketServer } from '../../socket/index.js';
+import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
+import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -472,6 +474,21 @@ const SORT_COLUMNS: Record<string, string> = {
   priority:   `CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 END`,
 };
 
+const tenantSchemaCache = new Map<string, string>();
+
+async function resolveTenantSchemaName(tenantId: string): Promise<string | null> {
+  const cached = tenantSchemaCache.get(tenantId);
+  if (cached) return cached;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { schemaName: true },
+  });
+  if (!tenant) return null;
+  tenantSchemaCache.set(tenantId, tenant.schemaName);
+  return tenant.schemaName;
+}
+
 const BASE_SELECT = `
   SELECT
     t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
@@ -631,6 +648,15 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:created', { ticket });
   } catch { /* socket não inicializado em testes */ }
 
+  void dispatchWebhook(tenantId, 'ticket.created', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+  void (async () => {
+    const schemaName = await resolveTenantSchemaName(tenantId);
+    if (!schemaName) return;
+    await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'created');
+  })().catch(() => {});
+
   return ticket;
 }
 
@@ -756,7 +782,35 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
   if (old.status !== 'resolved' && ticket.status === 'resolved') {
     const resolvedEvent = await logTicketEvent(id, updatedBy, 'resolved', null, null);
     if (resolvedEvent) emitTicketEvent(tenantId, id, resolvedEvent);
+    void dispatchWebhook(tenantId, 'ticket.resolved', {
+      ticket: { id: ticket.id, title: ticket.title, resolvedAt: ticket.resolved_at },
+    });
+    void (async () => {
+      const schemaName = await resolveTenantSchemaName(tenantId);
+      if (!schemaName) return;
+      await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'resolved');
+    })().catch(() => {});
   }
+
+  if (old.status !== 'closed' && ticket.status === 'closed') {
+    void dispatchWebhook(tenantId, 'ticket.closed', {
+      ticket: { id: ticket.id, title: ticket.title },
+    });
+    void (async () => {
+      const schemaName = await resolveTenantSchemaName(tenantId);
+      if (!schemaName) return;
+      await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'closed');
+    })().catch(() => {});
+  }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+  void (async () => {
+    const schemaName = await resolveTenantSchemaName(tenantId);
+    if (!schemaName) return;
+    await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'updated');
+  })().catch(() => {});
 
   try {
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
@@ -965,6 +1019,20 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
       });
     }
   } catch { /* socket não inicializado em testes */ }
+
+  void (async () => {
+    const schemaName = await resolveTenantSchemaName(tenantId);
+    if (!schemaName) return;
+    const userRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+      `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+      userId,
+    );
+    await syncCommentToRedmine(tenantId, schemaName, ticketId, {
+      content: comment.content,
+      authorName: userRows[0]?.name ?? 'Agente',
+      isInternal: comment.is_internal,
+    });
+  })().catch(() => {});
 
   return comment;
 }
