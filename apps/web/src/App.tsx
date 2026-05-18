@@ -33,6 +33,8 @@ import { ConversationTags as AdminConversationTags } from './pages/admin/Convers
 import { TicketTypes as AdminTicketTypes } from './pages/admin/TicketTypes';
 import { CloseConfig as AdminCloseConfig } from './pages/admin/CloseConfig';
 import { AIAgentPage as AdminAIAgent } from './pages/admin/AIAgent';
+import { Webhooks as AdminWebhooks } from './pages/admin/Webhooks';
+import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -177,6 +179,8 @@ export function App() {
               <Route path="conversation-tags" element={<AdminConversationTags />} />
               <Route path="close-config" element={<AdminCloseConfig />} />
               <Route path="ai-agent" element={<AdminAIAgent />} />
+              <Route path="integrations" element={<AdminIntegrations />} />
+              <Route path="webhooks" element={<AdminWebhooks />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />

@@ -5,6 +5,7 @@ import {
   adminApi,
   omnichannelApi,
   type OmnichannelConversation,
+  type ConversationWindowStatus,
   type OmnichannelMessage,
   type QuickReply,
 } from '../../services/api';
@@ -321,9 +322,12 @@ interface Props {
   conversationId: string;
 }
 
-function requiresWhatsappTemplateMessage(conversation: Conversation | undefined): boolean {
+function requiresWhatsappTemplateMessage(
+  conversation: Conversation | undefined,
+  withinActiveOutboundWindow: boolean,
+): boolean {
   if (!conversation || conversation.channel_type !== 'whatsapp') return false;
-  if (conversation.status === 'active_outbound') return true;
+  if (conversation.status === 'active_outbound') return !withinActiveOutboundWindow;
   if (!conversation.metadata || typeof conversation.metadata !== 'object') return false;
   return conversation.metadata.whatsapp_reengagement_required === true;
 }
@@ -507,6 +511,22 @@ export function ChatArea({ conversationId }: Props) {
     enabled: hasValidSession,
     retry: shouldRetryQuery,
   });
+
+  const isActiveOutboundConversation = data?.conversation?.status === 'active_outbound';
+  const {
+    data: conversationWindowStatus,
+    isSuccess: isConversationWindowLoaded,
+  } = useQuery({
+    queryKey: ['conversation-window', conversationId],
+    queryFn: () => omnichannelApi.getConversationWindowStatus(conversationId),
+    enabled: hasValidSession && isActiveOutboundConversation,
+    retry: shouldRetryQuery,
+  });
+  const activeOutboundWindowStatus: ConversationWindowStatus = conversationWindowStatus ?? {
+    withinWindow: false,
+    lastMessageAt: null,
+  };
+  const withinActiveOutboundWindow = activeOutboundWindowStatus.withinWindow;
 
   const { data: quickReplies = [] } = useQuery({
     queryKey: ['admin', 'quick-replies', 'chat'],
@@ -882,7 +902,12 @@ export function ChatArea({ conversationId }: Props) {
     onSuccess: () => {
       setContent('');
       setIsInternal(false);
-      setUseTemplateMessage(false);
+      setUseTemplateMessage(
+        requiresWhatsappTemplateMessage(
+          data?.conversation as Conversation | undefined,
+          withinActiveOutboundWindow,
+        ),
+      );
       setTemplateName('');
       setTemplateLanguage('pt_BR');
       setTemplateParams('');
@@ -912,7 +937,13 @@ export function ChatArea({ conversationId }: Props) {
         }
       )?.response?.data?.error?.message;
 
-      if (statusCode === 409 && requiresWhatsappTemplateMessage(data?.conversation as Conversation | undefined)) {
+      if (
+        statusCode === 409
+        && requiresWhatsappTemplateMessage(
+          data?.conversation as Conversation | undefined,
+          withinActiveOutboundWindow,
+        )
+      ) {
         setUseTemplateMessage(true);
         setIsInternal(false);
         setTemplateError(apiMessage ?? t('chat.templateHint'));
@@ -1006,7 +1037,13 @@ export function ChatArea({ conversationId }: Props) {
   function handleSend() {
     if (!canSendMessage) return;
     if (sendMutation.isPending) return;
-    if (requiresWhatsappTemplateMessage(data?.conversation as Conversation | undefined) && !useTemplateMessage) {
+    if (
+      requiresWhatsappTemplateMessage(
+        data?.conversation as Conversation | undefined,
+        withinActiveOutboundWindow,
+      )
+      && !useTemplateMessage
+    ) {
       const templateRequiredMessage = t('chat.templateHint');
       setUseTemplateMessage(true);
       setIsInternal(false);
@@ -1233,7 +1270,9 @@ export function ChatArea({ conversationId }: Props) {
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
-  const requiresWhatsappTemplate = requiresWhatsappTemplateMessage(conv);
+  const isActiveOutboundWhatsappConversation = isWhatsappConversation && conv?.status === 'active_outbound';
+  const requiresWhatsappTemplate = requiresWhatsappTemplateMessage(conv, withinActiveOutboundWindow);
+  const canToggleActiveOutboundTemplate = isActiveOutboundWhatsappConversation && withinActiveOutboundWindow;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
   const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
@@ -1263,10 +1302,26 @@ export function ChatArea({ conversationId }: Props) {
   }, [isWhatsappConversation]);
 
   useEffect(() => {
+    if (!isWhatsappConversation) return;
+
+    if (isActiveOutboundWhatsappConversation) {
+      if (!isConversationWindowLoaded) return;
+      setUseTemplateMessage(!withinActiveOutboundWindow);
+      setIsInternal(false);
+      setTemplateError(null);
+      return;
+    }
+
     if (!requiresWhatsappTemplate) return;
     setUseTemplateMessage(true);
     setIsInternal(false);
-  }, [requiresWhatsappTemplate]);
+  }, [
+    isActiveOutboundWhatsappConversation,
+    isConversationWindowLoaded,
+    isWhatsappConversation,
+    requiresWhatsappTemplate,
+    withinActiveOutboundWindow,
+  ]);
 
   const grouped = useMemo(() => {
     const list: Array<{ date: string; msgs: Message[] }> = [];
@@ -2020,6 +2075,80 @@ export function ChatArea({ conversationId }: Props) {
           position: 'relative',
         }}
       >
+        {isActiveOutboundWhatsappConversation && isConversationWindowLoaded && (
+          <div
+            style={{
+              margin: '-12px -16px 10px',
+              padding: '6px 12px',
+              fontSize: 11,
+              background: withinActiveOutboundWindow ? 'var(--green-dim)' : 'var(--amber-dim)',
+              color: withinActiveOutboundWindow ? 'var(--green)' : 'var(--amber)',
+              borderBottom: '1px solid var(--line)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span aria-hidden>{withinActiveOutboundWindow ? '✓' : '⚠'}</span>
+            <span>
+              {withinActiveOutboundWindow
+                ? t('activeOutbound.withinWindow')
+                : t('activeOutbound.outsideWindow')}
+            </span>
+          </div>
+        )}
+        {canToggleActiveOutboundTemplate && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: 10,
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--line)',
+              background: 'var(--bg-3)',
+            }}
+          >
+            <label style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+              {t('activeOutbound.useTemplate')}
+            </label>
+            <button
+              type="button"
+              aria-label={t('activeOutbound.useTemplate')}
+              aria-pressed={useTemplateMessage}
+              onClick={() => {
+                setUseTemplateMessage((prev) => !prev);
+                setTemplateError(null);
+                setIsInternal(false);
+              }}
+              style={{
+                width: 40,
+                height: 22,
+                borderRadius: 999,
+                border: useTemplateMessage ? '1px solid var(--teal)' : '1px solid var(--line-2)',
+                background: useTemplateMessage ? 'var(--teal-dim)' : 'var(--bg-4)',
+                position: 'relative',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: useTemplateMessage ? 20 : 2,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: useTemplateMessage ? 'var(--teal)' : 'var(--txt-3)',
+                  transition: 'left .15s ease, background .15s ease',
+                }}
+              />
+            </button>
+          </div>
+        )}
         {canSendMessage && (
           <>
             <MediaUpload
@@ -2229,7 +2358,7 @@ export function ChatArea({ conversationId }: Props) {
                         </svg>
                       )}
                     />
-                    {isWhatsappConversation && (
+                    {isWhatsappConversation && !isActiveOutboundWhatsappConversation && (
                       <ToolbarButton
                         tooltip="Template WhatsApp"
                         active={useTemplateMessage}

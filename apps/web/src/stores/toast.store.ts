@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useCallback, useMemo } from 'react';
 
-export type ToastType = 'success' | 'error' | 'info' | 'help_request';
+export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'help_request';
 
 export interface Toast {
   id: string;
@@ -54,9 +54,10 @@ export const useToastStore = create<ToastState>((set) => ({
 
 export function useToast() {
   const { addToast } = useToastStore();
-  const success = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'success', ...options }), [addToast]);
-  const error = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'error', ...options }), [addToast]);
-  const info = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string }) => addToast({ message, type: 'info', ...options }), [addToast]);
+  const success = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string; durationMs?: number }) => addToast({ message, type: 'success', ...options }), [addToast]);
+  const error = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string; durationMs?: number }) => addToast({ message, type: 'error', ...options }), [addToast]);
+  const info = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string; durationMs?: number }) => addToast({ message, type: 'info', ...options }), [addToast]);
+  const warning = useCallback((message: string, options?: { icon?: string; linkLabel?: string; linkHref?: string; durationMs?: number }) => addToast({ message, type: 'warning', ...options }), [addToast]);
   const helpRequest = useCallback((options: {
     message: string;
     protocol?: string | null;
@@ -82,8 +83,9 @@ export function useToast() {
       success,
       error,
       info,
+      warning,
       helpRequest,
     }),
-    [error, helpRequest, info, success],
+    [error, helpRequest, info, success, warning],
   );
 }

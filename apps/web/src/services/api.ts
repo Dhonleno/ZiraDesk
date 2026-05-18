@@ -754,6 +754,17 @@ export const contactsApi = {
     const res = await api.get<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`);
     return res.data.data;
   },
+  getStats: async (id: string): Promise<{
+    total_conversations: number;
+    total_messages: number;
+    open_tickets: number;
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: { total_conversations: number; total_messages: number; open_tickets: number };
+    }>(`/crm/contacts/${id}/stats`);
+    return res.data.data;
+  },
   create: async (payload: Partial<CrmContact>): Promise<CrmContact> => {
     const res = await api.post<{ success: boolean; data: CrmContact }>('/crm/contacts', payload);
     return res.data.data;
@@ -811,6 +822,72 @@ export interface KnowledgeArticle {
   created_at: string;
   updated_at: string;
   chunk_count: number;
+}
+
+export type WebhookEvent =
+  | 'ticket.created' | 'ticket.updated' | 'ticket.resolved' | 'ticket.closed'
+  | 'conversation.created' | 'conversation.resolved' | 'conversation.assigned'
+  | 'contact.created' | 'contact.updated';
+
+export interface OutboundWebhook {
+  id: string;
+  name: string;
+  url: string;
+  secret: string | null;
+  events: WebhookEvent[];
+  headers: Record<string, string>;
+  is_active: boolean;
+  last_triggered_at: string | null;
+  last_status: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWebhookPayload {
+  name: string;
+  url: string;
+  secret?: string;
+  events: WebhookEvent[];
+  headers?: Record<string, string>;
+  isActive: boolean;
+}
+
+export interface RedmineIntegrationConfig {
+  id: string;
+  name: string;
+  redmine_url: string;
+  project_id: string;
+  is_active: boolean;
+  sync_comments: boolean;
+  sync_status: boolean;
+  status_map: Record<string, number>;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+  has_api_key: boolean;
+  api_key_masked: string | null;
+}
+
+export interface SaveRedmineIntegrationPayload {
+  name?: string;
+  redmineUrl: string;
+  apiKey: string;
+  projectId: string;
+  isActive?: boolean;
+  syncComments?: boolean;
+  syncStatus?: boolean;
+  statusMap?: Record<string, number>;
+}
+
+export interface UpdateRedmineIntegrationPayload {
+  name?: string;
+  redmineUrl?: string;
+  apiKey?: string;
+  projectId?: string;
+  isActive?: boolean;
+  syncComments?: boolean;
+  syncStatus?: boolean;
+  statusMap?: Record<string, number>;
 }
 
 export const adminApi = {
@@ -901,6 +978,12 @@ export const adminApi = {
 
   listChannels: async (): Promise<Channel[]> => {
     const res = await api.get<{ success: boolean; data: Channel[] }>('/admin/channels');
+    return res.data.data;
+  },
+
+  listChannelsByTypes: async (types: string[]): Promise<Channel[]> => {
+    const query = types.length ? { types: types.join(',') } : undefined;
+    const res = await api.get<{ success: boolean; data: Channel[] }>('/admin/channels', { params: query });
     return res.data.data;
   },
 
@@ -1253,6 +1336,80 @@ export const adminApi = {
 
     toggleArticle: async (id: string, isActive: boolean): Promise<void> => {
       await api.patch(`/admin/ai/knowledge/${id}/toggle`, { is_active: isActive });
+    },
+  },
+
+  webhooks: {
+    list: async (): Promise<OutboundWebhook[]> => {
+      const res = await api.get<{ success: boolean; data: OutboundWebhook[] }>('/admin/webhooks');
+      return res.data.data;
+    },
+
+    create: async (data: CreateWebhookPayload): Promise<OutboundWebhook> => {
+      const res = await api.post<{ success: boolean; data: OutboundWebhook }>('/admin/webhooks', data);
+      return res.data.data;
+    },
+
+    get: async (id: string): Promise<OutboundWebhook> => {
+      const res = await api.get<{ success: boolean; data: OutboundWebhook }>(`/admin/webhooks/${id}`);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: Partial<CreateWebhookPayload>): Promise<OutboundWebhook> => {
+      const res = await api.patch<{ success: boolean; data: OutboundWebhook }>(`/admin/webhooks/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<OutboundWebhook> => {
+      const res = await api.delete<{ success: boolean; data: OutboundWebhook }>(`/admin/webhooks/${id}`);
+      return res.data.data;
+    },
+
+    test: async (id: string): Promise<{ success: boolean; data: { status: number } }> => {
+      const res = await api.post<{ success: boolean; data: { status: number } }>(`/admin/webhooks/${id}/test`);
+      return res.data;
+    },
+  },
+
+  integrations: {
+    redmine: {
+      get: async (): Promise<RedmineIntegrationConfig | null> => {
+        const res = await api.get<{ success: boolean; data: RedmineIntegrationConfig | null }>(
+          '/admin/integrations/redmine',
+        );
+        return res.data.data;
+      },
+
+      save: async (data: SaveRedmineIntegrationPayload): Promise<RedmineIntegrationConfig> => {
+        const res = await api.post<{ success: boolean; data: RedmineIntegrationConfig }>(
+          '/admin/integrations/redmine',
+          data,
+        );
+        return res.data.data;
+      },
+
+      update: async (data: UpdateRedmineIntegrationPayload): Promise<RedmineIntegrationConfig> => {
+        const res = await api.patch<{ success: boolean; data: RedmineIntegrationConfig }>(
+          '/admin/integrations/redmine',
+          data,
+        );
+        return res.data.data;
+      },
+
+      remove: async (): Promise<{ removed: boolean }> => {
+        const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+          '/admin/integrations/redmine',
+        );
+        return res.data.data;
+      },
+
+      test: async (data?: { redmineUrl?: string; apiKey?: string }): Promise<{ ok: true }> => {
+        const res = await api.post<{ success: boolean; data: { ok: true } }>(
+          '/admin/integrations/redmine/test',
+          data ?? {},
+        );
+        return res.data.data;
+      },
     },
   },
 };
@@ -1610,7 +1767,7 @@ export interface ListConversationsParams {
   page?: number;
   perPage?: number;
   per_page?: number;
-  tab?: 'active' | 'queue' | 'return' | 'closed';
+  tab?: 'active' | 'queue' | 'return' | 'closed' | 'active_outbound';
   sub_status?: 'resolved' | 'closed' | 'outbound';
   search?: string;
   status?: string;
@@ -1633,6 +1790,25 @@ export interface CreateConversationPayload {
     language?: string;
     components?: Array<Record<string, unknown>>;
   };
+}
+
+export interface ActiveOutboundTemplate {
+  name: string;
+  language: string;
+  body: string | null;
+  category: string | null;
+  components: Array<Record<string, unknown>>;
+}
+
+export interface CreateActiveOutboundPayload {
+  contactId: string;
+  channelId: string;
+  templateName?: string;
+  templateLanguage?: string;
+  templateComponents?: Array<Record<string, unknown>>;
+  subject?: string;
+  message?: string;
+  useTemplate?: boolean;
 }
 
 export interface SendMessagePayload {
@@ -1746,6 +1922,11 @@ export interface OmnichannelMessagesPage {
   total: number;
 }
 
+export interface ConversationWindowStatus {
+  withinWindow: boolean;
+  lastMessageAt: string | null;
+}
+
 export interface NotificationItem {
   id: string;
   type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
@@ -1837,9 +2018,29 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
+  getConversationWindowStatus: async (conversationId: string): Promise<ConversationWindowStatus> => {
+    const res = await api.get<{ success: boolean; data: ConversationWindowStatus }>(
+      `/omnichannel/conversations/${conversationId}/window-status`,
+    );
+    return res.data.data;
+  },
+
   createConversation: async (payload: CreateConversationPayload): Promise<OmnichannelConversation> => {
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       '/omnichannel/conversations',
+      payload,
+    );
+    return res.data.data;
+  },
+
+  listActiveOutboundTemplates: async (): Promise<ActiveOutboundTemplate[]> => {
+    const res = await api.get<{ success: boolean; data: ActiveOutboundTemplate[] }>('/omnichannel/templates');
+    return res.data.data;
+  },
+
+  createActiveOutbound: async (payload: CreateActiveOutboundPayload): Promise<OmnichannelConversation> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      '/omnichannel/active-outbound',
       payload,
     );
     return res.data.data;

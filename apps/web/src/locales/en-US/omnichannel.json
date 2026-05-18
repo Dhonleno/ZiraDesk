@@ -79,8 +79,28 @@
     "warning": "It will appear in Active until the customer replies",
     "activated": "Customer replied to the active attendance!"
   },
+  "activeOutbound": {
+    "button": "Active outbound",
+    "title": "Active outbound",
+    "subtitle": "Start contact with a customer",
+    "selectContact": "Select contact",
+    "selectChannel": "Select channel",
+    "composeMessage": "Compose message",
+    "useTemplate": "Use WhatsApp template",
+    "withinWindow": "Inside the 24-hour window — you can send a free-form message",
+    "outsideWindow": "Outside the 24-hour window — use an approved template",
+    "templateWarning": "Templates are required outside the 24-hour window",
+    "freeMessageWarning": "Use only within 24h from the last customer message",
+    "costWarning": "WhatsApp business-initiated messages are billed by Meta",
+    "send": "Send",
+    "sent": "Active outbound created successfully",
+    "replied": "{{name}} replied to your active outbound!",
+    "lastContact": "Last contact",
+    "noHistory": "No previous history"
+  },
   "tabs": {
     "active": "In service",
+    "activeOutbound": "Active",
     "queue": "Bot",
     "return": "Follow-up",
     "closed": "Closed"
@@ -104,11 +124,12 @@
     "messages": "messages",
     "markAllRead": "Mark all as read"
   },
+  "agentRequeued": "{{agentName}} went offline. {{count}} conversation(s) returned to queue.",
   "outboundBadge": "↗ Follow-up",
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Open",
-    "active_outbound": "Follow-up",
+    "active_outbound": "Active",
     "in_service": "In service",
     "pending": "Pending",
     "resolved": "Resolved",

@@ -17,6 +17,7 @@ import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
+import { PermissionGate } from '../components/ui/PermissionGate';
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
 function ThemeToggle() {
@@ -243,6 +244,7 @@ export function TenantLayout() {
         : user?.role === 'agent'
           ? 'Agente'
           : 'Visualização';
+  const isManager = user?.role === 'owner' || user?.role === 'admin';
   const {
     status: agentStatus,
     pauseReason,
@@ -352,6 +354,52 @@ export function TenantLayout() {
       unsubHelpRequested();
     };
   }, [navigate, queryClient, t, toast, user?.id]);
+
+  useEffect(() => {
+    if (!isManager) return;
+
+    const unsubRequeueAlert = subscribeToEvent<{
+      agentName?: string;
+      conversationCount?: number;
+      message?: string;
+    }>('agent:requeued:alert', (data) => {
+      const fallbackMessage = t('agentRequeued', {
+        ns: 'omnichannel',
+        agentName: data.agentName ?? 'Agente',
+        count: data.conversationCount ?? 0,
+      });
+
+      toast.warning(data.message ?? fallbackMessage, {
+        durationMs: 8000,
+        icon: '⚠️',
+      });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+    });
+
+    return () => {
+      unsubRequeueAlert();
+    };
+  }, [isManager, queryClient, t, toast]);
+
+  useEffect(() => {
+    const unsubActiveOutboundReplied = subscribeToEvent<{
+      conversationId: string;
+      contactName: string;
+    }>('active_outbound:replied', (data) => {
+      toast.success(
+        t('activeOutbound.replied', { ns: 'omnichannel', name: data.contactName }),
+        { durationMs: 6000, icon: '💬' },
+      );
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation', data.conversationId] });
+    });
+
+    return () => {
+      unsubActiveOutboundReplied();
+    };
+  }, [queryClient, t, toast]);
 
   useEffect(() => {
     if (!user?.id || pathname.startsWith('/omnichannel')) return;
@@ -650,17 +698,30 @@ export function TenantLayout() {
 
           {/* Conversations-specific topbar actions */}
           {pathname.startsWith('/omnichannel') && (
-            <>
-              <button
-                className="topbar-primary-btn"
-                onClick={() => window.dispatchEvent(new CustomEvent('omnichannel:open-modal'))}
-                title="Criar novo atendimento"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                Novo atendimento
-              </button>
-              <div className="topbar-inline-divider" aria-hidden />
-            </>
+            <PermissionGate permission="conversations:reply">
+              <>
+                <button
+                  className="topbar-primary-btn"
+                  onClick={() => window.dispatchEvent(new CustomEvent('omnichannel:open-modal'))}
+                  title={t('new', { ns: 'omnichannel' })}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  {t('new', { ns: 'omnichannel' })}
+                </button>
+                <button
+                  className="topbar-primary-btn"
+                  style={{ background: 'var(--bg-3)', borderColor: 'var(--line-2)', color: 'var(--teal)', boxShadow: 'none' }}
+                  onClick={() => window.dispatchEvent(new CustomEvent('omnichannel:open-active-outbound-modal'))}
+                  title={t('activeOutbound.button', { ns: 'omnichannel' })}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path d="M2 10L10 2M10 2H6M10 2V6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {t('activeOutbound.button', { ns: 'omnichannel' })}
+                </button>
+                <div className="topbar-inline-divider" aria-hidden />
+              </>
+            </PermissionGate>
           )}
 
           <div className="profile-menu-wrapper" ref={profileMenuRef}>

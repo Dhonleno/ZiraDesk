@@ -6,6 +6,7 @@ import { ConversationList } from '../../components/omnichannel/ConversationList'
 import { ChatArea } from '../../components/omnichannel/ChatArea';
 import { InfoPanel } from '../../components/omnichannel/InfoPanel';
 import { CreateConversationModal } from '../../components/omnichannel/CreateConversationModal';
+import { ActiveOutboundModal } from '../../components/omnichannel/ActiveOutboundModal';
 import { PageShell } from '../../components/layout/PageShell';
 import { subscribeToEvent } from '../../services/socket';
 
@@ -13,6 +14,7 @@ export function ConversationsPage() {
   const { t } = useTranslation('omnichannel');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showActiveOutboundModal, setShowActiveOutboundModal] = useState(false);
   const [searchParams] = useSearchParams();
   const [filterAgentId, setFilterAgentId] = useState('');
   const qc = useQueryClient();
@@ -26,8 +28,13 @@ export function ConversationsPage() {
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);
+    const handleOpenActiveOutboundModal = () => setShowActiveOutboundModal(true);
     window.addEventListener('omnichannel:open-modal', handleOpenModal);
-    return () => window.removeEventListener('omnichannel:open-modal', handleOpenModal);
+    window.addEventListener('omnichannel:open-active-outbound-modal', handleOpenActiveOutboundModal);
+    return () => {
+      window.removeEventListener('omnichannel:open-modal', handleOpenModal);
+      window.removeEventListener('omnichannel:open-active-outbound-modal', handleOpenActiveOutboundModal);
+    };
   }, []);
 
   useEffect(() => {
@@ -88,6 +95,7 @@ export function ConversationsPage() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           onNew={() => setShowModal(true)}
+          onNewActiveOutbound={() => setShowActiveOutboundModal(true)}
           initialAgentId={filterAgentId}
         />
 
@@ -119,6 +127,13 @@ export function ConversationsPage() {
         {showModal && (
           <CreateConversationModal
             onClose={() => setShowModal(false)}
+            onCreated={(id) => setSelectedId(id)}
+          />
+        )}
+
+        {showActiveOutboundModal && (
+          <ActiveOutboundModal
+            onClose={() => setShowActiveOutboundModal(false)}
             onCreated={(id) => setSelectedId(id)}
           />
         )}

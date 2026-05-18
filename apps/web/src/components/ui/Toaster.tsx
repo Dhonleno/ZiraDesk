@@ -13,6 +13,10 @@ const typeStyles: Record<Exclude<ToastType, 'help_request'>, { wrapper: string; 
     wrapper: 'border-[rgba(96,165,250,.25)] bg-bg-2 text-[#60A5FA]',
     icon: 'ℹ',
   },
+  warning: {
+    wrapper: 'border-[rgba(245,158,11,.28)] bg-bg-2 text-[#F59E0B]',
+    icon: '⚠',
+  },
 };
 
 export function Toaster() {

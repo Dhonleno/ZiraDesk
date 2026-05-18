@@ -35,6 +35,7 @@
       "conversationTags": "Tags",
       "closeConfig": "Conversation Closing",
       "aiAgent": "AI Agent",
+      "webhooks": "Webhooks",
       "settings": "Settings"
     },
     "autoAssign": {
@@ -424,6 +425,80 @@
         "articleToggled": "Article updated"
       }
     },
+    "webhooks": {
+      "title": "Webhooks",
+      "subtitle": "Notify external systems when events occur",
+      "new": "New webhook",
+      "newTitle": "New webhook",
+      "editTitle": "Edit webhook",
+      "empty": "No webhooks configured",
+      "name": "Name",
+      "url": "Destination URL",
+      "secret": "Secret (optional)",
+      "secretHint": "Used to sign the payload with HMAC-SHA256",
+      "headers": "Custom headers",
+      "addHeader": "+ Add header",
+      "events": "Events",
+      "active": "Active",
+      "inactive": "Inactive",
+      "lastTriggered": "Last triggered",
+      "lastStatus": "Last status",
+      "test": "Test",
+      "deleteTitle": "Remove webhook",
+      "deleteConfirm": "Are you sure you want to remove this webhook?",
+      "testSuccess": "Webhook delivered successfully ({{status}})",
+      "testError": "Delivery failed ({{status}})",
+      "createSuccess": "Webhook created successfully",
+      "updateSuccess": "Webhook updated successfully",
+      "deleteSuccess": "Webhook removed successfully",
+      "groups": {
+        "tickets": "TICKETS",
+        "conversations": "CONVERSATIONS",
+        "crm": "CRM"
+      },
+      "eventLabels": {
+        "ticket": {
+          "created": "Ticket created",
+          "updated": "Ticket updated",
+          "resolved": "Ticket resolved",
+          "closed": "Ticket closed"
+        },
+        "conversation": {
+          "created": "Conversation created",
+          "resolved": "Conversation resolved",
+          "assigned": "Conversation assigned"
+        },
+        "contact": {
+          "created": "Contact created",
+          "updated": "Contact updated"
+        }
+      }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "subtitle": "Connect ZiraDesk with external tools",
+      "redmine": {
+        "title": "Redmine",
+        "description": "Sync tickets and comments with Redmine",
+        "configure": "Configure",
+        "url": "Redmine URL",
+        "urlHint": "Ex: https://redmine.yourcompany.com",
+        "apiKey": "API Key",
+        "apiKeyHint": "Find it in My account → API access in Redmine",
+        "projectId": "Project ID",
+        "projectIdHint": "Project ID or identifier in Redmine",
+        "syncComments": "Sync comments",
+        "syncStatus": "Sync status",
+        "statusMap": "Status mapping (advanced)",
+        "testConnection": "Test connection",
+        "testSuccess": "Connection successful",
+        "testError": "Connection failed — check URL and API Key",
+        "saveSuccess": "Integration saved successfully",
+        "webhookUrl": "Webhook URL to configure in Redmine",
+        "webhookHint": "Configure this webhook in your Redmine project settings",
+        "comingSoon": "Coming soon"
+      }
+    },
     "dashboard": {
       "title": "Dashboard",
       "subtitle": "Overview of your support",
@@ -492,6 +567,8 @@
     "tags": "Tags",
     "conversationClosing": "Conversation Closing",
     "aiAgent": "AI Agent",
+    "integrations": "Integrations",
+    "webhooks": "Webhooks",
     "settings": "Settings"
   },
   "settings": {

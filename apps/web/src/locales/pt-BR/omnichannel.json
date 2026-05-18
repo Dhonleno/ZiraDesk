@@ -79,8 +79,28 @@
     "warning": "Aparecerá em Ativos até o cliente responder",
     "activated": "Cliente respondeu ao atendimento ativo!"
   },
+  "activeOutbound": {
+    "button": "Envio ativo",
+    "title": "Envio ativo",
+    "subtitle": "Inicie um contato com um cliente",
+    "selectContact": "Selecionar contato",
+    "selectChannel": "Selecionar canal",
+    "composeMessage": "Compor mensagem",
+    "useTemplate": "Usar template WhatsApp",
+    "withinWindow": "Dentro da janela de 24h — você pode enviar mensagem livre",
+    "outsideWindow": "Fora da janela de 24h — use um template aprovado",
+    "templateWarning": "Templates são obrigatórios fora da janela de 24h",
+    "freeMessageWarning": "Use apenas dentro da janela de 24h do último contato",
+    "costWarning": "Mensagens iniciadas pelo WhatsApp são cobradas pela Meta",
+    "send": "Enviar",
+    "sent": "Envio ativo criado com sucesso",
+    "replied": "{{name}} respondeu ao seu envio ativo!",
+    "lastContact": "Último contato",
+    "noHistory": "Sem histórico anterior"
+  },
   "tabs": {
     "active": "Em atendimento",
+    "activeOutbound": "Ativos",
     "queue": "Bot",
     "return": "Retorno",
     "closed": "Encerrados"
@@ -104,11 +124,12 @@
     "messages": "mensagens",
     "markAllRead": "Marcar todas como lidas"
   },
+  "agentRequeued": "{{agentName}} ficou offline. {{count}} atendimento(s) retornaram para a fila.",
   "outboundBadge": "↗ Retorno",
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Aberto",
-    "active_outbound": "Retorno",
+    "active_outbound": "Ativo",
     "in_service": "Em atendimento",
     "pending": "Aguardando",
     "resolved": "Resolvido",

@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { isConversationBotControlled } from '../../utils/conversationNotifications';
 import { AgentStatsModal } from './AgentStatsModal';
+import { PermissionGate } from '../ui/PermissionGate';
 
 interface ConversationItem {
   id: string;
@@ -73,7 +74,7 @@ interface ConversationCreatedEventPayload {
   contactName?: string | null;
 }
 
-type TabKey = 'active' | 'queue' | 'return' | 'closed';
+type TabKey = 'active' | 'queue' | 'active_outbound' | 'closed';
 type ClosedSubStatus = null | 'resolved' | 'closed' | 'outbound';
 
 interface ConversationCounts {
@@ -168,10 +169,11 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNew?: () => void;
+  onNewActiveOutbound?: () => void;
   initialAgentId?: string;
 }
 
-export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }: Props) {
+export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbound, initialAgentId }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const { showNotification } = useNotification();
@@ -599,6 +601,9 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
     const unsubCsatUpdated = subscribeToEvent<{ conversationId: string }>('conversation:csat_updated', () => {
       invalidateConversationData();
     });
+    const unsubAgentRequeued = subscribeToEvent('agent:requeued', () => {
+      invalidateConversationData();
+    });
     return () => {
       unsubMessage();
       unsubIncoming();
@@ -608,6 +613,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       unsubTagAdded();
       unsubTagRemoved();
       unsubCsatUpdated();
+      unsubAgentRequeued();
 
       for (const timer of activityTimeoutsRef.current.values()) {
         window.clearTimeout(timer);
@@ -635,7 +641,7 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
 
   const TABS: Array<{ key: TabKey; labelKey: string }> = [
     { key: 'active', labelKey: 'tabs.active' },
-    { key: 'return', labelKey: 'tabs.return' },
+    { key: 'active_outbound', labelKey: 'tabs.activeOutbound' },
     { key: 'queue', labelKey: 'tabs.queue' },
     { key: 'closed', labelKey: 'tabs.closed' },
   ];
@@ -673,9 +679,9 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
         {
           params: {
             perPage: 50,
-            tab: activeTab,
+            tab: activeTab === 'active_outbound' ? 'return' : activeTab,
             assigned_to_me:
-              (activeTab === 'active' || activeTab === 'return') && !filterAgentId
+              (activeTab === 'active' || activeTab === 'active_outbound') && !filterAgentId
                 ? (assignedToMe ? true : undefined)
                 : undefined,
             agent_id: filterAgentId || undefined,
@@ -760,24 +766,43 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                 <rect x="8" y="1" width="2" height="9" rx="0.5" fill="currentColor" />
               </svg>
             </button>
+            {onNewActiveOutbound && (
+              <PermissionGate permission="conversations:reply">
+                <button
+                  onClick={onNewActiveOutbound}
+                  title={t('activeOutbound.button')}
+                  style={{
+                    width: 24, height: 24,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--bg-3)', border: '1px solid var(--line-2)',
+                    borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--teal)',
+                    transition: 'all .15s',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                    <path d="M2 9L9 2M9 2H4.5M9 2V6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </PermissionGate>
+            )}
             {onNew && (
-              <button
-                onClick={onNew}
-                title={t('new')}
-                style={{
-                  width: 24, height: 24,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'var(--teal)', border: 'none',
-                  borderRadius: 'var(--r)', cursor: 'pointer', color: '#0E1A18',
-                  transition: 'all .15s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                  <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-              </button>
+              <PermissionGate permission="conversations:reply">
+                <button
+                  onClick={onNew}
+                  title={t('new')}
+                  style={{
+                    width: 24, height: 24,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--teal)', border: 'none',
+                    borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--on-teal)',
+                    transition: 'all .15s',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                    <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </PermissionGate>
             )}
           </div>
         </div>
@@ -1025,13 +1050,12 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
       >
         {TABS.map((tab) => {
           const isQueueTab = tab.key === 'queue';
-          const isReturnTab = tab.key === 'return';
-          const isAmberCounter = isQueueTab || isReturnTab;
+          const isAmberCounter = isQueueTab;
           const tabCount = tab.key === 'active'
             ? counts?.active
             : tab.key === 'queue'
               ? counts?.queue
-              : tab.key === 'return'
+              : tab.key === 'active_outbound'
                 ? counts?.return
                 : counts?.closed;
           return (
@@ -1320,7 +1344,27 @@ export function ConversationList({ selectedId, onSelect, onNew, initialAgentId }
                     </p>
 
                     <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
-                      {conv.conversation_type === 'outbound' && (
+                      {conv.status === 'active_outbound' && (
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          padding: '1px 7px',
+                          borderRadius: 'var(--r-pill)',
+                          background: 'var(--teal-dim)',
+                          color: 'var(--teal)',
+                          border: '1px solid rgba(0,201,167,.28)',
+                          whiteSpace: 'nowrap',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}>
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+                            <path d="M2 8L8 2M8 2H4.5M8 2V5.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          {t('outbound.badge')}
+                        </span>
+                      )}
+                      {conv.conversation_type === 'outbound' && conv.status !== 'active_outbound' && (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 600,

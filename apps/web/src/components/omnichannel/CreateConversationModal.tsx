@@ -11,25 +11,8 @@ import { useDebounce } from '../../hooks/useDebounce';
 const schema = z.object({
   contact_id: z.string().min(1),
   channel_id: z.string().min(1),
-  type: z.enum(['inbound', 'outbound']),
-  subject: z.string().optional(),
-  initial_message: z.string().optional(),
-  use_initial_template: z.boolean().default(false),
-  initial_template_name: z.string().optional(),
-  initial_template_language: z.string().optional(),
-  initial_template_body_params: z.string().optional(),
-}).refine((data) => (
-  data.type !== 'outbound'
-  || Boolean(data.initial_message?.trim())
-  || (data.use_initial_template && Boolean(data.initial_template_name?.trim()))
-), {
-  path: ['initial_message'],
-  message: 'initialMessageRequired',
-}).refine((data) => (
-  !data.use_initial_template || Boolean(data.initial_template_name?.trim())
-), {
-  path: ['initial_template_name'],
-  message: 'initialTemplateNameRequired',
+  subject: z.string().max(255).optional(),
+  initial_message: z.string().max(4000).optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -56,30 +39,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      type: 'inbound',
-      use_initial_template: false,
-      initial_template_language: 'pt_BR',
-    },
   });
 
   const selectedContactId = watch('contact_id');
   const selectedChannelId = watch('channel_id');
-  const selectedType = watch('type') ?? 'inbound';
-  const useInitialTemplate = watch('use_initial_template') ?? false;
 
-  useEffect(() => {
-    if (selectedType === 'outbound') return;
-    setValue('use_initial_template', false, { shouldValidate: true });
-  }, [selectedType, setValue]);
-
-  // Load channels
   const { data: channels = [] } = useQuery({
     queryKey: ['admin-channels'],
     queryFn: () => adminApi.listChannels(),
   });
 
-  // Search contacts
   const { data: contactsResult } = useQuery({
     queryKey: ['crm-contacts-search', debouncedSearch],
     queryFn: () => contactsApi.list({ ...(debouncedSearch ? { search: debouncedSearch } : {}), per_page: 10 }),
@@ -92,31 +61,9 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
       omnichannelApi.createConversation({
         contact_id: data.contact_id,
         channel_id: data.channel_id,
-        type: data.type,
-        ...(data.subject ? { subject: data.subject } : {}),
-        ...(data.initial_message ? { initial_message: data.initial_message } : {}),
-        ...(data.use_initial_template && data.initial_template_name?.trim()
-          ? {
-            initial_template: {
-              name: data.initial_template_name.trim(),
-              language: data.initial_template_language?.trim() || 'pt_BR',
-              ...(data.initial_template_body_params?.trim()
-                ? {
-                  components: [
-                    {
-                      type: 'body',
-                      parameters: data.initial_template_body_params
-                        .split('\n')
-                        .map((item) => item.trim())
-                        .filter(Boolean)
-                        .map((text) => ({ type: 'text', text })),
-                    },
-                  ],
-                }
-                : {}),
-            },
-          }
-          : {}),
+        type: 'inbound',
+        ...(data.subject?.trim() ? { subject: data.subject.trim() } : {}),
+        ...(data.initial_message?.trim() ? { initial_message: data.initial_message.trim() } : {}),
       }),
     onSuccess: (conv) => {
       toast.success(t('form.created'));
@@ -140,9 +87,11 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     [setValue],
   );
 
-  // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -150,153 +99,138 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: 'var(--backdrop)',
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label={t('form.title')}
     >
-      <div style={{
-        background: 'var(--bg-2)',
-        border: '1px solid var(--line-2)',
-        borderRadius: 'var(--r-xl)',
-        boxShadow: 'var(--shadow-pop)',
-        width: '100%',
-        maxWidth: 460,
-        maxHeight: 'calc(100vh - 32px)',
-        margin: '0 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', borderBottom: '1px solid var(--line)',
-        }}>
+      <div
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--line-2)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--shadow-pop)',
+          width: '100%',
+          maxWidth: 460,
+          maxHeight: 'calc(100vh - 32px)',
+          margin: '0 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--line)',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 'var(--r)',
-              background: 'var(--teal-dim)', border: '1px solid rgba(0,201,167,.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)',
-            }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 'var(--r)',
+                background: 'var(--teal-dim)',
+                border: '1px solid rgba(0,201,167,.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--teal)',
+              }}
+            >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
               </svg>
             </div>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{t('form.title')}</span>
           </div>
+
           <button
+            type="button"
             onClick={onClose}
-            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', borderRadius: 'var(--r)', color: 'var(--txt-3)', cursor: 'pointer' }}
-            aria-label="Fechar"
+            style={{
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              borderRadius: 'var(--r)',
+              color: 'var(--txt-3)',
+              cursor: 'pointer',
+            }}
+            aria-label={t('resolve.cancel')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={onSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-
-          {/* Type */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {t('form.type')} *
-            </label>
-            <input type="hidden" {...register('type')} />
-            <input type="hidden" {...register('use_initial_template')} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => setValue('type', 'inbound', { shouldValidate: true })}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  textAlign: 'left',
-                  background: selectedType === 'inbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
-                  border: `1px solid ${selectedType === 'inbound' ? 'var(--teal)' : 'var(--line-2)'}`,
-                  borderRadius: 'var(--r-lg)',
-                  padding: 12,
-                  color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt-2)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font)',
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }} aria-hidden>
-                  <path d="M4 10h12M10 4l6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ minWidth: 0 }}>
-                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 2, color: selectedType === 'inbound' ? 'var(--teal)' : 'var(--txt)' }}>
-                    {t('form.typeInbound')}
-                  </strong>
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--txt-3)' }}>
-                    {t('form.typeInboundHelp')}
-                  </span>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setValue('type', 'outbound', { shouldValidate: true })}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  textAlign: 'left',
-                  background: selectedType === 'outbound' ? 'var(--teal-dim)' : 'var(--bg-3)',
-                  border: `1px solid ${selectedType === 'outbound' ? 'var(--teal)' : 'var(--line-2)'}`,
-                  borderRadius: 'var(--r-lg)',
-                  padding: 12,
-                  color: selectedType === 'outbound' ? 'var(--teal)' : 'var(--txt-2)',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font)',
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }} aria-hidden>
-                  <path d="M16 10H4M10 4l-6 6 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ minWidth: 0 }}>
-                  <strong style={{ display: 'block', fontSize: 13, marginBottom: 2, color: selectedType === 'outbound' ? 'var(--teal)' : 'var(--txt)' }}>
-                    {t('form.typeOutbound')}
-                  </strong>
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--txt-3)' }}>
-                    {t('form.typeOutboundHelp')}
-                  </span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Contact search */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('form.client')} *
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: 'var(--bg-3)', border: `1px solid ${errors.contact_id ? 'var(--red)' : selectedContactId ? 'rgba(0,201,167,.3)' : 'var(--line-2)'}`,
-                borderRadius: 'var(--r)', padding: '9px 12px',
-                transition: 'border-color .15s',
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: 'var(--bg-3)',
+                  border: `1px solid ${errors.contact_id ? 'var(--red)' : selectedContactId ? 'rgba(0,201,167,.3)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r)',
+                  padding: '9px 12px',
+                }}
+              >
                 {selectedContactId ? (
                   <>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+                    <div
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg,#667eea,#764ba2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#fff',
+                        flexShrink: 0,
+                      }}
+                    >
                       {contactLabel.charAt(0).toUpperCase()}
                     </div>
                     <span style={{ flex: 1, fontSize: 13, color: 'var(--txt)' }}>{contactLabel}</span>
                     <button
                       type="button"
-                      onClick={() => { setValue('contact_id', '', { shouldValidate: true }); setContactLabel(''); setShowContactDropdown(true); }}
+                      onClick={() => {
+                        setValue('contact_id', '', { shouldValidate: true });
+                        setContactLabel('');
+                        setShowContactDropdown(true);
+                      }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-3)', display: 'flex', padding: 0 }}
                     >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
                     </button>
                   </>
                 ) : (
@@ -309,60 +243,92 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                       type="text"
                       placeholder={t('form.clientPlaceholder')}
                       value={contactSearch}
-                      onChange={(e) => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
+                      onChange={(event) => {
+                        setContactSearch(event.target.value);
+                        setShowContactDropdown(true);
+                      }}
                       onFocus={() => setShowContactDropdown(true)}
                       style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
                     />
                   </>
                 )}
               </div>
+
               {showContactDropdown && !selectedContactId && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                  background: 'var(--bg-3)', border: '1px solid var(--line-2)',
-                  borderRadius: 'var(--r)', marginTop: 4,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                  maxHeight: 200, overflowY: 'auto',
-                }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    zIndex: 10,
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 'var(--r)',
+                    marginTop: 4,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                  }}
+                >
                   {contactsList.length === 0 ? (
                     <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--txt-3)', textAlign: 'center' }}>
                       {t('noConversations')}
                     </div>
-                  ) : contactsList.map((c) => (
+                  ) : contactsList.map((contact) => (
                     <button
-                      key={c.id}
+                      key={contact.id}
                       type="button"
-                      onClick={() => handleSelectContact(c.id, c.name)}
+                      onClick={() => handleSelectContact(contact.id, contact.name)}
                       style={{
-                        width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
-                        color: 'var(--txt)', fontSize: 13, fontFamily: 'var(--font)',
+                        width: '100%',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '10px 14px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--txt)',
+                        fontSize: 13,
+                        fontFamily: 'var(--font)',
                         borderBottom: '1px solid var(--line)',
-                        transition: 'background .1s',
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
-                        {c.name.charAt(0).toUpperCase()}
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg,#667eea,#764ba2)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: '#fff',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {contact.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 500 }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{c.email ?? c.phone ?? ''}</div>
+                        <div style={{ fontWeight: 500 }}>{contact.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{contact.email ?? contact.phone ?? ''}</div>
                       </div>
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            {/* Hidden input for validation */}
+
             <input type="hidden" {...register('contact_id')} />
             {errors.contact_id && (
               <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.clientRequired')}</p>
             )}
           </div>
 
-          {/* Channel */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('form.channel')} *
@@ -384,9 +350,9 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               }}
             >
               <option value="">{t('form.channelPlaceholder')}</option>
-              {channels.filter((ch) => ch.status === 'active').map((ch) => (
-                <option key={ch.id} value={ch.id} style={{ background: 'var(--bg-3)' }}>
-                  {ch.name} ({ch.type})
+              {channels.filter((channel) => channel.status === 'active').map((channel) => (
+                <option key={channel.id} value={channel.id} style={{ background: 'var(--bg-3)' }}>
+                  {channel.name} ({channel.type})
                 </option>
               ))}
             </select>
@@ -395,7 +361,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
             )}
           </div>
 
-          {/* Subject */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {t('form.subject')}
@@ -415,132 +380,21 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 color: 'var(--txt)',
                 outline: 'none',
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--teal-dim)'; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
 
-          {/* Initial message */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {t('form.initialMessage')}{selectedType === 'outbound' ? ' *' : ''}
+              {t('form.initialMessage')}
             </label>
-            {selectedType === 'outbound' && (
-              <button
-                type="button"
-                onClick={() => setValue('use_initial_template', !useInitialTemplate, { shouldValidate: true })}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  marginBottom: 8,
-                  borderRadius: 'var(--r-pill)',
-                  border: `1px solid ${useInitialTemplate ? 'rgba(0,201,167,.45)' : 'var(--line-2)'}`,
-                  background: useInitialTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
-                  color: useInitialTemplate ? 'var(--teal)' : 'var(--txt-2)',
-                  padding: '4px 10px',
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                <span
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: '50%',
-                    border: `1px solid ${useInitialTemplate ? 'var(--teal)' : 'var(--line-2)'}`,
-                    background: useInitialTemplate ? 'var(--teal)' : 'transparent',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--on-teal)',
-                    fontSize: 10,
-                    lineHeight: 1,
-                  }}
-                >
-                  {useInitialTemplate ? '✓' : ''}
-                </span>
-                {t('form.useTemplate')}
-              </button>
-            )}
-
-            {selectedType === 'outbound' && useInitialTemplate && (
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 8,
-                  marginBottom: 10,
-                  padding: '10px',
-                  borderRadius: 'var(--r)',
-                  border: '1px solid rgba(0,201,167,.25)',
-                  background: 'rgba(0,201,167,.06)',
-                }}
-              >
-                <input
-                  type="text"
-                  {...register('initial_template_name')}
-                  placeholder={t('form.templateNamePlaceholder')}
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-3)',
-                    border: `1px solid ${errors.initial_template_name ? 'var(--red)' : 'var(--line-2)'}`,
-                    borderRadius: 'var(--r)',
-                    padding: '9px 12px',
-                    fontSize: 13,
-                    fontFamily: 'var(--font)',
-                    color: 'var(--txt)',
-                    outline: 'none',
-                  }}
-                />
-                <input
-                  type="text"
-                  {...register('initial_template_language')}
-                  placeholder="pt_BR"
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-3)',
-                    border: '1px solid var(--line-2)',
-                    borderRadius: 'var(--r)',
-                    padding: '9px 12px',
-                    fontSize: 13,
-                    fontFamily: 'var(--font)',
-                    color: 'var(--txt)',
-                    outline: 'none',
-                  }}
-                />
-                <textarea
-                  {...register('initial_template_body_params')}
-                  rows={2}
-                  placeholder={t('form.templateParamsPlaceholder')}
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-3)',
-                    border: '1px solid var(--line-2)',
-                    borderRadius: 'var(--r)',
-                    padding: '9px 12px',
-                    fontSize: 12,
-                    fontFamily: 'var(--font)',
-                    color: 'var(--txt)',
-                    outline: 'none',
-                    resize: 'vertical',
-                    lineHeight: 1.5,
-                  }}
-                />
-                {errors.initial_template_name && (
-                  <p style={{ fontSize: 11, color: 'var(--red)' }}>{t('form.initialTemplateNameRequired')}</p>
-                )}
-              </div>
-            )}
             <textarea
               {...register('initial_message')}
-              placeholder={t(selectedType === 'outbound' ? 'form.initialMessageOutboundPlaceholder' : 'form.initialMessagePlaceholder')}
+              placeholder={t('form.initialMessagePlaceholder')}
               rows={3}
-              disabled={selectedType === 'outbound' && useInitialTemplate}
               style={{
                 width: '100%',
                 background: 'var(--bg-3)',
-                border: `1px solid ${errors.initial_message ? 'var(--red)' : 'var(--line-2)'}`,
+                border: '1px solid var(--line-2)',
                 borderRadius: 'var(--r)',
                 padding: '9px 12px',
                 fontSize: 13,
@@ -549,57 +403,48 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 outline: 'none',
                 resize: 'vertical',
                 lineHeight: 1.5,
-                opacity: selectedType === 'outbound' && useInitialTemplate ? 0.6 : 1,
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--teal-dim)'; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = errors.initial_message ? 'var(--red)' : 'var(--line-2)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
-            {errors.initial_message && (
-              <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.initialMessageRequired')}</p>
-            )}
           </div>
 
-          {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <button
               type="button"
               onClick={onClose}
               style={{
-                padding: '8px 16px', borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)', background: 'var(--bg-4)',
-                color: 'var(--txt-2)', fontSize: 13, fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all .15s',
+                padding: '8px 16px',
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: 'var(--bg-4)',
+                color: 'var(--txt-2)',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-5)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; }}
             >
-              Cancelar
+              {t('resolve.cancel')}
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending}
               style={{
-                padding: '8px 18px', borderRadius: 'var(--r)',
-                border: '1px solid var(--teal)', background: 'var(--teal)',
-                color: '#0E1A18', fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all .15s',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 18px',
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--teal)',
+                background: 'var(--teal)',
+                color: 'var(--on-teal)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'var(--font)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
                 opacity: createMutation.isPending ? 0.7 : 1,
               }}
             >
-              {createMutation.isPending ? (
-                <>
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(14,26,24,.4)', borderTopColor: '#0E1A18', animation: 'spin 0.7s linear infinite' }} />
-                  {t('form.creating')}
-                </>
-              ) : (
-                <>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                    <path d="M2 6.5l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  {t('form.create')}
-                </>
-              )}
+              {createMutation.isPending ? t('form.creating') : t('form.create')}
             </button>
           </div>
         </form>
