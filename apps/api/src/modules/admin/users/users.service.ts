@@ -56,6 +56,17 @@ interface UserRow {
   created_at: Date;
 }
 
+function validateSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/.test(schemaName)) {
+    throw new ForbiddenError('Schema do tenant inválido');
+  }
+  return schemaName;
+}
+
+function usersTable(schemaName: string): string {
+  return `"${validateSchemaName(schemaName)}".users`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -65,16 +76,17 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export async function listUsers(query: ListUsersQuery) {
+export async function listUsers(query: ListUsersQuery, schemaName: string) {
   const { page, per_page, search, role, status } = query;
   const offset = (page - 1) * per_page;
   const searchParam = search ?? null;
   const roleParam = role ?? null;
   const statusParam = status ?? null;
+  const usersRef = usersTable(schemaName);
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
     `SELECT id, name, email, role, status, last_seen_at, created_at
-     FROM users
+     FROM ${usersRef}
      WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%')
        AND ($2::text IS NULL OR role = $2)
        AND ($3::text IS NULL OR status = $3)
@@ -88,7 +100,7 @@ export async function listUsers(query: ListUsersQuery) {
   );
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count FROM users
+    `SELECT COUNT(*) AS count FROM ${usersRef}
      WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%')
        AND ($2::text IS NULL OR role = $2)
        AND ($3::text IS NULL OR status = $3)`,
@@ -104,18 +116,20 @@ export async function listUsers(query: ListUsersQuery) {
   };
 }
 
-export async function getUser(id: string) {
+export async function getUser(id: string, schemaName: string) {
+  const usersRef = usersTable(schemaName);
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-    `SELECT id, name, email, role, status, last_seen_at, created_at FROM users WHERE id = $1::uuid LIMIT 1`,
+    `SELECT id, name, email, role, status, last_seen_at, created_at FROM ${usersRef} WHERE id = $1::uuid LIMIT 1`,
     id,
   );
   if (!rows[0]) throw new NotFoundError('Usuário');
   return rows[0];
 }
 
-export async function inviteUser(data: InviteUserInput, tenantId: string) {
+export async function inviteUser(data: InviteUserInput, tenantId: string, schemaName: string) {
+  const usersRef = usersTable(schemaName);
   const existing = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+    `SELECT id FROM ${usersRef} WHERE email = $1 LIMIT 1`,
     data.email,
   );
   if (existing[0]) throw new ConflictError('E-mail já cadastrado neste tenant');
@@ -127,7 +141,7 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
   if (!tenant) throw new NotFoundError('Tenant');
 
   const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count FROM users WHERE status = 'active'`,
+    `SELECT COUNT(*) AS count FROM ${usersRef} WHERE status = 'active'`,
   );
   const currentUsers = Number(countRows[0]?.count ?? 0);
 
@@ -145,7 +159,7 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
   }
 
   const created = await prisma.$queryRawUnsafe<UserRow[]>(
-    `INSERT INTO users (name, email, password_hash, role, status)
+    `INSERT INTO ${usersRef} (name, email, password_hash, role, status)
      VALUES ($1, $2, $3, $4, 'active')
      RETURNING id, name, email, role, status, last_seen_at, created_at`,
     data.name,
@@ -183,7 +197,7 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
       throw new Error(error.message);
     }
   } catch (sendError) {
-    await prisma.$executeRawUnsafe(`DELETE FROM users WHERE id = $1::uuid`, user.id);
+    await prisma.$executeRawUnsafe(`DELETE FROM ${usersRef} WHERE id = $1::uuid`, user.id);
 
     const reason = sendError instanceof Error ? sendError.message : 'erro desconhecido';
     throw new ConflictError(
@@ -197,10 +211,11 @@ export async function inviteUser(data: InviteUserInput, tenantId: string) {
 export async function updateUser(
   id: string,
   data: UpdateUserInput,
-  schemaName?: string,
+  schemaName: string,
   actor?: { id: string; role: Role },
 ) {
-  await getUser(id);
+  const usersRef = usersTable(schemaName);
+  await getUser(id, schemaName);
 
   if (data.role) {
     if (actor?.id === id) {
@@ -213,7 +228,7 @@ export async function updateUser(
   }
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-    `UPDATE users
+    `UPDATE ${usersRef}
      SET name   = COALESCE($1, name),
          role   = COALESCE($2, role),
          status = COALESCE($3, status)
@@ -225,7 +240,7 @@ export async function updateUser(
     id,
   );
 
-  if ('max_conversations' in data && schemaName) {
+  if ('max_conversations' in data) {
     await prisma.$executeRawUnsafe(
       `UPDATE "${schemaName}".agent_assignments
        SET max_conversations = $2
@@ -238,8 +253,9 @@ export async function updateUser(
   return rows[0]!;
 }
 
-export async function resetUserPassword(id: string) {
-  const user = await getUser(id);
+export async function resetUserPassword(id: string, schemaName: string) {
+  const user = await getUser(id, schemaName);
+  const usersRef = usersTable(schemaName);
   if (user.role === 'owner') {
     throw new ForbiddenError('Não é possível redefinir a senha do proprietário da conta');
   }
@@ -248,7 +264,7 @@ export async function resetUserPassword(id: string) {
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
   await prisma.$executeRawUnsafe(
-    `UPDATE users SET password_hash = $1 WHERE id = $2::uuid`,
+    `UPDATE ${usersRef} SET password_hash = $1 WHERE id = $2::uuid`,
     passwordHash,
     id,
   );
@@ -256,18 +272,19 @@ export async function resetUserPassword(id: string) {
   return { tempPassword };
 }
 
-export async function deleteUser(id: string, requesterId: string) {
+export async function deleteUser(id: string, requesterId: string, schemaName: string) {
   if (id === requesterId) {
     throw new ForbiddenError('Você não pode remover a si mesmo');
   }
 
-  const user = await getUser(id);
+  const user = await getUser(id, schemaName);
+  const usersRef = usersTable(schemaName);
   if (user.role === 'owner') {
     throw new ForbiddenError('Não é possível remover o proprietário da conta');
   }
 
   const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-    `UPDATE users SET status = 'inactive' WHERE id = $1::uuid
+    `UPDATE ${usersRef} SET status = 'inactive' WHERE id = $1::uuid
      RETURNING id, name, email, role, status, last_seen_at, created_at`,
     id,
   );

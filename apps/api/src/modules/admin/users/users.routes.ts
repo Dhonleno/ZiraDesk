@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
@@ -21,8 +21,21 @@ import {
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const usersManageGuard = [...guard, requirePermission('users:manage')];
 
+function resolveSchemaName(request: FastifyRequest): string | null {
+  const authUser = request.user as AuthUser;
+  return authUser.schemaName ?? null;
+}
+
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     const parsed = listUsersQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -30,13 +43,21 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Query inválida', details: parsed.error.flatten() },
       });
     }
-    const result = await listUsers(parsed.data);
+    const result = await listUsers(parsed.data, schemaName);
     return reply.send({ success: true, ...result });
   });
 
   app.get<{ Params: { id: string } }>('/:id', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     try {
-      const user = await getUser(request.params.id);
+      const user = await getUser(request.params.id, schemaName);
       return reply.send({ success: true, data: user });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -46,6 +67,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/invite', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     const parsed = inviteUserSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -54,7 +83,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const result = await inviteUser(parsed.data, request.user.tenantId!);
+      const result = await inviteUser(parsed.data, request.user.tenantId!, schemaName);
       return reply.code(201).send({ success: true, data: result });
     } catch (err) {
       if (err instanceof ConflictError)
@@ -66,6 +95,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     const parsed = updateUserSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -78,7 +115,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       const user = await updateUser(
         request.params.id,
         parsed.data,
-        authUser.schemaName ?? undefined,
+        schemaName,
         { id: authUser.id, role: authUser.role },
       );
       return reply.send({ success: true, data: user });
@@ -96,8 +133,16 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/:id/reset-password', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     try {
-      const result = await resetUserPassword(request.params.id);
+      const result = await resetUserPassword(request.params.id, schemaName);
       return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -109,8 +154,16 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     try {
-      const user = await deleteUser(request.params.id, request.user.id);
+      const user = await deleteUser(request.params.id, request.user.id, schemaName);
       return reply.send({ success: true, data: user });
     } catch (err) {
       if (err instanceof NotFoundError)
