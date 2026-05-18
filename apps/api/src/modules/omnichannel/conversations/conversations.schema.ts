@@ -15,7 +15,7 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
-    tab: z.enum(['active', 'queue', 'return', 'closed']).optional(),
+    tab: z.enum(['active', 'queue', 'return', 'active_outbound', 'closed']).optional(),
     sub_status: z.enum(['resolved', 'closed', 'outbound']).optional(),
     status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
     search: z.string().optional(),

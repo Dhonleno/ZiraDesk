@@ -8,6 +8,7 @@ import { omnichannelMetricsRoutes } from './metrics/metrics.routes.js';
 import { conversationTagsOmnichannelRoutes } from '../admin/conversation-tags/conversation-tags.routes.js';
 import { omnichannelCloseConfigRoutes } from './close-config.routes.js';
 import { omnichannelTransferRoutes } from './transfer.routes.js';
+import { activeOutboundRoutes } from './active-outbound.routes.js';
 
 export async function omnichannelModuleRoutes(app: FastifyInstance): Promise<void> {
   await app.register(omnichannelAvailabilityRoutes);
@@ -15,6 +16,7 @@ export async function omnichannelModuleRoutes(app: FastifyInstance): Promise<voi
   await app.register(omnichannelMonitorRoutes);
   await app.register(omnichannelCloseConfigRoutes);
   await app.register(omnichannelMetricsRoutes);
+  await app.register(activeOutboundRoutes);
   await app.register(conversationsModule);
   await app.register(conversationTagsOmnichannelRoutes, { prefix: '/conversations' });
   await app.register(mediaModule);

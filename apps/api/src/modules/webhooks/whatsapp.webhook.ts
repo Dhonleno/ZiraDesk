@@ -1034,6 +1034,7 @@ async function processIncomingMessage(
     const currentAssignedTo = currentConversation?.assigned_to ?? null;
     const currentBotStage = currentConversation?.bot_stage ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
+    let activeOutboundReplyAgentId: string | null = null;
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
     const isWaitingForHumanQueue = !isNewConversation
       && !hasAssignedAgent
@@ -1096,6 +1097,7 @@ async function processIncomingMessage(
         );
       }
 
+      activeOutboundReplyAgentId = selectedAgent?.user_id ?? preferredAgentId ?? currentAssignedTo ?? null;
       await syncActiveConversationCounters(tx, [currentAssignedTo, selectedAgent?.user_id ?? null]);
     }
 
@@ -1252,6 +1254,7 @@ async function processIncomingMessage(
       shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
       conversationStatus: currentConversation?.status ?? null,
+      activeOutboundReplyAgentId,
     };
   });
 
@@ -1304,6 +1307,13 @@ async function processIncomingMessage(
         inactivitySettings.warningMinutes,
       );
     }
+  }
+
+  if (result.activeOutboundReplyAgentId) {
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('active_outbound:replied', {
+      conversationId: result.conversationId,
+      contactName: result.contactName,
+    });
   }
 
   if (result.isNewConversation) {

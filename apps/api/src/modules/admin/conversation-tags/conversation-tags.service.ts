@@ -109,12 +109,8 @@ export async function ensureConversationTagsInfrastructure(schemaName: string): 
   for (const tag of DEFAULT_TAGS) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO ${conversationTagsRef} (name, color, sort_order)
-       SELECT $1, $2, $3
-       WHERE NOT EXISTS (
-         SELECT 1
-         FROM ${conversationTagsRef}
-         WHERE LOWER(name) = LOWER($1)
-       )`,
+       VALUES ($1, $2, $3)
+       ON CONFLICT (name) DO NOTHING`,
       tag.name,
       tag.color,
       tag.sort_order,

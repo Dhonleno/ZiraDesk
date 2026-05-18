@@ -11,6 +11,9 @@ let io: SocketServer | null = null;
 let hasPublicUsersTable: boolean | null = null;
 const PRESENCE_TTL_SECONDS = 60;
 const DISCONNECT_GRACE_MS = 5_000;
+const REQUEUE_TIMEOUT_MS = 5 * 60 * 1000;
+const REQUEUE_KEY_TTL_SECONDS = 6 * 60;
+const pendingRequeueTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface TypingPayload {
   conversationId?: string;
@@ -53,6 +56,18 @@ function normalizePresenceStatus(status: string | undefined): 'online' | 'paused
 
 function presenceRedisKey(tenantId: string, userId: string): string {
   return `presence:${tenantId}:${userId}`;
+}
+
+function requeueRedisKey(tenantId: string, userId: string): string {
+  return `requeue:${tenantId}:${userId}`;
+}
+
+function clearLocalRequeueTimer(tenantId: string, userId: string): void {
+  const key = requeueRedisKey(tenantId, userId);
+  const timer = pendingRequeueTimers.get(key);
+  if (!timer) return;
+  clearTimeout(timer);
+  pendingRequeueTimers.delete(key);
 }
 
 async function publicUsersTableExists(): Promise<boolean> {
@@ -137,6 +152,150 @@ async function setAgentPresenceState(
   return rows[0]?.previous_status ?? null;
 }
 
+async function resolveSchemaName(tenantId: string): Promise<string> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { schemaName: true },
+  });
+
+  if (!tenant?.schemaName) {
+    throw new Error('Tenant schema not found');
+  }
+
+  return tenant.schemaName;
+}
+
+async function requeueAgentConversations(
+  tenantId: string,
+  userId: string,
+  socketServer: SocketServer,
+): Promise<void> {
+  const requeueKey = requeueRedisKey(tenantId, userId);
+
+  try {
+    const schemaName = await resolveSchemaName(tenantId);
+
+    const conversations = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      return tx.$queryRawUnsafe<Array<{ id: string; protocol_number: string | null }>>(
+        `SELECT id::text AS id, protocol_number::text AS protocol_number
+         FROM conversations
+         WHERE assigned_to = $1::uuid
+           AND status IN ('open', 'in_service', 'active_outbound')`,
+        userId,
+      );
+    });
+
+    if (conversations.length === 0) {
+      await redis.del(requeueKey);
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      await tx.$executeRawUnsafe(
+        `UPDATE conversations
+         SET status = 'pending',
+             assigned_to = NULL
+         WHERE assigned_to = $1::uuid
+           AND status IN ('open', 'in_service', 'active_outbound')`,
+        userId,
+      );
+    });
+
+    const agentRows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      return tx.$queryRawUnsafe<Array<{ name: string }>>(
+        `SELECT name
+         FROM users
+         WHERE id = $1::uuid
+         LIMIT 1`,
+        userId,
+      );
+    });
+    const agentName = agentRows[0]?.name ?? 'Agente';
+
+    logger.info(
+      { tenantId, userId, count: conversations.length },
+      '[Requeue] Agent conversations returned to queue',
+    );
+
+    socketServer.to(`tenant:${tenantId}`).emit('agent:requeued', {
+      agentId: userId,
+      agentName,
+      conversationCount: conversations.length,
+      conversationIds: conversations.map((conversation) => conversation.id),
+      reason: 'agent_disconnected',
+    });
+
+    const managers = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      return tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text AS id
+         FROM users
+         WHERE role IN ('owner', 'admin')
+           AND status = 'active'`,
+      );
+    });
+
+    for (const manager of managers) {
+      socketServer.to(`agent:${manager.id}`).emit('agent:requeued:alert', {
+        agentId: userId,
+        agentName,
+        conversationCount: conversations.length,
+        message: `${agentName} ficou offline. ${conversations.length} atendimento(s) retornaram para a fila.`,
+      });
+    }
+
+    await redis.del(requeueKey);
+  } catch (err) {
+    logger.error({ tenantId, userId, err }, '[Requeue] Failed to requeue agent conversations');
+  }
+}
+
+async function cancelPendingRequeue(
+  tenantId: string,
+  userId: string,
+  source: 'online' | 'presence' = 'online',
+): Promise<void> {
+  const requeueKey = requeueRedisKey(tenantId, userId);
+  const hasPendingRequeue = await redis.exists(requeueKey);
+  clearLocalRequeueTimer(tenantId, userId);
+  if (!hasPendingRequeue) return;
+
+  await redis.del(requeueKey);
+  logger.info({ tenantId, userId, source }, '[Requeue] Agent reconnected — requeue cancelled');
+}
+
+function scheduleRequeueCheck(tenantId: string, userId: string, socketServer: SocketServer): void {
+  clearLocalRequeueTimer(tenantId, userId);
+
+  const timer = setTimeout(() => {
+    void (async () => {
+      const requeueKey = requeueRedisKey(tenantId, userId);
+      try {
+        const hasPendingRequeue = await redis.exists(requeueKey);
+        if (!hasPendingRequeue) return;
+
+        const stillOffline = !(await redis.exists(presenceRedisKey(tenantId, userId)));
+        if (!stillOffline) {
+          await redis.del(requeueKey);
+          logger.info({ tenantId, userId }, '[Requeue] Agent reconnected before timeout');
+          return;
+        }
+
+        await requeueAgentConversations(tenantId, userId, socketServer);
+      } catch (err) {
+        logger.error({ tenantId, userId, err }, '[Requeue] Timeout handler error');
+      } finally {
+        clearLocalRequeueTimer(tenantId, userId);
+      }
+    })();
+  }, REQUEUE_TIMEOUT_MS);
+
+  pendingRequeueTimers.set(requeueRedisKey(tenantId, userId), timer);
+}
+
 export function createSocketServer(httpServer: HttpServer): SocketServer {
   io = new SocketServer(httpServer, {
     cors: {
@@ -209,6 +368,7 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
       const previousStatus = await setAgentPresenceState(schemaName, userId, status);
       await refreshAgentPresence(schemaName, userId);
       await touchPresenceKey(tenantId, userId, status);
+      await cancelPendingRequeue(tenantId, userId, 'presence');
 
       if (previousStatus === null) return;
       if (previousStatus === status) return;
@@ -283,18 +443,23 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
             const hasAnotherSocket = socketsInRoom.some((item) => item.id !== socket.id);
             if (hasAnotherSocket) return;
 
-            await prisma.$executeRawUnsafe(
-              `UPDATE ${quoteIdent(schemaName)}.agent_assignments
-               SET status = 'offline',
-                   is_available = false,
-                   online_since = NULL
-               WHERE user_id = $1::uuid`,
-              userId,
-            );
+            await prisma.$transaction(async (tx) => {
+              await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+              await tx.$executeRawUnsafe(
+                `UPDATE agent_assignments
+                 SET status = 'offline',
+                     is_available = false,
+                     online_since = NULL
+                 WHERE user_id = $1::uuid`,
+                userId,
+              );
+            });
 
             await redis.del(presenceRedisKey(tenantId, userId));
+            await redis.setex(requeueRedisKey(tenantId, userId), REQUEUE_KEY_TTL_SECONDS, 'pending');
+            scheduleRequeueCheck(tenantId, userId, socketServer);
             socketServer.to(`tenant:${tenantId}`).emit('agent:offline', { userId });
-            logger.info({ userId }, '[Socket] Agent went offline');
+            logger.info({ tenantId, userId }, '[Socket] Agent went offline');
           } catch (err) {
             logger.error({ err }, '[Socket] Disconnect handler error');
           }

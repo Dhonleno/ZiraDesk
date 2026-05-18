@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 import type { Server } from 'socket.io';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import type {
@@ -115,6 +116,14 @@ async function syncActiveConversationCounters(
       userId,
     );
   }
+}
+
+async function ensureMessagesMetadataInfrastructure(schemaName?: string | null): Promise<void> {
+  const messagesRef = schemaName ? `${quoteIdent(schemaName)}.messages` : 'messages';
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE ${messagesRef}
+     ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  );
 }
 
 interface ConversationRow {
@@ -286,7 +295,7 @@ function buildListConversationSqlContext(
     if (assigned_to_me) {
       conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
     }
-  } else if (tab === 'return') {
+  } else if (tab === 'return' || tab === 'active_outbound') {
     conditions.push("c.status = 'active_outbound'");
 
     if (assigned_to_me) {
@@ -361,6 +370,7 @@ interface TenantConversationInfra {
   hasUsers: boolean;
   hasChannels: boolean;
   hasContacts: boolean;
+  hasOrganizations: boolean;
 }
 
 function buildEmptyConversationListMeta(page: number, perPage: number) {
@@ -379,6 +389,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
       hasUsers: true,
       hasChannels: true,
       hasContacts: true,
+      hasOrganizations: true,
     };
   }
 
@@ -387,16 +398,19 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     has_users: boolean;
     has_channels: boolean;
     has_contacts: boolean;
+    has_organizations: boolean;
   }>>(
     `SELECT
        to_regclass($1::text) IS NOT NULL AS has_conversations,
        to_regclass($2::text) IS NOT NULL AS has_users,
        to_regclass($3::text) IS NOT NULL AS has_channels,
-       to_regclass($4::text) IS NOT NULL AS has_contacts`,
+       to_regclass($4::text) IS NOT NULL AS has_contacts,
+       to_regclass($5::text) IS NOT NULL AS has_organizations`,
     `${schemaName}.conversations`,
     `${schemaName}.users`,
     `${schemaName}.channels`,
     `${schemaName}.contacts`,
+    `${schemaName}.organizations`,
   );
 
   const row = rows[0];
@@ -405,6 +419,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     hasUsers: row?.has_users ?? false,
     hasChannels: row?.has_channels ?? false,
     hasContacts: row?.has_contacts ?? false,
+    hasOrganizations: row?.has_organizations ?? false,
   };
 }
 
@@ -469,6 +484,15 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
   const channelsRef = `${schemaPrefix}channels`;
   const conversationTagsRef = `${schemaPrefix}conversation_tags`;
   const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
+  const organizationIdSelect = infra.hasOrganizations
+    ? 'COALESCE(c.organization_id, ct.organization_id) AS organization_id'
+    : 'c.organization_id AS organization_id';
+  const organizationNameSelect = infra.hasOrganizations
+    ? 'o.name AS organization_name,'
+    : 'NULL::text AS organization_name,';
+  const organizationJoin = infra.hasOrganizations
+    ? `LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)`
+    : '';
 
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
   await ensureConversationCsatInfrastructure(prisma, schemaName);
@@ -487,12 +511,12 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.contact_id, COALESCE(c.organization_id, ct.organization_id) AS organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
        c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
-       o.name AS organization_name,
+       ${organizationNameSelect}
        u.name AS assigned_name,
        ch.name AS channel_name,
        COALESCE(
@@ -514,7 +538,7 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
        ) AS tags
      FROM ${conversationsRef} c
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
-     LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)
+     ${organizationJoin}
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
      LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
      ${modernContext.whereSql}
@@ -597,9 +621,19 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
   const schemaName = await getSchemaName(tenantId);
+  const infra = await getTenantConversationInfra(schemaName);
+  if (
+    !infra.hasConversations ||
+    !infra.hasUsers ||
+    !infra.hasChannels ||
+    !infra.hasContacts
+  ) {
+    throw new NotFoundError('Conversa não encontrada');
+  }
   const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
   await ensureConversationCsatInfrastructure(prisma, schemaName);
+  await ensureMessagesMetadataInfrastructure(schemaName);
   if (schemaName) {
     await ensureConversationTagsInfrastructure(schemaName);
   }
@@ -610,15 +644,24 @@ export async function getConversationWithMessages(conversationId: string, tenant
   const channelsRef = `${schemaPrefix}channels`;
   const conversationTagsRef = `${schemaPrefix}conversation_tags`;
   const conversationTagAssignmentsRef = `${schemaPrefix}conversation_tag_assignments`;
+  const organizationIdSelect = infra.hasOrganizations
+    ? 'COALESCE(c.organization_id, ct.organization_id) AS organization_id'
+    : 'c.organization_id AS organization_id';
+  const organizationNameSelect = infra.hasOrganizations
+    ? 'o.name AS organization_name,'
+    : 'NULL::text AS organization_name,';
+  const organizationJoin = infra.hasOrganizations
+    ? `LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)`
+    : '';
   let convRows: ConversationRow[] = [];
   convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `SELECT
-       c.id, c.contact_id, COALESCE(c.organization_id, ct.organization_id) AS organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
        c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
        c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
-       o.name AS organization_name,
+       ${organizationNameSelect}
        u.name AS assigned_name,
        ch.name AS channel_name,
        COALESCE(
@@ -640,7 +683,7 @@ export async function getConversationWithMessages(conversationId: string, tenant
        ) AS tags
      FROM ${conversationsRef} c
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
-     LEFT JOIN ${organizationsRef} o ON o.id = COALESCE(c.organization_id, ct.organization_id)
+     ${organizationJoin}
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
      LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
      WHERE c.id = $1::uuid
@@ -667,7 +710,9 @@ export async function listConversationMessages(
   query: ListMessagesQuery,
   tenantId?: string,
 ): Promise<MessagePageResult> {
-  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const schemaName = await getSchemaName(tenantId);
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  await ensureMessagesMetadataInfrastructure(schemaName);
   const limit = Math.max(1, query.per_page);
   const fetchLimit = limit + 1;
   let rows: MessageRow[] = [];
@@ -1143,6 +1188,12 @@ export async function createConversation(
     }
   }
 
+  if (tenantId) {
+    void dispatchWebhook(tenantId, 'conversation.created', {
+      conversation: { id: conversation.id, status: conversation.status, channelType: conversation.channel_type, contactId: conversation.contact_id },
+    });
+  }
+
   return { conversation, protocolDispatches };
 }
 
@@ -1426,6 +1477,7 @@ export async function resolveConversation(
   body: ResolveConversationBody,
   actorUserId: string,
   schemaName: string,
+  tenantId?: string,
 ): Promise<ConversationRow> {
   const safeSchemaName = validateSchemaName(schemaName);
 
@@ -1516,6 +1568,12 @@ export async function resolveConversation(
     );
 
     await syncActiveConversationCounters(tx, [conversation.assigned_to ?? conversationRows[0].assigned_to]);
+
+    if (tenantId) {
+      void dispatchWebhook(tenantId, 'conversation.resolved', {
+        conversation: { id: conversation.id, resolvedAt: conversation.resolved_at, csatSent: conversation.csat_sent_at !== null },
+      });
+    }
 
     return conversation;
   });

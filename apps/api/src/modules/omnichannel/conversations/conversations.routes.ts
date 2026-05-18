@@ -46,6 +46,7 @@ import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
+import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const conversationsViewGuard = [...guard, requirePermission('conversations:view')];
@@ -63,6 +64,19 @@ interface ConversationDispatchRow {
 
 interface AgentNameRow {
   name: string | null;
+}
+
+interface ConversationExistsRow {
+  id: string;
+}
+
+interface ConversationWindowStatusRow {
+  within_window: boolean | null;
+  last_message_at: Date | null;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function ensureSafeSchemaName(schemaName: string): string {
@@ -259,6 +273,65 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // GET /api/omnichannel/conversations/:id/window-status
+  app.get<{ Params: { id: string } }>('/:id/window-status', { preHandler: conversationsViewGuard }, async (request, reply) => {
+    const conversationId = request.params.id;
+    const tenantUser = request.user as AuthUser;
+    const schemaName = tenantUser.schemaName;
+
+    if (!isUuid(conversationId)) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'ID da conversa inválido' },
+      });
+    }
+
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    const conversationRows = await withTenantSchema(schemaName, (tx) =>
+      tx.$queryRawUnsafe<ConversationExistsRow[]>(
+        `SELECT id
+         FROM conversations
+         WHERE id = $1::uuid
+         LIMIT 1`,
+        conversationId,
+      ),
+    );
+
+    if (!conversationRows[0]) {
+      return reply.code(404).send({
+        success: false,
+        error: { message: 'Conversa não encontrada' },
+      });
+    }
+
+    const windowRows = await withTenantSchema(schemaName, (tx) =>
+      tx.$queryRawUnsafe<ConversationWindowStatusRow[]>(
+        `SELECT
+           MAX(m.created_at) AS last_message_at,
+           (MAX(m.created_at) > NOW() - INTERVAL '24 hours') AS within_window
+         FROM messages m
+         WHERE m.conversation_id = $1::uuid
+           AND m.sender_type = 'client'`,
+        conversationId,
+      ),
+    );
+
+    const row = windowRows[0];
+    return reply.send({
+      success: true,
+      data: {
+        withinWindow: row?.within_window ?? false,
+        lastMessageAt: row?.last_message_at ? row.last_message_at.toISOString() : null,
+      },
+    });
+  });
+
   // GET /api/omnichannel/conversations/:id/messages
   app.get<{ Params: { id: string } }>('/:id/messages', { preHandler: conversationsViewGuard }, async (request, reply) => {
     const parsed = listMessagesQuerySchema.safeParse(request.query);
@@ -445,6 +518,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           conversation,
         });
 
+        if (tenantId) {
+          void dispatchWebhook(tenantId, 'conversation.assigned', {
+            conversation: { id: conversationId, assignedTo: parsed.data.user_id },
+          });
+        }
+
         return reply.send({ success: true, data: conversation });
       } catch (err) {
         if (err instanceof NotFoundError) {
@@ -584,6 +663,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         parsed.data,
         request.user.id,
         schemaName,
+        tenantUser.tenantId,
       );
 
       const tenantId = tenantUser.tenantId ?? null;
