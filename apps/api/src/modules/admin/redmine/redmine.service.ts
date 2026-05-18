@@ -11,7 +11,9 @@ interface RedmineIntegrationRow {
   is_active: boolean;
   sync_comments: boolean;
   sync_status: boolean;
+  sync_company: boolean;
   status_map: unknown;
+  priority_map: unknown;
   last_sync_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -49,7 +51,9 @@ export async function ensureRedmineInfrastructure(schemaName: string): Promise<v
       is_active       BOOLEAN DEFAULT true,
       sync_comments   BOOLEAN DEFAULT true,
       sync_status     BOOLEAN DEFAULT true,
+      sync_company    BOOLEAN DEFAULT true,
       status_map      JSONB DEFAULT '{}'::jsonb,
+      priority_map    JSONB DEFAULT '{}'::jsonb,
       last_sync_at    TIMESTAMPTZ,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -61,10 +65,26 @@ export async function ensureRedmineInfrastructure(schemaName: string): Promise<v
       id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id        UUID NOT NULL,
       redmine_issue_id INTEGER NOT NULL,
+      redmine_company_id INTEGER,
       integration_id   UUID REFERENCES ${schema}.redmine_integrations(id),
       last_synced_at   TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(ticket_id, integration_id)
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_integrations
+    ADD COLUMN IF NOT EXISTS sync_company BOOLEAN DEFAULT true
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_integrations
+    ADD COLUMN IF NOT EXISTS priority_map JSONB DEFAULT '{}'::jsonb
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_ticket_map
+    ADD COLUMN IF NOT EXISTS redmine_company_id INTEGER
   `);
 }
 
@@ -78,7 +98,9 @@ function toPublic(row: RedmineIntegrationRow | null): RedmineIntegrationPublic |
     is_active: row.is_active,
     sync_comments: row.sync_comments,
     sync_status: row.sync_status,
+    sync_company: row.sync_company,
     status_map: normalizeStatusMap(row.status_map),
+    priority_map: normalizeStatusMap(row.priority_map),
     last_sync_at: row.last_sync_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -91,8 +113,8 @@ export async function getRedmineIntegration(schemaName: string): Promise<Redmine
   await ensureRedmineInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
   const rows = await prisma.$queryRawUnsafe<RedmineIntegrationRow[]>(
-    `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-            status_map, last_sync_at, created_at, updated_at
+    `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+            status_map, priority_map, last_sync_at, created_at, updated_at
      FROM ${schema}.redmine_integrations
      ORDER BY created_at ASC
      LIMIT 1`,
@@ -115,11 +137,11 @@ export async function createOrSaveRedmineIntegration(
   if (!existing[0]) {
     const inserted = await prisma.$queryRawUnsafe<RedmineIntegrationRow[]>(
       `INSERT INTO ${schema}.redmine_integrations
-         (name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, status_map, updated_at)
+         (name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company, status_map, updated_at)
        VALUES
-         ($1, $2, $3, $4, COALESCE($5, true), COALESCE($6, true), COALESCE($7, true), $8::jsonb, NOW())
-       RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-                 status_map, last_sync_at, created_at, updated_at`,
+         ($1, $2, $3, $4, COALESCE($5, true), COALESCE($6, true), COALESCE($7, true), COALESCE($8, true), $9::jsonb, NOW())
+       RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+                 status_map, priority_map, last_sync_at, created_at, updated_at`,
       data.name,
       data.redmineUrl,
       encryptedApiKey,
@@ -127,6 +149,7 @@ export async function createOrSaveRedmineIntegration(
       data.isActive ?? true,
       data.syncComments ?? true,
       data.syncStatus ?? true,
+      data.syncCompany ?? true,
       JSON.stringify(data.statusMap ?? {}),
     );
 
@@ -142,11 +165,12 @@ export async function createOrSaveRedmineIntegration(
          is_active = COALESCE($5, is_active),
          sync_comments = COALESCE($6, sync_comments),
          sync_status = COALESCE($7, sync_status),
-         status_map = $8::jsonb,
+         sync_company = COALESCE($8, sync_company),
+         status_map = $9::jsonb,
          updated_at = NOW()
-     WHERE id = $9::uuid
-     RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-               status_map, last_sync_at, created_at, updated_at`,
+     WHERE id = $10::uuid
+     RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+               status_map, priority_map, last_sync_at, created_at, updated_at`,
     data.name,
     data.redmineUrl,
     encryptedApiKey,
@@ -154,6 +178,7 @@ export async function createOrSaveRedmineIntegration(
     data.isActive ?? null,
     data.syncComments ?? null,
     data.syncStatus ?? null,
+    data.syncCompany ?? null,
     JSON.stringify(data.statusMap ?? {}),
     existing[0].id,
   );
@@ -168,8 +193,8 @@ export async function updateRedmineIntegration(
   await ensureRedmineInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
   const currentRows = await prisma.$queryRawUnsafe<RedmineIntegrationRow[]>(
-    `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-            status_map, last_sync_at, created_at, updated_at
+    `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+            status_map, priority_map, last_sync_at, created_at, updated_at
      FROM ${schema}.redmine_integrations
      ORDER BY created_at ASC
      LIMIT 1`,
@@ -189,11 +214,12 @@ export async function updateRedmineIntegration(
          is_active = COALESCE($5, is_active),
          sync_comments = COALESCE($6, sync_comments),
          sync_status = COALESCE($7, sync_status),
-         status_map = $8::jsonb,
+         sync_company = COALESCE($8, sync_company),
+         status_map = $9::jsonb,
          updated_at = NOW()
-     WHERE id = $9::uuid
-     RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-               status_map, last_sync_at, created_at, updated_at`,
+     WHERE id = $10::uuid
+     RETURNING id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+               status_map, priority_map, last_sync_at, created_at, updated_at`,
     data.name ?? null,
     data.redmineUrl ?? null,
     nextApiKey,
@@ -201,6 +227,7 @@ export async function updateRedmineIntegration(
     data.isActive ?? null,
     data.syncComments ?? null,
     data.syncStatus ?? null,
+    data.syncCompany ?? null,
     JSON.stringify(nextStatusMap),
     current.id,
   );
@@ -232,8 +259,8 @@ export async function testRedmineConnection(
 
   if (!redmineUrl || !apiKey) {
     const rows = await prisma.$queryRawUnsafe<RedmineIntegrationRow[]>(
-      `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status,
-              status_map, last_sync_at, created_at, updated_at
+      `SELECT id, name, redmine_url, api_key, project_id, is_active, sync_comments, sync_status, sync_company,
+              status_map, priority_map, last_sync_at, created_at, updated_at
        FROM ${schema}.redmine_integrations
        ORDER BY created_at ASC
        LIMIT 1`,

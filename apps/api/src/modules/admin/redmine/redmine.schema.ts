@@ -8,6 +8,7 @@ export const redmineCreateSchema = z.object({
   isActive: z.boolean().optional(),
   syncComments: z.boolean().optional(),
   syncStatus: z.boolean().optional(),
+  syncCompany: z.boolean().default(true),
   statusMap: z.record(z.union([z.number(), z.string()])).optional(),
 });
 
@@ -19,6 +20,7 @@ export const redmineUpdateSchema = z.object({
   isActive: z.boolean().optional(),
   syncComments: z.boolean().optional(),
   syncStatus: z.boolean().optional(),
+  syncCompany: z.boolean().optional(),
   statusMap: z.record(z.union([z.number(), z.string()])).optional(),
 });
 
