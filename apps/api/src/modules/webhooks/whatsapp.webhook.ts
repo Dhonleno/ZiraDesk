@@ -930,8 +930,7 @@ async function processIncomingMessage(
                csat_expires_at = NULL,
                status = 'closed',
                closed_at = COALESCE(closed_at, NOW()),
-               resolved_at = COALESCE(resolved_at, NOW()),
-               updated_at = NOW()
+               resolved_at = COALESCE(resolved_at, NOW())
            WHERE id = $1::uuid`,
           conversationId,
         );
@@ -1077,10 +1076,10 @@ async function processIncomingMessage(
           `UPDATE conversations
            SET csat_comment = $1,
                csat_stage = 'done',
+               csat_expires_at = NULL,
                status = 'closed',
                closed_at = COALESCE(closed_at, NOW()),
-               resolved_at = COALESCE(resolved_at, NOW()),
-               updated_at = NOW()
+               resolved_at = COALESCE(resolved_at, NOW())
            WHERE id = $2::uuid`,
           nextComment,
           conversationId,

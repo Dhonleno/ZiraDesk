@@ -34,7 +34,10 @@ async function cleanupExpiredCsat(): Promise<void> {
         `WITH expired AS (
            UPDATE conversations
            SET csat_stage = 'done',
-               csat_expires_at = NULL
+               csat_expires_at = NULL,
+               status = 'closed',
+               closed_at = COALESCE(closed_at, NOW()),
+               resolved_at = COALESCE(resolved_at, NOW())
            WHERE csat_stage IN ('sent', 'waiting_comment')
              AND csat_expires_at IS NOT NULL
              AND csat_expires_at < NOW()
