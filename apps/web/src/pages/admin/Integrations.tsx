@@ -13,6 +13,7 @@ interface RedmineFormState {
   redmineUrl: string;
   apiKey: string;
   projectId: string;
+  isActive: boolean;
   syncComments: boolean;
   syncStatus: boolean;
   statusMap: Record<string, number>;
@@ -30,6 +31,7 @@ const DEFAULT_FORM: RedmineFormState = {
   redmineUrl: '',
   apiKey: '',
   projectId: '',
+  isActive: true,
   syncComments: true,
   syncStatus: true,
   statusMap: DEFAULT_STATUS_MAP,
@@ -58,6 +60,7 @@ export function Integrations() {
       redmineUrl: integration.redmine_url ?? '',
       apiKey: integration.api_key_masked ?? '',
       projectId: integration.project_id ?? '',
+      isActive: integration.is_active ?? true,
       syncComments: integration.sync_comments ?? true,
       syncStatus: integration.sync_status ?? true,
       statusMap: {
@@ -73,6 +76,7 @@ export function Integrations() {
         name: 'Redmine',
         redmineUrl: form.redmineUrl.trim(),
         projectId: form.projectId.trim(),
+        isActive: form.isActive,
         syncComments: form.syncComments,
         syncStatus: form.syncStatus,
         statusMap: form.statusMap,
@@ -98,6 +102,18 @@ export function Integrations() {
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: async (nextActive: boolean) => {
+      if (!integration) throw new Error('missing_integration');
+      return adminApi.integrations.redmine.update({ isActive: nextActive });
+    },
+    onSuccess: async () => {
+      toast.success(t('tenantAdmin.integrations.redmine.saveSuccess'));
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'integrations', 'redmine'] });
+    },
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+  });
+
   const testMutation = useMutation({
     mutationFn: async () => {
       const redmineUrl = form.redmineUrl.trim();
@@ -118,6 +134,8 @@ export function Integrations() {
     form.redmineUrl.trim().length > 0 &&
     form.projectId.trim().length > 0 &&
     (integration ? true : form.apiKey.trim().length > 0);
+  const isIntegrationActive = integration?.is_active ?? false;
+  const canToggleIntegration = Boolean(integration);
 
   return (
     <PageShell>
@@ -141,7 +159,8 @@ export function Integrations() {
             flexDirection: 'column',
             gap: 12,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{
                 width: 24,
                 height: 24,
@@ -149,8 +168,8 @@ export function Integrations() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'var(--red-dim)',
-                color: 'var(--red)',
+                background: isIntegrationActive ? 'var(--teal-dim)' : 'var(--red-dim)',
+                color: isIntegrationActive ? 'var(--teal)' : 'var(--red)',
               }}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                   <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2" />
@@ -159,7 +178,75 @@ export function Integrations() {
               <strong style={{ color: 'var(--txt)', fontSize: 14 }}>
                 {t('tenantAdmin.integrations.redmine.title')}
               </strong>
+              </div>
+              <button
+                type="button"
+                aria-label={
+                  isIntegrationActive
+                    ? t('tenantAdmin.common.deactivate')
+                    : t('tenantAdmin.common.activate')
+                }
+                title={
+                  isIntegrationActive
+                    ? t('tenantAdmin.common.deactivate')
+                    : t('tenantAdmin.common.activate')
+                }
+                onClick={() => {
+                  if (!canToggleIntegration) {
+                    setModalOpen(true);
+                    return;
+                  }
+                  toggleActiveMutation.mutate(!isIntegrationActive);
+                }}
+                disabled={toggleActiveMutation.isPending}
+                style={{
+                  width: 'fit-content',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: isIntegrationActive ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  border: `1px solid ${isIntegrationActive ? 'rgba(0,201,167,.25)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r-pill)',
+                  padding: '4px 8px',
+                  cursor: canToggleIntegration ? 'pointer' : 'default',
+                  color: isIntegrationActive ? 'var(--teal)' : 'var(--txt-2)',
+                  opacity: canToggleIntegration ? 1 : 0.72,
+                }}
+              >
+                <span
+                  style={{
+                    width: 28,
+                    height: 16,
+                    borderRadius: 999,
+                    background: isIntegrationActive ? 'var(--teal)' : 'var(--bg-5)',
+                    position: 'relative',
+                  }}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: isIntegrationActive ? 14 : 2,
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      background: isIntegrationActive ? 'var(--on-teal)' : 'var(--txt-3)',
+                      transition: 'left .15s',
+                    }}
+                  />
+                </span>
+              </button>
             </div>
+            <p style={{
+              margin: '-4px 0 0',
+              color: isIntegrationActive ? 'var(--teal)' : 'var(--txt-3)',
+              fontSize: 11,
+              fontWeight: 500,
+            }}>
+              {isIntegrationActive
+                ? t('tenantAdmin.channels.status.active')
+                : t('tenantAdmin.channels.status.inactive')}
+            </p>
             <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 12 }}>
               {t('tenantAdmin.integrations.redmine.description')}
             </p>
