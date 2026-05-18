@@ -36,6 +36,54 @@ interface MetaApiErrorResponse {
   };
 }
 
+function parseMetaApiError(responseText: string): {
+  code: number | null;
+  message: string | null;
+  details: string | null;
+} {
+  try {
+    const parsed = JSON.parse(responseText) as MetaApiErrorResponse;
+    return {
+      code: typeof parsed.error?.code === 'number' ? parsed.error.code : null,
+      message: parsed.error?.message?.trim() ?? null,
+      details: parsed.error?.error_data?.details?.trim() ?? null,
+    };
+  } catch {
+    return {
+      code: null,
+      message: null,
+      details: null,
+    };
+  }
+}
+
+function buildTemplateLanguageFallbacks(language: string): string[] {
+  const normalized = language.trim();
+  const fallbackOrder: string[] = [];
+  const push = (value: string) => {
+    const candidate = value.trim();
+    if (!candidate || candidate.toLowerCase() === normalized.toLowerCase()) return;
+    if (fallbackOrder.some((item) => item.toLowerCase() === candidate.toLowerCase())) return;
+    fallbackOrder.push(candidate);
+  };
+
+  const baseLanguage = normalized.includes('_')
+    ? normalized.split('_')[0]
+    : normalized.slice(0, 2);
+  if (baseLanguage) push(baseLanguage);
+
+  if (normalized.toLowerCase() === 'pt_br') {
+    push('pt_PT');
+  } else if (normalized.toLowerCase() === 'en_us') {
+    push('en_GB');
+  } else if (normalized.toLowerCase() === 'es') {
+    push('es_ES');
+    push('es_MX');
+  }
+
+  return fallbackOrder;
+}
+
 function normalizeWhatsappText(content: string): string {
   return content
     .replace(/\r\n/g, '\n')
@@ -135,6 +183,31 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExt
     )
     : [];
 
+  const normalizedTemplateComponents = (() => {
+    if (templateComponents.length === 0) {
+      return [{ type: 'body', parameters: [] as Array<Record<string, unknown>> }];
+    }
+
+    const componentsWithBodyParameters = templateComponents.map((component) => {
+      const type = typeof component.type === 'string' ? component.type.toLowerCase() : '';
+      if (type !== 'body') return component;
+      const parameters = Array.isArray(component.parameters) ? component.parameters : [];
+      return { ...component, parameters };
+    });
+
+    const hasBody = componentsWithBodyParameters.some((component) => {
+      const type = typeof component.type === 'string' ? component.type.toLowerCase() : '';
+      return type === 'body';
+    });
+
+    if (hasBody) return componentsWithBodyParameters;
+
+    return [
+      ...componentsWithBodyParameters,
+      { type: 'body', parameters: [] as Array<Record<string, unknown>> },
+    ];
+  })();
+
   if (templateName) {
     return {
       messaging_product: 'whatsapp',
@@ -144,11 +217,11 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExt
       template: {
         name: templateName,
         language: {
-          policy: 'deterministic',
           code: templateLanguage,
         },
-        ...(templateComponents.length ? { components: templateComponents } : {}),
+        components: normalizedTemplateComponents,
       },
+      ...context,
     };
   }
 
@@ -258,40 +331,59 @@ const worker = new Worker<SendMessageJob>(
         // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
         const sanitizedPhone = (job.data.to ?? '').replace(/\D/g, '');
         const replyExternalId = await resolveReplyExternalId(job.data);
-        const body = buildWhatsAppBody(job.data, sanitizedPhone, replyExternalId);
-
-        const response = await fetch(
-          `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
+        const sendToMeta = async (payload: ReturnType<typeof buildWhatsAppBody>) => {
+          const response = await fetch(
+            `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payload),
             },
-            body: JSON.stringify(body),
-          },
-        );
-        const responseText = await response.text();
+          );
+          const responseText = await response.text();
+          return { response, responseText };
+        };
+
+        const primaryBody = buildWhatsAppBody(job.data, sanitizedPhone, replyExternalId);
+        let { response, responseText } = await sendToMeta(primaryBody);
 
         if (!response.ok) {
-          let metaErrorCode: number | null = null;
-          let metaErrorMessage: string | null = null;
-          let metaErrorDetails: string | null = null;
+          const metaError = parseMetaApiError(responseText);
+          const templateName = job.data.templateName?.trim() ?? '';
+          const templateLanguage = job.data.templateLanguage?.trim() || 'pt_BR';
 
-          try {
-            const parsed = JSON.parse(responseText) as MetaApiErrorResponse;
-            metaErrorCode = typeof parsed.error?.code === 'number' ? parsed.error.code : null;
-            metaErrorMessage = parsed.error?.message?.trim() ?? null;
-            metaErrorDetails = parsed.error?.error_data?.details?.trim() ?? null;
-          } catch {
-            // Keep fallbacks as null when Meta payload isn't JSON.
+          if (templateName && metaError.code === 132001) {
+            const fallbackLanguages = buildTemplateLanguageFallbacks(templateLanguage);
+            for (const fallbackLanguage of fallbackLanguages) {
+              const fallbackBody = buildWhatsAppBody(
+                { ...job.data, templateLanguage: fallbackLanguage },
+                sanitizedPhone,
+                replyExternalId,
+              );
+              const fallbackResult = await sendToMeta(fallbackBody);
+              if (fallbackResult.response.ok) {
+                response = fallbackResult.response;
+                responseText = fallbackResult.responseText;
+                logger.warn(
+                  { jobId: job.id, messageId: job.data.messageId, templateName, requestedLanguage: templateLanguage, fallbackLanguage },
+                  '[WhatsApp Worker] Template sent with fallback language',
+                );
+                break;
+              }
+            }
           }
+        }
 
+        if (!response.ok) {
+          const metaError = parseMetaApiError(responseText);
           await persistFailedStatus(job.data, {
             whatsapp_send_http_status: response.status,
-            whatsapp_send_error_code: metaErrorCode,
-            whatsapp_send_error_message: metaErrorMessage,
-            whatsapp_send_error_details: metaErrorDetails,
+            whatsapp_send_error_code: metaError.code,
+            whatsapp_send_error_message: metaError.message,
+            whatsapp_send_error_details: metaError.details,
             whatsapp_send_failed_at: new Date().toISOString(),
           });
           throw new Error(`Meta API error: ${responseText}`);

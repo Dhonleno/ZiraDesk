@@ -688,6 +688,7 @@ async function processIncomingMessage(
   if (externalMediaId) {
     mediaMetadata.media_id = externalMediaId;
   }
+  const incomingExternalId = message.id?.trim() || null;
   const quotedExternalId =
     message.context?.id?.trim()
     || message.reaction?.message_id?.trim()
@@ -824,6 +825,27 @@ async function processIncomingMessage(
       conversationId,
     );
 
+    if (incomingExternalId) {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`,
+        incomingExternalId,
+      );
+      const duplicateMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id
+         FROM messages
+         WHERE external_id = $1
+         LIMIT 1`,
+        incomingExternalId,
+      );
+      if (duplicateMessageRows[0]) {
+        logger.info(
+          { conversationId, messageId: incomingExternalId },
+          '[WhatsApp] Duplicate inbound message ignored',
+        );
+        return null;
+      }
+    }
+
     const normalizedIncomingContent = content.trim().toLowerCase();
     if (normalizedIncomingContent === CLOSE_KEYWORD) {
       await tx.$executeRawUnsafe(
@@ -905,7 +927,11 @@ async function processIncomingMessage(
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET csat_stage = 'done',
-               csat_expires_at = NULL
+               csat_expires_at = NULL,
+               status = 'closed',
+               closed_at = COALESCE(closed_at, NOW()),
+               resolved_at = COALESCE(resolved_at, NOW()),
+               updated_at = NOW()
            WHERE id = $1::uuid`,
           conversationId,
         );
@@ -925,7 +951,7 @@ async function processIncomingMessage(
         content,
         contentType,
         externalMediaId,
-        message.id,
+        incomingExternalId,
         JSON.stringify(incomingMessageMetadata),
       );
       const savedMessage = msgRows[0]!;
@@ -941,19 +967,16 @@ async function processIncomingMessage(
 
       let replyText: string;
       let csatPayload: { csat_score: number | null; csat_comment?: string | null } | null = null;
+      let nextScore: number | null = null;
+      let nextComment: string | null = null;
+      let shouldAdvanceToWaitingComment = false;
+      let shouldFinalizeCsat = false;
       if (currentCsatStage === 'sent') {
         const normalized = content.trim();
         const score = Number.parseInt(normalized, 10);
         if (score >= 1 && score <= 5) {
-          await tx.$executeRawUnsafe(
-            `UPDATE conversations
-             SET csat_score = $1,
-                 csat_stage = 'waiting_comment',
-                 csat_responded_at = NOW()
-             WHERE id = $2::uuid`,
-            score,
-            conversationId,
-          );
+          nextScore = score;
+          shouldAdvanceToWaitingComment = true;
           replyText = buildCsatCommentRequestMessage(score);
           csatPayload = { csat_score: score };
         } else {
@@ -962,16 +985,106 @@ async function processIncomingMessage(
       } else {
         const rawComment = content.trim();
         const csatComment = rawComment === '0' ? null : rawComment || null;
+        nextComment = csatComment;
+        shouldFinalizeCsat = true;
+        replyText = buildCsatThankYouMessage();
+        csatPayload = { csat_score: currentCsatScore ?? null, csat_comment: csatComment };
+      }
+
+      const csatPhoneNumberId =
+        getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id') ?? phoneNumberId;
+      const csatAccessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
+      if (!csatPhoneNumberId || !csatAccessToken) {
+        logger.error(
+          { conversationId, csatStage: currentCsatStage },
+          '[WhatsApp] Missing credentials for CSAT reply',
+        );
+        return {
+          conversationId,
+          closeByKeyword: false as const,
+          isNewConversation: false,
+          shouldAutoAssign: false,
+          botTag: undefined,
+          botOptionId: undefined,
+          message: savedMessage,
+          protocolNumber: null,
+          protocolMessageId: null,
+          protocolMessageContent: null,
+          botMessageId: null,
+          botMessageContent: null,
+          botMessage: null,
+          contactId,
+          contactName: contactRows[0]?.name ?? senderName,
+          organizationId,
+          outsideBusinessHours,
+          csatHandled: false,
+          csatPayload: null,
+          conversationStatus: currentConversation?.status ?? null,
+          refreshInactivityForAssignedConversation: false,
+        };
+      }
+
+      const csatReplySent = await sendWhatsAppTextMessage({
+        text: replyText,
+        to: formattedPhone,
+        phoneNumberId: csatPhoneNumberId,
+        accessToken: csatAccessToken,
+      });
+      if (!csatReplySent) {
+        logger.error(
+          { conversationId, csatStage: currentCsatStage },
+          '[WhatsApp] Failed to deliver CSAT reply',
+        );
+        return {
+          conversationId,
+          closeByKeyword: false as const,
+          isNewConversation: false,
+          shouldAutoAssign: false,
+          botTag: undefined,
+          botOptionId: undefined,
+          message: savedMessage,
+          protocolNumber: null,
+          protocolMessageId: null,
+          protocolMessageContent: null,
+          botMessageId: null,
+          botMessageContent: null,
+          botMessage: null,
+          contactId,
+          contactName: contactRows[0]?.name ?? senderName,
+          organizationId,
+          outsideBusinessHours,
+          csatHandled: false,
+          csatPayload: null,
+          conversationStatus: currentConversation?.status ?? null,
+          refreshInactivityForAssignedConversation: false,
+        };
+      }
+
+      if (shouldAdvanceToWaitingComment && nextScore !== null) {
+        await tx.$executeRawUnsafe(
+          `UPDATE conversations
+           SET csat_score = $1,
+               csat_stage = 'waiting_comment',
+               csat_responded_at = NOW()
+           WHERE id = $2::uuid`,
+          nextScore,
+          conversationId,
+        );
+      }
+
+      if (shouldFinalizeCsat) {
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET csat_comment = $1,
-               csat_stage = 'done'
+               csat_stage = 'done',
+               status = 'closed',
+               closed_at = COALESCE(closed_at, NOW()),
+               resolved_at = COALESCE(resolved_at, NOW()),
+               updated_at = NOW()
            WHERE id = $2::uuid`,
-          csatComment,
+          nextComment,
           conversationId,
         );
-        replyText = buildCsatThankYouMessage();
-        csatPayload = { csat_score: currentCsatScore ?? null, csat_comment: csatComment };
       }
 
       const replyRows = await tx.$queryRawUnsafe<
@@ -984,18 +1097,6 @@ async function processIncomingMessage(
         replyText,
       );
       const botSavedReply = replyRows[0]!;
-
-      const csatPhoneNumberId =
-        getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id') ?? phoneNumberId;
-      const csatAccessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
-      if (csatPhoneNumberId && csatAccessToken) {
-        await sendWhatsAppTextMessage({
-          text: replyText,
-          to: formattedPhone,
-          phoneNumberId: csatPhoneNumberId,
-          accessToken: csatAccessToken,
-        });
-      }
 
       await tx.$executeRawUnsafe(
         `UPDATE conversations
@@ -1131,7 +1232,7 @@ async function processIncomingMessage(
       content,
       contentType,
       externalMediaId,
-      message.id,
+      incomingExternalId,
       JSON.stringify(incomingMessageMetadata),
     );
     const savedMessage = msgRows[0]!;
@@ -1257,6 +1358,7 @@ async function processIncomingMessage(
       activeOutboundReplyAgentId,
     };
   });
+  if (!result) return;
 
   const io = getSocketServer();
   const emitConversationNewMessage = async (payload: {

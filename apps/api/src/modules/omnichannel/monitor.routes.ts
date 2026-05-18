@@ -40,7 +40,8 @@ export async function omnichannelMonitorRoutes(app: FastifyInstance): Promise<vo
         await prisma.$executeRawUnsafe(
           `UPDATE ${quoteIdent(schemaName)}.agent_assignments
            SET status = 'offline',
-               is_available = false
+               is_available = false,
+               online_since = NULL
            WHERE status = 'online'
              AND user_id = ANY($1::uuid[])`,
           staleOnlineAgentIds,

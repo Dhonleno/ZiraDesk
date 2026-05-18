@@ -30,6 +30,7 @@ import {
   declineHelp,
   endHelp,
   getConversationHelpers,
+  shouldTriggerCsatForConversation,
   NotFoundError,
   ConflictError,
   ForbiddenError,
@@ -674,9 +675,18 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const io = getSocketServer();
 
       if (parsed.data.csatMode === 'resolve') {
-        sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
-          request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-        });
+        const shouldTriggerCsat = await shouldTriggerCsatForConversation(
+          request.params.id,
+          schemaName,
+        );
+
+        if (shouldTriggerCsat) {
+          sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
+            request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
+          });
+        } else {
+          request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on resolve');
+        }
 
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
           conversationId: request.params.id,
@@ -727,9 +737,17 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const io = getSocketServer();
       if (parsed.data.status === 'resolved') {
         if (patchSchemaName) {
-          sendCsatMessage(request.params.id, patchSchemaName, prisma).catch((err: unknown) => {
-            request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-          });
+          const shouldTriggerCsat = await shouldTriggerCsatForConversation(
+            request.params.id,
+            patchSchemaName,
+          );
+          if (shouldTriggerCsat) {
+            sendCsatMessage(request.params.id, patchSchemaName, prisma).catch((err: unknown) => {
+              request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
+            });
+          } else {
+            request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on status update');
+          }
         }
         io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
           conversationId: request.params.id,

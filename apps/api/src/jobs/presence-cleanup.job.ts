@@ -46,7 +46,8 @@ async function cleanupStalePresence(): Promise<void> {
       return tx.$queryRawUnsafe<OfflineAgentRow[]>(
         `UPDATE agent_assignments
          SET status = 'offline',
-             is_available = false
+             is_available = false,
+             online_since = NULL
          WHERE status = 'online'
            AND (
              last_seen_at IS NULL

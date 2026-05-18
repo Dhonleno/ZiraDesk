@@ -68,6 +68,53 @@ function resolveSchemaNameFromRequest(request: { user: { tenantId?: string; sche
   };
 }
 
+function getDateIsoInTimeZone(timeZone: string, date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? '1970';
+  const month = parts.find((part) => part.type === 'month')?.value ?? '01';
+  const day = parts.find((part) => part.type === 'day')?.value ?? '01';
+
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToIsoDate(dateIso: string, days: number): string {
+  const parts = parseDatePartsOrNull(dateIso);
+  if (!parts) return dateIso;
+
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  date.setUTCDate(date.getUTCDate() + days);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function resolveTimezoneFromRequest(request: { user: { tenantId?: string } }) {
+  return async (): Promise<string> => {
+    const tenantId = request.user.tenantId;
+    if (!tenantId) return 'America/Sao_Paulo';
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+
+    const settings =
+      typeof tenant?.settings === 'object' && tenant.settings !== null
+        ? (tenant.settings as Record<string, unknown>)
+        : {};
+    const timezone = settings.timezone;
+    if (typeof timezone === 'string' && timezone.trim()) return timezone.trim();
+    return 'America/Sao_Paulo';
+  };
+}
+
 function getFilters(raw: z.infer<typeof metricsQuerySchema>) {
   const dateFromParts = parseDatePartsOrNull(raw.date_from);
   const dateToParts = parseDatePartsOrNull(raw.date_to);
@@ -107,7 +154,23 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
     try {
       const schemaName = await resolveSchemaNameFromRequest(request)();
-      const data = await getMyStats(request.user.id, getFilters(parsed.data), schemaName);
+      const tenantTimezone = await resolveTimezoneFromRequest(request)();
+      const dateToLocal = parseDatePartsOrNull(parsed.data.date_to)
+        ? parsed.data.date_to!.trim()
+        : getDateIsoInTimeZone(tenantTimezone);
+      const dateFromLocal = parseDatePartsOrNull(parsed.data.date_from)
+        ? parsed.data.date_from!.trim()
+        : addDaysToIsoDate(dateToLocal, -7);
+
+      if (dateFromLocal > dateToLocal) {
+        throw new Error('Período inválido: date_from maior que date_to');
+      }
+
+      const data = await getMyStats(
+        request.user.id,
+        { dateFromLocal, dateToLocal, timezone: tenantTimezone },
+        schemaName,
+      );
       return reply.send({ success: true, data });
     } catch (error) {
       return reply.code(400).send({

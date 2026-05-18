@@ -190,6 +190,7 @@
     "via": "Via",
     "internalNoteActive": "Internal note active",
     "templateNamePlaceholder": "Approved template name (e.g. reengagement_en)",
+    "selectTemplate": "Select template",
     "templateParamsPlaceholder": "Body parameters (one per line, optional)",
     "templateHint": "WhatsApp requires templates outside the 24-hour window.",
     "templateModeHint": "Template mode enabled (press Enter to send template)",

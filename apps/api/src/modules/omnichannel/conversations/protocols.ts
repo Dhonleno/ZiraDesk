@@ -1,6 +1,16 @@
 import { prisma } from '../../../config/database.js';
 
 type ProtocolDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+type PrismaRawError = {
+  code?: string;
+  meta?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+const protocolInfraReady = new Set<string>();
+const protocolInfraInFlight = new Map<string, Promise<void>>();
 
 export function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -33,44 +43,99 @@ function buildGenerateProtocolSql(schemaName?: string | null): string {
   `;
 }
 
+function getSchemaInfraKey(schemaName?: string | null): string {
+  return schemaName?.trim() || 'public';
+}
+
+function isTupleConcurrentlyUpdatedError(error: unknown): boolean {
+  const raw = error as PrismaRawError;
+  const code = raw?.code;
+  const metaCode = raw?.meta?.code;
+  const metaMessage = raw?.meta?.message?.toLowerCase() ?? '';
+  return (code === 'P2010' || metaCode === 'XX000') && metaMessage.includes('tuple concurrently updated');
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function execRawWithRetry(
+  db: ProtocolDbClient,
+  query: string,
+  ...params: unknown[]
+): Promise<void> {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await db.$executeRawUnsafe(query, ...params);
+      return;
+    } catch (error) {
+      if (!isTupleConcurrentlyUpdatedError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await sleep(40 * attempt);
+    }
+  }
+}
+
 export async function ensureConversationProtocolInfrastructure(
   db: ProtocolDbClient,
   schemaName?: string | null,
 ): Promise<void> {
-  const conversationsRef = schemaName ? `${quoteIdent(schemaName)}.conversations` : 'conversations';
+  const infraKey = getSchemaInfraKey(schemaName);
+  if (protocolInfraReady.has(infraKey)) {
+    return;
+  }
 
-  await db.$executeRawUnsafe(
+  const running = protocolInfraInFlight.get(infraKey);
+  if (running) {
+    await running;
+    return;
+  }
+
+  const run = (async () => {
+  const conversationsRef = schemaName ? `${quoteIdent(schemaName)}.conversations` : 'conversations';
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS protocol_number VARCHAR(20) UNIQUE`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) DEFAULT 'inbound'`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS outbound_expires_at TIMESTAMPTZ`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS outbound_origin_agent_id UUID`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS outbound_returned_at TIMESTAMPTZ`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `ALTER TABLE ${conversationsRef}
      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
   );
 
   try {
-    await db.$executeRawUnsafe(
+    await execRawWithRetry(
+      db,
       `UPDATE ${conversationsRef}
        SET conversation_type = 'outbound'
        WHERE metadata->>'type' = 'outbound'
@@ -84,13 +149,15 @@ export async function ensureConversationProtocolInfrastructure(
     }
   }
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `UPDATE ${conversationsRef}
      SET conversation_type = 'inbound'
      WHERE conversation_type IS NULL`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `UPDATE ${conversationsRef}
      SET outbound_origin_agent_id = assigned_to
      WHERE conversation_type = 'outbound'
@@ -98,14 +165,23 @@ export async function ensureConversationProtocolInfrastructure(
        AND assigned_to IS NOT NULL`,
   );
 
-  await db.$executeRawUnsafe(
+  await execRawWithRetry(
+    db,
     `UPDATE ${conversationsRef}
      SET assigned_at = created_at
      WHERE assigned_to IS NOT NULL
        AND assigned_at IS NULL`,
   );
 
-  await db.$executeRawUnsafe(buildGenerateProtocolSql(schemaName));
+  await execRawWithRetry(db, buildGenerateProtocolSql(schemaName));
+
+  protocolInfraReady.add(infraKey);
+  })().finally(() => {
+    protocolInfraInFlight.delete(infraKey);
+  });
+
+  protocolInfraInFlight.set(infraKey, run);
+  await run;
 }
 
 /**

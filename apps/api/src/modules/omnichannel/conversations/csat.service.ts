@@ -3,7 +3,8 @@ import { decryptCredentials } from '../../../utils/crypto.js';
 import { logger } from '../../../config/logger.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 
-type CsatDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+type CsatTxClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+type CsatDbClient = CsatTxClient & Pick<typeof prisma, '$transaction'>;
 
 interface CsatConversationRow {
   id: string;
@@ -12,6 +13,9 @@ interface CsatConversationRow {
   contact_phone: string | null;
   channel_credentials: string | object | null;
   csat_stage: string | null;
+  csat_score: number | null;
+  csat_sent_at: Date | null;
+  metadata: unknown;
 }
 
 interface TenantSettingsRow {
@@ -59,6 +63,13 @@ function normalizePhoneNumber(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+function extractConversationOrigin(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const record = metadata as Record<string, unknown>;
+  const origin = record.origin;
+  return typeof origin === 'string' && origin.trim() ? origin.trim() : null;
+}
+
 export async function sendWhatsAppTextMessage({
   text,
   to,
@@ -104,84 +115,114 @@ export async function sendCsatMessage(
   await ensureConversationCsatInfrastructure(db, schemaName);
 
   const safeSchemaName = schemaName.replace(/"/g, '""');
-  await db.$executeRawUnsafe(`SET search_path TO "${safeSchemaName}", public`);
+  await db.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
 
-  const rows = await db.$queryRawUnsafe<CsatConversationRow[]>(
-    `SELECT
-       c.id,
-       c.channel_type,
-       c.csat_stage,
-       ct.whatsapp AS contact_whatsapp,
-       ct.phone AS contact_phone,
-       ch.credentials AS channel_credentials
-     FROM conversations c
-     LEFT JOIN contacts ct ON ct.id = c.contact_id
-     LEFT JOIN channels ch ON ch.id = c.channel_id
-     WHERE c.id = $1::uuid
-     LIMIT 1`,
-    conversationId,
-  );
-  const conversation = rows[0];
-  if (!conversation) return;
-  if (conversation.channel_type !== 'whatsapp') return;
-  if (conversation.csat_stage) return;
+    const rows = await tx.$queryRawUnsafe<CsatConversationRow[]>(
+      `SELECT
+         c.id,
+         c.channel_type,
+         c.csat_stage,
+         c.csat_score,
+         c.csat_sent_at,
+         c.metadata,
+         ct.whatsapp AS contact_whatsapp,
+         ct.phone AS contact_phone,
+         ch.credentials AS channel_credentials
+       FROM conversations c
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       LEFT JOIN channels ch ON ch.id = c.channel_id
+       WHERE c.id = $1::uuid
+       FOR UPDATE OF c
+       LIMIT 1`,
+      conversationId,
+    );
+    const conversation = rows[0];
+    if (!conversation) return;
+    if (conversation.channel_type !== 'whatsapp') return;
+    const origin = extractConversationOrigin(conversation.metadata);
+    const isLegacyActiveOutbound = conversation.metadata
+      && typeof conversation.metadata === 'object'
+      && (conversation.metadata as Record<string, unknown>).active_outbound === true;
+    if (origin === 'active_outbound' || isLegacyActiveOutbound) {
+      logger.info({ conversationId }, '[CSAT] Skipping — active_outbound origin');
+      return;
+    }
 
-  const tenantRows = await db.$queryRawUnsafe<TenantSettingsRow[]>(
-    `SELECT settings
-     FROM tenants
-     WHERE schema_name = $1
-     LIMIT 1`,
-    schemaName,
-  );
-  const settings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
-  if (settings.csat_enabled === false) return;
+    if (conversation.csat_score !== null && conversation.csat_score !== undefined) {
+      logger.info({ conversationId }, '[CSAT] Already rated — skipping');
+      return;
+    }
+    if (conversation.csat_stage === 'done') {
+      logger.info({ conversationId }, '[CSAT] Already done — skipping');
+      return;
+    }
+    if (conversation.csat_stage === 'sent' || conversation.csat_stage === 'waiting_comment') {
+      logger.info({ conversationId, csatStage: conversation.csat_stage }, '[CSAT] Already in progress — skipping');
+      return;
+    }
+    if (conversation.csat_sent_at) {
+      logger.info({ conversationId }, '[CSAT] Already sent — skipping');
+      return;
+    }
 
-  const csatExpirationHours =
-    typeof settings.csatExpirationHours === 'number' &&
-    settings.csatExpirationHours >= 1 &&
-    settings.csatExpirationHours <= 720
-      ? Math.trunc(settings.csatExpirationHours)
-      : 48;
+    const tenantRows = await tx.$queryRawUnsafe<TenantSettingsRow[]>(
+      `SELECT settings
+       FROM tenants
+       WHERE schema_name = $1
+       LIMIT 1`,
+      schemaName,
+    );
+    const settings = (tenantRows[0]?.settings as Record<string, unknown> | null) ?? {};
+    if (settings.csat_enabled === false) return;
 
-  const csatText =
-    typeof settings.csat_message === 'string' && settings.csat_message.trim()
-      ? settings.csat_message.trim()
-      : buildDefaultCsatMessage();
+    const csatExpirationHours =
+      typeof settings.csatExpirationHours === 'number' &&
+      settings.csatExpirationHours >= 1 &&
+      settings.csatExpirationHours <= 720
+        ? Math.trunc(settings.csatExpirationHours)
+        : 48;
 
-  const clientPhone = normalizePhoneNumber(conversation.contact_whatsapp ?? conversation.contact_phone ?? '');
-  if (!clientPhone) return;
+    const csatText =
+      typeof settings.csat_message === 'string' && settings.csat_message.trim()
+        ? settings.csat_message.trim()
+        : buildDefaultCsatMessage();
 
-  const credentials = conversation.channel_credentials
-    ? decryptCredentials(conversation.channel_credentials)
-    : {};
-  const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
-  const accessToken = credentials.accessToken ?? credentials.access_token;
-  if (!phoneNumberId || !accessToken) return;
+    const clientPhone = normalizePhoneNumber(conversation.contact_whatsapp ?? conversation.contact_phone ?? '');
+    if (!clientPhone) return;
 
-  const sent = await sendWhatsAppTextMessage({
-    text: csatText,
-    to: clientPhone,
-    phoneNumberId,
-    accessToken,
+    const credentials = conversation.channel_credentials
+      ? decryptCredentials(conversation.channel_credentials)
+      : {};
+    const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
+    const accessToken = credentials.accessToken ?? credentials.access_token;
+    if (!phoneNumberId || !accessToken) return;
+
+    const sent = await sendWhatsAppTextMessage({
+      text: csatText,
+      to: clientPhone,
+      phoneNumberId,
+      accessToken,
+    });
+    if (!sent) return;
+
+    await tx.$executeRawUnsafe(
+      `UPDATE conversations
+       SET csat_sent_at = NOW(),
+           csat_stage = 'sent',
+           csat_expires_at = NOW() + ($1 * INTERVAL '1 hour')
+       WHERE id = $2::uuid`,
+      csatExpirationHours,
+      conversationId,
+    );
+
+    await tx.$executeRawUnsafe(
+      `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+       VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
+      conversationId,
+      csatText,
+    );
+
+    logger.info({ conversationId }, '[CSAT] Sent');
   });
-  if (!sent) return;
-
-  await db.$executeRawUnsafe(
-    `UPDATE conversations
-     SET csat_sent_at = NOW(),
-         csat_stage = 'sent',
-         csat_expires_at = NOW() + ($1 * INTERVAL '1 hour')
-     WHERE id = $2::uuid`,
-    csatExpirationHours,
-    conversationId,
-  );
-
-  await db.$executeRawUnsafe(
-    `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
-     VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
-    conversationId,
-    csatText,
-  );
-
-  logger.info({ conversationId }, '[CSAT] Sent');
 }

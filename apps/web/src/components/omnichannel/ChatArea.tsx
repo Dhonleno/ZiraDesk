@@ -327,9 +327,55 @@ function requiresWhatsappTemplateMessage(
   withinActiveOutboundWindow: boolean,
 ): boolean {
   if (!conversation || conversation.channel_type !== 'whatsapp') return false;
-  if (conversation.status === 'active_outbound') return !withinActiveOutboundWindow;
-  if (!conversation.metadata || typeof conversation.metadata !== 'object') return false;
-  return conversation.metadata.whatsapp_reengagement_required === true;
+  return conversation.status === 'active_outbound' && !withinActiveOutboundWindow;
+}
+
+function extractTemplateNameFromPlaceholder(content: string | null | undefined): string | null {
+  if (!content) return null;
+  const normalized = content.trim();
+  const match = normalized.match(/^\[Template WhatsApp:\s*([^\]]+)\]$/i);
+  return match?.[1]?.trim() || null;
+}
+
+function extractTemplateParamsFromMessageMetadata(metadata: Message['metadata'] | undefined): string[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const whatsappTemplate = (metadata as Record<string, unknown>).whatsapp_template;
+  if (!whatsappTemplate || typeof whatsappTemplate !== 'object') return [];
+  const components = (whatsappTemplate as Record<string, unknown>).components;
+  if (!Array.isArray(components)) return [];
+
+  const bodyComponent = components.find((component) => {
+    if (!component || typeof component !== 'object') return false;
+    const type = (component as Record<string, unknown>).type;
+    return typeof type === 'string' && type.toLowerCase() === 'body';
+  }) as Record<string, unknown> | undefined;
+
+  if (!bodyComponent) return [];
+  const parameters = bodyComponent.parameters;
+  if (!Array.isArray(parameters)) return [];
+
+  return parameters
+    .map((parameter) => {
+      if (!parameter || typeof parameter !== 'object') return '';
+      const text = (parameter as Record<string, unknown>).text;
+      return typeof text === 'string' ? text : '';
+    })
+    .filter((value) => value.trim().length > 0);
+}
+
+function applyTemplateParamsToBody(body: string, params: string[]): string {
+  if (!body || params.length === 0) return body;
+  let autoIndex = 0;
+  return body.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (_full, key: string) => {
+    const numericIndex = Number.parseInt(key, 10);
+    if (Number.isFinite(numericIndex) && numericIndex > 0) {
+      const numericParam = params[numericIndex - 1];
+      return numericParam ?? `{{${key}}}`;
+    }
+    const next = params[autoIndex];
+    autoIndex += 1;
+    return next ?? `{{${key}}}`;
+  });
 }
 
 export function ChatArea({ conversationId }: Props) {
@@ -357,7 +403,8 @@ export function ChatArea({ conversationId }: Props) {
   const [useTemplateMessage, setUseTemplateMessage] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [templateLanguage, setTemplateLanguage] = useState('pt_BR');
-  const [templateParams, setTemplateParams] = useState('');
+  const [templateParamValues, setTemplateParamValues] = useState<string[]>([]);
+  const [templatePreview, setTemplatePreview] = useState('');
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [showShortcutSuggestions, setShowShortcutSuggestions] = useState(false);
   const [shortcutSuggestions, setShortcutSuggestions] = useState<QuickReply[]>([]);
@@ -543,6 +590,80 @@ export function ChatArea({ conversationId }: Props) {
     retry: shouldRetryQuery,
   });
 
+  const activeConversation = data?.conversation as Conversation | undefined;
+  const activeChannelId =
+    activeConversation?.channel_id
+    ?? (activeConversation as { channelId?: string | null } | undefined)?.channelId
+    ?? (activeConversation as { channel?: { id?: string | null } } | undefined)?.channel?.id
+    ?? null;
+  const isActiveConversationWhatsapp = activeConversation?.channel_type === 'whatsapp';
+  const templatesQueryEnabled = hasValidSession && isActiveConversationWhatsapp && Boolean(activeChannelId);
+  const {
+    data: templatesData,
+    isLoading: isTemplatesLoading,
+    isFetching: isTemplatesFetching,
+    isError: isTemplatesError,
+    error: templatesError,
+    status: templatesStatus,
+  } = useQuery({
+    queryKey: ['templates', activeChannelId],
+    queryFn: () => omnichannelApi.listTemplates(activeChannelId!),
+    enabled: templatesQueryEnabled,
+    staleTime: 60_000,
+    retry: shouldRetryQuery,
+  });
+  const templates = useMemo(
+    () => templatesData?.data ?? [],
+    [templatesData?.data],
+  );
+  const templatesByName = useMemo(() => {
+    const map = new Map<string, typeof templates[number]>();
+    for (const template of templates) {
+      map.set(template.name, template);
+    }
+    return map;
+  }, [templates]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const conversation = activeConversation as
+      | (Conversation & { channelId?: string | null; channel?: unknown })
+      | undefined;
+    if (!conversation?.id) return;
+
+    console.debug('[Templates Debug]', {
+      conversationId: conversation?.id,
+      channelId: conversation?.channel_id ?? conversation?.channelId,
+      channel_id: conversation?.channel_id,
+      channel: conversation?.channel,
+      templatesQueryEnabled,
+      templatesStatus,
+      isTemplatesLoading,
+      isTemplatesFetching,
+      isTemplatesError,
+      templatesError,
+      templatesData,
+      rawConversation: conversation,
+    });
+    console.debug('[ChatArea templates query]', {
+      queryEnabled: templatesQueryEnabled,
+      resolvedChannelId: activeChannelId,
+      templatesCount: templates.length,
+      templatesData,
+    });
+  }, [
+    activeChannelId,
+    activeConversation,
+    templatesQueryEnabled,
+    templatesStatus,
+    isTemplatesLoading,
+    isTemplatesFetching,
+    isTemplatesError,
+    templatesError,
+    templatesData,
+    templates.length,
+  ]);
+
   const notifyMessagesLoadError = useCallback(() => {
     const now = Date.now();
     if (now - lastMessagesErrorAtRef.current < 2500) return;
@@ -604,7 +725,8 @@ export function ChatArea({ conversationId }: Props) {
     setUseTemplateMessage(false);
     setTemplateName('');
     setTemplateLanguage('pt_BR');
-    setTemplateParams('');
+    setTemplateParamValues([]);
+    setTemplatePreview('');
     setTemplateError(null);
     setShowEmojiPicker(false);
     setShowQuickReplies(false);
@@ -910,7 +1032,8 @@ export function ChatArea({ conversationId }: Props) {
       );
       setTemplateName('');
       setTemplateLanguage('pt_BR');
-      setTemplateParams('');
+      setTemplateParamValues([]);
+      setTemplatePreview('');
       setTemplateError(null);
       setMentioningMessage(null);
       shouldAutoScrollNextRef.current = true;
@@ -1064,10 +1187,7 @@ export function ChatArea({ conversationId }: Props) {
         text: content.trim(),
         templateName: resolvedTemplateName,
         templateLanguage: templateLanguage.trim() || 'pt_BR',
-        templateParams: templateParams
-          .split('\n')
-          .map((item) => item.trim())
-          .filter(Boolean),
+        templateParams: templateParamValues.map((item) => item.trim()),
       });
       return;
     }
@@ -1270,9 +1390,10 @@ export function ChatArea({ conversationId }: Props) {
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const statusStyle = STATUS_STYLE[conv?.status ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
-  const isActiveOutboundWhatsappConversation = isWhatsappConversation && conv?.status === 'active_outbound';
-  const requiresWhatsappTemplate = requiresWhatsappTemplateMessage(conv, withinActiveOutboundWindow);
-  const canToggleActiveOutboundTemplate = isActiveOutboundWhatsappConversation && withinActiveOutboundWindow;
+  const isActiveOutbound = conv?.status === 'active_outbound';
+  const isActiveOutboundWhatsappConversation = isWhatsappConversation && isActiveOutbound;
+  const shouldForceTemplate = isActiveOutbound && !withinActiveOutboundWindow;
+  const isTemplateMode = isWhatsappConversation && shouldForceTemplate;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
   const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
@@ -1298,30 +1419,62 @@ export function ChatArea({ conversationId }: Props) {
   useEffect(() => {
     if (isWhatsappConversation) return;
     setUseTemplateMessage(false);
+    setTemplateName('');
+    setTemplateLanguage('pt_BR');
+    setTemplateParamValues([]);
+    setTemplatePreview('');
     setTemplateError(null);
   }, [isWhatsappConversation]);
 
   useEffect(() => {
     if (!isWhatsappConversation) return;
+    if (conv?.status === 'active_outbound' && !isConversationWindowLoaded) return;
 
-    if (isActiveOutboundWhatsappConversation) {
-      if (!isConversationWindowLoaded) return;
-      setUseTemplateMessage(!withinActiveOutboundWindow);
+    setUseTemplateMessage((current) => (current === isTemplateMode ? current : isTemplateMode));
+    if (isTemplateMode) {
       setIsInternal(false);
+    } else {
       setTemplateError(null);
+    }
+  }, [
+    isConversationWindowLoaded,
+    isWhatsappConversation,
+    isTemplateMode,
+    conv?.status,
+  ]);
+
+  useEffect(() => {
+    if (conv?.status === 'active_outbound') return;
+    setUseTemplateMessage(false);
+    setTemplateError(null);
+  }, [conv?.status]);
+
+  useEffect(() => {
+    if (!useTemplateMessage || !templateName) {
       return;
     }
 
-    if (!requiresWhatsappTemplate) return;
-    setUseTemplateMessage(true);
-    setIsInternal(false);
-  }, [
-    isActiveOutboundWhatsappConversation,
-    isConversationWindowLoaded,
-    isWhatsappConversation,
-    requiresWhatsappTemplate,
-    withinActiveOutboundWindow,
-  ]);
+    const selectedTemplate = templates.find((template) => template.name === templateName);
+    if (!selectedTemplate) {
+      if (templatePreview !== '') {
+        setTemplatePreview('');
+      }
+      if (templateParamValues.length > 0) {
+        setTemplateParamValues([]);
+      }
+      return;
+    }
+
+    setTemplateLanguage(selectedTemplate.language);
+    setTemplatePreview(selectedTemplate.body ?? '');
+    const variableCount = selectedTemplate.variables?.length ?? 0;
+    setTemplateParamValues((current) => {
+      const next = Array.from({ length: variableCount }, (_, index) => current[index] ?? '');
+      const unchanged = current.length === next.length
+        && current.every((value, index) => value === next[index]);
+      return unchanged ? current : next;
+    });
+  }, [templateName, templateParamValues.length, templatePreview, templates, useTemplateMessage]);
 
   const grouped = useMemo(() => {
     const list: Array<{ date: string; msgs: Message[] }> = [];
@@ -1761,7 +1914,26 @@ export function ChatArea({ conversationId }: Props) {
                 const callRecordingMeta = parseCallRecordingMetadata(msg);
                 const isCompanySide = isAgent;
                 const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
-                const showMessageContent = Boolean(msg.content) && !hideAudioLabel && !isCallRecording;
+                const templateNameFromPlaceholder = extractTemplateNameFromPlaceholder(msg.content);
+                const templateNameFromMetadata = (
+                  msg.metadata
+                  && typeof msg.metadata === 'object'
+                  && typeof (msg.metadata as Record<string, unknown>).whatsapp_template === 'object'
+                  && (msg.metadata as Record<string, unknown>).whatsapp_template
+                  && typeof ((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name === 'string'
+                )
+                  ? String(((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name)
+                  : null;
+                const resolvedTemplateName = templateNameFromMetadata || templateNameFromPlaceholder;
+                const templateFromCatalog = resolvedTemplateName ? templatesByName.get(resolvedTemplateName) : undefined;
+                const isTemplateMessage = msg.content_type === 'template' || Boolean(templateNameFromPlaceholder);
+                const templateBody = templateFromCatalog?.body ?? msg.content;
+                const templateParams = extractTemplateParamsFromMessageMetadata(msg.metadata);
+                const resolvedTemplateBody = isTemplateMessage
+                  ? applyTemplateParamsToBody(templateBody ?? '', templateParams)
+                  : msg.content;
+                const showTemplateLabel = Boolean(isTemplateMessage && resolvedTemplateName);
+                const showMessageContent = Boolean(resolvedTemplateBody) && !hideAudioLabel && !isCallRecording;
                 const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
                 const contactDisplayName = displayName;
                 const organizationDisplayName = conv?.organization_name?.trim();
@@ -1990,7 +2162,7 @@ export function ChatArea({ conversationId }: Props) {
                             </audio>
                           </div>
                         ) : null}
-                        {msg.content_type !== 'text' && !isCallRecording && (
+                        {msg.content_type !== 'text' && msg.content_type !== 'template' && !isCallRecording && (
                           <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
                             <MessageMedia
                               message={msg}
@@ -2000,10 +2172,15 @@ export function ChatArea({ conversationId }: Props) {
                           </div>
                         )}
                         {showMessageContent
-                          ? msg.content_type === 'text'
-                            ? <span style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</span>
-                            : msg.content
+                          ? msg.content_type === 'text' || isTemplateMessage
+                            ? <span style={{ whiteSpace: 'pre-wrap' }}>{resolvedTemplateBody}</span>
+                            : resolvedTemplateBody
                           : null}
+                        {showTemplateLabel && (
+                          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--txt-3)' }}>
+                            Template: {resolvedTemplateName}
+                          </div>
+                        )}
                       </div>
                       <div
                         style={{
@@ -2095,58 +2272,6 @@ export function ChatArea({ conversationId }: Props) {
                 ? t('activeOutbound.withinWindow')
                 : t('activeOutbound.outsideWindow')}
             </span>
-          </div>
-        )}
-        {canToggleActiveOutboundTemplate && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              marginBottom: 10,
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid var(--line)',
-              background: 'var(--bg-3)',
-            }}
-          >
-            <label style={{ fontSize: 12, color: 'var(--txt-2)' }}>
-              {t('activeOutbound.useTemplate')}
-            </label>
-            <button
-              type="button"
-              aria-label={t('activeOutbound.useTemplate')}
-              aria-pressed={useTemplateMessage}
-              onClick={() => {
-                setUseTemplateMessage((prev) => !prev);
-                setTemplateError(null);
-                setIsInternal(false);
-              }}
-              style={{
-                width: 40,
-                height: 22,
-                borderRadius: 999,
-                border: useTemplateMessage ? '1px solid var(--teal)' : '1px solid var(--line-2)',
-                background: useTemplateMessage ? 'var(--teal-dim)' : 'var(--bg-4)',
-                position: 'relative',
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 2,
-                  left: useTemplateMessage ? 20 : 2,
-                  width: 16,
-                  height: 16,
-                  borderRadius: '50%',
-                  background: useTemplateMessage ? 'var(--teal)' : 'var(--txt-3)',
-                  transition: 'left .15s ease, background .15s ease',
-                }}
-              />
-            </button>
           </div>
         )}
         {canSendMessage && (
@@ -2358,33 +2483,6 @@ export function ChatArea({ conversationId }: Props) {
                         </svg>
                       )}
                     />
-                    {isWhatsappConversation && !isActiveOutboundWhatsappConversation && (
-                      <ToolbarButton
-                        tooltip="Template WhatsApp"
-                        active={useTemplateMessage}
-                        onClick={() => {
-                          if (useTemplateMessage && requiresWhatsappTemplate) {
-                            setTemplateError(t('chat.templateHint'));
-                            return;
-                          }
-                          const next = !useTemplateMessage;
-                          setUseTemplateMessage(next);
-                          setTemplateError(null);
-                          if (next) {
-                            setIsInternal(false);
-                            setShowEmojiPicker(false);
-                            setShowQuickReplies(false);
-                            setMentioningMessage(null);
-                          }
-                        }}
-                        icon={(
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                            <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" />
-                            <path d="M4.5 6h7M4.5 9h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                          </svg>
-                        )}
-                      />
-                    )}
                     <ToolbarButton
                       tooltip="Nota interna"
                       active={isInternal}
@@ -2487,15 +2585,24 @@ export function ChatArea({ conversationId }: Props) {
                       gap: 8,
                     }}
                   >
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 110px', gap: 8 }}>
-                      <input
-                        type="text"
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <select
                         value={templateName}
                         onChange={(event) => {
-                          setTemplateName(event.target.value);
+                          const selectedName = event.target.value;
+                          const selectedTemplate = templates.find((template) => template.name === selectedName);
+                          setTemplateName(selectedName);
+                          if (selectedTemplate) {
+                            setTemplateLanguage(selectedTemplate.language);
+                            setTemplatePreview(selectedTemplate.body ?? '');
+                            const variableCount = selectedTemplate.variables?.length ?? 0;
+                            setTemplateParamValues(Array.from({ length: variableCount }, () => ''));
+                          } else {
+                            setTemplateParamValues([]);
+                            setTemplatePreview('');
+                          }
                           if (templateError) setTemplateError(null);
                         }}
-                        placeholder={t('chat.templateNamePlaceholder')}
                         style={{
                           width: '100%',
                           background: 'var(--bg-3)',
@@ -2503,34 +2610,51 @@ export function ChatArea({ conversationId }: Props) {
                           borderRadius: 'var(--r)',
                           padding: '8px 10px',
                           fontSize: 12,
-                          fontFamily: 'var(--font)',
-                          color: 'var(--txt)',
-                          outline: 'none',
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={templateLanguage}
-                        onChange={(event) => setTemplateLanguage(event.target.value)}
-                        placeholder="pt_BR"
-                        style={{
-                          width: '100%',
-                          background: 'var(--bg-3)',
-                          border: '1px solid var(--line-2)',
-                          borderRadius: 'var(--r)',
-                          padding: '8px 10px',
-                          fontSize: 12,
                           fontFamily: 'var(--mono)',
                           color: 'var(--txt)',
                           outline: 'none',
                         }}
-                      />
+                      >
+                        <option value="">{t('chat.selectTemplate')}</option>
+                        {templates.map((template) => (
+                          <option key={template.id} value={template.name}>
+                            {(template.display_name ?? template.name)} ({template.language})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <textarea
-                      rows={2}
-                      value={templateParams}
-                      onChange={(event) => setTemplateParams(event.target.value)}
-                      placeholder={t('chat.templateParamsPlaceholder')}
+
+                    {templateName && templateParamValues.length > 0 && (
+                      <div style={{ display: 'grid', gap: 6 }}>
+                        {templateParamValues.map((value, index) => (
+                          <input
+                            key={`${templateName}-param-${index + 1}`}
+                            type="text"
+                            value={value}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setTemplateParamValues((current) =>
+                                current.map((item, itemIndex) => (itemIndex === index ? nextValue : item)),
+                              );
+                            }}
+                            placeholder={`{{${index + 1}}}`}
+                            style={{
+                              width: '100%',
+                              background: 'var(--bg-3)',
+                              border: '1px solid var(--line-2)',
+                              borderRadius: 'var(--r)',
+                              padding: '8px 10px',
+                              fontSize: 12,
+                              fontFamily: 'var(--font)',
+                              color: 'var(--txt)',
+                              outline: 'none',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <div
                       style={{
                         width: '100%',
                         background: 'var(--bg-3)',
@@ -2539,14 +2663,16 @@ export function ChatArea({ conversationId }: Props) {
                         padding: '8px 10px',
                         fontSize: 12,
                         fontFamily: 'var(--font)',
-                        color: 'var(--txt)',
-                        outline: 'none',
-                        resize: 'vertical',
+                        color: 'var(--txt-2)',
                         lineHeight: 1.45,
+                        whiteSpace: 'pre-wrap',
+                        minHeight: 46,
                       }}
-                    />
+                    >
+                      {templatePreview || t('chat.templatePreviewPlaceholder')}
+                    </div>
                     <div style={{ fontSize: 11, color: templateError ? 'var(--red)' : 'var(--txt-2)' }}>
-                      {templateError ?? t('chat.templateHint')}
+                      {templateError ?? `${templateLanguage} · ${t('chat.templateHint')}`}
                     </div>
                   </div>
                 )}

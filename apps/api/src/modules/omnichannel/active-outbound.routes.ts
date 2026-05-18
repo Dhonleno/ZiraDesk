@@ -10,6 +10,7 @@ import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { getSocketServer } from '../../socket/index.js';
 import { loadConversationSocketPayload } from './conversations/socket-payload.js';
 import { decryptCredentials } from '../../utils/crypto.js';
+import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -54,13 +55,9 @@ interface GeneratedProtocolRow {
   protocol: string;
 }
 
-interface OutboundTemplate {
-  name: string;
-  language: string;
-  body: string | null;
-  category: string | null;
-  components: Array<Record<string, unknown>>;
-}
+const listTemplatesQuerySchema = z.object({
+  channel_id: z.string().uuid().optional(),
+});
 
 const activeOutboundSchema = z.object({
   contactId: z.string().uuid(),
@@ -72,6 +69,25 @@ const activeOutboundSchema = z.object({
   message: z.string().trim().max(4000).optional(),
   useTemplate: z.boolean().default(true),
 });
+
+function extractBodyParamsFromComponents(components: Record<string, unknown>[]): string[] {
+  const bodyComp = components.find(
+    (c) => typeof c.type === 'string' && c.type.toLowerCase() === 'body',
+  );
+  if (!bodyComp || !Array.isArray(bodyComp.parameters)) return [];
+  return (bodyComp.parameters as Array<Record<string, unknown>>)
+    .filter((p) => typeof p.text === 'string')
+    .map((p) => p.text as string);
+}
+
+function applyBodyParams(body: string, params: string[]): string {
+  if (!params.length) return body;
+  return body.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (_full, key: string) => {
+    const n = Number.parseInt(key, 10);
+    if (Number.isFinite(n) && n > 0) return params[n - 1] ?? `{{${key}}}`;
+    return `{{${key}}}`;
+  });
+}
 
 function ensureSafeSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/.test(schemaName)) {
@@ -92,72 +108,28 @@ async function withTenantSchema<T>(
   });
 }
 
-function normalizeTemplateList(settings: unknown): OutboundTemplate[] {
-  if (!settings || typeof settings !== 'object') return [];
-
-  const payload = settings as Record<string, unknown>;
-  const candidates = [
-    payload.templates,
-    payload.whatsapp_templates,
-    payload.meta_templates,
-  ];
-
-  const extracted: OutboundTemplate[] = [];
-
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
-
-    for (const raw of candidate) {
-      if (!raw || typeof raw !== 'object') continue;
-      const item = raw as Record<string, unknown>;
-      const nameRaw = item.name;
-      const languageRaw = item.language;
-      if (typeof nameRaw !== 'string' || !nameRaw.trim()) continue;
-
-      const components = Array.isArray(item.components)
-        ? item.components.filter(
-          (component): component is Record<string, unknown> =>
-            Boolean(component) && typeof component === 'object',
-        )
-        : [];
-
-      extracted.push({
-        name: nameRaw.trim(),
-        language: typeof languageRaw === 'string' && languageRaw.trim() ? languageRaw.trim() : 'pt_BR',
-        body: typeof item.body === 'string' ? item.body : null,
-        category: typeof item.category === 'string' ? item.category : null,
-        components,
-      });
-    }
-  }
-
-  const deduplicated = new Map<string, OutboundTemplate>();
-  for (const template of extracted) {
-    deduplicated.set(`${template.name}:${template.language}`, template);
-  }
-
-  return Array.from(deduplicated.values()).sort((a, b) => a.name.localeCompare(b.name));
-}
-
 export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> {
   app.get('/templates', { preHandler: guard }, async (request, reply) => {
+    const parsed = listTemplatesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
     const user = request.user as AuthUser;
     const schemaName = user.schemaName;
     if (!schemaName) {
       return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
     }
 
-    const channels = await withTenantSchema(schemaName, (tx) =>
-      tx.$queryRawUnsafe<ChannelRow[]>(
-        `SELECT id, type, name, status, settings, credentials
-         FROM channels
-         WHERE type = 'whatsapp' AND status = 'active'
-         ORDER BY created_at DESC`,
-      ),
-    );
-
-    const templates = channels.flatMap((channel) => normalizeTemplateList(channel.settings));
-    return reply.send({ success: true, data: templates });
+    const templates = await listAdminTemplates(schemaName, parsed.data);
+    const approvedTemplates = templates.filter((template) => {
+      const status = String(template.status ?? '').toLowerCase();
+      return status === 'approved' && Boolean(template.meta_template_id);
+    });
+    return reply.send({ success: true, data: approvedTemplates });
   });
 
   app.post('/active-outbound', { preHandler: guard }, async (request, reply) => {
@@ -270,8 +242,93 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       );
       const protocolNumber = protocolRows[0]?.protocol ?? null;
 
+      let resolvedTemplateBody: string | null = null;
+      if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
+        const templateRows = await tx.$queryRawUnsafe<Array<{
+          body: string | null;
+          status: string | null;
+          meta_template_id: string | null;
+          last_synced_at: Date | null;
+        }>>(
+          `SELECT body, status, meta_template_id, last_synced_at
+           FROM whatsapp_templates
+           WHERE channel_id = $1::uuid
+             AND name = $2
+             AND language = $3
+           LIMIT 1`,
+          channelId,
+          templateNameNormalized,
+          templateLanguageNormalized,
+        );
+        const selectedTemplate = templateRows[0];
+
+        if (!selectedTemplate) {
+          const languageRows = await tx.$queryRawUnsafe<Array<{ language: string }>>(
+            `SELECT language
+             FROM whatsapp_templates
+             WHERE channel_id = $1::uuid
+               AND name = $2
+             ORDER BY language ASC`,
+            channelId,
+            templateNameNormalized,
+          );
+          const availableLanguages = languageRows.map((row) => row.language);
+          if (availableLanguages.length > 0) {
+            return {
+              statusCode: 409 as const,
+              payload: {
+                success: false,
+                error: {
+                  message: `Template "${templateNameNormalized}" não existe no idioma "${templateLanguageNormalized}". Idiomas disponíveis: ${availableLanguages.join(', ')}.`,
+                },
+              },
+            };
+          }
+          return {
+            statusCode: 404 as const,
+            payload: {
+              success: false,
+              error: {
+                message: `Template "${templateNameNormalized}" não encontrado para este canal. Sincronize os templates com a Meta.`,
+              },
+            },
+          };
+        }
+
+        const normalizedStatus = selectedTemplate.status?.trim().toLowerCase() ?? '';
+        if (normalizedStatus && normalizedStatus !== 'approved') {
+          return {
+            statusCode: 409 as const,
+            payload: {
+              success: false,
+              error: {
+                message: `Template "${templateNameNormalized}" está com status "${selectedTemplate.status}". Envie apenas templates aprovados.`,
+              },
+            },
+          };
+        }
+        if (!selectedTemplate.meta_template_id) {
+          return {
+            statusCode: 409 as const,
+            payload: {
+              success: false,
+              error: {
+                message: `Template "${templateNameNormalized}" (${templateLanguageNormalized}) não está vinculado à Meta para este canal. Sincronize os templates e tente novamente.`,
+              },
+            },
+          };
+        }
+        if (selectedTemplate.body) {
+          resolvedTemplateBody = applyBodyParams(
+            selectedTemplate.body,
+            extractBodyParamsFromComponents(normalizedTemplateComponents),
+          );
+        }
+      }
+
       const metadata = {
         type: 'outbound',
+        origin: 'active_outbound',
         active_outbound: true,
         active_outbound_started_at: new Date().toISOString(),
         active_outbound_origin_agent_id: userId,
@@ -333,7 +390,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       }
 
       const initialContent = channel.type === 'whatsapp' && useTemplate
-        ? `[Template WhatsApp: ${templateNameNormalized}]`
+        ? (resolvedTemplateBody ?? `[Template WhatsApp: ${templateNameNormalized}]`)
         : normalizedMessage;
       const initialContentType = channel.type === 'whatsapp' && useTemplate ? 'template' : 'text';
       const initialMetadata = channel.type === 'whatsapp' && useTemplate

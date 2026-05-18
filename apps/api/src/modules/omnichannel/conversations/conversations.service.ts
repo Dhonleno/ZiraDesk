@@ -809,6 +809,18 @@ export interface CreateConversationResult {
   protocolDispatches: MessageDispatchPayload[];
 }
 
+interface WhatsAppTemplateLookupRow {
+  id: string;
+  body: string | null;
+  status: string | null;
+  meta_template_id: string | null;
+  last_synced_at: Date | null;
+}
+
+interface WhatsAppTemplateLanguageRow {
+  language: string;
+}
+
 export async function sendMessage(
   conversationId: string,
   senderId: string,
@@ -883,6 +895,55 @@ export async function sendMessage(
     : [];
   const normalizedTemplateComponents = templateComponents
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+
+  if (isTemplateMessage && conv.channel_type === 'whatsapp' && templateName && templateLanguage) {
+    const templateRows = await prisma.$queryRawUnsafe<WhatsAppTemplateLookupRow[]>(
+      `SELECT id, body, status, meta_template_id, last_synced_at
+       FROM whatsapp_templates
+       WHERE channel_id = $1::uuid
+         AND name = $2
+         AND language = $3
+       LIMIT 1`,
+      conv.channel_id,
+      templateName,
+      templateLanguage,
+    );
+
+    const selectedTemplate = templateRows[0];
+    if (!selectedTemplate) {
+      const availableLanguageRows = await prisma.$queryRawUnsafe<WhatsAppTemplateLanguageRow[]>(
+        `SELECT language
+         FROM whatsapp_templates
+         WHERE channel_id = $1::uuid
+           AND name = $2
+         ORDER BY language ASC`,
+        conv.channel_id,
+        templateName,
+      );
+      const availableLanguages = availableLanguageRows.map((row) => row.language);
+      if (availableLanguages.length > 0) {
+        throw new ConflictError(
+          `Template "${templateName}" não existe no idioma "${templateLanguage}". Idiomas disponíveis: ${availableLanguages.join(', ')}.`,
+        );
+      }
+      throw new ConflictError(
+        `Template "${templateName}" não encontrado para este canal. Sincronize os templates com a Meta.`,
+      );
+    }
+
+    const normalizedStatus = selectedTemplate.status?.trim().toLowerCase() ?? '';
+    if (normalizedStatus && normalizedStatus !== 'approved') {
+      throw new ConflictError(
+        `Template "${templateName}" está com status "${selectedTemplate.status}". Envie apenas templates aprovados.`,
+      );
+    }
+    if (!selectedTemplate.meta_template_id || !selectedTemplate.last_synced_at) {
+      throw new ConflictError(
+        `Template "${templateName}" (${templateLanguage}) não está sincronizado com a Meta para este canal. Clique em "Sincronizar com Meta" e tente novamente.`,
+      );
+    }
+  }
+
   const content = isTemplateMessage
     ? (rawContent || `[Template WhatsApp: ${templateName ?? 'sem_nome'}]`)
     : rawContent;
@@ -1051,6 +1112,7 @@ export async function createConversation(
     type: conversationType,
   };
   if (conversationType === 'outbound') {
+    metadata.origin = 'active_outbound';
     metadata.active_outbound = true;
     metadata.active_outbound_started_at = new Date().toISOString();
     metadata.active_outbound_origin_agent_id = userId;
@@ -1576,6 +1638,54 @@ export async function resolveConversation(
     }
 
     return conversation;
+  });
+}
+
+interface ConversationCsatStateRow {
+  csat_stage: string | null;
+  csat_score: number | null;
+  metadata: unknown;
+}
+
+function extractConversationOrigin(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const origin = (metadata as Record<string, unknown>).origin;
+  return typeof origin === 'string' && origin.trim() ? origin.trim() : null;
+}
+
+export async function shouldTriggerCsatForConversation(
+  conversationId: string,
+  schemaName: string,
+): Promise<boolean> {
+  const safeSchemaName = validateSchemaName(schemaName);
+  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+
+    const convStateRows = await tx.$queryRawUnsafe<ConversationCsatStateRow[]>(
+      `SELECT csat_stage, csat_score, metadata
+       FROM conversations
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+
+    const convState = convStateRows[0];
+    if (!convState) return false;
+
+    const origin = extractConversationOrigin(convState.metadata);
+    const isLegacyActiveOutbound = convState.metadata
+      && typeof convState.metadata === 'object'
+      && (convState.metadata as Record<string, unknown>).active_outbound === true;
+    if (origin === 'active_outbound' || isLegacyActiveOutbound) return false;
+
+    if (convState.csat_score !== null && convState.csat_score !== undefined) return false;
+
+    const csatStage = convState.csat_stage?.trim().toLowerCase() ?? null;
+    if (csatStage === 'sent' || csatStage === 'waiting_comment' || csatStage === 'done') return false;
+
+    return !csatStage;
   });
 }
 

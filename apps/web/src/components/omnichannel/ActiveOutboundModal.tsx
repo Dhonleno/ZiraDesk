@@ -104,8 +104,9 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   });
 
   const { data: templates = [] } = useQuery({
-    queryKey: ['active-outbound-templates'],
-    queryFn: omnichannelApi.listActiveOutboundTemplates,
+    queryKey: ['active-outbound-templates', selectedChannelId],
+    queryFn: () => omnichannelApi.listActiveOutboundTemplates(selectedChannelId || undefined),
+    enabled: Boolean(selectedChannelId),
     staleTime: 60_000,
   });
 
@@ -153,6 +154,9 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
 
     if (selectedChannel.type === 'whatsapp') {
       setUseTemplate(true);
+      setSelectedTemplateName('');
+      setSelectedTemplateLanguage('pt_BR');
+      setTemplateValues({});
     }
   }, [selectedChannel]);
 
@@ -225,8 +229,17 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       onCreated(conversation.id);
       onClose();
     },
-    onError: () => {
-      toast.error(t('form.errorCreate'));
+    onError: (error: unknown) => {
+      const apiMessage = (
+        error as {
+          response?: {
+            data?: {
+              error?: { message?: string };
+            };
+          };
+        }
+      )?.response?.data?.error?.message;
+      toast.error(apiMessage ?? t('form.errorCreate'));
     },
   });
 
@@ -441,7 +454,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
                       <option value="">{t('chat.templateNamePlaceholder')}</option>
                       {templates.map((template) => (
                         <option key={`${template.name}:${template.language}`} value={`${template.name}::${template.language}`}>
-                          {template.name} ({template.language})
+                          {template.display_name ?? template.name} ({template.language})
                         </option>
                       ))}
                     </select>

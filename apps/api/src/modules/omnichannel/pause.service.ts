@@ -163,7 +163,8 @@ export async function startPause(
          pause_reason = $1,
          pause_started_at = NOW(),
          pause_notes = $2,
-         is_available = false
+         is_available = false,
+         online_since = NULL
      WHERE user_id = $3::uuid`,
     normalizedReason,
     input.notes?.trim() ?? null,
@@ -223,7 +224,8 @@ export async function endPause(
          pause_reason = NULL,
          pause_started_at = NULL,
          pause_notes = NULL,
-         is_available = true
+         is_available = true,
+         online_since = NOW()
      WHERE user_id = $1::uuid`,
     userId,
   );

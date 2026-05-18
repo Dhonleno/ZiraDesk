@@ -437,7 +437,7 @@ export async function getPeakHours(filters: MetricsFilters, schemaName: string, 
 
 export async function getMyStats(
   agentId: string,
-  filters: MetricsFilters,
+  filters: { dateFromLocal: string; dateToLocal: string; timezone: string },
   schemaName: string,
   db: MetricsDbClient = prisma,
 ) {
@@ -480,15 +480,18 @@ export async function getMyStats(
            AND m.is_internal = false
        ) fr ON true
        WHERE c.assigned_to = $1::uuid
-         AND c.created_at >= $2::timestamptz
-         AND c.created_at < $3::timestamptz`,
+         AND c.conversation_type IS DISTINCT FROM 'outbound'
+         AND (c.metadata->>'origin') IS DISTINCT FROM 'active_outbound'
+         AND c.created_at >= (($2::date)::timestamp AT TIME ZONE $4::text)
+         AND c.created_at < ((($3::date + INTERVAL '1 day')::timestamp) AT TIME ZONE $4::text)`,
       agentId,
-      filters.dateFrom,
-      filters.dateToExclusive,
+      filters.dateFromLocal,
+      filters.dateToLocal,
+      filters.timezone,
     );
 
     const onlineRows = await tx.$queryRawUnsafe<Array<{ online_since: Date | null }>>(
-      `SELECT aa.updated_at AS online_since
+      `SELECT COALESCE(aa.online_since, aa.last_seen_at) AS online_since
        FROM agent_assignments aa
        WHERE aa.user_id = $1::uuid
          AND aa.status = 'online'

@@ -11,6 +11,7 @@ import {
 } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
 import { useAuthStore } from '../../stores/auth.store';
+import { usePermission } from '../../hooks/usePermission';
 
 interface AgentEventPayload {
   userId?: string;
@@ -220,6 +221,8 @@ function ConversationChronometer({
 export function TVDashboard() {
   const { t, i18n } = useTranslation('omnichannel');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { role } = usePermission();
+  const canAccessTv = role === 'owner' || role === 'admin';
   const [now, setNow] = useState(new Date());
   const [dashboard, setDashboard] = useState<TvDashboardData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -229,9 +232,14 @@ export function TVDashboard() {
   const { data } = useQuery({
     queryKey: ['tv-dashboard'],
     queryFn: omnichannelApi.tv,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canAccessTv,
     staleTime: 0,
     refetchInterval: 30_000,
+    retry: (failureCount, error) => {
+      const statusCode = (error as { response?: { status?: number } })?.response?.status;
+      if (statusCode === 403) return false;
+      return failureCount < 1;
+    },
   });
 
   useEffect(() => {
@@ -466,6 +474,10 @@ export function TVDashboard() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!canAccessTv) {
+    return <Navigate to="/omnichannel/conversations" replace />;
   }
 
   if (!dashboard) {

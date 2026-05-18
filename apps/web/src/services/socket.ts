@@ -100,9 +100,7 @@ function attachLifecycleHandlers(): void {
   });
 
   socket.io.on('reconnect', (attemptNumber) => {
-    if (import.meta.env.DEV) {
-      console.info('[Socket] reconnected after', attemptNumber, 'attempts');
-    }
+    void attemptNumber;
     emitPresenceOnline();
     startHeartbeat();
   });
