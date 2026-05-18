@@ -3,7 +3,12 @@
     "allow": [
       "Bash(pnpm -C apps/api type-check)",
       "Bash(Remove-Item \"d:\\\\Projetos\\\\ZiraDesk\\\\apps\\\\web\\\\src\\\\components\\\\crm\\\\EditClientModal.tsx\")",
-      "Bash(pnpm -C apps/web type-check)"
+      "Bash(pnpm -C apps/web type-check)",
+      "Bash(Get-ChildItem -Path \"d:\\\\Projetos\\\\ZiraDesk\" -Directory)",
+      "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\")",
+      "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\")",
+      "Bash(grep -n \"adminApi\" \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\\\\\\\\web\\\\\\\\src\\\\\\\\services\\\\\\\\api.ts\")",
+      "Bash(find \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\" -name \"schema.prisma\" -o -name \"*.prisma\")"
     ],
     "defaultMode": "bypassPermissions"
   }
