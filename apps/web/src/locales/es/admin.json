@@ -267,18 +267,46 @@
       },
       "messages": {
         "invited": "Usuario invitado con éxito",
+        "inviteSuccess": "Invitación enviada con éxito",
+        "inviteError": "Error al invitar usuario",
         "updated": "Usuario actualizado",
         "deactivated": "Usuario desactivado",
         "cantDeleteSelf": "No puedes eliminarte a ti mismo",
         "tempPassword": "Contraseña temporal",
         "reactivated": "Usuario reactivado con éxito",
+        "tempPasswordTitle": "Usuario creado - contraseña temporal",
+        "tempPasswordDesc": "No se pudo enviar el correo de invitación a {{name}}. Comparte la contraseña abajo manualmente.",
+        "emailNotConfiguredWarning": "Configura RESEND_API_KEY en el servidor para enviar invitaciones por correo automáticamente.",
         "passwordReset": "Contraseña de {{name}} restablecida",
-        "tempPasswordHint": "Comparte esta contraseña con el usuario. Expirará después del primer inicio de sesión.",
+        "tempPasswordHint": "El usuario deberá cambiar la contraseña en el primer acceso.",
         "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal.",
         "inviteEmailNotConfigured": "Invitación creada, pero el envío de correo no está configurado. Define RESEND_API_KEY en el entorno de la API.",
         "inviteEmailDomainNotVerified": "Invitación creada, pero el remitente no es válido. Revisa RESEND_FROM_EMAIL y el dominio verificado en Resend.",
         "inviteEmailDeliveryFailed": "No fue posible enviar la invitación por correo ahora. Revisa la configuración del proveedor e inténtalo de nuevo."
       }
+    },
+    "smtp": {
+      "title": "Configuración SMTP",
+      "subtitle": "Configura tu servidor de correo corporativo",
+      "host": "Servidor SMTP",
+      "hostHint": "Ej: smtp.gmail.com, smtp.outlook.com",
+      "port": "Puerto",
+      "secure": "Seguridad",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "fromEmail": "Correo de envío",
+      "fromEmailHint": "Correo que aparecerá como remitente",
+      "fromName": "Nombre del remitente",
+      "test": "Probar conexión",
+      "testing": "Probando...",
+      "testOk": "Conexión exitosa",
+      "testError": "Fallo en la conexión",
+      "saveSuccess": "SMTP configurado con éxito",
+      "removeSuccess": "SMTP eliminado",
+      "notConfigured": "No configurado",
+      "configured": "Configurado",
+      "lastTested": "Última prueba",
+      "usedFor": "Usado para: invitaciones, CSAT y correos de atención"
     },
     "channels": {
       "title": "Canales",
@@ -295,7 +323,8 @@
       },
       "status": {
         "active": "Conectado",
-        "inactive": "Desconectado"
+        "inactive": "Desconectado",
+        "pending": "Sin probar"
       },
       "fields": {
         "name": "Nombre del canal",

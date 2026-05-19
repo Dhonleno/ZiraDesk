@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { AxiosError } from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
@@ -23,6 +24,21 @@ interface Props {
   onClose: () => void;
 }
 
+interface InviteErrorResponse {
+  success: false;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+interface TempPasswordModalState {
+  open: boolean;
+  name: string;
+  email: string;
+  password: string;
+}
+
 function mapInviteErrorMessage(rawMessage: string | undefined, t: (key: string) => string): string {
   const message = (rawMessage ?? '').toLowerCase();
 
@@ -38,14 +54,14 @@ function mapInviteErrorMessage(rawMessage: string | undefined, t: (key: string) 
     return t('tenantAdmin.users.messages.inviteEmailDeliveryFailed');
   }
 
-  return rawMessage ?? t('tenantAdmin.common.errorSave');
+  return t('tenantAdmin.users.messages.inviteError');
 }
 
 export function InviteUserModal({ open, onClose }: Props) {
   const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [tempPasswordModal, setTempPasswordModal] = useState<TempPasswordModalState | null>(null);
   const [copied, setCopied] = useState(false);
 
   const {
@@ -61,26 +77,49 @@ export function InviteUserModal({ open, onClose }: Props) {
   const mutation = useMutation({
     mutationFn: adminApi.inviteUser,
     onSuccess: (res) => {
-      setTempPassword(res.data.tempPassword);
+      const inviteResult = res.data;
+      if (!inviteResult.emailSent && inviteResult.tempPassword) {
+        setTempPasswordModal({
+          open: true,
+          name: inviteResult.user.name,
+          email: inviteResult.user.email,
+          password: inviteResult.tempPassword,
+        });
+        return;
+      }
+
+      toast.success(t('tenantAdmin.users.messages.inviteSuccess'));
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success(t('tenantAdmin.users.messages.invited'));
+      handleClose();
     },
-    onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
+    onError: (err: AxiosError<InviteErrorResponse>) => {
+      const code = err.response?.data?.error?.code;
       const rawMessage = err.response?.data?.error?.message;
+
+      if (code === 'EMAIL_NOT_CONFIGURED') {
+        toast.error(t('tenantAdmin.users.messages.inviteEmailNotConfigured'));
+        return;
+      }
+
+      if (code === 'EMAIL_SEND_FAILED') {
+        toast.error(t('tenantAdmin.users.messages.inviteEmailDeliveryFailed'));
+        return;
+      }
+
       toast.error(mapInviteErrorMessage(rawMessage, t as (key: string) => string));
     },
   });
 
   function handleClose() {
-    setTempPassword(null);
+    setTempPasswordModal(null);
     setCopied(false);
     reset();
     onClose();
   }
 
   async function handleCopy() {
-    if (tempPassword) {
-      await navigator.clipboard.writeText(tempPassword);
+    if (tempPasswordModal?.password) {
+      await navigator.clipboard.writeText(tempPasswordModal.password);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -99,33 +138,61 @@ export function InviteUserModal({ open, onClose }: Props) {
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title={t('tenantAdmin.users.inviteUser')}>
-      {tempPassword ? (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={
+        tempPasswordModal?.open
+          ? t('tenantAdmin.users.messages.tempPasswordTitle')
+          : t('tenantAdmin.users.inviteUser')
+      }
+    >
+      {tempPasswordModal?.open ? (
         <div className="space-y-4">
           <p className="text-sm" style={{ color: 'var(--txt-2)' }}>
-            {t('tenantAdmin.users.messages.invited')}. {t('tenantAdmin.users.messages.tempPassword')}:
+            {t('tenantAdmin.users.messages.tempPasswordDesc', { name: tempPasswordModal.name })}
           </p>
           <div
-            className="flex items-center gap-3 rounded-lg p-4"
-            style={{ background: 'rgba(0,201,167,.08)', border: '1px solid rgba(0,201,167,.25)' }}
+            className="rounded-lg p-3 text-xs"
+            style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber)', color: 'var(--amber)' }}
           >
-            <span className="flex-1 font-mono text-lg font-semibold" style={{ color: 'var(--teal)' }}>
-              {tempPassword}
+            {t('tenantAdmin.users.messages.emailNotConfiguredWarning')}
+          </div>
+          <div
+            className="flex items-center gap-3 rounded-lg p-4"
+            style={{ background: 'var(--bg-3)', border: '1px solid var(--line-2)' }}
+          >
+            <span className="flex-1 font-mono text-lg font-semibold" style={{ color: 'var(--txt)' }}>
+              {tempPasswordModal.password}
             </span>
             <button
+              type="button"
               onClick={handleCopy}
               className="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
               style={{
-                background: copied ? 'rgba(0,201,167,.2)' : 'rgba(255,255,255,.05)',
+                background: copied ? 'var(--teal-dim)' : 'var(--bg-4)',
                 color: copied ? 'var(--teal)' : 'var(--txt-2)',
                 border: '1px solid var(--line-2)',
               }}
             >
-              {copied ? 'Copiado' : 'Copiar'}
+              {t('tenantAdmin.common.copy')}
             </button>
           </div>
+          <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
+            {t('tenantAdmin.users.messages.tempPasswordHint')}
+          </p>
           <div className="flex justify-end pt-2">
-            <Button onClick={handleClose}>{t('tenantAdmin.common.close')}</Button>
+            <Button
+              onClick={() => {
+                setTempPasswordModal(null);
+                setCopied(false);
+                reset();
+                void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+                onClose();
+              }}
+            >
+              {t('tenantAdmin.common.close')}
+            </Button>
           </div>
         </div>
       ) : (

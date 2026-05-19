@@ -284,18 +284,46 @@
       },
       "messages": {
         "invited": "Usuário convidado com sucesso",
+        "inviteSuccess": "Convite enviado com sucesso",
+        "inviteError": "Erro ao convidar usuário",
         "updated": "Usuário atualizado",
         "deactivated": "Usuário desativado",
         "reactivated": "Usuário reativado com sucesso",
         "cantDeleteSelf": "Você não pode remover a si mesmo",
         "tempPassword": "Senha temporária",
+        "tempPasswordTitle": "Usuário criado - senha temporária",
+        "tempPasswordDesc": "O e-mail de convite não pôde ser enviado para {{name}}. Compartilhe a senha abaixo manualmente.",
+        "emailNotConfiguredWarning": "Configure RESEND_API_KEY no servidor para enviar convites por e-mail automaticamente.",
         "passwordReset": "Senha de {{name}} redefinida com sucesso",
-        "tempPasswordHint": "Compartilhe esta senha com o usuário. Ela será inválida após o primeiro login.",
+        "tempPasswordHint": "O usuário deverá trocar a senha no primeiro acesso.",
         "resetPasswordConfirm": "Redefinir a senha de {{name}} ({{email}})? Uma nova senha temporária será gerada.",
         "inviteEmailNotConfigured": "Convite criado, mas o envio de e-mail não está configurado. Defina RESEND_API_KEY no ambiente da API.",
         "inviteEmailDomainNotVerified": "Convite criado, mas o remetente de e-mail não está válido. Verifique RESEND_FROM_EMAIL e o domínio no Resend.",
         "inviteEmailDeliveryFailed": "Não foi possível enviar o convite por e-mail agora. Revise a configuração do provedor e tente novamente."
       }
+    },
+    "smtp": {
+      "title": "Configuração SMTP",
+      "subtitle": "Configure seu servidor de e-mail corporativo",
+      "host": "Servidor SMTP",
+      "hostHint": "Ex: smtp.gmail.com, smtp.outlook.com",
+      "port": "Porta",
+      "secure": "Segurança",
+      "username": "Usuário",
+      "password": "Senha",
+      "fromEmail": "E-mail de envio",
+      "fromEmailHint": "E-mail que aparecerá como remetente",
+      "fromName": "Nome do remetente",
+      "test": "Testar conexão",
+      "testing": "Testando...",
+      "testOk": "Conexão bem-sucedida",
+      "testError": "Falha na conexão",
+      "saveSuccess": "SMTP configurado com sucesso",
+      "removeSuccess": "SMTP removido",
+      "notConfigured": "Não configurado",
+      "configured": "Configurado",
+      "lastTested": "Último teste",
+      "usedFor": "Usado para: convites, CSAT e e-mails de atendimento"
     },
     "channels": {
       "title": "Canais",
@@ -312,7 +340,8 @@
       },
       "status": {
         "active": "Conectado",
-        "inactive": "Desconectado"
+        "inactive": "Desconectado",
+        "pending": "Não testado"
       },
       "fields": {
         "name": "Nome do canal",

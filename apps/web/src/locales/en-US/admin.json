@@ -267,18 +267,46 @@
       },
       "messages": {
         "invited": "User invited successfully",
+        "inviteSuccess": "Invite sent successfully",
+        "inviteError": "Error inviting user",
         "updated": "User updated",
         "deactivated": "User deactivated",
         "cantDeleteSelf": "You cannot remove yourself",
         "tempPassword": "Temporary password",
         "reactivated": "User reactivated successfully",
+        "tempPasswordTitle": "User created - temporary password",
+        "tempPasswordDesc": "The invite email could not be sent to {{name}}. Share the password below manually.",
+        "emailNotConfiguredWarning": "Configure RESEND_API_KEY on the server to send invite emails automatically.",
         "passwordReset": "Password for {{name}} has been reset",
-        "tempPasswordHint": "Share this password with the user. It will expire after first login.",
+        "tempPasswordHint": "The user must change the password on first login.",
         "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated.",
         "inviteEmailNotConfigured": "Invite created, but email delivery is not configured. Set RESEND_API_KEY in the API environment.",
         "inviteEmailDomainNotVerified": "Invite created, but sender email is invalid. Check RESEND_FROM_EMAIL and your verified domain in Resend.",
         "inviteEmailDeliveryFailed": "We could not send the invite email right now. Check provider settings and try again."
       }
+    },
+    "smtp": {
+      "title": "SMTP Configuration",
+      "subtitle": "Configure your corporate email server",
+      "host": "SMTP Server",
+      "hostHint": "Example: smtp.gmail.com, smtp.outlook.com",
+      "port": "Port",
+      "secure": "Security",
+      "username": "Username",
+      "password": "Password",
+      "fromEmail": "Sender email",
+      "fromEmailHint": "Email address shown as sender",
+      "fromName": "Sender name",
+      "test": "Test connection",
+      "testing": "Testing...",
+      "testOk": "Connection successful",
+      "testError": "Connection failed",
+      "saveSuccess": "SMTP configured successfully",
+      "removeSuccess": "SMTP removed",
+      "notConfigured": "Not configured",
+      "configured": "Configured",
+      "lastTested": "Last test",
+      "usedFor": "Used for: invites, CSAT and support emails"
     },
     "channels": {
       "title": "Channels",
@@ -295,7 +323,8 @@
       },
       "status": {
         "active": "Connected",
-        "inactive": "Disconnected"
+        "inactive": "Disconnected",
+        "pending": "Not tested"
       },
       "fields": {
         "name": "Channel name",

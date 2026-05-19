@@ -68,7 +68,35 @@ interface Channel {
   status: string;
   credentials?: Record<string, unknown>;
   settings: unknown;
+  last_tested_at: string | null;
+  last_test_ok: boolean | null;
   created_at: string;
+}
+
+export interface SmtpConfig {
+  id: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  fromEmail: string;
+  fromName: string | null;
+  isActive: boolean;
+  hasPassword: boolean;
+  lastTestedAt: string | null;
+  lastTestOk: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SmtpPayload {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password?: string;
+  fromEmail: string;
+  fromName?: string;
 }
 
 interface AdminStats {
@@ -99,6 +127,13 @@ interface InviteUserPayload {
   name: string;
   email: string;
   role: 'admin' | 'agent' | 'viewer';
+}
+
+export interface InviteUserResultData {
+  user: TenantUser;
+  tempPassword: string | null;
+  emailSent: boolean;
+  warning?: 'EMAIL_NOT_CONFIGURED';
 }
 
 interface CreateChannelPayload {
@@ -991,7 +1026,7 @@ export const adminApi = {
   },
 
   inviteUser: async (payload: InviteUserPayload) => {
-    const res = await api.post<{ success: boolean; data: { user: TenantUser; tempPassword: string } }>(
+    const res = await api.post<{ success: boolean; data: InviteUserResultData }>(
       '/admin/users/invite',
       payload,
     );
@@ -1049,6 +1084,33 @@ export const adminApi = {
       `/admin/channels/${id}/test`,
     );
     return res.data;
+  },
+
+  smtp: {
+    get: async (): Promise<SmtpConfig | null> => {
+      const res = await api.get<{ success: boolean; data: SmtpConfig | null }>('/admin/smtp');
+      return res.data.data;
+    },
+
+    save: async (payload: SmtpPayload): Promise<SmtpConfig> => {
+      const res = await api.post<{ success: boolean; data: SmtpConfig }>('/admin/smtp', payload);
+      return res.data.data;
+    },
+
+    update: async (payload: SmtpPayload): Promise<SmtpConfig> => {
+      const res = await api.patch<{ success: boolean; data: SmtpConfig }>('/admin/smtp', payload);
+      return res.data.data;
+    },
+
+    remove: async (): Promise<{ deleted: boolean }> => {
+      const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>('/admin/smtp');
+      return res.data.data;
+    },
+
+    test: async (payload: Partial<SmtpPayload>): Promise<{ message: string }> => {
+      const res = await api.post<{ success: boolean; message: string }>('/admin/smtp/test', payload);
+      return { message: res.data.message };
+    },
   },
 
   businessHours: {

@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { AxiosError } from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { adminApi } from '../../services/api';
+import { adminApi, type SmtpConfig, type SmtpPayload } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { Button } from '../../components/ui/Button';
 import { AddChannelModal } from '../../components/admin/AddChannelModal';
 import { EditChannelModal } from '../../components/admin/EditChannelModal';
 import { PageShell } from '../../components/layout/PageShell';
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
 
 interface Channel {
   id: string;
@@ -14,7 +17,19 @@ interface Channel {
   name: string;
   status: string;
   settings: unknown;
+  last_tested_at: string | null;
+  last_test_ok: boolean | null;
   created_at: string;
+}
+
+interface SmtpFormState {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  fromEmail: string;
+  fromName: string;
 }
 
 const TYPE_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -57,23 +72,72 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
   },
 };
 
-function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
-  const isActive = status === 'active';
+type ChannelConnectionState = 'connected' | 'failed' | 'inactive' | 'untested';
+
+function getChannelConnectionState(channel: Channel): ChannelConnectionState {
+  if (channel.status !== 'active') return 'inactive';
+  if (channel.last_test_ok === true) return 'connected';
+  if (channel.last_test_ok === false) return 'failed';
+  return 'untested';
+}
+
+function StatusBadge({ channel, t }: { channel: Channel; t: (k: string) => string }) {
+  const state = getChannelConnectionState(channel);
+  const isConnected = state === 'connected';
+  const isUntested = state === 'untested';
+  const isInactive = state === 'inactive';
+  const color = isConnected
+    ? 'var(--green)'
+    : isUntested
+      ? 'var(--amber)'
+      : isInactive
+        ? 'var(--txt-3)'
+        : 'var(--red)';
+  const background = isConnected
+    ? 'var(--green-dim)'
+    : isUntested
+      ? 'var(--amber-dim)'
+      : isInactive
+        ? 'var(--bg-4)'
+        : 'var(--red-dim)';
+  const label = isConnected
+    ? t('tenantAdmin.channels.status.active')
+    : isUntested
+      ? t('tenantAdmin.channels.status.pending')
+      : t('tenantAdmin.channels.status.inactive');
+
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
       style={{
-        background: isActive ? 'var(--green-dim)' : 'var(--red-dim)',
-        color: isActive ? 'var(--green)' : 'var(--red)',
+        background,
+        color,
       }}
     >
       <span
         className="h-1.5 w-1.5 rounded-full"
-        style={{ background: isActive ? 'var(--green)' : 'var(--red)' }}
+        style={{ background: color }}
       />
-      {isActive ? t('tenantAdmin.channels.status.active') : t('tenantAdmin.channels.status.inactive')}
+      {label}
     </span>
   );
+}
+
+function getDefaultSmtpForm(config?: SmtpConfig | null): SmtpFormState {
+  return {
+    host: config?.host ?? '',
+    port: config?.port ?? 587,
+    secure: config?.secure ?? false,
+    username: config?.username ?? '',
+    password: '',
+    fromEmail: config?.fromEmail ?? '',
+    fromName: config?.fromName ?? '',
+  };
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
 export function Channels() {
@@ -82,10 +146,16 @@ export function Channels() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editChannelId, setEditChannelId] = useState<string | null>(null);
+  const [smtpModalOpen, setSmtpModalOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'channels'],
     queryFn: adminApi.listChannels,
+  });
+
+  const { data: smtpConfig, isLoading: smtpLoading } = useQuery({
+    queryKey: ['admin', 'smtp'],
+    queryFn: adminApi.smtp.get,
   });
 
   const deleteMutation = useMutation({
@@ -99,14 +169,18 @@ export function Channels() {
 
   const testMutation = useMutation({
     mutationFn: (id: string) => adminApi.testChannel(id),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
       if (res.data.connected) {
         toast.success(t('tenantAdmin.channels.messages.testSuccess'));
       } else {
         toast.error(t('tenantAdmin.channels.messages.testFail'));
       }
     },
-    onError: () => toast.error(t('tenantAdmin.channels.messages.testFail')),
+    onError: (error: AxiosError<{ error?: { message?: string } }>) => {
+      const message = error.response?.data?.error?.message?.trim();
+      toast.error(message || t('tenantAdmin.channels.messages.testFail'));
+    },
   });
 
   const toggleMutation = useMutation({
@@ -206,7 +280,7 @@ export function Channels() {
                         <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{meta.label}</p>
                       </div>
                     </div>
-                    <StatusBadge status={channel.status} t={t} />
+                    <StatusBadge channel={channel} t={t} />
                   </div>
 
                   <div className="mt-4 flex gap-2">
@@ -256,13 +330,282 @@ export function Channels() {
           </div>
         )}
 
+        <div
+          className="rounded-xl p-5"
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)' }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-lg"
+                style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}
+                aria-hidden
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <polyline points="22,6 12,13 2,6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-medium" style={{ color: 'var(--txt)' }}>
+                  SMTP - E-mail corporativo
+                </p>
+                <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
+                  {t('tenantAdmin.smtp.usedFor')}
+                </p>
+              </div>
+            </div>
+
+            <Button variant="secondary" onClick={() => setSmtpModalOpen(true)} disabled={smtpLoading}>
+              {smtpConfig ? 'Editar' : 'Configurar'}
+            </Button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--txt-2)' }}>
+            <span
+              style={{
+                color: smtpConfig?.lastTestOk ? 'var(--green)' : 'var(--amber)',
+                background: smtpConfig?.lastTestOk ? 'var(--green-dim)' : 'var(--amber-dim)',
+                border: `1px solid ${smtpConfig?.lastTestOk ? 'rgba(62,207,142,.3)' : 'rgba(245,158,11,.35)'}`,
+                borderRadius: 'var(--r-pill)',
+                padding: '2px 8px',
+                fontWeight: 600,
+              }}
+            >
+              {smtpConfig
+                ? (smtpConfig.lastTestOk ? t('tenantAdmin.smtp.configured') : t('tenantAdmin.smtp.notConfigured'))
+                : t('tenantAdmin.smtp.notConfigured')}
+            </span>
+            <span>
+              {t('tenantAdmin.smtp.lastTested')}: {formatDateTime(smtpConfig?.lastTestedAt ?? null)}
+            </span>
+          </div>
+        </div>
+
         <AddChannelModal open={addOpen} onClose={() => setAddOpen(false)} />
         <EditChannelModal
           open={Boolean(editChannelId)}
           channelId={editChannelId}
           onClose={() => setEditChannelId(null)}
         />
+        <SmtpConfigModal
+          open={smtpModalOpen}
+          onClose={() => setSmtpModalOpen(false)}
+          config={smtpConfig ?? null}
+        />
       </div>
     </PageShell>
+  );
+}
+
+function SmtpConfigModal({
+  open,
+  onClose,
+  config,
+}: {
+  open: boolean;
+  onClose: () => void;
+  config: SmtpConfig | null;
+}) {
+  const { t } = useTranslation('admin');
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<SmtpFormState>(getDefaultSmtpForm(config));
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(getDefaultSmtpForm(config));
+      setTestResult(null);
+    }
+  }, [open, config]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const basePayload: SmtpPayload = {
+        host: form.host.trim(),
+        port: form.port,
+        secure: form.secure,
+        username: form.username.trim(),
+        fromEmail: form.fromEmail.trim(),
+      };
+      if (form.fromName.trim()) {
+        basePayload.fromName = form.fromName.trim();
+      }
+
+      if (config) {
+        const payload: SmtpPayload = form.password.trim()
+          ? { ...basePayload, password: form.password.trim() }
+          : basePayload;
+        return adminApi.smtp.update(payload);
+      }
+
+      if (!form.password.trim()) {
+        throw new Error('PASSWORD_REQUIRED');
+      }
+
+      return adminApi.smtp.save({ ...basePayload, password: form.password.trim() });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'smtp'] });
+      toast.success(t('tenantAdmin.smtp.saveSuccess'));
+      onClose();
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error && error.message === 'PASSWORD_REQUIRED') {
+        toast.error(t('tenantAdmin.smtp.password'));
+        return;
+      }
+      toast.error(t('tenantAdmin.common.errorSave'));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: adminApi.smtp.remove,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'smtp'] });
+      toast.success(t('tenantAdmin.smtp.removeSuccess'));
+      onClose();
+    },
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Partial<SmtpPayload> = {
+        host: form.host.trim(),
+        port: form.port,
+        secure: form.secure,
+        username: form.username.trim(),
+        fromEmail: form.fromEmail.trim(),
+      };
+      if (form.fromName.trim()) {
+        payload.fromName = form.fromName.trim();
+      }
+      if (form.password.trim()) {
+        payload.password = form.password.trim();
+      }
+      return adminApi.smtp.test(payload);
+    },
+    onSuccess: async (res) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'smtp'] });
+      setTestResult({ ok: true, message: res.message || t('tenantAdmin.smtp.testOk') });
+    },
+    onError: (error: AxiosError<{ error?: { message?: string } }>) => {
+      setTestResult({
+        ok: false,
+        message: error.response?.data?.error?.message ?? t('tenantAdmin.smtp.testError'),
+      });
+    },
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('tenantAdmin.smtp.title')} maxWidth="lg">
+      <div className="space-y-4">
+        <p className="text-sm" style={{ color: 'var(--txt-2)' }}>
+          {t('tenantAdmin.smtp.subtitle')}
+        </p>
+
+        <Input
+          label={t('tenantAdmin.smtp.host')}
+          hint={t('tenantAdmin.smtp.hostHint')}
+          placeholder="smtp.gmail.com"
+          value={form.host}
+          onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))}
+        />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label={t('tenantAdmin.smtp.port')}
+            type="number"
+            value={form.port}
+            onChange={(event) => setForm((prev) => ({ ...prev, port: Number(event.target.value || 587) }))}
+          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>
+              {t('tenantAdmin.smtp.secure')}
+            </label>
+            <select
+              value={form.secure ? 'ssl' : 'tls'}
+              onChange={(event) => setForm((prev) => ({ ...prev, secure: event.target.value === 'ssl' }))}
+              style={{
+                background: 'var(--bg-3)',
+                border: '1px solid var(--line-2)',
+                color: 'var(--txt)',
+                height: '2.5rem',
+                borderRadius: '0.5rem',
+                padding: '0 0.75rem',
+                fontSize: '0.875rem',
+                width: '100%',
+                outline: 'none',
+              }}
+            >
+              <option value="tls">TLS (587)</option>
+              <option value="ssl">SSL (465)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label={t('tenantAdmin.smtp.username')}
+            value={form.username}
+            onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
+          />
+          <Input
+            label={t('tenantAdmin.smtp.password')}
+            type="password"
+            value={form.password}
+            onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+          />
+          <Input
+            label={t('tenantAdmin.smtp.fromEmail')}
+            hint={t('tenantAdmin.smtp.fromEmailHint')}
+            type="email"
+            value={form.fromEmail}
+            onChange={(event) => setForm((prev) => ({ ...prev, fromEmail: event.target.value }))}
+          />
+          <Input
+            label={t('tenantAdmin.smtp.fromName')}
+            value={form.fromName}
+            onChange={(event) => setForm((prev) => ({ ...prev, fromName: event.target.value }))}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onClose}>
+            {t('tenantAdmin.common.cancel')}
+          </Button>
+          {config && (
+            <Button
+              variant="secondary"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {t('tenantAdmin.common.remove')}
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => testMutation.mutate()}
+            disabled={testMutation.isPending}
+          >
+            {testMutation.isPending ? t('tenantAdmin.smtp.testing') : t('tenantAdmin.smtp.test')}
+          </Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.common.save')}
+          </Button>
+        </div>
+
+        {testResult && (
+          <p
+            className="text-xs"
+            style={{ color: testResult.ok ? 'var(--green)' : 'var(--red)' }}
+          >
+            {testResult.ok ? t('tenantAdmin.smtp.testOk') : testResult.message}
+          </p>
+        )}
+      </div>
+    </Modal>
   );
 }
