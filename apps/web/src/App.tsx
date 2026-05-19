@@ -24,6 +24,7 @@ import { Roles as AdminRoles } from './pages/admin/Roles';
 import { Channels as AdminChannels } from './pages/admin/Channels';
 import { QuickReplies as AdminQuickReplies } from './pages/admin/QuickReplies';
 import { Settings as AdminSettings } from './pages/admin/Settings';
+import { AttendanceRules as AdminAttendanceRules } from './pages/admin/AttendanceRules';
 import { BusinessHours as AdminBusinessHours } from './pages/admin/BusinessHours';
 import { BotMenu as AdminBotMenu } from './pages/admin/BotMenu';
 import { AutoAssign as AdminAutoAssign } from './pages/admin/AutoAssign';
@@ -171,6 +172,14 @@ export function App() {
               />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="business-hours" element={<AdminBusinessHours />} />
+              <Route
+                path="attendance-rules"
+                element={(
+                  <ProtectedRoute permission="settings:manage">
+                    <AdminAttendanceRules />
+                  </ProtectedRoute>
+                )}
+              />
               <Route path="bot" element={<AdminBotMenu />} />
               <Route path="auto-assign" element={<AdminAutoAssign />} />
               <Route path="pause-reasons" element={<AdminPauseReasons />} />

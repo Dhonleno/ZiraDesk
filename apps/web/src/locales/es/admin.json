@@ -624,7 +624,52 @@
     "aiAgent": "Agente de IA",
     "integrations": "Integraciones",
     "webhooks": "Webhooks",
-    "settings": "Configuración"
+    "attendanceRules": "Reglas de Atención",
+    "settings": "Configuración",
+    "groups": {
+      "team": "Equipo",
+      "attendance": "Atención",
+      "automation": "Automatización",
+      "tickets": "Tickets",
+      "integrations": "Integraciones",
+      "settings": "Configuración"
+    }
+  },
+  "attendanceRules": {
+    "title": "Reglas de Atención",
+    "subtitle": "Configura el comportamiento operativo de la atención",
+    "sections": {
+      "csat": "CSAT — Evaluación de Atención",
+      "email": "Correo de Soporte",
+      "inactivity": "Inactividad de Atención",
+      "outbound": "Envío Activo",
+      "bot": "Mensaje del Bot",
+      "limits": "Límites Operativos"
+    },
+    "csatEnabled": "Enviar CSAT automáticamente",
+    "csatMessage": "Mensaje inicial del CSAT",
+    "csatExpiration": "Expiración del enlace (horas)",
+    "emailAddress": "Dirección de correo de soporte",
+    "emailConfirmation": "Enviar confirmación al cliente",
+    "inactivityEnabled": "Activar monitoreo de inactividad",
+    "inactivityWarning": "Tiempo para aviso (minutos)",
+    "inactivityClose": "Tiempo para cerrar (minutos)",
+    "inactivityWarningMessage": "Mensaje de aviso por inactividad",
+    "inactivityCloseMessage": "Mensaje de cierre por inactividad",
+    "inactivityValidation": "El tiempo de cierre debe ser mayor que el tiempo de aviso",
+    "outboundMode": "Validez del envío activo",
+    "outboundHours": "Validez en horas",
+    "outboundModes": {
+      "until_end_of_day": "Hasta el fin del día",
+      "hours": "Por horas definidas",
+      "unlimited": "Sin límite"
+    },
+    "botAssignedMessage": "Mensaje al transferir a un agente",
+    "botAssignedHint": "Usa {{agent}} para insertar el nombre del agente",
+    "maxConversations": "Límite de atenciones por agente",
+    "maxConversationsHint": "Déjalo en blanco para sin límite",
+    "saveSuccess": "Reglas guardadas con éxito",
+    "saveError": "Error al guardar reglas"
   },
   "settings": {
     "visualIdentity": "Identidad visual",
@@ -708,6 +753,21 @@
       "trialEndsAt": "Trial hasta",
       "users": "Usuarios",
       "conversations": "Conversaciones",
+      "access": {
+        "title": "Accesos del tenant",
+        "subtitle": "Crea logins y restablece contraseñas sin impersonar.",
+        "createLogin": "Crear login",
+        "empty": "No se encontraron accesos para este tenant.",
+        "credentialsTitle": "Contraseña temporal generada",
+        "credentialsDescription": "Comparte esta contraseña temporal con {{name}}.",
+        "table": {
+          "actions": "Acciones"
+        },
+        "messages": {
+          "userCreated": "Login creado con éxito",
+          "passwordReset": "Contraseña restablecida con éxito"
+        }
+      },
       "createWizard": {
         "stepsAriaLabel": "Pasos de creación del tenant",
         "steps": {

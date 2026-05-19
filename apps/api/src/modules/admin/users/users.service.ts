@@ -56,6 +56,14 @@ interface UserRow {
   created_at: Date;
 }
 
+interface ExistingUserRow {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  password_hash: string;
+}
+
 function validateSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/.test(schemaName)) {
     throw new ForbiddenError('Schema do tenant inválido');
@@ -126,13 +134,24 @@ export async function getUser(id: string, schemaName: string) {
   return rows[0];
 }
 
-export async function inviteUser(data: InviteUserInput, tenantId: string, schemaName: string) {
+export async function inviteUser(
+  data: InviteUserInput,
+  tenantId: string,
+  schemaName: string,
+  options?: { sendInviteEmail?: boolean },
+) {
+  const sendInviteEmail = options?.sendInviteEmail ?? true;
   const usersRef = usersTable(schemaName);
-  const existing = await prisma.$queryRawUnsafe<[{ id: string }]>(
-    `SELECT id FROM ${usersRef} WHERE email = $1 LIMIT 1`,
+  const existing = await prisma.$queryRawUnsafe<ExistingUserRow[]>(
+    `SELECT id, name, role, status, password_hash
+       FROM ${usersRef}
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1`,
     data.email,
   );
-  if (existing[0]) throw new ConflictError('E-mail já cadastrado neste tenant');
+  if (existing[0]?.status === 'active') {
+    throw new ConflictError('E-mail já cadastrado neste tenant');
+  }
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -144,8 +163,9 @@ export async function inviteUser(data: InviteUserInput, tenantId: string, schema
     `SELECT COUNT(*) AS count FROM ${usersRef} WHERE status = 'active'`,
   );
   const currentUsers = Number(countRows[0]?.count ?? 0);
+  const willIncreaseActiveUsers = existing[0]?.status !== 'active';
 
-  if (currentUsers >= tenant.plan.maxUsers) {
+  if (willIncreaseActiveUsers && currentUsers >= tenant.plan.maxUsers) {
     throw new PlanLimitError(
       `Limite de ${tenant.plan.maxUsers} usuários atingido para o seu plano`,
     );
@@ -154,21 +174,45 @@ export async function inviteUser(data: InviteUserInput, tenantId: string, schema
   const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
+  const previousUser = existing[0] ?? null;
+  let user: UserRow;
+
+  if (!previousUser) {
+    const created = await prisma.$queryRawUnsafe<UserRow[]>(
+      `INSERT INTO ${usersRef} (name, email, password_hash, role, status)
+       VALUES ($1, $2, $3, $4, 'active')
+       RETURNING id, name, email, role, status, last_seen_at, created_at`,
+      data.name,
+      data.email,
+      passwordHash,
+      data.role,
+    );
+    user = created[0]!;
+  } else {
+    const updated = await prisma.$queryRawUnsafe<UserRow[]>(
+      `UPDATE ${usersRef}
+       SET name = $1,
+           role = $2,
+           status = 'active',
+           password_hash = $3
+       WHERE id = $4::uuid
+       RETURNING id, name, email, role, status, last_seen_at, created_at`,
+      data.name,
+      previousUser.role === 'owner' ? 'owner' : data.role,
+      passwordHash,
+      previousUser.id,
+    );
+    user = updated[0]!;
+  }
+
+  if (!sendInviteEmail) {
+    return { user, tempPassword };
+  }
+
   if (!env.RESEND_API_KEY) {
     throw new ConflictError('Envio de convite por e-mail não configurado. Defina RESEND_API_KEY.');
   }
 
-  const created = await prisma.$queryRawUnsafe<UserRow[]>(
-    `INSERT INTO ${usersRef} (name, email, password_hash, role, status)
-     VALUES ($1, $2, $3, $4, 'active')
-     RETURNING id, name, email, role, status, last_seen_at, created_at`,
-    data.name,
-    data.email,
-    passwordHash,
-    data.role,
-  );
-
-  const user = created[0]!;
   const resend = new Resend(env.RESEND_API_KEY);
   const fromEmail = env.RESEND_FROM_EMAIL || `suporte@${tenant.slug}.ziradesk.com.br`;
   const loginUrl = `${env.APP_URL.replace(/\/$/, '')}/login`;
@@ -197,7 +241,23 @@ export async function inviteUser(data: InviteUserInput, tenantId: string, schema
       throw new Error(error.message);
     }
   } catch (sendError) {
-    await prisma.$executeRawUnsafe(`DELETE FROM ${usersRef} WHERE id = $1::uuid`, user.id);
+    if (!previousUser) {
+      await prisma.$executeRawUnsafe(`DELETE FROM ${usersRef} WHERE id = $1::uuid`, user.id);
+    } else {
+      await prisma.$executeRawUnsafe(
+        `UPDATE ${usersRef}
+         SET name = $1,
+             role = $2,
+             status = $3,
+             password_hash = $4
+         WHERE id = $5::uuid`,
+        previousUser.name,
+        previousUser.role,
+        previousUser.status,
+        previousUser.password_hash,
+        previousUser.id,
+      );
+    }
 
     const reason = sendError instanceof Error ? sendError.message : 'erro desconhecido';
     throw new ConflictError(
@@ -253,10 +313,14 @@ export async function updateUser(
   return rows[0]!;
 }
 
-export async function resetUserPassword(id: string, schemaName: string) {
+export async function resetUserPassword(
+  id: string,
+  schemaName: string,
+  options?: { allowOwner?: boolean },
+) {
   const user = await getUser(id, schemaName);
   const usersRef = usersTable(schemaName);
-  if (user.role === 'owner') {
+  if (user.role === 'owner' && !options?.allowOwner) {
     throw new ForbiddenError('Não é possível redefinir a senha do proprietário da conta');
   }
 

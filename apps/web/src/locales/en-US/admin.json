@@ -624,7 +624,52 @@
     "aiAgent": "AI Agent",
     "integrations": "Integrations",
     "webhooks": "Webhooks",
-    "settings": "Settings"
+    "attendanceRules": "Attendance Rules",
+    "settings": "Settings",
+    "groups": {
+      "team": "Team",
+      "attendance": "Attendance",
+      "automation": "Automation",
+      "tickets": "Tickets",
+      "integrations": "Integrations",
+      "settings": "Settings"
+    }
+  },
+  "attendanceRules": {
+    "title": "Attendance Rules",
+    "subtitle": "Configure operational behavior for customer support",
+    "sections": {
+      "csat": "CSAT — Service Rating",
+      "email": "Support Email",
+      "inactivity": "Conversation Inactivity",
+      "outbound": "Active Outbound",
+      "bot": "Bot Message",
+      "limits": "Operational Limits"
+    },
+    "csatEnabled": "Send CSAT automatically",
+    "csatMessage": "CSAT opening message",
+    "csatExpiration": "Link expiration (hours)",
+    "emailAddress": "Support email address",
+    "emailConfirmation": "Send confirmation to customer",
+    "inactivityEnabled": "Enable inactivity monitoring",
+    "inactivityWarning": "Warning time (minutes)",
+    "inactivityClose": "Close time (minutes)",
+    "inactivityWarningMessage": "Inactivity warning message",
+    "inactivityCloseMessage": "Inactivity close message",
+    "inactivityValidation": "Close time must be greater than warning time",
+    "outboundMode": "Active outbound validity",
+    "outboundHours": "Validity in hours",
+    "outboundModes": {
+      "until_end_of_day": "Until end of day",
+      "hours": "Fixed number of hours",
+      "unlimited": "No limit"
+    },
+    "botAssignedMessage": "Message when transferring to an agent",
+    "botAssignedHint": "Use {{agent}} to insert the agent name",
+    "maxConversations": "Conversation limit per agent",
+    "maxConversationsHint": "Leave blank for no limit",
+    "saveSuccess": "Rules saved successfully",
+    "saveError": "Error saving rules"
   },
   "settings": {
     "visualIdentity": "Visual Identity",
@@ -708,6 +753,21 @@
       "trialEndsAt": "Trial until",
       "users": "Users",
       "conversations": "Conversations",
+      "access": {
+        "title": "Tenant access",
+        "subtitle": "Create logins and reset passwords without impersonating.",
+        "createLogin": "Create login",
+        "empty": "No access found for this tenant.",
+        "credentialsTitle": "Temporary password generated",
+        "credentialsDescription": "Share this temporary password with {{name}}.",
+        "table": {
+          "actions": "Actions"
+        },
+        "messages": {
+          "userCreated": "Login created successfully",
+          "passwordReset": "Password reset successfully"
+        }
+      },
       "createWizard": {
         "stepsAriaLabel": "Tenant creation steps",
         "steps": {

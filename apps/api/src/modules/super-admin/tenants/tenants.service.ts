@@ -7,7 +7,13 @@ import { prisma } from '../../../config/database.js';
 import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
 import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
+import {
+  listUsers,
+  inviteUser,
+  resetUserPassword,
+} from '../../admin/users/users.service.js';
 import type { CreateTenantInput, UpdateTenantInput, ListTenantsQuery, SlugAvailabilityQuery } from './tenants.schema.js';
+import type { SuperAdminTenantInviteUserInput, SuperAdminTenantUsersQuery } from './tenants.schema.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -21,6 +27,26 @@ export class ConflictError extends Error {
     super(message);
     this.name = 'ConflictError';
   }
+}
+
+interface TenantUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  last_seen_at: Date | null;
+  created_at: Date;
+}
+
+interface TenantUsersListResult {
+  data: TenantUserSummary[];
+  meta: {
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+  };
 }
 
 export async function checkTenantSlugAvailability(query: SlugAvailabilityQuery) {
@@ -1041,4 +1067,40 @@ export async function impersonateTenantAsAdmin(tenantId: string, superAdminId: s
     tenantSlug: tenant.slug,
     tenantName: tenant.name,
   };
+}
+
+export async function listTenantUsersForSuperAdmin(
+  tenantId: string,
+  query: SuperAdminTenantUsersQuery,
+): Promise<TenantUsersListResult> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, schemaName: true },
+  });
+
+  if (!tenant) throw new NotFoundError('Tenant');
+  return listUsers(query, tenant.schemaName);
+}
+
+export async function inviteTenantUserAsSuperAdmin(
+  tenantId: string,
+  payload: SuperAdminTenantInviteUserInput,
+): Promise<{ user: TenantUserSummary; tempPassword: string }> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, schemaName: true },
+  });
+
+  if (!tenant) throw new NotFoundError('Tenant');
+  return inviteUser(payload, tenant.id, tenant.schemaName, { sendInviteEmail: false });
+}
+
+export async function resetTenantUserPasswordAsSuperAdmin(tenantId: string, userId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, schemaName: true },
+  });
+
+  if (!tenant) throw new NotFoundError('Tenant');
+  return resetUserPassword(userId, tenant.schemaName, { allowOwner: true });
 }
