@@ -1911,6 +1911,7 @@ export function ChatArea({ conversationId }: Props) {
                 const isAIMessage = isBot && msg.metadata?.source === 'ai_agent';
                 const isSystem = msg.sender_type === 'system';
                 const isCallRecording = msg.content_type === 'call_recording';
+                const isAudioMessage = msg.content_type === 'audio' && !isCallRecording;
                 const callRecordingMeta = parseCallRecordingMetadata(msg);
                 const isCompanySide = isAgent;
                 const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
@@ -2091,7 +2092,8 @@ export function ChatArea({ conversationId }: Props) {
                       </div>
                       <div
                         style={{
-                          padding: '9px 13px',
+                          padding: isAudioMessage ? '4px 6px' : '9px 13px',
+                          minWidth: isAudioMessage ? 240 : undefined,
                           borderRadius: 12,
                           borderTopLeftRadius: isCompanySide ? 12 : 0,
                           borderTopRightRadius: isCompanySide ? 0 : 12,
@@ -2168,6 +2170,7 @@ export function ChatArea({ conversationId }: Props) {
                               message={msg}
                               conversationId={conversationId}
                               localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
+                              isOutgoing={msg.sender_type === 'agent'}
                             />
                           </div>
                         )}
