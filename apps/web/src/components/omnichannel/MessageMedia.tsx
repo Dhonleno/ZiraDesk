@@ -3,11 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { omnichannelApi, type OmnichannelMessage } from '../../services/api';
 import { Lightbox } from '../ui/Lightbox';
+import { AudioPlayer } from './AudioPlayer';
 
 interface MessageMediaProps {
   message: OmnichannelMessage;
   conversationId: string;
   localMediaUrl?: string | undefined;
+  isOutgoing?: boolean;
 }
 
 function revokeBlobUrlLater(url: string, delayMs = 1500) {
@@ -22,7 +24,7 @@ function getMetadataMediaId(metadata: OmnichannelMessage['metadata']): string | 
   return typeof mediaId === 'string' && mediaId.trim().length > 0 ? mediaId : null;
 }
 
-export function MessageMedia({ message, conversationId, localMediaUrl }: MessageMediaProps) {
+export function MessageMedia({ message, conversationId, localMediaUrl, isOutgoing = false }: MessageMediaProps) {
   const { t } = useTranslation('omnichannel');
   const [openLightbox, setOpenLightbox] = useState(false);
   const [ignoreLocalMediaUrl, setIgnoreLocalMediaUrl] = useState(false);
@@ -100,7 +102,7 @@ export function MessageMedia({ message, conversationId, localMediaUrl }: Message
 
   if (message.content_type === 'audio') {
     return (
-      <audio controls src={mediaUrl} onError={handleMediaError} style={{ maxWidth: 240 }} />
+      <AudioPlayer src={mediaUrl} isOutgoing={isOutgoing} />
     );
   }
 
