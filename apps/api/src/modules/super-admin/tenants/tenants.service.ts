@@ -223,6 +223,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       credentials JSONB        NOT NULL DEFAULT '{}',
       status      VARCHAR(20)  NOT NULL DEFAULT 'active',
       settings    JSONB        NOT NULL DEFAULT '{}',
+      last_tested_at TIMESTAMPTZ,
+      last_test_ok   BOOLEAN,
       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
@@ -1092,7 +1094,13 @@ export async function inviteTenantUserAsSuperAdmin(
   });
 
   if (!tenant) throw new NotFoundError('Tenant');
-  return inviteUser(payload, tenant.id, tenant.schemaName, { sendInviteEmail: false });
+  const result = await inviteUser(payload, tenant.id, tenant.schemaName, { sendInviteEmail: false });
+
+  if (!result.tempPassword) {
+    throw new Error('Senha temporária não disponível para convite de super-admin');
+  }
+
+  return { user: result.user, tempPassword: result.tempPassword };
 }
 
 export async function resetTenantUserPasswordAsSuperAdmin(tenantId: string, userId: string) {

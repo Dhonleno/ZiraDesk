@@ -1,8 +1,9 @@
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
-import { Resend } from 'resend';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
+import { logger } from '../../../config/logger.js';
+import { hasTenantEmailProvider, sendEmail } from '../../../services/email.service.js';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.schema.js';
 import type { Role } from '@ziradesk/shared';
 
@@ -34,6 +35,20 @@ export class PlanLimitError extends Error {
   }
 }
 
+type InviteEmailErrorCode = 'EMAIL_SEND_FAILED';
+
+export class InviteEmailError extends Error {
+  code: InviteEmailErrorCode;
+  statusCode: number;
+
+  constructor(code: InviteEmailErrorCode, message: string, statusCode: number) {
+    super(message);
+    this.name = 'InviteEmailError';
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
 type RoleUpdateErrorCode = 'CANNOT_CHANGE_OWN_ROLE' | 'ONLY_OWNER_CAN_ASSIGN_OWNER';
 
 export class RoleUpdateError extends Error {
@@ -62,6 +77,13 @@ interface ExistingUserRow {
   role: string;
   status: string;
   password_hash: string;
+}
+
+interface InviteUserResult {
+  user: UserRow;
+  tempPassword: string | null;
+  emailSent: boolean;
+  warning?: 'EMAIL_NOT_CONFIGURED';
 }
 
 function validateSchemaName(schemaName: string): string {
@@ -139,8 +161,19 @@ export async function inviteUser(
   tenantId: string,
   schemaName: string,
   options?: { sendInviteEmail?: boolean },
-) {
+): Promise<InviteUserResult> {
   const sendInviteEmail = options?.sendInviteEmail ?? true;
+  const canSendInviteEmail = sendInviteEmail
+    ? await hasTenantEmailProvider(schemaName)
+    : false;
+
+  if (sendInviteEmail && !canSendInviteEmail) {
+    logger.warn(
+      { tenantId, email: data.email },
+      '[Invite] Email not configured — returning temp password',
+    );
+  }
+
   const usersRef = usersTable(schemaName);
   const existing = await prisma.$queryRawUnsafe<ExistingUserRow[]>(
     `SELECT id, name, role, status, password_hash
@@ -173,7 +206,6 @@ export async function inviteUser(
 
   const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
   const passwordHash = await bcrypt.hash(tempPassword, 12);
-
   const previousUser = existing[0] ?? null;
   let user: UserRow;
 
@@ -206,20 +238,26 @@ export async function inviteUser(
   }
 
   if (!sendInviteEmail) {
-    return { user, tempPassword };
+    return { user, tempPassword, emailSent: false };
   }
 
-  if (!env.RESEND_API_KEY) {
-    throw new ConflictError('Envio de convite por e-mail não configurado. Defina RESEND_API_KEY.');
+  if (!canSendInviteEmail) {
+    return {
+      user,
+      tempPassword,
+      emailSent: false,
+      warning: 'EMAIL_NOT_CONFIGURED',
+    };
   }
 
-  const resend = new Resend(env.RESEND_API_KEY);
-  const fromEmail = env.RESEND_FROM_EMAIL || `suporte@${tenant.slug}.ziradesk.com.br`;
   const loginUrl = `${env.APP_URL.replace(/\/$/, '')}/login`;
 
+  logger.info({ tenantId, email: data.email }, '[Invite] Sending email');
+
   try {
-    const { error } = await resend.emails.send({
-      from: `ZiraDesk <${fromEmail}>`,
+    await sendEmail({
+      tenantId,
+      tenantSchema: schemaName,
       to: user.email,
       subject: 'Convite para acessar o ZiraDesk',
       html: `
@@ -235,12 +273,13 @@ export async function inviteUser(
           <p style="margin:0;">Por segurança, altere essa senha após o primeiro acesso.</p>
         </div>
       `,
+      from: { name: tenant.name },
     });
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    logger.info({ tenantId, email: data.email }, '[Invite] Email sent');
   } catch (sendError) {
+    logger.error({ tenantId, email: data.email, err: sendError }, '[Invite] Email send failed');
+
     if (!previousUser) {
       await prisma.$executeRawUnsafe(`DELETE FROM ${usersRef} WHERE id = $1::uuid`, user.id);
     } else {
@@ -258,14 +297,10 @@ export async function inviteUser(
         previousUser.id,
       );
     }
-
-    const reason = sendError instanceof Error ? sendError.message : 'erro desconhecido';
-    throw new ConflictError(
-      `Não foi possível enviar o convite por e-mail (${reason}). Verifique RESEND_FROM_EMAIL/domínio no Resend e tente novamente.`,
-    );
+    throw new InviteEmailError('EMAIL_SEND_FAILED', 'Falha ao enviar e-mail de convite', 502);
   }
 
-  return { user, tempPassword };
+  return { user, tempPassword: null, emailSent: true };
 }
 
 export async function updateUser(

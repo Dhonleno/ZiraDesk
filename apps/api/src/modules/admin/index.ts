@@ -17,6 +17,7 @@ import { aiAdminRoutes } from './ai/ai-admin.routes.js';
 import { webhooksRoutes } from './webhooks/webhooks.routes.js';
 import { redmineAdminRoutes } from './redmine/redmine.routes.js';
 import { templatesRoutes } from './templates/templates.routes.js';
+import { smtpRoutes } from './smtp/smtp.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -37,4 +38,5 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(webhooksRoutes, { prefix: '/webhooks' });
   await app.register(redmineAdminRoutes, { prefix: '/integrations/redmine' });
   await app.register(templatesRoutes, { prefix: '/templates' });
+  await app.register(smtpRoutes, { prefix: '/smtp' });
 }

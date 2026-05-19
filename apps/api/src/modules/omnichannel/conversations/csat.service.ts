@@ -1,6 +1,8 @@
 import { prisma } from '../../../config/database.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { logger } from '../../../config/logger.js';
+import { env } from '../../../config/env.js';
+import { sendEmail } from '../../../services/email.service.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 
 type CsatTxClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
@@ -11,6 +13,7 @@ interface CsatConversationRow {
   channel_type: string;
   contact_whatsapp: string | null;
   contact_phone: string | null;
+  contact_email: string | null;
   channel_credentials: string | object | null;
   csat_stage: string | null;
   csat_score: number | null;
@@ -57,6 +60,31 @@ export function buildCsatInvalidScoreMessage(): string {
 
 export function buildCsatThankYouMessage(): string {
   return ['Agradecemos seu feedback!', 'Até a próxima. 😊'].join('\n');
+}
+
+function buildCsatEmailHtml(message: string, conversationId: string): string {
+  const baseUrl = env.APP_URL.replace(/\/$/, '');
+  const ratingLinks = [1, 2, 3, 4, 5]
+    .map((rating) => {
+      const url = `${baseUrl}/omnichannel/conversations/${conversationId}?csat=${rating}`;
+      return `<a href="${url}" style="display:inline-block;margin:4px 4px 0 0;padding:6px 10px;border-radius:8px;background:#f1f5f9;color:#111827;text-decoration:none;">${rating} ⭐</a>`;
+    })
+    .join('');
+
+  const bodyHtml = message
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => `<p style="margin:0 0 10px;">${line}</p>`)
+    .join('');
+
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#111827;">
+      <h2 style="margin:0 0 12px;">Como foi seu atendimento?</h2>
+      ${bodyHtml}
+      <p style="margin:16px 0 8px;"><strong>Avalie rapidamente:</strong></p>
+      <div>${ratingLinks}</div>
+    </div>
+  `;
 }
 
 function normalizePhoneNumber(value: string): string {
@@ -110,6 +138,7 @@ export async function sendWhatsAppTextMessage({
 export async function sendCsatMessage(
   conversationId: string,
   schemaName: string,
+  tenantId: string,
   db: CsatDbClient,
 ): Promise<void> {
   await ensureConversationCsatInfrastructure(db, schemaName);
@@ -128,6 +157,7 @@ export async function sendCsatMessage(
          c.metadata,
          ct.whatsapp AS contact_whatsapp,
          ct.phone AS contact_phone,
+         ct.email AS contact_email,
          ch.credentials AS channel_credentials
        FROM conversations c
        LEFT JOIN contacts ct ON ct.id = c.contact_id
@@ -139,7 +169,7 @@ export async function sendCsatMessage(
     );
     const conversation = rows[0];
     if (!conversation) return;
-    if (conversation.channel_type !== 'whatsapp') return;
+    if (conversation.channel_type !== 'whatsapp' && conversation.channel_type !== 'email') return;
     const origin = extractConversationOrigin(conversation.metadata);
     const isLegacyActiveOutbound = conversation.metadata
       && typeof conversation.metadata === 'object'
@@ -188,23 +218,37 @@ export async function sendCsatMessage(
         ? settings.csat_message.trim()
         : buildDefaultCsatMessage();
 
-    const clientPhone = normalizePhoneNumber(conversation.contact_whatsapp ?? conversation.contact_phone ?? '');
-    if (!clientPhone) return;
+    if (conversation.channel_type === 'email') {
+      const contactEmail = conversation.contact_email?.trim();
+      if (!contactEmail) return;
 
-    const credentials = conversation.channel_credentials
-      ? decryptCredentials(conversation.channel_credentials)
-      : {};
-    const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
-    const accessToken = credentials.accessToken ?? credentials.access_token;
-    if (!phoneNumberId || !accessToken) return;
+      await sendEmail({
+        tenantId,
+        tenantSchema: schemaName,
+        to: contactEmail,
+        subject: 'Como foi seu atendimento?',
+        html: buildCsatEmailHtml(csatText, conversationId),
+        text: csatText,
+      });
+    } else {
+      const clientPhone = normalizePhoneNumber(conversation.contact_whatsapp ?? conversation.contact_phone ?? '');
+      if (!clientPhone) return;
 
-    const sent = await sendWhatsAppTextMessage({
-      text: csatText,
-      to: clientPhone,
-      phoneNumberId,
-      accessToken,
-    });
-    if (!sent) return;
+      const credentials = conversation.channel_credentials
+        ? decryptCredentials(conversation.channel_credentials)
+        : {};
+      const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
+      const accessToken = credentials.accessToken ?? credentials.access_token;
+      if (!phoneNumberId || !accessToken) return;
+
+      const sent = await sendWhatsAppTextMessage({
+        text: csatText,
+        to: clientPhone,
+        phoneNumberId,
+        accessToken,
+      });
+      if (!sent) return;
+    }
 
     await tx.$executeRawUnsafe(
       `UPDATE conversations
@@ -216,12 +260,14 @@ export async function sendCsatMessage(
       conversationId,
     );
 
-    await tx.$executeRawUnsafe(
-      `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
-       VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
-      conversationId,
-      csatText,
-    );
+    if (conversation.channel_type === 'whatsapp') {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO messages (id, conversation_id, sender_type, content, content_type, is_internal, created_at)
+         VALUES (gen_random_uuid(), $1::uuid, 'bot', $2, 'text', false, NOW())`,
+        conversationId,
+        csatText,
+      );
+    }
 
     logger.info({ conversationId }, '[CSAT] Sent');
   });

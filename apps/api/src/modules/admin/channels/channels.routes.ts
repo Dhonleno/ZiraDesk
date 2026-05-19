@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -14,6 +15,11 @@ import {
 } from './channels.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin')];
+
+function resolveSchemaName(user: unknown): string | null {
+  const authUser = user as AuthUser;
+  return authUser.schemaName ?? null;
+}
 
 export async function channelsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { preHandler: guard }, async (_request, reply) => {
@@ -78,12 +84,23 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: guard },
     async (request, reply) => {
       try {
-        const data = await testChannel(request.params.id);
+        const schemaName = resolveSchemaName(request.user);
+        if (!schemaName) {
+          return reply.code(500).send({
+            success: false,
+            error: { message: 'Schema do tenant não resolvido' },
+          });
+        }
+        const data = await testChannel(request.params.id, schemaName);
         return reply.send({ success: true, data });
       } catch (err) {
         if (err instanceof NotFoundError)
           return reply.code(404).send({ success: false, error: { message: err.message } });
-        throw err;
+        const message = err instanceof Error ? err.message : 'Erro ao testar canal';
+        return reply.code(502).send({
+          success: false,
+          error: { code: 'CHANNEL_TEST_FAILED', message },
+        });
       }
     },
   );

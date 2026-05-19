@@ -3,6 +3,7 @@ import { redis } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
+import { sendEmail } from '../services/email.service.js';
 
 interface SendMessageJob {
   messageId: string;
@@ -119,6 +120,18 @@ async function persistExternalId(job: SendMessageJob, externalId: string): Promi
      SET external_id = $1, status = 'sent'
      WHERE id = $2::uuid`,
     externalId,
+    job.messageId,
+  );
+}
+
+async function persistSentStatus(job: SendMessageJob): Promise<void> {
+  const schemaName = await resolveSchemaName(job);
+  if (!schemaName) return;
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${quoteIdent(schemaName)}.messages
+     SET status = 'sent'
+     WHERE id = $1::uuid`,
     job.messageId,
   );
 }
@@ -500,25 +513,6 @@ const worker = new Worker<SendMessageJob>(
       }
 
       case 'email': {
-        const fromEmail =
-          channelCredentials['fromEmail'] ??
-          channelCredentials['from_email'] ??
-          env.RESEND_FROM_EMAIL;
-        const fromName =
-          channelCredentials['fromName'] ??
-          channelCredentials['from_name'] ??
-          '';
-        const resendApiKey =
-          channelCredentials['resendApiKey'] ??
-          channelCredentials['resend_api_key'] ??
-          env.RESEND_API_KEY;
-
-        if (!fromEmail || !resendApiKey) {
-          logger.error({ jobId: job.id }, '[Email] Missing credentials (fromEmail or resendApiKey)');
-          await persistFailedStatus(job.data, { email_send_error: 'missing_credentials' });
-          return;
-        }
-
         const toEmail = job.data.to?.trim();
         if (!toEmail) {
           logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Missing recipient email');
@@ -539,72 +533,45 @@ const worker = new Worker<SendMessageJob>(
           }
         }
 
+        if (!emailSchemaName) {
+          logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Missing tenant schema');
+          await persistFailedStatus(job.data, { email_send_error: 'missing_tenant_schema' });
+          return;
+        }
+
         const textContent = job.data.content ?? '';
         const htmlBody = textContent
           .split('\n')
           .map((line) => `<p>${line}</p>`)
           .join('');
-
-        const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-
-        const emailResponse = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${resendApiKey}`,
-          },
-          body: JSON.stringify({
-            from,
-            to: [toEmail],
+        try {
+          await sendEmail({
+            tenantId: job.data.tenantId ?? 'unknown',
+            tenantSchema: emailSchemaName,
+            to: toEmail,
             subject: emailSubject,
             html: htmlBody,
             text: textContent,
-            headers: {
-              'X-Conversation-Id': job.data.conversationId,
-              ...(job.data.tenantId ? { 'X-Tenant-Id': job.data.tenantId } : {}),
-            },
-          }),
-        });
-        const emailText = await emailResponse.text();
+          });
+          await persistSentStatus(job.data);
+          logger.info(
+            { jobId: job.id, messageId: job.data.messageId },
+            '[Email] Message sent',
+          );
+          return { ok: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'unknown_error';
 
-        if (!emailResponse.ok) {
-          let emailErrorMessage: string | null = null;
-          try {
-            const parsed = JSON.parse(emailText) as { name?: string; message?: string };
-            emailErrorMessage = parsed.message?.trim() ?? null;
-          } catch { /* not JSON */ }
-
-          // Permanent errors — do not retry
-          const permanentEmailStatuses = new Set([400, 403, 422]);
-          if (permanentEmailStatuses.has(emailResponse.status)) {
-            logger.error(
-              { jobId: job.id, status: emailResponse.status, error: emailErrorMessage },
-              '[Email] Permanent error — no retry',
-            );
+          if (message === 'EMAIL_NOT_CONFIGURED') {
             await persistFailedStatus(job.data, {
-              email_send_http_status: emailResponse.status,
-              email_send_error_message: emailErrorMessage,
+              email_send_error: 'email_not_configured',
               email_send_failed_at: new Date().toISOString(),
             });
+            logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Provider not configured');
             return;
           }
 
-          // Temporary errors (429, 500, 502, 503) — let BullMQ retry
-          throw new Error(`[Email] Resend API error ${emailResponse.status}: ${emailErrorMessage ?? emailText}`);
-        }
-
-        try {
-          const emailResult = JSON.parse(emailText) as { id?: string };
-          if (emailResult.id) {
-            await persistExternalId(job.data, emailResult.id);
-          }
-          logger.info(
-            { jobId: job.id, messageId: job.data.messageId, resendId: emailResult.id },
-            '[Email] Message sent',
-          );
-          return emailResult;
-        } catch {
-          return { ok: true, raw: emailText };
+          throw error;
         }
       }
     }

@@ -16,6 +16,7 @@ import {
   ForbiddenError,
   PlanLimitError,
   RoleUpdateError,
+  InviteEmailError,
 } from './users.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
@@ -86,6 +87,12 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       const result = await inviteUser(parsed.data, request.user.tenantId!, schemaName);
       return reply.code(201).send({ success: true, data: result });
     } catch (err) {
+      if (err instanceof InviteEmailError) {
+        return reply.code(err.statusCode).send({
+          success: false,
+          error: { code: err.code, message: err.message },
+        });
+      }
       if (err instanceof ConflictError)
         return reply.code(409).send({ success: false, error: { message: err.message } });
       if (err instanceof PlanLimitError)

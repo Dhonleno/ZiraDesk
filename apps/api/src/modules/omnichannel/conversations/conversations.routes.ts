@@ -681,7 +681,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         );
 
         if (shouldTriggerCsat) {
-          sendCsatMessage(request.params.id, schemaName, prisma).catch((err: unknown) => {
+          sendCsatMessage(request.params.id, schemaName, tenantUser.tenantId, prisma).catch((err: unknown) => {
             request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
           });
         } else {
@@ -742,7 +742,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
             patchSchemaName,
           );
           if (shouldTriggerCsat) {
-            sendCsatMessage(request.params.id, patchSchemaName, prisma).catch((err: unknown) => {
+            sendCsatMessage(request.params.id, patchSchemaName, patchTenantId, prisma).catch((err: unknown) => {
               request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
             });
           } else {
