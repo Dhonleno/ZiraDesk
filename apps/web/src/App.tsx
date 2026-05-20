@@ -146,8 +146,22 @@ export function App() {
             <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
             <Route path="crm/organizations" element={<OrganizationsPage />} />
             <Route path="crm/organizations/:id" element={<OrganizationsPage />} />
-            <Route path="crm/contacts" element={<ContactsPage />} />
-            <Route path="crm/contacts/:id" element={<ContactsPage />} />
+            <Route
+              path="crm/contacts"
+              element={(
+                <ProtectedRoute permission="contacts:view">
+                  <ContactsPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="crm/contacts/:id"
+              element={(
+                <ProtectedRoute permission="contacts:view">
+                  <ContactsPage />
+                </ProtectedRoute>
+              )}
+            />
             <Route path="tickets" element={<TicketsPage />} />
             <Route path="tickets/new" element={<CreateTicket />} />
             <Route path="tickets/:id" element={<TicketDetailPage />} />
