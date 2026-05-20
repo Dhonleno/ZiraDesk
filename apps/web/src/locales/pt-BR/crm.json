@@ -184,9 +184,15 @@
     "title": "Contatos",
     "standalone": "Contatos avulsos",
     "standaloneDesc": "Contatos sem organização vinculada",
+    "subtitle": "{{count}} contatos",
     "new": "Novo contato",
     "search": "Buscar contato...",
     "clearSearch": "Limpar",
+    "filter": {
+      "all": "Todos",
+      "linked": "Com organização",
+      "standalone": "Sem organização"
+    },
     "noResults": "Nenhum contato encontrado",
     "loading": "Carregando...",
     "total": "{{n}} contatos",
