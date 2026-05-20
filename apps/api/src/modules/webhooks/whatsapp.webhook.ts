@@ -47,7 +47,7 @@ interface MetaMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction';
+  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction';
   context?: {
     id?: string;
     from?: string;
@@ -62,10 +62,27 @@ interface MetaMessage {
     animated?: boolean;
   };
   text?: { body: string };
+  interactive?: {
+    type?: 'button_reply' | 'list_reply';
+    button_reply?: {
+      id?: string;
+      title?: string;
+    };
+    list_reply?: {
+      id?: string;
+      title?: string;
+      description?: string;
+    };
+  };
   image?: { id: string; mime_type: string; caption?: string };
   audio?: { id: string; mime_type: string };
   video?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; filename: string; mime_type: string };
+}
+
+interface InteractiveMenuOption {
+  number: number;
+  label: string;
 }
 
 interface MetaStatus {
@@ -483,6 +500,110 @@ async function sendConversationWhatsAppText(
   });
 }
 
+async function sendWhatsAppInteractiveMenu(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  body: string,
+  options: InteractiveMenuOption[],
+  footer?: string,
+): Promise<void> {
+  const sanitizedTo = to.replace(/\D/g, '');
+  if (!sanitizedTo) return;
+
+  const truncate = (text: string, max: number): string => {
+    if (text.length <= max) return text;
+    return `${text.slice(0, Math.max(0, max - 1))}…`;
+  };
+
+  const sanitizedBody = body.trim() || 'Escolha uma opção:';
+  const sanitizedFooter = footer?.trim();
+  let payload: Record<string, unknown>;
+
+  if (options.length <= 3) {
+    payload = {
+      messaging_product: 'whatsapp',
+      to: sanitizedTo,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: sanitizedBody },
+        ...(sanitizedFooter ? { footer: { text: sanitizedFooter } } : {}),
+        action: {
+          buttons: options.map((option) => ({
+            type: 'reply',
+            reply: {
+              id: String(option.number),
+              title: truncate(option.label, 20),
+            },
+          })),
+        },
+      },
+    };
+  } else {
+    payload = {
+      messaging_product: 'whatsapp',
+      to: sanitizedTo,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: sanitizedBody },
+        ...(sanitizedFooter ? { footer: { text: sanitizedFooter } } : {}),
+        action: {
+          button: truncate('Ver opções', 20),
+          sections: [{
+            title: 'Opções disponíveis',
+            rows: options.map((option) => ({
+              id: String(option.number),
+              title: truncate(option.label, 24),
+            })),
+          }],
+        },
+      },
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => '');
+      logger.error(
+        { to: sanitizedTo, status: response.status, details: details.substring(0, 500) },
+        '[Bot] Interactive menu send failed — falling back to text',
+      );
+      await sendWhatsAppTextMessage({
+        text: sanitizedBody,
+        to: sanitizedTo,
+        phoneNumberId,
+        accessToken,
+      });
+    }
+  } catch (error) {
+    logger.error(
+      { to: sanitizedTo, err: error },
+      '[Bot] Interactive menu send failed — falling back to text',
+    );
+    await sendWhatsAppTextMessage({
+      text: sanitizedBody,
+      to: sanitizedTo,
+      phoneNumberId,
+      accessToken,
+    });
+  }
+}
+
 async function closeConversationOutsideHours(
   conversationId: string,
   schemaName: string,
@@ -635,6 +756,7 @@ async function processIncomingMessage(
 
   let content = '';
   let contentType = 'text';
+  let interactiveReplyId: string | null = null;
   let externalMediaId: string | null = null;
   const mediaMetadata: Record<string, unknown> = {};
 
@@ -643,6 +765,20 @@ async function processIncomingMessage(
       content = message.text?.body ?? '';
       contentType = 'text';
       break;
+    case 'interactive': {
+      const interactiveType = message.interactive?.type;
+      if (interactiveType === 'button_reply') {
+        interactiveReplyId = message.interactive?.button_reply?.id?.trim() || null;
+        content = message.interactive?.button_reply?.title?.trim() || '';
+      } else if (interactiveType === 'list_reply') {
+        interactiveReplyId = message.interactive?.list_reply?.id?.trim() || null;
+        content = message.interactive?.list_reply?.title?.trim() || '';
+      } else {
+        content = '';
+      }
+      contentType = 'text';
+      break;
+    }
     case 'image':
       content = message.image?.caption?.trim() ?? '';
       contentType = 'image';
@@ -790,6 +926,8 @@ async function processIncomingMessage(
     let protocolMessageContent: string | null = null;
     let botMessageId: string | null = null;
     let botMessageContent: string | null = null;
+    let botMenuOptions: InteractiveMenuOption[] = [];
+    let botMenuIncludeBack = false;
     let botSavedMessage: { id: string; content: string; created_at: Date; sender_type: string } | null = null;
     if (convRows[0]) {
       conversationId = convRows[0].id;
@@ -914,6 +1052,7 @@ async function processIncomingMessage(
     const incomingMessageMetadata: Record<string, unknown> = {
       ...mediaMetadata,
       ...(mentionMetadata ? { mention: mentionMetadata } : {}),
+      ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
     };
 
     const isCsatPending = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
@@ -1216,7 +1355,14 @@ async function processIncomingMessage(
       const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
       const skipBot = currentBotStage === 'done';
       if (!skipBot && canProcessBot) {
-        botResponse = await processBotMessage(content, conversationId, isNewConversation, tx, false);
+        botResponse = await processBotMessage(
+          content,
+          conversationId,
+          isNewConversation,
+          tx,
+          false,
+          interactiveReplyId,
+        );
       }
     }
 
@@ -1253,6 +1399,13 @@ async function processIncomingMessage(
     if (botResponse) {
       const botText = isNewConversation ? withCloseHint(botResponse.text) : botResponse.text;
       let resolvedBotText = botText;
+      if (botResponse.type === 'menu' || botResponse.type === 'submenu' || botResponse.type === 'invalid') {
+        botMenuOptions = botResponse.options.map((option) => ({
+          number: option.number,
+          label: option.label,
+        }));
+        botMenuIncludeBack = botResponse.includeBack;
+      }
 
       if (botResponse.type === 'choice') {
         const queuePositionRows = await tx.$queryRawUnsafe<Array<{ count: string }>>(
@@ -1337,6 +1490,8 @@ async function processIncomingMessage(
       protocolMessageContent,
       botMessageId,
       botMessageContent,
+      botMenuOptions,
+      botMenuIncludeBack,
       botMessage: botSavedMessage,
       contactId,
       contactName: contactRows[0]?.name ?? senderName,
@@ -1491,20 +1646,47 @@ async function processIncomingMessage(
   const aiActivatesOnLeaf = Boolean(aiConfigForLeaf?.is_enabled && aiConfigForLeaf?.openai_api_key);
 
   if (result.botMessageId && result.botMessageContent) {
+    const outgoingPhoneNumberId = getCredentialValue(channelCredentials, 'phoneNumberId', 'phone_number_id');
+    const outgoingAccessToken = getCredentialValue(channelCredentials, 'accessToken', 'access_token');
+    const currentMenuOptions = 'botMenuOptions' in result ? result.botMenuOptions : [];
+    const includeBackOption = 'botMenuIncludeBack' in result ? result.botMenuIncludeBack === true : false;
+    const interactiveOptions = currentMenuOptions
+      .filter((option) => Number.isInteger(option.number) && option.label.trim().length > 0)
+      .map((option) => ({
+        number: option.number,
+        label: option.label.trim(),
+      }));
+    if (includeBackOption && !interactiveOptions.some((option) => option.number === 0)) {
+      interactiveOptions.push({ number: 0, label: 'Voltar' });
+    }
+    const canSendInteractiveMenu = interactiveOptions.length > 0
+      && interactiveOptions.length <= 10
+      && Boolean(outgoingPhoneNumberId && outgoingAccessToken);
+
     if (result.shouldAutoAssign && !aiActivatesOnLeaf) {
       // Send transfer message directly so it arrives before the "accepted" message from autoAssign
       await sendConversationWhatsAppText(channelCredentials, formattedPhone, result.botMessageContent);
     } else if (!result.shouldAutoAssign) {
-      await messageQueue.add('send', {
-        messageId: result.botMessageId,
-        conversationId: result.conversationId,
-        tenantId,
-        tenantSchema: schemaName,
-        channelType: 'whatsapp',
-        channelCredentials,
-        content: result.botMessageContent,
-        to: formattedPhone,
-      });
+      if (canSendInteractiveMenu && outgoingPhoneNumberId && outgoingAccessToken) {
+        await sendWhatsAppInteractiveMenu(
+          outgoingPhoneNumberId,
+          outgoingAccessToken,
+          formattedPhone,
+          result.botMessageContent,
+          interactiveOptions,
+        );
+      } else {
+        await messageQueue.add('send', {
+          messageId: result.botMessageId,
+          conversationId: result.conversationId,
+          tenantId,
+          tenantSchema: schemaName,
+          channelType: 'whatsapp',
+          channelCredentials,
+          content: result.botMessageContent,
+          to: formattedPhone,
+        });
+      }
     }
     // When aiActivatesOnLeaf, the queue-position message stays in DB but is not sent via WhatsApp;
     // the AI greeting below takes its place.

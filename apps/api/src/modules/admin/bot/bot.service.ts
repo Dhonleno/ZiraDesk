@@ -48,9 +48,25 @@ export interface BotMenu extends BotMenuRow {
 }
 
 export type BotResponse =
-  | { type: 'menu'; text: string }
-  | { type: 'submenu'; text: string; option: BotOption }
-  | { type: 'invalid'; text: string }
+  | {
+    type: 'menu';
+    text: string;
+    options: Array<Pick<BotOption, 'number' | 'label'>>;
+    includeBack: boolean;
+  }
+  | {
+    type: 'submenu';
+    text: string;
+    option: BotOption;
+    options: Array<Pick<BotOption, 'number' | 'label'>>;
+    includeBack: true;
+  }
+  | {
+    type: 'invalid';
+    text: string;
+    options: Array<Pick<BotOption, 'number' | 'label'>>;
+    includeBack: boolean;
+  }
   | { type: 'choice'; text: string; option: BotOption | null };
 
 export class NotFoundError extends Error {
@@ -614,6 +630,7 @@ export async function processBotMessage(
   isNewConversation: boolean,
   db: BotDbClient,
   ensureInfrastructure = true,
+  interactiveReplyId: string | null = null,
 ): Promise<BotResponse | null> {
   const menu = await getActiveMenuForBot(db, ensureInfrastructure);
   if (!menu?.is_active) return null;
@@ -654,14 +671,19 @@ export async function processBotMessage(
       db,
     );
 
-    return { type: 'menu', text: menuText };
+    return {
+      type: 'menu',
+      text: menuText,
+      options: rootOptions.map((option) => ({ number: option.number, label: option.label })),
+      includeBack: false,
+    };
   }
 
   if (botStage !== 'waiting_choice') {
     return null;
   }
 
-  const input = message.trim();
+  const input = interactiveReplyId?.trim() || message.trim();
 
   if (input === '0') {
     if (path.length === 0) {
@@ -687,24 +709,31 @@ export async function processBotMessage(
       db,
     );
 
-    return { type: 'menu', text: menuText };
+    return {
+      type: 'menu',
+      text: menuText,
+      options: parentOptions.map((option) => ({ number: option.number, label: option.label })),
+      includeBack: newParentId !== null,
+    };
   }
 
+  const options = await getOptionsByParent(db, menu.id, currentParentId);
   const choiceNum = Number.parseInt(input, 10);
 
   if (Number.isNaN(choiceNum)) {
     const currentMenuText =
       (typeof metadata['bot_current_menu_text'] === 'string' && metadata['bot_current_menu_text'])
         ? metadata['bot_current_menu_text']
-        : buildMenuText(menu.greeting, await getOptionsByParent(db, menu.id, currentParentId), menu.footer, currentParentId !== null);
+        : buildMenuText(menu.greeting, options, menu.footer, currentParentId !== null);
 
     return {
       type: 'invalid',
       text: `${menu.invalid_msg ?? 'Opcao invalida'}\n\n${currentMenuText}`,
+      options: options.map((option) => ({ number: option.number, label: option.label })),
+      includeBack: currentParentId !== null,
     };
   }
 
-  const options = await getOptionsByParent(db, menu.id, currentParentId);
   const selectedOption = options.find((option) => option.number === choiceNum);
 
   if (!selectedOption) {
@@ -716,6 +745,8 @@ export async function processBotMessage(
     return {
       type: 'invalid',
       text: `${menu.invalid_msg ?? 'Opcao invalida'}\n\n${currentMenuText}`,
+      options: options.map((option) => ({ number: option.number, label: option.label })),
+      includeBack: currentParentId !== null,
     };
   }
 
@@ -742,6 +773,8 @@ export async function processBotMessage(
       type: 'submenu',
       text: menuText,
       option: selectedOption,
+      options: subOptions.map((option) => ({ number: option.number, label: option.label })),
+      includeBack: true,
     };
   }
 
