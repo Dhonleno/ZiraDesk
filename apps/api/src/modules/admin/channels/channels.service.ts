@@ -48,6 +48,17 @@ function extractMetaErrorMessage(payload: unknown): string | null {
 
 async function ensureChannelsInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(
+    `CREATE TABLE IF NOT EXISTS channels (
+       id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+       type        VARCHAR(30)  NOT NULL,
+       name        VARCHAR(100) NOT NULL,
+       credentials JSONB        NOT NULL DEFAULT '{}',
+       status      VARCHAR(20)  NOT NULL DEFAULT 'active',
+       settings    JSONB        NOT NULL DEFAULT '{}',
+       created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )`,
+  );
+  await prisma.$executeRawUnsafe(
     `ALTER TABLE channels
        ADD COLUMN IF NOT EXISTS last_tested_at TIMESTAMPTZ`,
   );
