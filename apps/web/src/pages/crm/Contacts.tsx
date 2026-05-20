@@ -24,6 +24,8 @@ export function ContactsPage() {
   const { id: routeId } = useParams<{ id?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
+  const [filterMode, setFilterMode] = useState<'all' | 'linked' | 'standalone'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editContact, setEditContact] = useState<CrmContact | null>(null);
   const [linkContact, setLinkContact] = useState<CrmContact | null>(null);
@@ -35,17 +37,28 @@ export function ContactsPage() {
 
   const search = useDebounce(searchRaw, 300);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterMode, search]);
+
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['crm-contacts', search, 'sidebar'],
-    queryFn: () => contactsApi.list({
-      per_page: 80,
-      standalone_only: true,
-      ...(search ? { search } : {}),
-    }),
+    queryKey: ['crm-contacts', search, filterMode, currentPage, 'sidebar'],
+    queryFn: () => {
+      const queryParams = {
+        per_page: 20,
+        page: currentPage,
+        ...(search ? { search } : {}),
+        ...(filterMode === 'standalone' ? { standalone_only: true } : {}),
+      };
+      return contactsApi.list(queryParams);
+    },
   });
 
-  const contacts = listData?.data ?? [];
+  const contacts = filterMode === 'linked'
+    ? (listData?.data ?? []).filter((contact) => contact.organization_id !== null)
+    : (listData?.data ?? []);
   const meta = listData?.meta;
+  const totalPages = meta?.total_pages ?? 1;
 
   useEffect(() => {
     const id = searchParams.get('id') ?? routeId ?? null;
@@ -126,9 +139,9 @@ export function ContactsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
       <div style={{ borderRight: '1px solid var(--line)', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <CrmSidebarHeader
-          title={t('contacts.standalone')}
+          title={t('contacts.title')}
           count={meta?.total ?? null}
-          subtitle={t('contacts.standaloneDesc')}
+          subtitle={t('contacts.subtitle', { count: meta?.total ?? 0 })}
           action={(
             <PermissionGate permission="contacts:edit">
               <button
@@ -150,6 +163,28 @@ export function ContactsPage() {
             clearLabel={t('contacts.clearSearch')}
             onClear={clearSearch}
           />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }} className="filter-chips">
+            {(['all', 'linked', 'standalone'] as const).map((mode) => (
+              <button
+                key={mode}
+                className={`fchip ${filterMode === mode ? 'has-val' : ''}`}
+                onClick={() => setFilterMode(mode)}
+                style={{
+                  border: `1px solid ${filterMode === mode ? 'var(--teal)' : 'var(--line-2)'}`,
+                  background: filterMode === mode ? 'var(--teal-dim)' : 'var(--bg-3)',
+                  color: filterMode === mode ? 'var(--teal)' : 'var(--txt-2)',
+                  borderRadius: 'var(--r-pill)',
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  fontFamily: 'var(--font)',
+                  cursor: 'pointer',
+                }}
+              >
+                {t(`contacts.filter.${mode}`)}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -225,6 +260,45 @@ export function ContactsPage() {
             })
           )}
         </div>
+        {totalPages > 1 ? (
+          <div style={{ borderTop: '1px solid var(--line)', padding: '9px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }} className="pagination">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              style={{
+                height: 28,
+                minWidth: 28,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: currentPage === 1 ? 'var(--bg-2)' : 'var(--bg-3)',
+                color: currentPage === 1 ? 'var(--txt-3)' : 'var(--txt-2)',
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+              }}
+              aria-label="Página anterior"
+            >
+              ←
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>{currentPage} / {totalPages}</span>
+            <button
+              type="button"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              style={{
+                height: 28,
+                minWidth: 28,
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--line-2)',
+                background: currentPage === totalPages ? 'var(--bg-2)' : 'var(--bg-3)',
+                color: currentPage === totalPages ? 'var(--txt-3)' : 'var(--txt-2)',
+                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+              }}
+              aria-label="Próxima página"
+            >
+              →
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ background: 'var(--bg-2)', overflow: 'hidden' }}>
