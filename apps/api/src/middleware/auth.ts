@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { redis } from '../config/redis.js';
 import type { AuthenticatedUser } from '@ziradesk/shared';
 
 declare module 'fastify' {
@@ -17,6 +18,7 @@ interface JwtPayload {
   tenantId?: string;
   schemaName?: string;
   isSuperAdmin: boolean;
+  iat?: number;
 }
 
 export async function authMiddleware(
@@ -33,6 +35,11 @@ export async function authMiddleware(
 
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const forcedLogoutAfterRaw = await redis.get(`auth:force_logout_after:${payload.sub}`);
+    const forcedLogoutAfter = forcedLogoutAfterRaw ? Number(forcedLogoutAfterRaw) : Number.NaN;
+    if (Number.isFinite(forcedLogoutAfter) && typeof payload.iat === 'number' && payload.iat <= forcedLogoutAfter) {
+      return reply.code(401).send({ error: 'Sessão inválida. Faça login novamente' });
+    }
 
     if (payload.isSuperAdmin) {
       request.user = {

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
 import { logger } from '../../../config/logger.js';
+import { redis } from '../../../config/redis.js';
 import { hasTenantEmailProvider, sendEmail } from '../../../services/email.service.js';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.schema.js';
 import type { Role } from '@ziradesk/shared';
@@ -310,7 +311,7 @@ export async function updateUser(
   actor?: { id: string; role: Role },
 ) {
   const usersRef = usersTable(schemaName);
-  await getUser(id, schemaName);
+  const currentUser = await getUser(id, schemaName);
 
   if (data.role) {
     if (actor?.id === id) {
@@ -343,6 +344,14 @@ export async function updateUser(
       id,
       data.max_conversations ?? null,
     );
+  }
+
+  if (data.role && data.role !== currentUser.role) {
+    const forcedLogoutAt = Math.floor(Date.now() / 1000).toString();
+    await Promise.all([
+      redis.del(`refresh:${id}`),
+      redis.set(`auth:force_logout_after:${id}`, forcedLogoutAt, 'EX', 60 * 60 * 24 * 30),
+    ]);
   }
 
   return rows[0]!;
