@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   DndContext,
   DragOverlay,
@@ -19,22 +20,33 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { adminApi, ticketsApi, type Ticket, type TicketPriority, type TicketStatus } from '../../services/api';
+import {
+  adminApi,
+  ticketsApi,
+  type ListTicketsParams,
+  type Ticket,
+  type TicketPriority,
+  type TicketStatus,
+} from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
+import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
-type BoardStatus = 'open' | 'in_progress' | 'waiting' | 'resolved';
+type BoardStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
+type TFn = TFunction<'tickets'>;
 
-const BOARD_COLUMNS: BoardStatus[] = ['open', 'in_progress', 'waiting', 'resolved'];
+const BOARD_COLUMNS: BoardStatus[] = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
+const CLOSED_COLUMN_MAX_ITEMS = 20;
 const STATUS_ACCENT: Record<BoardStatus, string> = {
   open: 'var(--teal)',
-  in_progress: '#F59E0B',
-  waiting: 'var(--amber)',
-  resolved: 'var(--txt-2)',
+  in_progress: 'var(--amber)',
+  waiting: 'var(--blue)',
+  resolved: 'var(--green)',
+  closed: 'var(--txt-3)',
 };
 
 function isBoardStatus(value: string): value is BoardStatus {
@@ -63,47 +75,59 @@ function sanitizeTicketTitle(value: string): string {
     .trim();
 }
 
-function getPriorityStyle(priority: TicketPriority, t: (key: string) => string) {
+function getPriorityStyle(priority: TicketPriority, t: TFn) {
   if (priority === 'urgent') {
-    return { bg: '#EF444420', color: '#EF4444', label: `! ${t('tickets.priority.urgent')}` };
+    return { bg: 'var(--red-dim)', color: 'var(--red)', label: `! ${t('tickets.priority.urgent')}` };
   }
 
   if (priority === 'high') {
-    return { bg: '#F59E0B20', color: '#F59E0B', label: `↑ ${t('tickets.priority.high')}` };
+    return { bg: 'var(--amber-dim)', color: 'var(--amber)', label: `↑ ${t('tickets.priority.high')}` };
   }
 
   if (priority === 'medium') {
-    return { bg: '#8B5CF620', color: '#8B5CF6', label: `→ ${t('tickets.priority.medium')}` };
+    return { bg: 'var(--purple-dim)', color: 'var(--purple)', label: `→ ${t('tickets.priority.medium')}` };
   }
 
   return { bg: 'var(--bg-4)', color: 'var(--txt-2)', label: `↓ ${t('tickets.priority.low')}` };
 }
 
-function getDueMeta(ticket: Ticket): { label: string; color: string } | null {
-  if (!ticket.due_date) return null;
-
-  const due = new Date(ticket.due_date);
-  const today = new Date();
-  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const diffDays = Math.floor((dueStart - todayStart) / (24 * 60 * 60 * 1000));
-
-  if (diffDays < 0) {
-    return { label: formatCompactDate(ticket.due_date), color: '#EF4444' };
-  }
-
-  if (diffDays <= 3) {
-    return { label: formatCompactDate(ticket.due_date), color: '#F59E0B' };
-  }
-
-  return { label: formatCompactDate(ticket.due_date), color: 'var(--txt-2)' };
-}
-
-function statusLabel(status: BoardStatus, t: (key: string) => string): string {
+function statusLabel(status: BoardStatus, t: TFn): string {
   if (status === 'open') return t('tickets.kanban.open');
   if (status === 'in_progress') return t('tickets.kanban.inProgress');
   if (status === 'waiting') return t('tickets.kanban.waiting');
-  return t('tickets.kanban.resolved');
+  if (status === 'resolved') return t('tickets.kanban.resolved');
+  return t('tickets.kanban.closed');
+}
+
+function isReadonlyStatus(status: BoardStatus): boolean {
+  return status === 'closed';
+}
+
+function canDropToStatus(status: BoardStatus): boolean {
+  return status !== 'closed';
+}
+
+function getSlaLabel(sla: SlaInfo, t: TFn): string | null {
+  if (sla.status === 'none' || sla.status === 'ok' || sla.hoursRemaining === null) return null;
+
+  if (sla.status === 'overdue') {
+    const overdueHours = Math.abs(Math.floor(sla.hoursRemaining));
+    if (overdueHours >= 24) {
+      return t('tickets.sla.overdueDays', { count: Math.floor(overdueHours / 24) });
+    }
+    return t('tickets.sla.overdueHours', { count: overdueHours });
+  }
+
+  if (sla.hoursRemaining < 1) {
+    return t('tickets.sla.expiresLessThanHour');
+  }
+
+  const remainingHours = Math.floor(sla.hoursRemaining);
+  if (remainingHours <= 0) {
+    return t('tickets.sla.expiresToday');
+  }
+
+  return t('tickets.sla.expiresHours', { count: remainingHours });
 }
 
 function StackAvatar({
@@ -125,14 +149,20 @@ function StackAvatar({
 function TicketCard({
   ticket,
   t,
+  now,
   onClick,
 }: {
   ticket: Ticket;
-  t: (key: string) => string;
+  t: TFn;
+  now: Date;
   onClick: () => void;
 }) {
   const priority = getPriorityStyle(ticket.priority, t);
-  const dueMeta = getDueMeta(ticket);
+  const sla = getSlaInfo(ticket.due_date, ticket.status, now);
+  const slaLabel = getSlaLabel(sla, t);
+  const dueColor = sla.status === 'warning' || sla.status === 'overdue'
+    ? getSlaColor(sla.status)
+    : 'var(--txt-2)';
 
   return (
     <button
@@ -162,9 +192,16 @@ function TicketCard({
           />
         </div>
 
-        {dueMeta ? (
-          <span className="tickets-card-due" style={{ color: dueMeta.color }}>
-            {dueMeta.label}
+        {ticket.due_date ? (
+          <span className="tickets-card-due" style={{ color: dueColor }}>
+            {(sla.status === 'warning' || sla.status === 'overdue') ? (
+              <span
+                aria-hidden
+                className={`tickets-sla-dot ${sla.status}`}
+              />
+            ) : null}
+            {formatCompactDate(ticket.due_date)}
+            {slaLabel ? <span className="tickets-card-sla-label"> · {slaLabel}</span> : null}
           </span>
         ) : null}
       </div>
@@ -175,13 +212,18 @@ function TicketCard({
 function SortableTicketCard({
   ticket,
   t,
+  now,
   onClick,
 }: {
   ticket: Ticket;
-  t: (key: string) => string;
+  t: TFn;
+  now: Date;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ticket.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: ticket.id,
+    disabled: ticket.status === 'closed',
+  });
 
   return (
     <div
@@ -194,19 +236,21 @@ function SortableTicketCard({
       {...attributes}
       {...listeners}
     >
-      <TicketCard ticket={ticket} t={t} onClick={onClick} />
+      <TicketCard ticket={ticket} t={t} now={now} onClick={onClick} />
     </div>
   );
 }
 
 function DroppableColumn({
   id,
+  disabled = false,
   children,
 }: {
   id: BoardStatus;
+  disabled?: boolean;
   children: ReactNode;
 }) {
-  const { setNodeRef } = useDroppable({ id });
+  const { setNodeRef } = useDroppable({ id, disabled });
   return <div ref={setNodeRef} className="tickets-column-body">{children}</div>;
 }
 
@@ -222,27 +266,47 @@ export function TicketsPage() {
   const [agentId, setAgentId] = useState('');
   const [category, setCategory] = useState('');
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   const debouncedSearch = useDebounce(search, 250);
 
   const listQueryKey = ['tickets-board', debouncedSearch, priority, agentId, category] as const;
 
+  const buildBoardFilters = (): ListTicketsParams => {
+    const params: ListTicketsParams = {
+      sort_by: 'updated_at',
+      sort_order: 'desc',
+    };
+
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (priority) params.priority = priority;
+    if (agentId) params.assigned_to = agentId;
+    if (category) params.category = category;
+
+    return params;
+  };
+
   const { data: ticketsData, isPending } = useQuery({
     queryKey: listQueryKey,
     queryFn: () => {
-      const params: import('../../services/api').ListTicketsParams = {
+      const params: ListTicketsParams = {
+        ...buildBoardFilters(),
         per_page: 100,
-        sort_by: 'updated_at',
-        sort_order: 'desc',
       };
-
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (priority) params.priority = priority;
-      if (agentId) params.assigned_to = agentId;
-      if (category) params.category = category;
 
       return ticketsApi.list(params);
     },
+    staleTime: 25_000,
+  });
+
+  const { data: closedTicketsData } = useQuery({
+    queryKey: ['tickets-board-closed', debouncedSearch, priority, agentId, category],
+    queryFn: () => ticketsApi.list({
+      ...buildBoardFilters(),
+      status: 'closed',
+      per_page: CLOSED_COLUMN_MAX_ITEMS,
+    }),
     staleTime: 25_000,
   });
 
@@ -279,22 +343,32 @@ export function TicketsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
       void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
     },
   });
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     const unsubscribers = [
       subscribeToEvent('ticket:created', () => {
         void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
       }),
       subscribeToEvent('ticket:updated', () => {
         void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
       }),
       subscribeToEvent('ticket:deleted', () => {
         void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
       }),
       subscribeToEvent('ticket:assigned', () => {
         void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+        void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
       }),
     ];
 
@@ -306,6 +380,7 @@ export function TicketsPage() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const tickets = ticketsData?.data ?? [];
+  const closedTickets = closedTicketsData?.data ?? [];
   const total = ticketsData?.meta.total ?? tickets.length;
 
   const categories = useMemo(() => {
@@ -322,22 +397,26 @@ export function TicketsPage() {
       in_progress: [],
       waiting: [],
       resolved: [],
+      closed: [],
     };
 
     tickets.forEach((ticket) => {
-      if (isBoardStatus(ticket.status)) {
+      if (ticket.status !== 'closed' && isBoardStatus(ticket.status)) {
         map[ticket.status].push(ticket);
       }
     });
 
+    map.closed = closedTickets;
+
     return map;
-  }, [tickets]);
+  }, [closedTickets, tickets]);
 
   const ticketById = useMemo(() => {
     const map = new Map<string, Ticket>();
     tickets.forEach((ticket) => map.set(ticket.id, ticket));
+    closedTickets.forEach((ticket) => map.set(ticket.id, ticket));
     return map;
-  }, [tickets]);
+  }, [closedTickets, tickets]);
 
   const activeTicket = activeTicketId ? ticketById.get(activeTicketId) ?? null : null;
 
@@ -367,8 +446,37 @@ export function TicketsPage() {
     }
 
     if (!targetStatus || targetStatus === source.status) return;
+    if (!canDropToStatus(targetStatus)) return;
 
     statusMutation.mutate({ ticketId: source.id, status: targetStatus });
+  }
+
+  async function handleExportCSV() {
+    setIsExporting(true);
+
+    try {
+      const blob = await ticketsApi.exportCsv({
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        ...(priority ? { priority } : {}),
+        ...(agentId ? { assigned_to: agentId } : {}),
+        ...(category ? { category } : {}),
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `tickets-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(t('tickets.exportSuccess'));
+    } catch {
+      toast.error(t('tickets.exportError'));
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -434,6 +542,20 @@ export function TicketsPage() {
           </div>
 
           <div className="tickets-header-actions">
+            <PermissionGate permission="tickets:view">
+              <button type="button" className="tickets-secondary-btn" onClick={() => void handleExportCSV()} disabled={isExporting}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path
+                    d="M6 1v7M3 5l3 3 3-3M1 9v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                {isExporting ? t('tickets.exporting') : t('tickets.exportCsv')}
+              </button>
+            </PermissionGate>
+
             <PermissionGate permission="tickets:edit">
               <button type="button" className="tickets-primary-btn" onClick={() => navigate('/tickets/new')}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
@@ -486,15 +608,35 @@ export function TicketsPage() {
           >
             <div className="tickets-kanban-board">
               {BOARD_COLUMNS.map((column) => (
-                <section key={column} className="tickets-column" id={column}>
+                <section
+                  key={column}
+                  className={`tickets-column${isReadonlyStatus(column) ? ' tickets-column-readonly' : ''}`}
+                  id={column}
+                >
                   <header className="tickets-column-head">
-                    <span>{statusLabel(column, t)}</span>
-                    <span className="tickets-column-count" style={{ color: STATUS_ACCENT[column] }}>
-                      {grouped[column].length}
+                    <div className="tickets-column-title-wrap">
+                      <span>{statusLabel(column, t)}</span>
+                      {isReadonlyStatus(column) ? (
+                        <span className="tickets-column-readonly-hint" title={t('tickets.kanban.readOnly')}>
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                            <rect x="2.5" y="5" width="7" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+                            <path d="M4 5V3.8a2 2 0 1 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                          </svg>
+                          <span>{t('tickets.kanban.readOnly')}</span>
+                        </span>
+                      ) : null}
+                    </div>
+                    <span
+                      className={`tickets-column-count${isReadonlyStatus(column) ? ' tickets-column-count-muted' : ''}`}
+                      style={{ color: STATUS_ACCENT[column] }}
+                    >
+                      {isReadonlyStatus(column)
+                        ? (closedTicketsData?.meta.total ?? grouped[column].length)
+                        : grouped[column].length}
                     </span>
                   </header>
 
-                  <DroppableColumn id={column}>
+                  <DroppableColumn id={column} disabled={!canDropToStatus(column)}>
                     {grouped[column].length === 0 ? (
                       <div className="tickets-column-empty">
                         <span className="tickets-empty-icon" aria-hidden>
@@ -508,12 +650,23 @@ export function TicketsPage() {
                     ) : (
                       <SortableContext items={grouped[column].map((ticket) => ticket.id)} strategy={rectSortingStrategy}>
                         {grouped[column].map((ticket) => (
-                          <SortableTicketCard
-                            key={ticket.id}
-                            ticket={ticket}
-                            t={t}
-                            onClick={() => navigate(`/tickets/${ticket.id}`)}
-                          />
+                          isReadonlyStatus(column) ? (
+                            <TicketCard
+                              key={ticket.id}
+                              ticket={ticket}
+                              t={t}
+                              now={now}
+                              onClick={() => navigate(`/tickets/${ticket.id}`)}
+                            />
+                          ) : (
+                            <SortableTicketCard
+                              key={ticket.id}
+                              ticket={ticket}
+                              t={t}
+                              now={now}
+                              onClick={() => navigate(`/tickets/${ticket.id}`)}
+                            />
+                          )
                         ))}
                       </SortableContext>
                     )}
@@ -525,7 +678,7 @@ export function TicketsPage() {
             <DragOverlay>
               {activeTicket ? (
                 <div style={{ width: 280 }}>
-                  <TicketCard ticket={activeTicket} t={t} onClick={() => {}} />
+                  <TicketCard ticket={activeTicket} t={t} now={now} onClick={() => {}} />
                 </div>
               ) : null}
             </DragOverlay>
@@ -535,11 +688,30 @@ export function TicketsPage() {
         {!isPending && view === 'list' ? (
           <div className="tickets-list-board">
             {BOARD_COLUMNS.map((column) => (
-              <section key={column} className="tickets-list-section">
+              <section
+                key={column}
+                className={`tickets-list-section${isReadonlyStatus(column) ? ' tickets-column-readonly' : ''}`}
+              >
                 <header className="tickets-column-head">
-                  <span>{statusLabel(column, t)}</span>
-                  <span className="tickets-column-count" style={{ color: STATUS_ACCENT[column] }}>
-                    {grouped[column].length}
+                  <div className="tickets-column-title-wrap">
+                    <span>{statusLabel(column, t)}</span>
+                    {isReadonlyStatus(column) ? (
+                      <span className="tickets-column-readonly-hint" title={t('tickets.kanban.readOnly')}>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                          <rect x="2.5" y="5" width="7" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+                          <path d="M4 5V3.8a2 2 0 1 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                        </svg>
+                        <span>{t('tickets.kanban.readOnly')}</span>
+                      </span>
+                    ) : null}
+                  </div>
+                  <span
+                    className={`tickets-column-count${isReadonlyStatus(column) ? ' tickets-column-count-muted' : ''}`}
+                    style={{ color: STATUS_ACCENT[column] }}
+                  >
+                    {isReadonlyStatus(column)
+                      ? (closedTicketsData?.meta.total ?? grouped[column].length)
+                      : grouped[column].length}
                   </span>
                 </header>
 
@@ -552,6 +724,7 @@ export function TicketsPage() {
                         key={ticket.id}
                         ticket={ticket}
                         t={t}
+                        now={now}
                         onClick={() => navigate(`/tickets/${ticket.id}`)}
                       />
                     ))

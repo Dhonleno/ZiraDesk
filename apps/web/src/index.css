@@ -2938,6 +2938,32 @@
   gap: 8px;
 }
 
+.tickets-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  background: var(--bg-3);
+  color: var(--txt-2);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  height: 32px;
+  padding: 0 11px;
+}
+
+.tickets-secondary-btn:hover:not(:disabled) {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+.tickets-secondary-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .tickets-primary-btn {
   display: inline-flex;
   align-items: center;
@@ -2994,7 +3020,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   height: calc(100vh - 180px);
   overflow-y: hidden;
@@ -3019,12 +3045,32 @@
   border-bottom: 1px solid var(--line);
 }
 
-.tickets-column-head > span:first-child {
+.tickets-column-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tickets-column-title-wrap > span:first-child {
   color: var(--txt-3);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.tickets-column-readonly-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--txt-3);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tickets-column-readonly-hint svg {
+  flex-shrink: 0;
 }
 
 .tickets-column-count {
@@ -3035,6 +3081,20 @@
   background: var(--bg-3);
   border: 1px solid var(--line-2);
   font-family: var(--mono);
+}
+
+.tickets-column-count-muted {
+  color: var(--txt-3);
+  border-color: var(--line);
+  background: var(--bg-4);
+}
+
+.tickets-column-readonly {
+  border-style: dashed;
+}
+
+.tickets-column-readonly .tickets-column-head {
+  background: var(--bg-3);
 }
 
 .tickets-column-body {
@@ -3073,7 +3133,7 @@
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--r);
-  background: var(--bg-2);
+  background: var(--bg-3);
   padding: 10px 12px;
   margin-bottom: 8px;
   cursor: pointer;
@@ -3085,6 +3145,11 @@
 .tickets-card:hover {
   border-color: var(--teal);
   background: var(--bg-4);
+}
+
+.tickets-column-readonly .tickets-card:hover {
+  border-color: var(--line-2);
+  background: var(--bg-3);
 }
 
 .tickets-card-top {
@@ -3167,6 +3232,30 @@
 .tickets-card-due {
   font-size: 11px;
   font-family: var(--mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tickets-card-sla-label {
+  font-weight: 500;
+}
+
+.tickets-sla-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tickets-sla-dot.warning {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-dim);
+}
+
+.tickets-sla-dot.overdue {
+  background: var(--red);
+  box-shadow: 0 0 0 3px var(--red-dim);
 }
 
 .tickets-list-board {
@@ -3314,6 +3403,61 @@
 .ticket-inline-menu button:hover {
   background: var(--bg-4);
   color: var(--txt);
+}
+
+.ticket-actions-wrap {
+  position: relative;
+}
+
+.ticket-actions-trigger {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--bg-3);
+  color: var(--txt-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ticket-actions-trigger:hover {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+.ticket-actions-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-pop);
+  z-index: 100;
+  min-width: 170px;
+  padding: 4px 0;
+}
+
+.ticket-actions-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--txt);
+  cursor: pointer;
+}
+
+.ticket-actions-menu-item:hover {
+  background: var(--bg-4);
+}
+
+.ticket-actions-menu-item.danger {
+  color: var(--red);
 }
 
 .ticket-detail-v2-layout {
@@ -3666,12 +3810,46 @@
 }
 
 .ticket-sidebar-field.overdue .ticket-due-date-input {
-  border: 1px solid #EF4444 !important;
-  color: #EF4444;
+  border: 1px solid var(--red) !important;
+  color: var(--red);
 }
 
 .ticket-sidebar-field.near .ticket-due-date-input {
-  border: 1px solid #F59E0B !important;
+  border: 1px solid var(--amber) !important;
+}
+
+.ticket-sla-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ticket-sla-badge svg {
+  flex-shrink: 0;
+}
+
+.ticket-sla-date {
+  font-size: 11px;
+  color: var(--txt-2);
+  font-family: var(--mono);
+}
+
+.ticket-sla-progress-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--bg-5);
+  overflow: hidden;
+}
+
+.ticket-sla-progress-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width 0.2s linear;
 }
 
 .ticket-sidebar-field strong.mono {

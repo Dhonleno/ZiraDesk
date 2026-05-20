@@ -1,7 +1,11 @@
 import type { Ticket } from '../../services/api';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { TicketStatusBadge } from './TicketStatusBadge';
 import { TicketPriorityBadge } from './TicketPriorityBadge';
 import { SourceBadge } from './SourceBadge';
+import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
 interface Props {
   ticket:     Ticket;
@@ -21,12 +25,27 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 }
 
-function dueStatus(iso: string | null): 'overdue' | 'soon' | null {
-  if (!iso) return null;
-  const diff = new Date(iso).getTime() - Date.now();
-  if (diff < 0)              return 'overdue';
-  if (diff < 3 * 86_400_000) return 'soon';
-  return null;
+function getSlaLabel(sla: SlaInfo, t: TFunction<'tickets'>): string | null {
+  if (sla.status === 'none' || sla.status === 'ok' || sla.hoursRemaining === null) return null;
+
+  if (sla.status === 'overdue') {
+    const overdueHours = Math.abs(Math.floor(sla.hoursRemaining));
+    if (overdueHours >= 24) {
+      return t('tickets.sla.overdueDays', { count: Math.floor(overdueHours / 24) });
+    }
+    return t('tickets.sla.overdueHours', { count: overdueHours });
+  }
+
+  if (sla.hoursRemaining < 1) {
+    return t('tickets.sla.expiresLessThanHour');
+  }
+
+  const remainingHours = Math.floor(sla.hoursRemaining);
+  if (remainingHours <= 0) {
+    return t('tickets.sla.expiresToday');
+  }
+
+  return t('tickets.sla.expiresHours', { count: remainingHours });
 }
 
 function Initials({ name, color }: { name: string; color: string }) {
@@ -43,12 +62,22 @@ function Initials({ name, color }: { name: string; color: string }) {
 }
 
 export function TicketCard({ ticket, selected, onClick }: Props) {
-  const due    = dueStatus(ticket.due_date);
-  const dueCol = due === 'overdue' ? 'var(--red)' : due === 'soon' ? 'var(--amber)' : 'var(--txt-3)';
+  const { t } = useTranslation('tickets');
+  const [now, setNow] = useState(() => new Date());
+  const sla = getSlaInfo(ticket.due_date, ticket.status, now);
+  const slaLabel = getSlaLabel(sla, t);
+  const dueCol = sla.status === 'warning' || sla.status === 'overdue'
+    ? getSlaColor(sla.status)
+    : 'var(--txt-3)';
   const ticketKey = ticket.id.slice(-6).toUpperCase();
   const ticketContactName = ticket.contact_name;
   const lastSeen = localStorage.getItem(`zd_ticket_seen_${ticket.id}`);
   const hasUnread = !lastSeen || new Date(ticket.updated_at).getTime() > new Date(lastSeen).getTime();
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   return (
     <div
@@ -133,7 +162,8 @@ export function TicketCard({ ticket, selected, onClick }: Props) {
             <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2" />
             <path d="M5 3v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
-          {due === 'overdue' ? 'Prazo vencido' : 'Prazo próximo'} · {new Date(ticket.due_date).toLocaleDateString('pt-BR')}
+          {new Date(ticket.due_date).toLocaleDateString('pt-BR')}
+          {slaLabel ? <span style={{ fontWeight: 500 }}> · {slaLabel}</span> : null}
         </div>
       )}
     </div>

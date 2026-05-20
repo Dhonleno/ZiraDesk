@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   adminApi,
   ticketsApi,
@@ -21,6 +22,9 @@ import { SourceBadge } from '../../components/tickets/SourceBadge';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
 import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { TicketComments } from '../../components/tickets/TicketComments';
+import { PermissionGate } from '../../components/ui/PermissionGate';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
 type DetailTab = 'comments' | 'history';
 type DescriptionTab = 'write' | 'preview';
@@ -79,6 +83,29 @@ function dueTone(value: string | null): 'normal' | 'near' | 'overdue' {
   return 'normal';
 }
 
+function getSlaLabel(sla: SlaInfo, t: TFunction<'tickets'>): string | null {
+  if (sla.status === 'none' || sla.status === 'ok' || sla.hoursRemaining === null) return null;
+
+  if (sla.status === 'overdue') {
+    const overdueHours = Math.abs(Math.floor(sla.hoursRemaining));
+    if (overdueHours >= 24) {
+      return t('tickets.sla.overdueDays', { count: Math.floor(overdueHours / 24) });
+    }
+    return t('tickets.sla.overdueHours', { count: overdueHours });
+  }
+
+  if (sla.hoursRemaining < 1) {
+    return t('tickets.sla.expiresLessThanHour');
+  }
+
+  const remainingHours = Math.floor(sla.hoursRemaining);
+  if (remainingHours <= 0) {
+    return t('tickets.sla.expiresToday');
+  }
+
+  return t('tickets.sla.expiresHours', { count: remainingHours });
+}
+
 function AttachmentCard({
   attachment,
   canDelete,
@@ -135,6 +162,7 @@ export function TicketDetailPage() {
 
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   const [sidebarTypeId, setSidebarTypeId] = useState('');
   const [sidebarAssignedTo, setSidebarAssignedTo] = useState('');
@@ -142,12 +170,15 @@ export function TicketDetailPage() {
   const [sidebarCategory, setSidebarCategory] = useState('');
   const [sidebarTagInput, setSidebarTagInput] = useState('');
   const [sidebarTags, setSidebarTags] = useState<string[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload>>({});
   const debouncedPatch = useDebounce(pendingPatch, 500);
 
   const statusRef = useRef<HTMLDivElement | null>(null);
   const priorityRef = useRef<HTMLDivElement | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -222,6 +253,20 @@ export function TicketDetailPage() {
     },
   });
 
+  const deleteTicketMutation = useMutation({
+    mutationFn: () => ticketsApi.delete(id ?? ''),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      await queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      await queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
+      toast.success(t('tickets.deleteSuccess'));
+      navigate('/tickets');
+    },
+    onError: () => {
+      toast.error(t('tickets.errorUpdate'));
+    },
+  });
+
   useEffect(() => {
     if (!ticket) return;
 
@@ -246,6 +291,11 @@ export function TicketDetailPage() {
   }, [descriptionEditing]);
 
   useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
     const handler = (event: MouseEvent) => {
       if (statusRef.current && !statusRef.current.contains(event.target as Node)) {
         setStatusMenuOpen(false);
@@ -253,6 +303,10 @@ export function TicketDetailPage() {
 
       if (priorityRef.current && !priorityRef.current.contains(event.target as Node)) {
         setPriorityMenuOpen(false);
+      }
+
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setActionsMenuOpen(false);
       }
     };
 
@@ -395,6 +449,11 @@ export function TicketDetailPage() {
     });
   }
 
+  async function handleDelete() {
+    await deleteTicketMutation.mutateAsync();
+    setShowDeleteConfirm(false);
+  }
+
   if (!id) {
     return <Navigate to="/tickets" replace />;
   }
@@ -409,6 +468,19 @@ export function TicketDetailPage() {
 
   const currentTitle = sanitizeTicketTitle(ticket.title) || ticket.title;
   const dueState = dueTone(ticket.due_date ?? null);
+  const sla = getSlaInfo(ticket.due_date, ticket.status, now);
+  const slaLabel = getSlaLabel(sla, t);
+  const dueDateFormatted = ticket.due_date
+    ? new Date(ticket.due_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+  const slaProgress = (() => {
+    if (!ticket.due_date || !ticket.created_at || sla.status === 'none') return null;
+    const total = new Date(ticket.due_date).getTime() - new Date(ticket.created_at).getTime();
+    if (!Number.isFinite(total) || total <= 0) return null;
+    const elapsed = now.getTime() - new Date(ticket.created_at).getTime();
+    const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+    return pct;
+  })();
   const timelineMessage = (event: TicketTimelineEvent): string => {
     if (event.event_type === 'created') return t('tickets.timeline.created');
     if (event.event_type === 'status_changed') {
@@ -581,6 +653,39 @@ export function TicketDetailPage() {
                 {t('tickets.actions.reopen')}
               </button>
             ) : null}
+
+            <div className="ticket-actions-wrap" ref={actionsMenuRef}>
+              <button
+                type="button"
+                className="ticket-actions-trigger"
+                aria-label={t('tickets.actions.edit')}
+                title={t('tickets.actions.edit')}
+                onClick={() => setActionsMenuOpen((v) => !v)}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <circle cx="7" cy="2.5" r="1.2" fill="currentColor" />
+                  <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                  <circle cx="7" cy="11.5" r="1.2" fill="currentColor" />
+                </svg>
+              </button>
+
+              {actionsMenuOpen ? (
+                <div className="ticket-actions-menu">
+                  <PermissionGate permission="tickets:delete">
+                    <button
+                      type="button"
+                      className="ticket-actions-menu-item danger"
+                      onClick={() => {
+                        setActionsMenuOpen(false);
+                        setShowDeleteConfirm(true);
+                      }}
+                    >
+                      {t('tickets.delete')}
+                    </button>
+                  </PermissionGate>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 
@@ -870,6 +975,40 @@ export function TicketDetailPage() {
                     queuePatch({ due_date: value ? `${value}T00:00:00.000Z` : '' });
                   }}
                 />
+
+                {ticket.due_date && (sla.status === 'warning' || sla.status === 'overdue') ? (
+                  <span
+                    className={`ticket-sla-badge ${sla.status}`}
+                    style={{
+                      background: getSlaBg(sla.status),
+                      color: getSlaColor(sla.status),
+                      borderColor: `${getSlaColor(sla.status)}40`,
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                      <circle cx="5.5" cy="5.5" r="4.2" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5.5 3.2v2.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      <circle cx="5.5" cy="7.6" r=".6" fill="currentColor" />
+                    </svg>
+                    {slaLabel}
+                  </span>
+                ) : null}
+
+                {dueDateFormatted ? (
+                  <span className="ticket-sla-date">{dueDateFormatted}</span>
+                ) : null}
+
+                {slaProgress !== null ? (
+                  <div className="ticket-sla-progress-track">
+                    <div
+                      className="ticket-sla-progress-fill"
+                      style={{
+                        width: `${slaProgress}%`,
+                        background: getSlaColor(sla.status),
+                      }}
+                    />
+                  </div>
+                ) : null}
               </label>
             </section>
 
@@ -925,6 +1064,17 @@ export function TicketDetailPage() {
           </aside>
         </div>
       </section>
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title={t('tickets.deleteTitle')}
+        message={t('tickets.deleteMsg', { title: currentTitle })}
+        confirmLabel={t('tickets.delete')}
+        confirmVariant="danger"
+        loading={deleteTicketMutation.isPending}
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </PageShell>
   );
 }

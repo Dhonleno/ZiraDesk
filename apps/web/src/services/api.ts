@@ -1780,8 +1780,23 @@ export interface ListTicketsParams {
   contact_id?:  string;
   organization_id?: string;
   category?:    string;
+  date_from?:   string;
+  date_to?:     string;
   sort_by?:     'created_at' | 'updated_at' | 'priority' | 'due_date';
   sort_order?:  'asc' | 'desc';
+}
+
+export interface ExportTicketsParams {
+  search?: string;
+  status?: TicketStatus;
+  priority?: TicketPriority;
+  assigned_to?: string;
+  source?: 'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
+  contact_id?: string;
+  organization_id?: string;
+  category?: string;
+  date_from?: string;
+  date_to?: string;
 }
 
 export interface CreateTicketPayload {
@@ -2679,6 +2694,14 @@ export const ticketsApi = {
   getMetrics: async (params: TicketsMetricsParams): Promise<TicketsMetricsData> => {
     const res = await api.get<{ success: boolean; data: TicketsMetricsData }>('/tickets/metrics', { params });
     return res.data.data;
+  },
+
+  exportCsv: async (params?: ExportTicketsParams): Promise<Blob> => {
+    const res = await api.get<Blob>('/tickets/export', {
+      params: { format: 'csv', ...params },
+      responseType: 'blob',
+    });
+    return res.data;
   },
 };
 
