@@ -604,6 +604,38 @@ async function sendWhatsAppInteractiveMenu(
   }
 }
 
+function buildInteractiveMenuBodyFromBotMessage(message: string): string {
+  const normalizeComparable = (value: string): string =>
+    value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .trim();
+
+  const lines = message.split(/\r?\n/);
+  const filteredLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+
+    if (/^\d+\.\s+/.test(trimmed)) return false;
+
+    const comparable = normalizeComparable(trimmed);
+    if (comparable === 'digite o numero da opcao desejada.'
+      || comparable === 'digite o numero da opcao desejada') {
+      return false;
+    }
+
+    return true;
+  });
+
+  const body = filteredLines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return body || 'Escolha uma opção:';
+}
+
 async function closeConversationOutsideHours(
   conversationId: string,
   schemaName: string,
@@ -1668,11 +1700,12 @@ async function processIncomingMessage(
       await sendConversationWhatsAppText(channelCredentials, formattedPhone, result.botMessageContent);
     } else if (!result.shouldAutoAssign) {
       if (canSendInteractiveMenu && outgoingPhoneNumberId && outgoingAccessToken) {
+        const interactiveBody = buildInteractiveMenuBodyFromBotMessage(result.botMessageContent);
         await sendWhatsAppInteractiveMenu(
           outgoingPhoneNumberId,
           outgoingAccessToken,
           formattedPhone,
-          result.botMessageContent,
+          interactiveBody,
           interactiveOptions,
         );
       } else {
