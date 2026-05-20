@@ -8,6 +8,7 @@ import {
   createTicketSchema,
   updateTicketSchema,
   listTicketsQuerySchema,
+  exportTicketsQuerySchema,
   createCommentSchema,
   updateCommentSchema,
   assignTicketSchema,
@@ -17,6 +18,7 @@ import {
 } from './tickets.schema.js';
 import {
   listTickets,
+  exportTickets,
   getTicket,
   createTicket,
   updateTicket,
@@ -100,6 +102,96 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/stats', { preHandler: ticketsViewGuard }, async (_request, reply) => {
     const stats = await getStats();
     return reply.send({ success: true, data: stats });
+  });
+
+  // GET /api/tickets/export?format=csv
+  app.get('/export', { preHandler: ticketsViewGuard }, async (request, reply) => {
+    const parsed = exportTicketsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    if (parsed.data.format !== 'csv') {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Formato de exportação inválido' },
+      });
+    }
+
+    const tickets = await exportTickets(parsed.data);
+
+    const headers = [
+      'ID',
+      'Título',
+      'Status',
+      'Prioridade',
+      'Categoria',
+      'Tipo',
+      'Responsável',
+      'Contato',
+      'Organização',
+      'Prazo',
+      'Criado em',
+      'Atualizado em',
+      'Resolvido em',
+    ];
+
+    const statusLabels: Record<string, string> = {
+      open: 'Aberto',
+      in_progress: 'Em andamento',
+      waiting: 'Aguardando',
+      resolved: 'Resolvido',
+      closed: 'Fechado',
+    };
+
+    const priorityLabels: Record<string, string> = {
+      low: 'Baixa',
+      medium: 'Média',
+      high: 'Alta',
+      urgent: 'Urgente',
+    };
+
+    const formatDate = (value: Date | null): string => (
+      value
+        ? value.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : ''
+    );
+
+    const escapeCsvField = (value: string | null | undefined): string => (
+      `"${String(value ?? '').replace(/"/g, '""')}"`
+    );
+
+    const rows = tickets.map((ticket) => [
+      escapeCsvField(ticket.id.slice(0, 8).toUpperCase()),
+      escapeCsvField(ticket.title),
+      escapeCsvField(statusLabels[ticket.status] ?? ticket.status),
+      escapeCsvField(priorityLabels[ticket.priority] ?? ticket.priority),
+      escapeCsvField(ticket.category),
+      escapeCsvField(ticket.ticket_type_name),
+      escapeCsvField(ticket.assigned_to_name),
+      escapeCsvField(ticket.contact_name),
+      escapeCsvField(ticket.organization_name),
+      escapeCsvField(formatDate(ticket.due_date)),
+      escapeCsvField(formatDate(ticket.created_at)),
+      escapeCsvField(formatDate(ticket.updated_at)),
+      escapeCsvField(formatDate(ticket.resolved_at)),
+    ]);
+
+    const csv = [
+      headers.map((header) => escapeCsvField(header)).join(';'),
+      ...rows.map((row) => row.join(';')),
+    ].join('\n');
+
+    const bom = '\uFEFF';
+    const fileDate = new Date().toISOString().slice(0, 10);
+
+    return reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="tickets-${fileDate}.csv"`)
+      .send(bom + csv);
   });
 
   // GET /api/tickets/search?q=termo&exclude=id

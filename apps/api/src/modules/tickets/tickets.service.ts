@@ -9,6 +9,7 @@ import type {
   CreateTicketInput,
   UpdateTicketInput,
   ListTicketsQuery,
+  ExportTicketsQuery,
   CreateCommentInput,
   UpdateCommentInput,
   UpdateChecklistItemInput,
@@ -66,6 +67,22 @@ interface TicketRow {
   type_name:        string | null;
   type_icon:        string | null;
   type_color:       string | null;
+}
+
+interface TicketExportRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  category: string | null;
+  created_at: Date;
+  updated_at: Date;
+  due_date: Date | null;
+  resolved_at: Date | null;
+  assigned_to_name: string | null;
+  contact_name: string | null;
+  organization_name: string | null;
+  ticket_type_name: string | null;
 }
 
 interface CommentRow {
@@ -554,6 +571,69 @@ export async function listTickets(query: ListTicketsQuery) {
     data: rows,
     meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
   };
+}
+
+/* ── exportTickets ───────────────────────────────────────────────────────── */
+export async function exportTickets(query: ExportTicketsQuery): Promise<TicketExportRow[]> {
+  await ensureTicketInfrastructure();
+
+  const searchParam       = query.search          ?? null;
+  const statusParam       = query.status          ?? null;
+  const priorityParam     = query.priority        ?? null;
+  const assignedParam     = query.assigned_to     ?? null;
+  const sourceParam       = query.source          ?? null;
+  const contactParam      = query.contact_id      ?? null;
+  const organizationParam = query.organization_id ?? null;
+  const categoryParam     = query.category        ?? null;
+
+  const dateFrom = query.date_from ? new Date(query.date_from) : null;
+  const dateTo = query.date_to ? new Date(query.date_to) : null;
+  const dateFromParam = dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : null;
+  const dateToParam = dateTo && !Number.isNaN(dateTo.getTime()) ? dateTo : null;
+
+  return prisma.$queryRawUnsafe<TicketExportRow[]>(
+    `SELECT
+       t.id,
+       t.title,
+       t.status,
+       t.priority,
+       t.category,
+       t.created_at,
+       t.updated_at,
+       t.due_date,
+       t.resolved_at,
+       u.name AS assigned_to_name,
+       ct.name AS contact_name,
+       o.name AS organization_name,
+       tt.name AS ticket_type_name
+     FROM tickets t
+     LEFT JOIN users u ON u.id = t.assigned_to
+     LEFT JOIN contacts ct ON ct.id = t.contact_id
+     LEFT JOIN organizations o ON o.id = t.organization_id
+     LEFT JOIN ticket_types tt ON tt.id = t.type_id
+     WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+       AND ($2::text IS NULL OR t.status = $2)
+       AND ($3::text IS NULL OR t.priority = $3)
+       AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)
+       AND ($5::text IS NULL OR t.source = $5)
+       AND ($6::uuid IS NULL OR t.contact_id = $6::uuid)
+       AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
+       AND ($8::text IS NULL OR t.category = $8)
+       AND ($9::timestamptz IS NULL OR t.created_at >= $9::timestamptz)
+       AND ($10::timestamptz IS NULL OR t.created_at <= $10::timestamptz)
+     ORDER BY t.created_at DESC
+     LIMIT 10000`,
+    searchParam,
+    statusParam,
+    priorityParam,
+    assignedParam,
+    sourceParam,
+    contactParam,
+    organizationParam,
+    categoryParam,
+    dateFromParam,
+    dateToParam,
+  );
 }
 
 /* ── getTicket ───────────────────────────────────────────────────────────── */

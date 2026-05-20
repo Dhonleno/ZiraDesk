@@ -38,6 +38,20 @@ export const listTicketsQuerySchema = z.object({
   sort_order:  z.enum(['asc', 'desc']).default('desc'),
 });
 
+export const exportTicketsQuerySchema = z.object({
+  format: z.enum(['csv']).default('csv'),
+  search: z.string().optional(),
+  status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  assigned_to: z.string().uuid().optional(),
+  source: z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
+  contact_id: z.string().uuid().optional(),
+  organization_id: z.string().uuid().optional(),
+  category: z.string().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+});
+
 export const createCommentSchema = z.object({
   content:     z.string().min(1),
   is_internal: z.boolean().default(false),
@@ -71,6 +85,7 @@ export const createTimeEntrySchema = z.object({
 export type CreateTicketInput  = z.infer<typeof createTicketSchema>;
 export type UpdateTicketInput  = z.infer<typeof updateTicketSchema>;
 export type ListTicketsQuery   = z.infer<typeof listTicketsQuerySchema>;
+export type ExportTicketsQuery = z.infer<typeof exportTicketsQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;
