@@ -3,9 +3,9 @@
 Este documento é a fonte da verdade para qualquer tela do produto ZiraDesk. Use-o como referência ao criar novas páginas, modais ou componentes. **Nunca invente cores, tipografia, espaçamento ou estrutura novos** — se algo faltar, baseie-se no que já existe.
 
 Telas de referência canônicas (sempre leia antes de iniciar uma nova):
-- `Omnichannel - Modais.html` — shell completo do app + caixa de atendimentos + modais
-- `Clientes.html` — listagens densas (tabela + filtros + painel de detalhe)
-- `Monitor.html` — dashboards / painéis em tempo real (cards + KPIs + listas)
+- `apps/web/src/references/omnichannel_chat.html` — shell completo do app + caixa de atendimentos + estrutura de conversa
+- `apps/web/src/references/Clientes.html` — listagens densas (tabela + filtros + painel de detalhe)
+- `apps/web/src/pages/tv/TVDashboard.tsx` — dashboards / painéis em tempo real (cards + KPIs + listas)
 
 > Regra de ouro: ao começar uma tela nova, **abra uma das telas acima**, copie a topbar + nav rail + tokens, e construa o conteúdo dentro do mesmo container. Não recrie do zero.
 
@@ -192,7 +192,7 @@ Cores por estado:
 Pills com **pulso** usam `.pulse` (7×7 verde com aura). Para indicadores menores embutidos use `.live-dot` (6×6).
 
 ### Tags / chips
-- **Tag de segmento** (`.tag-pill`): pill colorida, 10px, weight 500, padding `2px 8px`. Vide variantes em `Clientes.html` (`tag-cliente`, `tag-vip`, `tag-lead`...).
+- **Tag de segmento** (`.tag-pill`): pill colorida, 10px, weight 500, padding `2px 8px`. Vide variantes em `apps/web/src/references/Clientes.html` (`tag-cliente`, `tag-vip`, `tag-lead`...).
 - **Tag de fila/categoria hierárquica** (`.q-tag`): pill em `var(--bg-3)`, fonte mono, `›` como separador (em `var(--txt-3)`), folha em `var(--txt)` peso 500.
 - **Filter chip** (`.fchip`): borda `var(--line-2)`, ícone de chevron à direita; estado `has-val` usa `var(--teal)` na borda + `var(--teal-dim)` no fundo.
 
@@ -239,7 +239,7 @@ Linha vertical 1px `var(--line-2)` à esquerda, dots 9×9 com borda 2px da cor d
 ### Modais
 - Overlay `rgba(0,0,0,.5)`, modal centralizado em `var(--bg-2)`, raio `var(--r-lg)`, `box-shadow: var(--shadow-pop)`.
 - Header: 14–16px peso 600 + botão de fechar à direita.
-- Footer: alinhado à direita, botão secundário `tb-btn` + primário `tb-btn-primary`. Veja `Omnichannel - Modais.html`.
+- Footer: alinhado à direita, botão secundário `tb-btn` + primário `tb-btn-primary`. Veja `apps/web/src/references/omnichannel_chat.html`.
 
 ---
 
@@ -309,7 +309,7 @@ Estrutura:
 fila/lista | conversa | painel do contato
    320px   |   1fr    |        360px
 ```
-Cabeçalho da conversa fixo, área de mensagens rolável, composer fixo no rodapé. Veja `Omnichannel - Modais.html`.
+Cabeçalho da conversa fixo, área de mensagens rolável, composer fixo no rodapé. Veja `apps/web/src/references/omnichannel_chat.html`.
 
 ### Configurações / Formulários longos
 - Cabeçalho de página padrão.
@@ -324,7 +324,7 @@ Sempre que uma lista, tabela ou painel não tem dados:
 - Subtítulo 11px em `--txt-3`.
 - (Opcional) botão `tb-btn` ou CTA teal abaixo.
 
-Exemplo: `.q-empty` no `Monitor.html`.
+Exemplo: estado vazio no monitor em `apps/web/src/pages/tv/TVDashboard.tsx`.
 
 ---
 

@@ -13,9 +13,9 @@
 
 ## Referências Canônicas de Tela
 
-- `Omnichannel - Modais.html`
-- `Clientes.html`
-- `Monitor.html`
+- `apps/web/src/references/omnichannel_chat.html`
+- `apps/web/src/references/Clientes.html`
+- `apps/web/src/pages/tv/TVDashboard.tsx`
 
 ## Compatibilidade
 
