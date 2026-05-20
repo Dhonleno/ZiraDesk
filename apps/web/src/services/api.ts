@@ -647,6 +647,7 @@ export interface CrmContact {
   id: string;
   organization_id: string | null;
   organization_name: string | null;
+  organization_status?: string | null;
   name: string;
   email: string | null;
   phone: string | null;
