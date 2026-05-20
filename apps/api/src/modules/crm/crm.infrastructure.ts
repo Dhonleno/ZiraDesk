@@ -5,6 +5,14 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
+async function tableExists(schemaName: string, tableName: string): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`,
+    `${schemaName}.${tableName}`,
+  );
+  return Boolean(rows[0]?.exists);
+}
+
 const ensuredSchemas = new Set<string>();
 const inflight = new Map<string, Promise<void>>();
 
@@ -88,25 +96,29 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
       ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
     `);
 
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE ${schema}.conversations
-      ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES ${schema}.organizations(id) ON DELETE SET NULL
-    `);
+    if (await tableExists(schemaName, 'conversations')) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE ${schema}.conversations
+        ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES ${schema}.organizations(id) ON DELETE SET NULL
+      `);
+    }
 
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE ${schema}.tickets
-      ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES ${schema}.organizations(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
-      ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
-    `);
+    if (await tableExists(schemaName, 'tickets')) {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE ${schema}.tickets
+        ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES ${schema}.organizations(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
+        ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+      `);
 
-    await prisma.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
-      ON ${schema}.tickets(email_message_id)
-      WHERE email_message_id IS NOT NULL
-    `);
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_email_message_id
+        ON ${schema}.tickets(email_message_id)
+        WHERE email_message_id IS NOT NULL
+      `);
+    }
 
     ensuredSchemas.add(schemaName);
   })()
