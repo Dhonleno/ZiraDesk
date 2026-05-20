@@ -9,11 +9,12 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.service.js';
 import { prisma } from '../../config/database.js';
+import { env } from '../../config/env.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 import { getSocketServer } from '../../socket/index.js';
 
-const REFRESH_COOKIE = 'zd_refresh';
+const REFRESH_COOKIE = env.REFRESH_COOKIE_NAME ?? 'zd_refresh';
 
 const RESERVED_SUBDOMAINS = new Set(['app', 'www', 'api', 'localhost', '127', '']);
 
