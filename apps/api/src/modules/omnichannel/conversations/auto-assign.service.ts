@@ -116,7 +116,7 @@ export async function ensureAgentAssignmentsInfrastructure(
          , 'offline'
     FROM ${usersRef}
     WHERE status = 'active'
-      AND role IN ('owner', 'admin', 'agent')
+      AND role IN ('owner', 'admin', 'supervisor', 'agent')
     ON CONFLICT (user_id) DO NOTHING
   `);
 
@@ -242,7 +242,7 @@ async function resolveAgentForAssignment(
          AND aa.status = 'online'
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
-         AND u.role IN ('owner', 'admin', 'agent')
+         AND u.role IN ('agent')
          AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
        LIMIT 1`,
       preferredAgentId,
@@ -272,7 +272,7 @@ async function resolveAgentForAssignment(
          AND aa.status = 'online'
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
-         AND u.role IN ('owner', 'admin', 'agent')
+         AND u.role IN ('agent')
          AND abs.bot_option_id IN (SELECT id FROM option_scope)
          AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
        ORDER BY aa.last_assigned_at ASC
@@ -294,7 +294,7 @@ async function resolveAgentForAssignment(
        AND aa.status = 'online'
        AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('agent')
        AND aa.active_conversations < COALESCE(aa.max_conversations, $1::integer, 999999)
      ORDER BY aa.last_assigned_at ASC
      LIMIT 15`,

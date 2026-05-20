@@ -1,6 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 import type { Server } from 'socket.io';
+import type { Role } from '@ziradesk/shared';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import type {
   ListConversationsQuery,
@@ -461,7 +462,12 @@ function getMentionMediaSubtype(message: MentionSourceMessageRow): string | null
   return typeof mediaSubtype === 'string' && mediaSubtype.trim() ? mediaSubtype.trim() : null;
 }
 
-export async function listConversations(query: ListConversationsQuery, userId?: string, tenantId?: string) {
+export async function listConversations(
+  query: ListConversationsQuery,
+  userId?: string,
+  tenantId?: string,
+  userRole?: Role,
+) {
   const schemaName = await getSchemaName(tenantId);
   const infra = await getTenantConversationInfra(schemaName);
   if (
@@ -500,8 +506,16 @@ export async function listConversations(query: ListConversationsQuery, userId?: 
     await ensureConversationTagsInfrastructure(schemaName);
   }
 
+  const isManager = userRole === 'owner' || userRole === 'admin' || userRole === 'supervisor';
+  const effectiveQuery: ListConversationsQuery = !isManager
+    && query.assigned_to_me === undefined
+    && !query.agent_id
+    && (query.tab === 'active' || query.tab === 'return' || query.tab === 'active_outbound' || !query.tab)
+    ? { ...query, assigned_to_me: true }
+    : query;
+
   const modernContext = buildListConversationSqlContext(
-    query,
+    effectiveQuery,
     userId,
     'ct.name',
     'c.contact_id',
@@ -1270,7 +1284,7 @@ export async function assignConversation(
      JOIN agent_assignments aa ON aa.user_id = u.id
      WHERE u.id = $1::uuid
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
        AND aa.status = 'online'
      LIMIT 1`,
     assignToUserId,
@@ -1361,7 +1375,7 @@ export async function listTransferAgents(currentAgentId?: string): Promise<Trans
      ) ac ON ac.assigned_to = u.id
      WHERE aa.status = 'online'
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
        ${excludeClause}
      ORDER BY aa.is_available DESC, COALESCE(ac.count, 0) ASC`,
     ...params,
@@ -1730,7 +1744,7 @@ export async function requestHelp(
      JOIN ${schemaPrefix}agent_assignments aa ON aa.user_id = u.id
      WHERE u.id = $1::uuid
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
        AND aa.status = 'online'
        AND aa.is_available = true
      LIMIT 1`,

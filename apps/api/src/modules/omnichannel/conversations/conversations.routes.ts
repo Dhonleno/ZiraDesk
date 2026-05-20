@@ -209,7 +209,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Query inválida', details: parsed.error.flatten() },
       });
     }
-    const result = await listConversations(parsed.data, request.user.id, request.user.tenantId);
+    const result = await listConversations(
+      parsed.data,
+      request.user.id,
+      request.user.tenantId,
+      request.user.role,
+    );
     return reply.send({ success: true, ...result });
   });
 

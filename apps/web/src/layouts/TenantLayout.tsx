@@ -242,10 +242,12 @@ export function TenantLayout() {
       ? 'Owner'
       : user?.role === 'admin'
         ? 'Admin'
+        : user?.role === 'supervisor'
+          ? t('tenantAdmin.users.roles.supervisor')
         : user?.role === 'agent'
           ? 'Agente'
           : 'Visualização';
-  const isManager = user?.role === 'owner' || user?.role === 'admin';
+  const isManager = ['owner', 'admin', 'supervisor'].includes(user?.role ?? '');
   const {
     status: agentStatus,
     pauseReason,

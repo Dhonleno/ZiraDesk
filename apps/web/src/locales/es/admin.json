@@ -250,6 +250,7 @@
       "roles": {
         "owner": "Propietario",
         "admin": "Administrador",
+        "supervisor": "Supervisor",
         "agent": "Agente",
         "viewer": "Visualizador"
       },
@@ -263,7 +264,8 @@
         "role": "Rol",
         "status": "Estado",
         "lastSeen": "Último acceso",
-        "createdAt": "Miembro desde"
+        "createdAt": "Miembro desde",
+        "actions": "Acciones"
       },
       "messages": {
         "invited": "Usuario invitado con éxito",
@@ -631,6 +633,7 @@
     "roles": {
       "owner": "Propietario",
       "admin": "Administrador",
+      "supervisor": "Supervisor",
       "agent": "Agente",
       "viewer": "Visualizador"
     }

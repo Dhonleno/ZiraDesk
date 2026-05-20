@@ -250,6 +250,7 @@
       "roles": {
         "owner": "Owner",
         "admin": "Administrator",
+        "supervisor": "Supervisor",
         "agent": "Agent",
         "viewer": "Viewer"
       },
@@ -263,7 +264,8 @@
         "role": "Role",
         "status": "Status",
         "lastSeen": "Last seen",
-        "createdAt": "Member since"
+        "createdAt": "Member since",
+        "actions": "Actions"
       },
       "messages": {
         "invited": "User invited successfully",
@@ -631,6 +633,7 @@
     "roles": {
       "owner": "Owner",
       "admin": "Administrator",
+      "supervisor": "Supervisor",
       "agent": "Agent",
       "viewer": "Viewer"
     }

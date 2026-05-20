@@ -56,7 +56,7 @@ const PERMISSION_ORDER: Permission[] = [
   'metrics:own',
 ];
 
-const MATRIX_ROLES: AssignableRole[] = ['owner', 'admin', 'agent', 'viewer'];
+const MATRIX_ROLES: AssignableRole[] = ['owner', 'admin', 'supervisor', 'agent', 'viewer'];
 
 function initials(name: string): string {
   return name
@@ -68,7 +68,11 @@ function initials(name: string): string {
 }
 
 function isAssignableRole(value: string): value is AssignableRole {
-  return value === 'owner' || value === 'admin' || value === 'agent' || value === 'viewer';
+  return value === 'owner'
+    || value === 'admin'
+    || value === 'supervisor'
+    || value === 'agent'
+    || value === 'viewer';
 }
 
 function canUseViewerRole(features?: Record<string, unknown>): boolean {
@@ -117,8 +121,8 @@ export function Roles() {
 
   const availableRoles = useMemo<AssignableRole[]>(() => (
     viewerEnabled
-      ? ['owner', 'admin', 'agent', 'viewer']
-      : ['owner', 'admin', 'agent']
+      ? ['owner', 'admin', 'supervisor', 'agent', 'viewer']
+      : ['owner', 'admin', 'supervisor', 'agent']
   ), [viewerEnabled]);
 
   const matrixPermissions = useMemo<Permission[]>(() => {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api, conversationTags, type ConversationTag } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useNotification } from '../../hooks/useNotification';
+import { usePermission } from '../../hooks/usePermission';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
@@ -177,10 +178,12 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const { showNotification } = useNotification();
+  const { role: currentUserRole } = usePermission();
+  const isManagerRole = ['owner', 'admin', 'supervisor'].includes(currentUserRole ?? '');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('active');
-  const [assignedToMe, setAssignedToMe] = useState(!initialAgentId);
+  const [assignedToMe, setAssignedToMe] = useState(!initialAgentId && !isManagerRole);
   const [filterAgentId, setFilterAgentId] = useState(initialAgentId ?? '');
   const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
   const [filterTagId, setFilterTagId] = useState<string | null>(null);
@@ -199,10 +202,10 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
 
   useEffect(() => {
     setFilterAgentId(initialAgentId ?? '');
-    setAssignedToMe(!initialAgentId);
+    setAssignedToMe(!initialAgentId && !isManagerRole);
     setActiveTab('active');
     setSubStatus(null);
-  }, [initialAgentId]);
+  }, [initialAgentId, isManagerRole]);
 
   const revealSelectedTab = useCallback((selector: string, container: HTMLDivElement | null) => {
     if (!container) return;
@@ -954,7 +957,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
               type="button"
               onClick={() => {
                 setFilterAgentId('');
-                setAssignedToMe(true);
+                setAssignedToMe(!isManagerRole);
               }}
               style={{
                 border: 'none',

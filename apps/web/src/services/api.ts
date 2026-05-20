@@ -126,7 +126,7 @@ interface ListUsersParams {
 interface InviteUserPayload {
   name: string;
   email: string;
-  role: 'admin' | 'agent' | 'viewer';
+  role: 'admin' | 'supervisor' | 'agent' | 'viewer';
 }
 
 export interface InviteUserResultData {

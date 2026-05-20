@@ -113,7 +113,7 @@ export async function getAgents(tenantId: string, schemaName?: string): Promise<
      FROM ${assignmentsRef} aa
      JOIN ${usersRef} u ON u.id = aa.user_id
      WHERE u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
      ORDER BY u.name ASC`,
   );
 }
@@ -184,7 +184,7 @@ export async function toggleAgentAvailability(
        FROM ${usersRef}
        WHERE id = $1::uuid
          AND status = 'active'
-         AND role IN ('owner', 'admin', 'agent')
+         AND role IN ('owner', 'admin', 'supervisor', 'agent')
        LIMIT 1`,
       userId,
     )

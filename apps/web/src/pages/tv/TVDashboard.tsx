@@ -222,7 +222,7 @@ export function TVDashboard() {
   const { t, i18n } = useTranslation('omnichannel');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { role } = usePermission();
-  const canAccessTv = role === 'owner' || role === 'admin';
+  const canAccessTv = ['owner', 'admin', 'supervisor'].includes(role ?? '');
   const [now, setNow] = useState(new Date());
   const [dashboard, setDashboard] = useState<TvDashboardData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);

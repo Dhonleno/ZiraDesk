@@ -12,7 +12,7 @@ import { useToast } from '../../stores/toast.store';
 
 const schema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
-  role: z.enum(['admin', 'agent', 'viewer']),
+  role: z.enum(['admin', 'supervisor', 'agent', 'viewer']),
   max_conversations: z.number().int().min(1).max(500).nullable().optional(),
 });
 
@@ -111,6 +111,7 @@ export function EditUserModal({ open, onClose, user }: Props) {
           </label>
           <select aria-label={t('tenantAdmin.users.fields.role')} style={selectStyle} {...register('role')}>
             <option value="admin">{t('tenantAdmin.users.roles.admin')}</option>
+            <option value="supervisor">{t('tenantAdmin.users.roles.supervisor')}</option>
             <option value="agent">{t('tenantAdmin.users.roles.agent')}</option>
             <option value="viewer">{t('tenantAdmin.users.roles.viewer')}</option>
           </select>

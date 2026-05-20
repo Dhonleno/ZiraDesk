@@ -30,6 +30,7 @@ function formatRelative(dateIso: string, locale: string): string {
 function roleLabel(role: string, t: (key: string) => string): string {
   if (role === 'owner') return t('tenantAdmin.users.roles.owner');
   if (role === 'admin') return t('tenantAdmin.users.roles.admin');
+  if (role === 'supervisor') return t('tenantAdmin.users.roles.supervisor');
   if (role === 'agent') return t('tenantAdmin.users.roles.agent');
   return role;
 }

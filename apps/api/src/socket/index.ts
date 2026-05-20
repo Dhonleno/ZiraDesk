@@ -233,7 +233,7 @@ async function requeueAgentConversations(
       return tx.$queryRawUnsafe<Array<{ id: string }>>(
         `SELECT id::text AS id
          FROM users
-         WHERE role IN ('owner', 'admin')
+         WHERE role IN ('owner', 'admin', 'supervisor')
            AND status = 'active'`,
       );
     });

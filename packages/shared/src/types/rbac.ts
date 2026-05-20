@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'owner' | 'admin' | 'agent' | 'viewer';
+export type Role = 'super_admin' | 'owner' | 'admin' | 'supervisor' | 'agent' | 'viewer';
 
 export type Permission =
   | 'tenant:manage'
@@ -57,6 +57,18 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'tickets:view',
     'tickets:edit',
     'tickets:delete',
+    'metrics:view',
+    'metrics:own',
+  ],
+  supervisor: [
+    'contacts:view',
+    'contacts:edit',
+    'organizations:view',
+    'organizations:edit',
+    'conversations:view',
+    'conversations:manage',
+    'tickets:view',
+    'tickets:edit',
     'metrics:view',
     'metrics:own',
   ],
