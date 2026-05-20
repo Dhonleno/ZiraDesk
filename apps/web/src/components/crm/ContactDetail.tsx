@@ -16,6 +16,52 @@ interface Props {
   contactId: string;
 }
 
+function normalizeEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractEmailFromArray(values: unknown[]): string | null {
+  for (const item of values) {
+    const direct = normalizeEmail(item);
+    if (direct) return direct;
+
+    if (item && typeof item === 'object') {
+      const entry = item as Record<string, unknown>;
+      const email = normalizeEmail(entry['email']) ?? normalizeEmail(entry['value']);
+      if (email) return email;
+    }
+  }
+  return null;
+}
+
+function resolveContactEmail(contact: CrmContact): string | null {
+  const direct = normalizeEmail(contact.email);
+  if (direct) return direct;
+
+  const rawContact = contact as unknown as Record<string, unknown>;
+  const fromEmails = rawContact['emails'];
+  if (Array.isArray(fromEmails)) {
+    const email = extractEmailFromArray(fromEmails);
+    if (email) return email;
+  }
+
+  if (contact.custom_fields && typeof contact.custom_fields === 'object') {
+    const customFields = contact.custom_fields as Record<string, unknown>;
+    const customDirect = normalizeEmail(customFields['email']) ?? normalizeEmail(customFields['primary_email']);
+    if (customDirect) return customDirect;
+
+    const customEmails = customFields['emails'];
+    if (Array.isArray(customEmails)) {
+      const email = extractEmailFromArray(customEmails);
+      if (email) return email;
+    }
+  }
+
+  return null;
+}
+
 function formatRelativeDate(value: string) {
   const date = new Date(value);
   const diffMs = Date.now() - date.getTime();
@@ -200,6 +246,9 @@ export function ContactDetail({ contactId }: Props) {
     setShowSelectChannel(true);
   }
 
+  const ticketRows = ticketsData?.data ?? [];
+  const contactEmail = contact ? resolveContactEmail(contact) : null;
+
   if (isLoading || !contact) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', fontSize: 13 }}>
@@ -207,8 +256,6 @@ export function ContactDetail({ contactId }: Props) {
       </div>
     );
   }
-
-  const ticketRows = ticketsData?.data ?? [];
 
   return (
     <>
@@ -291,7 +338,7 @@ export function ContactDetail({ contactId }: Props) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
               <InfoField label={t('contacts.table.whatsapp')} value={contact.whatsapp} />
               <InfoField label={t('contacts.fields.phone')} value={contact.phone} />
-              <InfoField label={t('contacts.fields.email')} value={contact.email} />
+              <InfoField label={t('contacts.fields.email')} value={contactEmail} />
               <InfoField label={t('contacts.fields.document')} value={contact.document} />
               <InfoField label={t('contacts.fields.role')} value={contact.role} />
               <InfoField label={t('contacts.fields.department')} value={contact.department} />
@@ -330,12 +377,14 @@ export function ContactDetail({ contactId }: Props) {
                 ) : (
                   <div>
                     <p className="portal-access-hint">
-                      O contato precisa ter e-mail cadastrado.
+                      {contactEmail
+                        ? 'Este contato já possui e-mail. Gere o acesso ao portal para liberar login.'
+                        : 'O contato precisa ter e-mail cadastrado.'}
                     </p>
                     <button
                       type="button"
                       onClick={() => createPortalAccessMutation.mutate()}
-                      disabled={!contact.email || createPortalAccessMutation.isPending}
+                      disabled={!contactEmail || createPortalAccessMutation.isPending}
                       className="zd-btn zd-btn-primary"
                     >
                       Criar acesso ao portal
