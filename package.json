@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@9.0.0",
-"scripts": {
+  "scripts": {
     "dev": "pnpm --parallel -r dev",
+    "dev:secondary": "pnpm --parallel --filter @ziradesk/api --filter @ziradesk/web run dev:secondary",
+    "dev:api:secondary": "pnpm --filter @ziradesk/api run dev:secondary",
+    "dev:web:secondary": "pnpm --filter @ziradesk/web run dev:secondary",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "type-check": "pnpm -r type-check"
