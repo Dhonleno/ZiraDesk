@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi } from '../../services/api';
@@ -27,6 +27,7 @@ interface TenantUser {
 const ROLE_STYLES: Record<string, { bg: string; color: string }> = {
   owner:  { bg: 'var(--purple-dim)', color: 'var(--purple)' },
   admin:  { bg: 'var(--teal-dim)',   color: 'var(--teal)' },
+  supervisor: { bg: 'var(--purple-dim)', color: 'var(--purple)' },
   agent:  { bg: 'var(--blue-dim)',   color: 'var(--blue)' },
   viewer: { bg: 'rgba(156,163,175,.15)', color: 'var(--txt-2)' },
 };
@@ -74,7 +75,7 @@ function formatDate(iso: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(iso));
 }
 
-const ROLE_TABS = ['all', 'owner', 'admin', 'agent', 'viewer'] as const;
+const ROLE_TABS = ['all', 'owner', 'admin', 'supervisor', 'agent', 'viewer'] as const;
 const STATUS_TABS = ['all', 'active', 'inactive'] as const;
 
 type RoleFilter = (typeof ROLE_TABS)[number];
@@ -246,8 +247,22 @@ export function Users() {
   const [editUser, setEditUser] = useState<TenantUser | null>(null);
   const [resetUser, setResetUser] = useState<TenantUser | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmStatusAction>(null);
+  const [openActionsUserId, setOpenActionsUserId] = useState<string | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const debouncedSearch = useDebounce(search, 300);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!actionsMenuRef.current) return;
+      if (!actionsMenuRef.current.contains(event.target as Node)) {
+        setOpenActionsUserId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', debouncedSearch, roleFilter, statusFilter, page],
@@ -288,6 +303,7 @@ export function Users() {
       all:    t('tenantAdmin.common.all'),
       owner:  t('tenantAdmin.users.roles.owner'),
       admin:  t('tenantAdmin.users.roles.admin'),
+      supervisor: t('tenantAdmin.users.roles.supervisor'),
       agent:  t('tenantAdmin.users.roles.agent'),
       viewer: t('tenantAdmin.users.roles.viewer'),
     };
@@ -322,8 +338,9 @@ export function Users() {
     t('tenantAdmin.users.fields.status'),
     t('tenantAdmin.users.fields.lastSeen'),
     t('tenantAdmin.users.fields.createdAt'),
-    '',
+    t('tenantAdmin.users.fields.actions'),
   ];
+  const ACTIONS_COL_WIDTH = 88;
 
   return (
     <PageShell padding={0}>
@@ -378,8 +395,15 @@ export function Users() {
               {TABLE_HEADERS.map((h, i) => (
                 <th
                   key={i}
-                  className="px-4 py-3 text-left text-xs font-medium"
-                  style={{ color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontSize: 10, fontWeight: 600 }}
+                  className={`px-4 py-3 text-xs font-medium ${i === TABLE_HEADERS.length - 1 ? 'text-right' : 'text-left'}`}
+                  style={{
+                    color: 'var(--txt-3)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '.08em',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    ...(i === TABLE_HEADERS.length - 1 ? { width: ACTIONS_COL_WIDTH } : {}),
+                  }}
                 >
                   {h}
                 </th>
@@ -405,8 +429,12 @@ export function Users() {
                       background: 'var(--bg)',
                       opacity: user.status === 'inactive' ? 0.65 : 1,
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg)')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--bg)';
+                    }}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -452,38 +480,89 @@ export function Users() {
                     <td className="px-4 py-3 tabular-nums" style={{ color: 'var(--txt-2)' }}>
                       {formatDate(user.created_at)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-right" style={{ width: ACTIONS_COL_WIDTH }}>
                       <PermissionGate permission="users:manage">
-                        {user.role !== 'owner' && (
-                          <div className="flex items-center justify-end gap-1">
-                            {user.status === 'active' ? (
-                              <>
-                                <ActionButton onClick={() => setEditUser(user)}>
-                                  {t('tenantAdmin.common.edit')}
-                                </ActionButton>
-                                <ActionButton onClick={() => setResetUser(user)} color="var(--txt-2)">
-                                  {t('tenantAdmin.users.resetPassword')}
-                                </ActionButton>
-                                <ActionButton
-                                  disabled={user.id === loggedUserId}
-                                  onClick={() => setConfirmAction({ user, nextStatus: 'inactive' })}
-                                  color="var(--red)"
-                                  hoverBg="var(--red-dim)"
-                                >
-                                  {t('tenantAdmin.common.deactivate')}
-                                </ActionButton>
-                              </>
-                            ) : (
-                              <ActionButton
-                                disabled={user.id === loggedUserId}
-                                onClick={() => setConfirmAction({ user, nextStatus: 'active' })}
-                                color="var(--teal)"
-                                hoverBg="var(--teal-dim)"
+                        {user.role !== 'owner' ? (
+                          <div
+                            ref={openActionsUserId === user.id ? actionsMenuRef : null}
+                            className="row-actions flex items-center justify-end"
+                            style={{ position: 'relative' }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setOpenActionsUserId((current) => (current === user.id ? null : user.id))}
+                              aria-label={t('tenantAdmin.users.fields.actions')}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: 'var(--r)',
+                                border: '1px solid var(--line-2)',
+                                background: 'var(--bg-3)',
+                                color: 'var(--txt-3)',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <circle cx="6" cy="2.5" r="1" fill="currentColor" />
+                                <circle cx="6" cy="6" r="1" fill="currentColor" />
+                                <circle cx="6" cy="9.5" r="1" fill="currentColor" />
+                              </svg>
+                            </button>
+
+                            {openActionsUserId === user.id && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 'calc(100% + 4px)',
+                                  minWidth: 156,
+                                  background: 'var(--bg-2)',
+                                  border: '1px solid var(--line)',
+                                  borderRadius: 'var(--r)',
+                                  boxShadow: 'var(--shadow-pop)',
+                                  zIndex: 20,
+                                  padding: 4,
+                                }}
                               >
-                                {t('tenantAdmin.common.reactivate')}
-                              </ActionButton>
+                                {user.status === 'active' ? (
+                                  <>
+                                    <DropdownItem onClick={() => { setEditUser(user); setOpenActionsUserId(null); }}>
+                                      {t('tenantAdmin.common.edit')}
+                                    </DropdownItem>
+                                    <DropdownItem onClick={() => { setResetUser(user); setOpenActionsUserId(null); }}>
+                                      {t('tenantAdmin.users.resetPassword')}
+                                    </DropdownItem>
+                                    <DropdownItem
+                                      color="var(--red)"
+                                      disabled={user.id === loggedUserId}
+                                      onClick={() => {
+                                        setConfirmAction({ user, nextStatus: 'inactive' });
+                                        setOpenActionsUserId(null);
+                                      }}
+                                    >
+                                      {t('tenantAdmin.common.deactivate')}
+                                    </DropdownItem>
+                                  </>
+                                ) : (
+                                  <DropdownItem
+                                    color="var(--teal)"
+                                    disabled={user.id === loggedUserId}
+                                    onClick={() => {
+                                      setConfirmAction({ user, nextStatus: 'active' });
+                                      setOpenActionsUserId(null);
+                                    }}
+                                  >
+                                    {t('tenantAdmin.common.reactivate')}
+                                  </DropdownItem>
+                                )}
+                              </div>
                             )}
                           </div>
+                        ) : (
+                          <span style={{ color: 'var(--txt-3)', fontSize: 12 }}>—</span>
                         )}
                       </PermissionGate>
                     </td>
@@ -579,17 +658,15 @@ export function Users() {
   );
 }
 
-function ActionButton({
+function DropdownItem({
   onClick,
   disabled = false,
   color = 'var(--txt-2)',
-  hoverBg = 'var(--bg-4)',
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
   color?: string;
-  hoverBg?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -598,10 +675,18 @@ function ActionButton({
       disabled={disabled}
       onClick={onClick}
       className="rounded px-2 py-1 text-xs transition-colors"
-      style={{ color: disabled ? 'var(--txt-3)' : color, background: 'transparent', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        color: disabled ? 'var(--txt-3)' : color,
+        background: 'transparent',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        padding: '7px 10px',
+        fontSize: 12,
+      }}
       onMouseEnter={(e) => {
         if (disabled) return;
-        e.currentTarget.style.background = hoverBg;
+        e.currentTarget.style.background = 'var(--bg-4)';
         if (color === 'var(--txt-2)') e.currentTarget.style.color = 'var(--txt)';
       }}
       onMouseLeave={(e) => {
