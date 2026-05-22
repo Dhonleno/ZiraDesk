@@ -252,9 +252,104 @@
     "error": "Error transferring conversation"
   },
   "history": {
+    "title": "Conversation History",
+    "subtitle": "Browse and analyze completed conversations",
+    "tabs": {
+      "history": "History",
+      "goals": "Goals"
+    },
+    "search": "Search by protocol, contact, or number...",
+    "filters": {
+      "period": "Period",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "status": "Status",
+      "agent": "Agent",
+      "channel": "Channel",
+      "group": "Group",
+      "csat": "CSAT Rating"
+    },
+    "periods": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "month": "This month",
+      "custom": "Custom"
+    },
+    "columns": {
+      "protocol": "Protocol",
+      "contact": "Contact",
+      "agent": "Agent",
+      "channel": "Channel",
+      "group": "Group",
+      "status": "Status",
+      "duration": "Duration",
+      "waitTime": "Wait",
+      "csat": "CSAT",
+      "date": "Date"
+    },
+    "found": "{{count}} conversations found",
+    "exportCsv": "Export CSV",
+    "noResults": "No conversations found",
+    "noResultsHint": "Try adjusting the filters",
+    "detail": {
+      "title": "Conversation details",
+      "transcript": "Transcript",
+      "timeline": "Timeline",
+      "csat": "Rating"
+    },
     "loadMore": "Load previous messages",
     "loading": "Loading...",
     "noMore": "Start of the conversation"
+  },
+  "goals": {
+    "title": "Goals",
+    "subtitle": "Set performance targets for your team",
+    "new": "New goal",
+    "empty": "No goals configured",
+    "emptyHint": "Create a goal to track agent performance",
+    "name": "Goal name",
+    "scope": {
+      "global": "Global (all agents)",
+      "agent": "By agent"
+    },
+    "period": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "metrics": {
+      "tma": "Max AHT (minutes)",
+      "tme": "Max AWT (minutes)",
+      "sla": "Min SLA (%)",
+      "csat": "Min CSAT (1-5)",
+      "volume": "Min volume"
+    },
+    "saveSuccess": "Goal saved successfully",
+    "deleteSuccess": "Goal removed"
+  },
+  "performance": {
+    "title": "Agent Performance",
+    "subtitle": "Track team metrics and goals",
+    "columns": {
+      "agent": "Agent",
+      "volume": "Volume",
+      "tma": "AHT",
+      "tme": "AWT",
+      "sla": "SLA",
+      "csat": "CSAT",
+      "status": "Status"
+    },
+    "status": {
+      "ok": "OK",
+      "warning": "Warning",
+      "breach": "Critical",
+      "no_goal": "No goal"
+    },
+    "exportCsv": "Export CSV",
+    "noGoal": "No goal defined",
+    "teamKpis": "Team summary"
   },
   "media": {
     "upload": "Upload file",

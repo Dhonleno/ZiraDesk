@@ -37,7 +37,9 @@
       "closeConfig": "Conversation Closing",
       "aiAgent": "AI Agent",
       "webhooks": "Webhooks",
-      "settings": "Settings"
+      "settings": "Settings",
+      "history": "History",
+      "performance": "Performance"
     },
     "autoAssign": {
       "title": "Automatic Distribution",
@@ -658,13 +660,17 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
     "settings": "Settings",
+    "history": "History",
+    "performance": "Performance",
     "groups": {
       "team": "Team",
       "attendance": "Attendance",
       "automation": "Automation",
       "tickets": "Tickets",
       "integrations": "Integrations",
-      "settings": "Settings"
+      "settings": "Settings",
+      "history": "History",
+      "performance": "Performance"
     }
   },
   "attendanceRules": {
