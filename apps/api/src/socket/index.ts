@@ -6,6 +6,7 @@ import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { redis } from '../config/redis.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
+import { autoAssignNextQueuedConversation } from '../modules/omnichannel/conversations/auto-assign.service.js';
 
 let io: SocketServer | null = null;
 let hasPublicUsersTable: boolean | null = null;
@@ -13,6 +14,7 @@ const PRESENCE_TTL_SECONDS = 60;
 const DISCONNECT_GRACE_MS = 5_000;
 const REQUEUE_TIMEOUT_MS = 5 * 60 * 1000;
 const REQUEUE_KEY_TTL_SECONDS = 6 * 60;
+const MAX_QUEUE_ASSIGNMENTS_ON_ONLINE = 5;
 const pendingRequeueTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface TypingPayload {
@@ -381,6 +383,20 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
         return;
       }
       socketServer.to(`tenant:${tenantId}`).emit('agent:online', { userId });
+
+      try {
+        let assigned = 0;
+        while (assigned < MAX_QUEUE_ASSIGNMENTS_ON_ONLINE) {
+          const result = await autoAssignNextQueuedConversation(tenantId, schemaName, prisma, socketServer, userId);
+          if (!result) break;
+          assigned++;
+        }
+        if (assigned > 0) {
+          logger.info({ tenantId, userId, assigned }, '[Socket] Assigned pending conversations on agent online');
+        }
+      } catch (err) {
+        logger.error({ tenantId, userId, err }, '[Socket] Failed to process queue on agent online');
+      }
     };
 
     if (schemaName) {

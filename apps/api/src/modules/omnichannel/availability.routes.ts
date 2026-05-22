@@ -52,13 +52,18 @@ export async function omnichannelAvailabilityRoutes(app: FastifyInstance): Promi
       if (parsed.data.is_available && canReceiveConversations) {
         const resolvedSchemaName = await resolveSchemaName(request.user.tenantId!, schemaName);
         const io = getSocketServer();
-        await autoAssignNextQueuedConversation(
-          request.user.tenantId!,
-          resolvedSchemaName,
-          prisma,
-          io,
-          request.user.id,
-        );
+        let assigned = 0;
+        while (assigned < 5) {
+          const result = await autoAssignNextQueuedConversation(
+            request.user.tenantId!,
+            resolvedSchemaName,
+            prisma,
+            io,
+            request.user.id,
+          );
+          if (!result) break;
+          assigned++;
+        }
       }
 
       return reply.send({ success: true, data: availability });
