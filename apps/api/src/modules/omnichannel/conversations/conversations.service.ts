@@ -506,7 +506,8 @@ export async function listConversations(
     await ensureConversationTagsInfrastructure(schemaName);
   }
 
-  const isManager = userRole === 'owner' || userRole === 'admin' || userRole === 'supervisor';
+  const normalizedRole: string = userRole ?? '';
+  const isManager = normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'supervisor';
   const effectiveQuery: ListConversationsQuery = !isManager
     && query.assigned_to_me === undefined
     && !query.agent_id
