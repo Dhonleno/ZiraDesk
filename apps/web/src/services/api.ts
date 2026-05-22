@@ -1991,6 +1991,197 @@ export interface MetricsFiltersParams {
   department?: string;
 }
 
+export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
+
+export interface HistoryFiltersParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: string;
+  assigned_to?: string;
+  channel_type?: string;
+  bot_option_id?: string;
+  csat_rating?: '1' | '2' | '3' | '4' | '5' | 'none';
+  period?: HistoryPeriodPreset;
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface OmnichannelHistoryConversation {
+  id: string;
+  protocol_number: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_whatsapp: string | null;
+  assigned_to: string | null;
+  assigned_name: string | null;
+  assigned_avatar: string | null;
+  channel_type: string;
+  bot_option_id: string | null;
+  bot_department: string | null;
+  status: string;
+  duration_seconds: number;
+  wait_seconds: number | null;
+  csat_score: number | null;
+  created_at: string;
+}
+
+export interface OmnichannelHistoryMeta {
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export interface OmnichannelHistoryTimelineItem {
+  id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface OmnichannelHistoryMessage {
+  id: string;
+  sender_type: string;
+  sender_id: string | null;
+  sender_name: string | null;
+  content: string | null;
+  content_type: string;
+  media_url: string | null;
+  is_internal: boolean;
+  status: string;
+  created_at: string;
+}
+
+export interface OmnichannelHistoryDetail {
+  conversation: {
+    id: string;
+    protocol_number: string | null;
+    status: string;
+    channel_type: string;
+    conversation_type: string;
+    subject: string | null;
+    close_type_id: string | null;
+    close_outcome_id: string | null;
+    close_type_label: string | null;
+    close_outcome_label: string | null;
+    created_at: string;
+    assigned_at: string | null;
+    resolved_at: string | null;
+    closed_at: string | null;
+    csat_score: number | null;
+    csat_comment: string | null;
+    csat_sent_at: string | null;
+    csat_responded_at: string | null;
+    contact_name: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    contact_whatsapp: string | null;
+    organization_name: string | null;
+    assigned_name: string | null;
+    assigned_avatar: string | null;
+    channel_name: string | null;
+    metadata: Record<string, unknown> | null;
+  };
+  timeline: OmnichannelHistoryTimelineItem[];
+  transcript: OmnichannelHistoryMessage[];
+}
+
+export type GoalScope = 'global' | 'agent';
+export type GoalPeriod = 'daily' | 'weekly' | 'monthly';
+
+export interface GoalPayload {
+  name: string;
+  scope: GoalScope;
+  agentId?: string | null;
+  period: GoalPeriod;
+  goalTmaMinutes?: number | null;
+  goalTmeMinutes?: number | null;
+  goalSlaPercent?: number | null;
+  goalCsatMin?: number | null;
+  goalVolumeMin?: number | null;
+  isActive?: boolean;
+}
+
+export interface OmnichannelGoal {
+  id: string;
+  name: string;
+  scope: GoalScope | 'group';
+  agentId: string | null;
+  agentName: string | null;
+  botOptionId?: string | null;
+  botOptionLabel?: string | null;
+  period: GoalPeriod;
+  goalTmaMinutes: number | null;
+  goalTmeMinutes: number | null;
+  goalSlaPercent: number | null;
+  goalCsatMin: number | null;
+  goalVolumeMin: number | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PerformanceMetricStatus = 'ok' | 'warning' | 'breach' | 'no_goal';
+
+export interface PerformanceFiltersParams {
+  period?: HistoryPeriodPreset;
+  date_from?: string;
+  date_to?: string;
+  agent_id?: string;
+  bot_option_id?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export interface OmnichannelPerformanceGoal {
+  id: string;
+  name: string;
+  scope: GoalScope;
+  period: GoalPeriod;
+  goal_tma_minutes: number | null;
+  goal_tme_minutes: number | null;
+  goal_sla_percent: number | null;
+  goal_csat_min: number | null;
+  goal_volume_min: number | null;
+}
+
+export interface OmnichannelPerformanceAgent {
+  agent_id: string;
+  agent_name: string;
+  avatar_url: string | null;
+  total_conversations: number;
+  avg_tma_minutes: number | null;
+  avg_tme_minutes: number | null;
+  avg_csat: number | null;
+  csat_count: number;
+  sla_percent: number | null;
+  sla_ok: number;
+  sla_breach: number;
+  goal: OmnichannelPerformanceGoal | null;
+  goal_status: {
+    tma: PerformanceMetricStatus;
+    tme: PerformanceMetricStatus;
+    sla: PerformanceMetricStatus;
+    csat: PerformanceMetricStatus;
+    volume: PerformanceMetricStatus;
+    overall: PerformanceMetricStatus;
+  };
+}
+
+export interface OmnichannelPerformanceResponse {
+  data: OmnichannelPerformanceAgent[];
+  meta: OmnichannelHistoryMeta;
+  team_kpis: {
+    avg_tma_minutes: number | null;
+    avg_tme_minutes: number | null;
+    avg_csat: number | null;
+    sla_percent: number | null;
+    total_volume: number;
+  };
+}
+
 export interface MetricsOverviewData {
   total: {
     total: number;
@@ -2138,6 +2329,69 @@ export const omnichannelApi = {
       const res = await api.get<{ success: boolean; data: MetricsCsatPoint[] }>('/omnichannel/metrics/csat', { params });
       return res.data.data;
     },
+  },
+
+  listHistory: async (
+    params?: HistoryFiltersParams,
+  ): Promise<{ data: OmnichannelHistoryConversation[]; meta: OmnichannelHistoryMeta }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: OmnichannelHistoryConversation[];
+      meta: OmnichannelHistoryMeta;
+    }>('/omnichannel/history', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  getHistoryDetail: async (conversationId: string): Promise<OmnichannelHistoryDetail> => {
+    const res = await api.get<{ success: boolean; data: OmnichannelHistoryDetail }>(
+      `/omnichannel/history/${conversationId}`,
+    );
+    return res.data.data;
+  },
+
+  exportHistoryCsv: async (params?: HistoryFiltersParams): Promise<Blob> => {
+    const res = await api.get<Blob>('/omnichannel/history', {
+      params: { ...params, export: 'csv' },
+      responseType: 'blob',
+    });
+    return res.data;
+  },
+
+  listGoals: async (): Promise<OmnichannelGoal[]> => {
+    const res = await api.get<{ success: boolean; data: OmnichannelGoal[] }>('/omnichannel/goals');
+    return res.data.data;
+  },
+
+  createGoal: async (payload: GoalPayload): Promise<OmnichannelGoal> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelGoal }>('/omnichannel/goals', payload);
+    return res.data.data;
+  },
+
+  updateGoal: async (goalId: string, payload: GoalPayload): Promise<OmnichannelGoal> => {
+    const res = await api.patch<{ success: boolean; data: OmnichannelGoal }>(`/omnichannel/goals/${goalId}`, payload);
+    return res.data.data;
+  },
+
+  deleteGoal: async (goalId: string): Promise<{ id: string }> => {
+    const res = await api.delete<{ success: boolean; data: { id: string } }>(`/omnichannel/goals/${goalId}`);
+    return res.data.data;
+  },
+
+  listPerformance: async (params?: PerformanceFiltersParams): Promise<OmnichannelPerformanceResponse> => {
+    const res = await api.get<{ success: boolean } & OmnichannelPerformanceResponse>('/omnichannel/performance', { params });
+    return {
+      data: res.data.data,
+      meta: res.data.meta,
+      team_kpis: res.data.team_kpis,
+    };
+  },
+
+  exportPerformanceCsv: async (params?: PerformanceFiltersParams): Promise<Blob> => {
+    const res = await api.get<Blob>('/omnichannel/performance', {
+      params: { ...params, export: 'csv' },
+      responseType: 'blob',
+    });
+    return res.data;
   },
 
   listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {

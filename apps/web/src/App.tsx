@@ -14,6 +14,8 @@ import { TenantDetail } from './pages/super-admin/TenantDetail';
 import { Plans } from './pages/super-admin/Plans';
 import { ConversationsPage } from './pages/omnichannel/Conversations';
 import { MetricsPage } from './pages/omnichannel/Metrics';
+import { HistoryPage } from './pages/omnichannel/History';
+import { PerformancePage } from './pages/omnichannel/Performance';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
@@ -140,6 +142,22 @@ export function App() {
               element={(
                 <ProtectedRoute permission="metrics:view" redirectTo="/omnichannel/conversations">
                   <MetricsPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="omnichannel/history"
+              element={(
+                <ProtectedRoute permission="metrics:view" redirectTo="/omnichannel/conversations">
+                  <HistoryPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="omnichannel/performance"
+              element={(
+                <ProtectedRoute permission="metrics:view" redirectTo="/omnichannel/conversations">
+                  <PerformancePage />
                 </ProtectedRoute>
               )}
             />

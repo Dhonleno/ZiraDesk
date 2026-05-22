@@ -9,7 +9,7 @@ import { usePermission } from '../../hooks/usePermission';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 
-type AssignableRole = Exclude<Role, 'super_admin'>;
+type AssignableRole = Exclude<Role, 'super_admin'> | 'supervisor';
 
 interface TenantUser {
   id: string;
@@ -328,7 +328,8 @@ export function Roles() {
                       {t(`roles.permissions.${permission}`, { nsSeparator: false, defaultValue: permission })}
                     </td>
                     {MATRIX_ROLES.filter((matrixRole) => viewerEnabled || matrixRole !== 'viewer').map((matrixRole) => {
-                      const allowed = hasPermission(matrixRole, permission);
+                      const roleForPermission: Role = matrixRole === 'supervisor' ? 'admin' : matrixRole;
+                      const allowed = hasPermission(roleForPermission, permission);
                       return (
                         <td
                           key={`${permission}-${matrixRole}`}
