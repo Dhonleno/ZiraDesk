@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { profileRoutes } from './profile.routes.js';
-import { loginBodySchema } from './auth.schema.js';
+import { forgotPasswordBodySchema, loginBodySchema } from './auth.schema.js';
 import {
   loginWithEmailPassword,
   verifyRefreshToken,
@@ -119,6 +119,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
     return reply.code(200).send({ message: 'Sessão encerrada' });
+  });
+
+  // POST /api/auth/forgot-password
+  app.post('/forgot-password', async (request, reply) => {
+    const parsed = forgotPasswordBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Dados inválidos', details: parsed.error.flatten() });
+    }
+
+    request.log.info(
+      { event: 'auth.forgot_password.request', email: parsed.data.email },
+      'Solicitação de recuperação de senha',
+    );
+
+    // Resposta neutra para evitar enumeração de usuários.
+    return reply.code(200).send({ success: true });
   });
 
   // POST /api/auth/refresh
