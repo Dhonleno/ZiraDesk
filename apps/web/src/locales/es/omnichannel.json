@@ -252,9 +252,104 @@
     "error": "Error al transferir conversación"
   },
   "history": {
+    "title": "Historial de Atenciones",
+    "subtitle": "Consulta y analiza atenciones realizadas",
+    "tabs": {
+      "history": "Historial",
+      "goals": "Metas"
+    },
+    "search": "Buscar protocolo, contacto o número...",
+    "filters": {
+      "period": "Período",
+      "startDate": "Fecha inicial",
+      "endDate": "Fecha final",
+      "status": "Estado",
+      "agent": "Agente",
+      "channel": "Canal",
+      "group": "Grupo",
+      "csat": "Evaluación CSAT"
+    },
+    "periods": {
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "7d": "Últimos 7 días",
+      "30d": "Últimos 30 días",
+      "month": "Este mes",
+      "custom": "Personalizado"
+    },
+    "columns": {
+      "protocol": "Protocolo",
+      "contact": "Contacto",
+      "agent": "Agente",
+      "channel": "Canal",
+      "group": "Grupo",
+      "status": "Estado",
+      "duration": "Duración",
+      "waitTime": "Espera",
+      "csat": "CSAT",
+      "date": "Fecha"
+    },
+    "found": "{{count}} atenciones encontradas",
+    "exportCsv": "Exportar CSV",
+    "noResults": "No se encontraron atenciones",
+    "noResultsHint": "Intenta ajustar los filtros",
+    "detail": {
+      "title": "Detalles de la atención",
+      "transcript": "Transcripción",
+      "timeline": "Línea de tiempo",
+      "csat": "Evaluación"
+    },
     "loadMore": "Cargar mensajes anteriores",
     "loading": "Cargando...",
     "noMore": "Inicio de la conversación"
+  },
+  "goals": {
+    "title": "Metas",
+    "subtitle": "Define parámetros de rendimiento para tu equipo",
+    "new": "Nueva meta",
+    "empty": "No hay metas configuradas",
+    "emptyHint": "Crea una meta para seguir el rendimiento de los agentes",
+    "name": "Nombre de la meta",
+    "scope": {
+      "global": "Global (todos los agentes)",
+      "agent": "Por agente"
+    },
+    "period": {
+      "daily": "Diario",
+      "weekly": "Semanal",
+      "monthly": "Mensual"
+    },
+    "metrics": {
+      "tma": "TMA máximo (minutos)",
+      "tme": "TME máximo (minutos)",
+      "sla": "SLA mínimo (%)",
+      "csat": "CSAT mínimo (1-5)",
+      "volume": "Volumen mínimo"
+    },
+    "saveSuccess": "Meta guardada con éxito",
+    "deleteSuccess": "Meta eliminada"
+  },
+  "performance": {
+    "title": "Performance de Agentes",
+    "subtitle": "Sigue métricas y metas del equipo",
+    "columns": {
+      "agent": "Agente",
+      "volume": "Volumen",
+      "tma": "TMA",
+      "tme": "TME",
+      "sla": "SLA",
+      "csat": "CSAT",
+      "status": "Estado"
+    },
+    "status": {
+      "ok": "OK",
+      "warning": "Atención",
+      "breach": "Crítico",
+      "no_goal": "Sin meta"
+    },
+    "exportCsv": "Exportar CSV",
+    "noGoal": "Sin meta definida",
+    "teamKpis": "Resumen del equipo"
   },
   "media": {
     "upload": "Enviar archivo",

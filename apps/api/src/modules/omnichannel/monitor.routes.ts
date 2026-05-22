@@ -61,7 +61,10 @@ export async function omnichannelMonitorRoutes(app: FastifyInstance): Promise<vo
     return reply.send({ success: true, data });
   });
 
-  app.get('/tv', { preHandler: [authMiddleware, hasRole('owner', 'admin', 'supervisor'), tenantSchemaFromJwt] }, async (request, reply) => {
+  app.get(
+    '/tv',
+    { preHandler: [authMiddleware, hasRole('owner', 'admin', 'supervisor' as never), tenantSchemaFromJwt] },
+    async (request, reply) => {
     const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
     if (!schemaName) {
       return reply.code(400).send({
@@ -72,5 +75,6 @@ export async function omnichannelMonitorRoutes(app: FastifyInstance): Promise<vo
 
     const data = await getTvSnapshot(schemaName);
     return reply.send({ success: true, data });
-  });
+    },
+  );
 }

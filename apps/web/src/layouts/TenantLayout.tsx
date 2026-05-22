@@ -78,6 +78,8 @@ function Breadcrumb() {
     '/monitor': 'Monitor',
     '/omnichannel/monitor': 'Monitor',
     '/omnichannel/metrics': 'Métricas',
+    '/omnichannel/history': t('nav.history'),
+    '/omnichannel/performance': t('nav.performance'),
     '/crm/organizations': 'Organizações',
     '/crm/contacts':      'Contatos',
     '/tickets':           'Tickets',
@@ -235,6 +237,8 @@ export function TenantLayout() {
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
   const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
   const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
+  const canViewHistoryNav = canAny('metrics:view');
+  const canViewPerformanceNav = canAny('metrics:view');
   const canViewAdminNav = canAny('settings:manage', 'users:manage');
   const isImpersonating = !!impersonatedTenantName;
   const roleLabel =
@@ -893,6 +897,23 @@ export function TenantLayout() {
                 <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
                 <rect x="7.75" y="6.5" width="2.5" height="6" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
                 <rect x="11.5" y="4" width="2.5" height="8.5" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
+              </svg>
+            </NavItem>
+          )}
+
+          {canViewHistoryNav && (
+            <NavItem to="/omnichannel/history" title={t('nav.history')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <circle cx="9" cy="9" r="6.2" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M9 5.8v3.5l2.5 1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
+
+          {canViewPerformanceNav && (
+            <NavItem to="/omnichannel/performance" title={t('nav.performance')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M2 14l4-4 3 3 4-6 3 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </NavItem>
           )}

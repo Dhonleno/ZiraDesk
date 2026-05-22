@@ -37,7 +37,9 @@
       "closeConfig": "Encerramento de Atendimento",
       "aiAgent": "Agente de IA",
       "webhooks": "Webhooks",
-      "settings": "Configurações"
+      "settings": "Configurações",
+      "history": "Histórico",
+      "performance": "Performance"
     },
     "autoAssign": {
       "title": "Distribuição Automática",
@@ -669,13 +671,17 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Regras de Atendimento",
     "settings": "Configurações",
+    "history": "Histórico",
+    "performance": "Performance",
     "groups": {
       "team": "Equipe",
       "attendance": "Atendimento",
       "automation": "Automação",
       "tickets": "Tickets",
       "integrations": "Integrações",
-      "settings": "Configurações"
+      "settings": "Configurações",
+      "history": "Histórico",
+      "performance": "Performance"
     }
   },
   "attendanceRules": {
