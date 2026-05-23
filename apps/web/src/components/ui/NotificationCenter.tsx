@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { notificationsApi, type NotificationItem } from '../../services/api';
@@ -31,11 +31,17 @@ function relativeTime(iso: string) {
 }
 
 function BackendNotificationIcon({ type }: { type: NotificationItem['type'] }) {
+  if (type === 'conversation_message') {
+    return <path d="M4 14V5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4zM8 8h8M8 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
+  }
   if (type === 'ticket_assigned') {
     return <path d="M3 5.5V3h2.5L18 15.5 15.5 18 3 5.5zM5 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
   if (type === 'conversation_assigned') {
     return <path d="M4 14V5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />;
+  }
+  if (type === 'help_requested') {
+    return <path d="M12 18v.01M9.2 9.1a2.8 2.8 0 115.6 0c0 2-2.8 2.1-2.8 4.3M12 21a9 9 0 100-18 9 9 0 000 18z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
   return <path d="M5 15l-3 3V5a2 2 0 012-2h13a2 2 0 012 2v8a2 2 0 01-2 2H5zM7 8h8M7 11h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
 }
@@ -53,11 +59,26 @@ export function NotificationCenter() {
 
   const { messageNotifications, markConversationRead, markAllRead: clearMessages } = useNotificationStore();
 
-  const { data: backendNotifications = [] } = useQuery({
+  const { data: notificationsPages, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['notifications'],
-    queryFn: notificationsApi.list,
+    queryFn: ({ pageParam }) => notificationsApi.list({ page: pageParam as number, per_page: 20 }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.meta.has_more ? lastPage.meta.page + 1 : undefined),
     staleTime: 30_000,
   });
+
+  const backendNotifications = useMemo<NotificationItem[]>(() => {
+    const pages = notificationsPages?.pages ?? [];
+    const unique = new Map<string, NotificationItem>();
+    for (const page of pages) {
+      for (const notification of page.data) {
+        if (!unique.has(notification.id)) {
+          unique.set(notification.id, notification);
+        }
+      }
+    }
+    return Array.from(unique.values());
+  }, [notificationsPages]);
 
   const backendUnreadCount = useMemo(
     () => backendNotifications.filter((n) => !n.read).length,
@@ -150,6 +171,57 @@ export function NotificationCenter() {
     clearMessages();
   }
 
+  function readDataString(data: NotificationItem['data'], key: string): string {
+    const value = data?.[key];
+    return typeof value === 'string' ? value : '';
+  }
+
+  function getNotificationDisplay(notification: NotificationItem): { title: string; preview: string; iconType: NotificationItem['type'] } {
+    switch (notification.type) {
+      case 'conversation_message': {
+        const contactName = readDataString(notification.data, 'contact_name') || 'Cliente';
+        const preview = readDataString(notification.data, 'preview') || notification.message || 'Nova mensagem';
+        return {
+          title: `Nova mensagem de ${contactName}`,
+          preview,
+          iconType: 'conversation_message',
+        };
+      }
+      case 'conversation_assigned':
+        return {
+          title: 'Atendimento atribuído a você',
+          preview: readDataString(notification.data, 'contact_name') || notification.message || '',
+          iconType: 'conversation_assigned',
+        };
+      case 'ticket_assigned':
+        return {
+          title: 'Ticket atribuído a você',
+          preview: readDataString(notification.data, 'title') || notification.message || '',
+          iconType: 'ticket_assigned',
+        };
+      case 'ticket_comment':
+        return {
+          title: 'Novo comentário no ticket',
+          preview: readDataString(notification.data, 'title') || notification.message || '',
+          iconType: 'ticket_comment',
+        };
+      case 'help_requested': {
+        const agentName = readDataString(notification.data, 'agent_name');
+        return {
+          title: 'Pedido de ajuda',
+          preview: agentName ? `${agentName} precisa de ajuda` : (notification.message || ''),
+          iconType: 'help_requested',
+        };
+      }
+      default:
+        return {
+          title: notification.title || 'Notificação',
+          preview: notification.message || '',
+          iconType: notification.type,
+        };
+    }
+  }
+
   return (
     <div ref={rootRef} style={{ position: 'relative' }}>
       <button className="tb-icon-btn" aria-label="Notificações" onClick={() => setOpen((v) => !v)}>
@@ -177,7 +249,7 @@ export function NotificationCenter() {
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {combined.length === 0 ? (
-              <div style={{ padding: 28, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>Nenhuma notificação por enquanto</div>
+              <div style={{ padding: 28, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>{t('notifications.empty')}</div>
             ) : combined.map((item) => {
               if (item.kind === 'message') {
                 const n = item.data;
@@ -212,6 +284,7 @@ export function NotificationCenter() {
               }
 
               const n = item.data;
+              const display = getNotificationDisplay(n);
               return (
                 <button
                   key={`backend-${n.id}`}
@@ -220,19 +293,37 @@ export function NotificationCenter() {
                 >
                   <span style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-4)', color: 'var(--teal)', flexShrink: 0 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                      <BackendNotificationIcon type={n.type} />
+                      <BackendNotificationIcon type={display.iconType} />
                     </svg>
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <strong style={{ fontSize: 12 }}>{n.title}</strong>
+                      <strong style={{ fontSize: 12 }}>{display.title}</strong>
                       <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{relativeTime(n.created_at)}</span>
                     </span>
-                    <span style={{ display: 'block', marginTop: 2, color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.4 }}>{n.message}</span>
+                    <span style={{ display: 'block', marginTop: 2, color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.4 }}>{display.preview}</span>
                   </span>
                 </button>
               );
             })}
+            {hasNextPage && (
+              <button
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '12px',
+                  color: 'var(--teal)',
+                  background: 'none',
+                  border: 'none',
+                  borderTop: '1px solid var(--line)',
+                  cursor: isFetchingNextPage ? 'default' : 'pointer',
+                }}
+              >
+                {isFetchingNextPage ? 'Carregando...' : t('notifications.loadMore')}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -2264,12 +2264,25 @@ export interface ConversationWindowStatus {
 
 export interface NotificationItem {
   id: string;
-  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
+  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment' | 'conversation_message' | 'help_requested';
   title: string;
   message: string;
   read: boolean;
   created_at: string;
   href: string;
+  data?: Record<string, unknown>;
+}
+
+export interface NotificationsMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
+}
+
+export interface NotificationsListResponse {
+  data: NotificationItem[];
+  meta: NotificationsMeta;
 }
 
 export interface GlobalSearchResult {
@@ -2656,9 +2669,16 @@ export const agentStatusApi = {
 };
 
 export const notificationsApi = {
-  list: async (): Promise<NotificationItem[]> => {
-    const res = await api.get<{ success: boolean; data: NotificationItem[] }>('/notifications');
-    return res.data.data;
+  list: async (params?: { page?: number; per_page?: number }): Promise<NotificationsListResponse> => {
+    const res = await api.get<{
+      success: boolean;
+      data: NotificationItem[];
+      meta: NotificationsMeta;
+    }>('/notifications', { params });
+    return {
+      data: res.data.data,
+      meta: res.data.meta,
+    };
   },
 
   markRead: async (id: string) => {

@@ -122,7 +122,16 @@
     "assignedBody": "was assigned to you",
     "permissionDenied": "Enable browser notifications to be alerted about new attendances",
     "messages": "messages",
-    "markAllRead": "Mark all as read"
+    "markAllRead": "Mark all as read",
+    "loadMore": "Load more notifications",
+    "empty": "No notifications",
+    "types": {
+      "conversation_message": "New message",
+      "conversation_assigned": "Conversation assigned",
+      "ticket_assigned": "Ticket assigned",
+      "ticket_comment": "New comment",
+      "help_requested": "Help requested"
+    }
   },
   "agentRequeued": "{{agentName}} went offline. {{count}} conversation(s) returned to queue.",
   "outboundBadge": "↗ Follow-up",

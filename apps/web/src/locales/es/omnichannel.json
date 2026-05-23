@@ -122,7 +122,16 @@
     "assignedBody": "fue asignado a ti",
     "permissionDenied": "Activa las notificaciones del navegador para recibir alertas de nuevas atenciones",
     "messages": "mensajes",
-    "markAllRead": "Marcar todas como leídas"
+    "markAllRead": "Marcar todas como leídas",
+    "loadMore": "Cargar más notificaciones",
+    "empty": "Sin notificaciones",
+    "types": {
+      "conversation_message": "Nuevo mensaje",
+      "conversation_assigned": "Atención asignada",
+      "ticket_assigned": "Ticket asignado",
+      "ticket_comment": "Nuevo comentario",
+      "help_requested": "Pedido de ayuda"
+    }
   },
   "agentRequeued": "{{agentName}} se desconectó. {{count}} atención(es) regresaron a la cola.",
   "outboundBadge": "↗ Retorno",

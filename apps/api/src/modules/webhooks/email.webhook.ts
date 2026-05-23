@@ -290,6 +290,56 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
     ticket.id,
   );
 
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    assigned_to: string | null;
+    status: string | null;
+  }>>(
+    `SELECT id, assigned_to, status
+     FROM ${schema}.conversations
+     WHERE contact_id = $1::uuid
+       AND channel_type = 'email'
+       AND status IN ('open', 'pending', 'in_service', 'active_outbound', 'bot')
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    contact.id,
+  );
+  const linkedConversation = conversationRows[0];
+  const assignedUserId = linkedConversation?.assigned_to ?? null;
+  if (linkedConversation && assignedUserId) {
+    const previewSource = (description || inbound.subject || '').trim();
+    const isNumericOnly = /^\d+$/.test(previewSource);
+    if (!(isNumericOnly && linkedConversation.status === 'bot')) {
+      const notificationPreview = isNumericOnly
+        ? `Mensagem de ${contact.name ?? 'Cliente'}`
+        : (previewSource.substring(0, 100) || 'Nova mensagem');
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+        await tx.$executeRawUnsafe(
+          `INSERT INTO audit_logs (
+             user_id, action, entity, entity_id, new_data, created_at
+           ) VALUES (
+             $1::uuid,
+             'conversation.message',
+             'conversation',
+             $2::uuid,
+             $3::jsonb,
+             NOW()
+           )`,
+          assignedUserId,
+          linkedConversation.id,
+          JSON.stringify({
+            assigned_to: assignedUserId,
+            contact_name: contact.name ?? 'Cliente',
+            preview: notificationPreview,
+            channel: 'email',
+          }),
+        );
+      });
+    }
+  }
+
   try {
     getSocketServer().to(`tenant:${tenant.id}`).emit('ticket:created', {
       ticket: {

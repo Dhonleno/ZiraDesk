@@ -2131,19 +2131,44 @@ async function processIncomingMessage(
     result.conversationId,
   );
   const assignedUserId = convAssigned[0]?.assigned_to ?? null;
+  const senderType = result.message.sender_type;
+  const conversationStatus = result.conversationStatus;
   if (assignedUserId) {
+    // Só criar notificação para mensagens de cliente.
+    if (senderType !== 'client') return;
+
     const clientName = convAssigned[0]?.contact_name ?? senderName;
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "${schemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,
-      assignedUserId,
-      result.conversationId,
-      JSON.stringify({ assigned_to: assignedUserId, conversationId: result.conversationId, clientName, preview: content.substring(0, 100) }),
-    );
+    const preview = content?.trim() ?? '';
+    const isNumericOnly = /^\d+$/.test(preview);
+
+    // Respostas numéricas em fluxo de bot não devem notificar agente.
+    if (isNumericOnly && conversationStatus === 'bot') return;
+
+    const notificationPreview = isNumericOnly
+      ? `Mensagem de ${clientName}`
+      : (preview ? preview.substring(0, 100) : 'Nova mensagem');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+         VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,
+        assignedUserId,
+        result.conversationId,
+        JSON.stringify({
+          assigned_to: assignedUserId,
+          conversationId: result.conversationId,
+          contact_name: clientName,
+          clientName,
+          preview: notificationPreview,
+          channel: 'whatsapp',
+        }),
+      );
+    });
     io.to(`agent:${assignedUserId}`).emit('notification:new', {
       type: 'conversation.message',
       title: `Nova mensagem de ${clientName}`,
-      message: content.substring(0, 80),
+      message: notificationPreview.substring(0, 80),
       conversationId: result.conversationId,
       createdAt: new Date().toISOString(),
     });

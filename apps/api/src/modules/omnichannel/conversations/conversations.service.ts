@@ -1713,6 +1713,7 @@ export async function requestHelp(
 ): Promise<ConversationHelperRow> {
   await ensureConversationHelpersInfrastructure(tenantId);
   const schemaPrefix = await getSchemaPrefix(tenantId);
+  const schemaName = await getSchemaName(tenantId);
 
   const conversationRows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -1784,11 +1785,37 @@ export async function requestHelp(
     requesterId,
   );
 
+  const agentName = requester?.name ?? 'Agente';
+  if (schemaName) {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (
+           user_id, action, entity, entity_id, new_data, created_at
+         ) VALUES (
+           $1::uuid,
+           'help.requested',
+           'conversation',
+           $2::uuid,
+           $3::jsonb,
+           NOW()
+         )`,
+        helperUserId,
+        conversationId,
+        JSON.stringify({
+          assigned_to: helperUserId,
+          agent_name: agentName,
+          conversation_id: conversationId,
+        }),
+      );
+    });
+  }
+
   io.to(`agent:${helperUserId}`).emit('help:requested', {
     conversationId,
     requestedBy: {
       id: requesterId,
-      name: requester?.name ?? 'Agente',
+      name: agentName,
     },
     protocol: normalizeProtocolNumber(conversation.protocol_number),
   });
@@ -1796,7 +1823,7 @@ export async function requestHelp(
   io.to(`agent:${helperUserId}`).emit('notification:new', {
     type: 'help.requested',
     title: 'Pedido de ajuda',
-    message: `${requester?.name ?? 'Um agente'} precisa de ajuda`,
+    message: `${agentName} precisa de ajuda`,
     conversationId,
     createdAt: new Date().toISOString(),
   });

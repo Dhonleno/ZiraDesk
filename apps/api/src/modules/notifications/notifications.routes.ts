@@ -9,18 +9,37 @@ import {
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 
-export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', { preHandler: guard }, async (request, reply) => {
-    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
-    if (!schemaName) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Schema do tenant nao identificado' },
-      });
+function parsePositiveInt(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
     }
-    const data = await listNotifications(request.user.id, schemaName);
-    return reply.send({ success: true, data });
-  });
+  }
+  return fallback;
+}
+
+export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
+  app.get<{ Querystring: { page?: string | number; per_page?: string | number } }>(
+    '/',
+    { preHandler: guard },
+    async (request, reply) => {
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      if (!schemaName) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Schema do tenant nao identificado' },
+        });
+      }
+      const page = parsePositiveInt(request.query.page, 1);
+      const perPage = parsePositiveInt(request.query.per_page, 20);
+      const result = await listNotifications(request.user.id, schemaName, page, perPage);
+      return reply.send({ success: true, data: result.data, meta: result.meta });
+    },
+  );
 
   app.patch<{ Params: { id: string } }>('/:id/read', { preHandler: guard }, async (request, reply) => {
     const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;

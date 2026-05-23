@@ -160,7 +160,27 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             conversationId,
           );
 
-          return { conversationId, message };
+          const assignmentRows = await tx.$queryRawUnsafe<Array<{
+            assigned_to: string | null;
+            contact_name: string | null;
+            status: string | null;
+          }>>(
+            `SELECT c.assigned_to, c.status, ct.name AS contact_name
+             FROM conversations c
+             LEFT JOIN contacts ct ON ct.id = c.contact_id
+             WHERE c.id = $1::uuid
+             LIMIT 1`,
+            conversationId,
+          );
+          const assignment = assignmentRows[0];
+
+          return {
+            conversationId,
+            message,
+            assignedUserId: assignment?.assigned_to ?? null,
+            contactName: assignment?.contact_name ?? `Instagram user ${senderId}`,
+            conversationStatus: assignment?.status ?? null,
+          };
         });
 
         const io = getSocketServer();
@@ -174,6 +194,43 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           message: result.message,
           conversation: conversation ?? undefined,
         });
+
+        const senderType = result.message.sender_type;
+        const preview = text.trim();
+        const isNumericOnly = /^\d+$/.test(preview);
+        if (
+          result.assignedUserId
+          && senderType === 'client'
+          && !(isNumericOnly && result.conversationStatus === 'bot')
+        ) {
+          const notificationPreview = isNumericOnly
+            ? `Mensagem de ${result.contactName}`
+            : (preview.substring(0, 100) || 'Nova mensagem');
+
+          await prisma.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+            await tx.$executeRawUnsafe(
+              `INSERT INTO audit_logs (
+                 user_id, action, entity, entity_id, new_data, created_at
+               ) VALUES (
+                 $1::uuid,
+                 'conversation.message',
+                 'conversation',
+                 $2::uuid,
+                 $3::jsonb,
+                 NOW()
+               )`,
+              result.assignedUserId,
+              result.conversationId,
+              JSON.stringify({
+                assigned_to: result.assignedUserId,
+                contact_name: result.contactName,
+                preview: notificationPreview,
+                channel: 'instagram',
+              }),
+            );
+          });
+        }
       }
     }
 

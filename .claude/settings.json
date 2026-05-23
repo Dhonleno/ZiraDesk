@@ -8,7 +8,9 @@
       "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\")",
       "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\")",
       "Bash(grep -n \"adminApi\" \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\\\\\\\\web\\\\\\\\src\\\\\\\\services\\\\\\\\api.ts\")",
-      "Bash(find \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\" -name \"schema.prisma\" -o -name \"*.prisma\")"
+      "Bash(find \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\" -name \"schema.prisma\" -o -name \"*.prisma\")",
+      "Bash(grep -iv \"import\\\\|//.*agent\")",
+      "Bash(git commit -m ' *)"
     ],
     "defaultMode": "bypassPermissions"
   }

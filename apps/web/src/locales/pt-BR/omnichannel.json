@@ -122,7 +122,16 @@
     "assignedBody": "foi atribuído a você",
     "permissionDenied": "Ative as notificações do navegador para ser avisado de novos atendimentos",
     "messages": "mensagens",
-    "markAllRead": "Marcar todas como lidas"
+    "markAllRead": "Marcar todas como lidas",
+    "loadMore": "Carregar mais notificações",
+    "empty": "Nenhuma notificação",
+    "types": {
+      "conversation_message": "Nova mensagem",
+      "conversation_assigned": "Atendimento atribuído",
+      "ticket_assigned": "Ticket atribuído",
+      "ticket_comment": "Novo comentário",
+      "help_requested": "Pedido de ajuda"
+    }
   },
   "agentRequeued": "{{agentName}} ficou offline. {{count}} atendimento(s) retornaram para a fila.",
   "outboundBadge": "↗ Retorno",

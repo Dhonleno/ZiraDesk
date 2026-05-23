@@ -347,6 +347,7 @@ async function persistAutoAssignment(
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const messagesRef = tableRef(schemaName, 'messages');
+  const contactsRef = tableRef(schemaName, 'contacts');
 
   const updatedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE ${conversationsRef}
@@ -381,6 +382,40 @@ async function persistAutoAssignment(
     conversationId,
     `Atendimento atribuido automaticamente para ${agentName}`,
   );
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+    `SELECT ct.name
+     FROM ${conversationsRef} c
+     LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+     WHERE c.id = $1::uuid
+     LIMIT 1`,
+    conversationId,
+  );
+  const contactName = contactRows[0]?.name ?? 'Cliente';
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (
+         user_id, action, entity, entity_id, new_data, created_at
+       ) VALUES (
+         $1::uuid,
+         'conversation.assigned',
+         'conversation',
+         $2::uuid,
+         $3::jsonb,
+         NOW()
+       )`,
+      agentId,
+      conversationId,
+      JSON.stringify({
+        assigned_to: agentId,
+        contact_name: contactName,
+        status: 'open',
+        source: 'auto_assign',
+      }),
+    );
+  });
 
   try {
     const convRows = await prisma.$queryRawUnsafe<ConversationDispatchRow[]>(
