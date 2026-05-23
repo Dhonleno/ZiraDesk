@@ -393,7 +393,7 @@ export function PerformancePage() {
             aria-label={t('history.filters.agent')}
           >
             <option value="">{t('history.filters.agent')}</option>
-            {(monitorData?.agents ?? []).map((agent) => (
+            {(monitorData?.agents ?? []).filter((a) => a.role === 'agent').map((agent) => (
               <option key={agent.id} value={agent.id}>{agent.name}</option>
             ))}
           </select>
