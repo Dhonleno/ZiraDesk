@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import {
+  deleteAllReadNotifications,
+  deleteNotification,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -62,6 +64,30 @@ export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const data = await markAllNotificationsRead(request.user.id, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    if (!schemaName) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Schema do tenant nao identificado' },
+      });
+    }
+    const data = await deleteNotification(request.user.id, request.params.id, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  app.delete('/', { preHandler: guard }, async (request, reply) => {
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    if (!schemaName) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Schema do tenant nao identificado' },
+      });
+    }
+    const data = await deleteAllReadNotifications(request.user.id, schemaName);
     return reply.send({ success: true, data });
   });
 }

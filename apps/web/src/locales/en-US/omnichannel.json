@@ -117,12 +117,14 @@
     "emptyHint": "New customer contacts will appear here"
   },
   "notifications": {
-    "newMessage": "New message",
+    "newMessage": "New message received",
     "assigned": "New attendance assigned",
     "assignedBody": "was assigned to you",
     "permissionDenied": "Enable browser notifications to be alerted about new attendances",
     "messages": "messages",
     "markAllRead": "Mark all as read",
+    "clearRead": "Clear read",
+    "clearReadSuccess": "Read notifications removed",
     "loadMore": "Load more notifications",
     "empty": "No notifications",
     "types": {

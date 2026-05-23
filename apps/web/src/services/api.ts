@@ -2690,6 +2690,16 @@ export const notificationsApi = {
     const res = await api.patch<{ success: boolean; data: { read: number } }>('/notifications/read-all');
     return res.data.data;
   },
+
+  deleteOne: async (id: string) => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(`/notifications/${id}`);
+    return res.data.data;
+  },
+
+  deleteAllRead: async () => {
+    const res = await api.delete<{ success: boolean; data: { deleted: number } }>('/notifications');
+    return res.data.data;
+  },
 };
 
 export const profileApi = {

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { notificationsApi, type NotificationItem } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
 import { useNotificationStore, type MessageNotification } from '../../stores/notification.store';
+import { useToast } from '../../stores/toast.store';
 
 const AVATAR_GRADIENTS = [
   'linear-gradient(135deg,#667eea,#764ba2)',
@@ -53,9 +54,11 @@ type CombinedNotification =
 export function NotificationCenter() {
   const { t } = useTranslation('omnichannel');
   const [open, setOpen] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
 
   const { messageNotifications, markConversationRead, markAllRead: clearMessages } = useNotificationStore();
 
@@ -129,6 +132,19 @@ export function NotificationCenter() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
+  const deleteOne = useMutation({
+    mutationFn: notificationsApi.deleteOne,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const deleteAllRead = useMutation({
+    mutationFn: notificationsApi.deleteAllRead,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      toast.success(t('notifications.clearReadSuccess'));
+    },
+  });
+
   useEffect(() => {
     const onDocClick = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
@@ -171,16 +187,26 @@ export function NotificationCenter() {
     clearMessages();
   }
 
+  function handleDeleteAllRead() {
+    deleteAllRead.mutate();
+  }
+
   function readDataString(data: NotificationItem['data'], key: string): string {
     const value = data?.[key];
     return typeof value === 'string' ? value : '';
+  }
+
+  function getSafePreview(notification: NotificationItem): string {
+    const rawPreview = readDataString(notification.data, 'preview') || notification.message || '';
+    const isNumericPreview = /^\d+$/.test(rawPreview.trim());
+    return isNumericPreview ? t('notifications.newMessage') : rawPreview;
   }
 
   function getNotificationDisplay(notification: NotificationItem): { title: string; preview: string; iconType: NotificationItem['type'] } {
     switch (notification.type) {
       case 'conversation_message': {
         const contactName = readDataString(notification.data, 'contact_name') || 'Cliente';
-        const preview = readDataString(notification.data, 'preview') || notification.message || 'Nova mensagem';
+        const preview = getSafePreview(notification) || t('notifications.newMessage');
         return {
           title: `Nova mensagem de ${contactName}`,
           preview,
@@ -239,13 +265,22 @@ export function NotificationCenter() {
         <div style={{ position: 'absolute', right: 0, top: 38, width: 360, maxHeight: 460, overflow: 'hidden', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-pop)', zIndex: 80 }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <strong style={{ fontSize: 13 }}>Notificações</strong>
-            <button
-              onClick={handleMarkAll}
-              disabled={unreadCount === 0 || markAllBackend.isPending}
-              style={{ border: 'none', background: 'transparent', color: unreadCount ? 'var(--teal)' : 'var(--txt-3)', fontSize: 11, cursor: unreadCount ? 'pointer' : 'default' }}
-            >
-              {t('notifications.markAllRead')}
-            </button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={handleMarkAll}
+                disabled={unreadCount === 0 || markAllBackend.isPending}
+                style={{ border: 'none', background: 'transparent', color: unreadCount ? 'var(--teal)' : 'var(--txt-3)', fontSize: 11, cursor: unreadCount ? 'pointer' : 'default' }}
+              >
+                {t('notifications.markAllRead')}
+              </button>
+              <button
+                onClick={handleDeleteAllRead}
+                disabled={backendUnreadCount === backendNotifications.length || deleteAllRead.isPending}
+                style={{ border: 'none', background: 'transparent', color: backendNotifications.some((n) => n.read) ? 'var(--txt-3)' : 'var(--txt-4, var(--txt-3))', fontSize: 11, cursor: backendNotifications.some((n) => n.read) ? 'pointer' : 'default' }}
+              >
+                {t('notifications.clearRead')}
+              </button>
+            </div>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {combined.length === 0 ? (
@@ -286,24 +321,39 @@ export function NotificationCenter() {
               const n = item.data;
               const display = getNotificationDisplay(n);
               return (
-                <button
+                <div
                   key={`backend-${n.id}`}
-                  onClick={() => openBackend(n)}
-                  style={{ width: '100%', display: 'flex', gap: 10, padding: '12px 14px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', background: n.read ? 'transparent' : 'var(--teal-dim)', cursor: 'pointer', color: 'var(--txt)' }}
+                  style={{ position: 'relative', borderBottom: '1px solid var(--line)' }}
+                  onMouseEnter={() => setHoveredId(n.id)}
+                  onMouseLeave={() => setHoveredId(null)}
                 >
-                  <span style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-4)', color: 'var(--teal)', flexShrink: 0 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                      <BackendNotificationIcon type={display.iconType} />
-                    </svg>
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <strong style={{ fontSize: 12 }}>{display.title}</strong>
-                      <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{relativeTime(n.created_at)}</span>
+                  <button
+                    onClick={() => openBackend(n)}
+                    style={{ width: '100%', display: 'flex', gap: 10, padding: '12px 14px', paddingRight: hoveredId === n.id ? 40 : 14, textAlign: 'left', border: 'none', borderBottom: 'none', background: n.read ? 'transparent' : 'var(--teal-dim)', cursor: 'pointer', color: 'var(--txt)' }}
+                  >
+                    <span style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-4)', color: 'var(--teal)', flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <BackendNotificationIcon type={display.iconType} />
+                      </svg>
                     </span>
-                    <span style={{ display: 'block', marginTop: 2, color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.4 }}>{display.preview}</span>
-                  </span>
-                </button>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <strong style={{ fontSize: 12 }}>{display.title}</strong>
+                        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{relativeTime(n.created_at)}</span>
+                      </span>
+                      <span style={{ display: 'block', marginTop: 2, color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.4 }}>{display.preview}</span>
+                    </span>
+                  </button>
+                  {hoveredId === n.id && (
+                    <button
+                      aria-label="Remover notificação"
+                      onClick={(e) => { e.stopPropagation(); deleteOne.mutate(n.id); }}
+                      style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-5, var(--bg-4))', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--txt-3)', fontSize: 11, lineHeight: 1 }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               );
             })}
             {hasNextPage && (

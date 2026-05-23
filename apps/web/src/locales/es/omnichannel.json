@@ -117,12 +117,14 @@
     "emptyHint": "Cuando los clientes entren en contacto aparecerán aquí"
   },
   "notifications": {
-    "newMessage": "Nuevo mensaje",
+    "newMessage": "Nuevo mensaje recibido",
     "assigned": "Nueva atención asignada",
     "assignedBody": "fue asignado a ti",
     "permissionDenied": "Activa las notificaciones del navegador para recibir alertas de nuevas atenciones",
     "messages": "mensajes",
     "markAllRead": "Marcar todas como leídas",
+    "clearRead": "Limpiar leídas",
+    "clearReadSuccess": "Notificaciones leídas eliminadas",
     "loadMore": "Cargar más notificaciones",
     "empty": "Sin notificaciones",
     "types": {

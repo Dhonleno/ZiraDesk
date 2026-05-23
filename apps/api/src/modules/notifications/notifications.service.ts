@@ -308,3 +308,71 @@ export async function markAllNotificationsRead(userId: string, schemaName: strin
 
   return { read: rows.length };
 }
+
+export async function deleteNotification(userId: string, notificationId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${notificationReadsRef} WHERE notification_id = $1::uuid AND user_id = $2::uuid`,
+    notificationId,
+    userId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${auditLogsRef}
+     WHERE id = $1::uuid
+       AND (new_data->>'assigned_to' = $2 OR user_id = $2::uuid)`,
+    notificationId,
+    userId,
+  );
+
+  return { deleted: true };
+}
+
+export async function deleteAllReadNotifications(userId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
+  const ticketsRef = tableRef(schemaName, 'tickets');
+
+  const readRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT al.id
+     FROM ${auditLogsRef} al
+     LEFT JOIN ${ticketsRef} t
+       ON t.id = CASE
+         WHEN al.action = 'ticket.assigned' THEN al.entity_id
+         WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
+         ELSE NULL
+       END
+     WHERE ${notificationsWhereClause()}
+       AND EXISTS (
+         SELECT 1 FROM ${notificationReadsRef} nr
+         WHERE nr.notification_id = al.id AND nr.user_id = $1::uuid
+       )`,
+    userId,
+  );
+
+  if (readRows.length === 0) return { deleted: 0 };
+
+  const ids = readRows.map((row) => row.id);
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${notificationReadsRef} WHERE notification_id = ANY($1::uuid[]) AND user_id = $2::uuid`,
+    ids,
+    userId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${auditLogsRef}
+     WHERE id = ANY($1::uuid[])
+       AND (new_data->>'assigned_to' = $2 OR user_id = $2::uuid)`,
+    ids,
+    userId,
+  );
+
+  return { deleted: readRows.length };
+}
