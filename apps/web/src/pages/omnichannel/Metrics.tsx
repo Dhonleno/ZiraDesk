@@ -951,7 +951,7 @@ export function MetricsPage() {
 
         <select className="filter-select" aria-label="Filtrar por agente" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
           <option value="">{t('metrics.filters.allAgents')}</option>
-          {(monitorData?.agents ?? []).map((agent) => (
+          {(monitorData?.agents ?? []).filter((a) => a.role === 'agent').map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.name}
             </option>
