@@ -112,7 +112,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
        LEFT JOIN ${botOptionsRef} bo ON bo.id = abs.bot_option_id
        LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
        WHERE u.status = 'active'
-         AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
+         AND u.role = 'agent'
        GROUP BY
          u.id,
          u.name,
