@@ -115,7 +115,7 @@ export function GoalsConfig() {
   });
 
   const sortedAgents = useMemo(
-    () => [...(monitorData?.agents ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    () => [...(monitorData?.agents ?? [])].filter((a) => a.role === 'agent').sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
     [monitorData?.agents],
   );
 
