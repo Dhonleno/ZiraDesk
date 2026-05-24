@@ -697,8 +697,12 @@
       "limits": "Limites Operacionais"
     },
     "csatEnabled": "Enviar CSAT automaticamente",
+    "csatScopeHint": "O CSAT é enviado ao encerrar atendimentos inbound de WhatsApp e E-mail. Envio ativo (outbound) não dispara CSAT.",
     "csatMessage": "Mensagem inicial do CSAT",
-    "csatExpiration": "Expiração do link (horas)",
+    "csatMessagePlaceholder": "Deixe em branco para usar a mensagem padrão do sistema.",
+    "csatMessageHint": "Use este texto como primeira mensagem de avaliação. Se ficar vazio, o sistema usa o modelo padrão.",
+    "csatDisabledHint": "CSAT desativado. Nenhuma pesquisa de satisfação será enviada após encerramento.",
+    "csatExpiration": "Prazo para resposta do CSAT (horas)",
     "emailAddress": "Endereço de e-mail de suporte",
     "emailConfirmation": "Enviar confirmação ao cliente",
     "inactivityEnabled": "Ativar monitoramento de inatividade",

@@ -686,8 +686,12 @@
       "limits": "Operational Limits"
     },
     "csatEnabled": "Send CSAT automatically",
+    "csatScopeHint": "CSAT is sent when inbound WhatsApp and Email conversations are closed. Active outbound does not trigger CSAT.",
     "csatMessage": "CSAT opening message",
-    "csatExpiration": "Link expiration (hours)",
+    "csatMessagePlaceholder": "Leave empty to use the system default message.",
+    "csatMessageHint": "This text is sent as the first rating prompt. If empty, the system default template is used.",
+    "csatDisabledHint": "CSAT is disabled. No satisfaction survey will be sent after closing conversations.",
+    "csatExpiration": "CSAT response window (hours)",
     "emailAddress": "Support email address",
     "emailConfirmation": "Send confirmation to customer",
     "inactivityEnabled": "Enable inactivity monitoring",

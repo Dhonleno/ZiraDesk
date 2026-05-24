@@ -121,6 +121,7 @@ export function AttendanceRules() {
   });
 
   const inactivityEnabled = watch('inactivity_enabled');
+  const csatEnabled = watch('csat_enabled');
   const activeOutboundMode = watch('active_outbound_validity_mode');
   const portalAddress = `suporte@${data?.slug ?? 'demo'}.ziradesk.com.br`;
 
@@ -184,6 +185,9 @@ export function AttendanceRules() {
                   <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--txt-3)' }}>
                     {t('attendanceRules.sections.csat')}
                   </div>
+                  <p className="text-xs" style={{ color: 'var(--txt-3)', margin: 0 }}>
+                    {t('attendanceRules.csatScopeHint')}
+                  </p>
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
                     <span style={{ fontSize: '0.875rem', color: 'var(--txt)', fontWeight: 600 }}>
                       {t('attendanceRules.csatEnabled')}
@@ -200,6 +204,8 @@ export function AttendanceRules() {
                     </label>
                     <textarea
                       rows={4}
+                      placeholder={t('attendanceRules.csatMessagePlaceholder')}
+                      disabled={!csatEnabled}
                       {...register('csat_message')}
                       style={{
                         width: '100%',
@@ -212,14 +218,21 @@ export function AttendanceRules() {
                         fontFamily: 'var(--font)',
                         resize: 'vertical',
                         outline: 'none',
+                        opacity: csatEnabled ? 1 : 0.55,
                       }}
                     />
+                    <p className="text-xs" style={{ color: 'var(--txt-3)', margin: 0 }}>
+                      {csatEnabled
+                        ? t('attendanceRules.csatMessageHint')
+                        : t('attendanceRules.csatDisabledHint')}
+                    </p>
                   </div>
                   <Input
                     type="number"
                     min={1}
                     max={720}
                     label={t('attendanceRules.csatExpiration')}
+                    disabled={!csatEnabled}
                     error={errors.csat_expiration_hours?.message}
                     {...register('csat_expiration_hours', { valueAsNumber: true })}
                   />
