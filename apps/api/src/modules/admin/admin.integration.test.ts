@@ -1,0 +1,504 @@
+import { randomUUID } from 'node:crypto';
+import request from 'supertest';
+import { Prisma } from '@prisma/client';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { prisma } from '../../config/database.js';
+import { createTestApp, createTestJWT } from '../../test/setup.js';
+import { decryptCredentials } from '../../utils/crypto.js';
+import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
+
+type TenantRole = 'owner' | 'admin' | 'supervisor' | 'agent' | 'viewer';
+
+interface TenantUser {
+  id: string;
+  name: string;
+  email: string;
+  role: TenantRole;
+}
+
+interface TempTenant {
+  id: string;
+  slug: string;
+  schemaName: string;
+  owner: TenantUser;
+}
+
+interface ChannelSeed {
+  id: string;
+  type: 'whatsapp' | 'instagram' | 'email' | 'webchat';
+  name: string;
+}
+
+const tempTenants: TempTenant[] = [];
+let suitePlanId: string | null = null;
+
+function uniqueToken(): string {
+  return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+function requireSuitePlanId(): string {
+  if (!suitePlanId) {
+    throw new Error('Plano da suite admin não inicializado');
+  }
+
+  return suitePlanId;
+}
+
+function authHeader(tenant: TempTenant, actor: TenantUser = tenant.owner): { Authorization: string } {
+  return {
+    Authorization: `Bearer ${createTestJWT({
+      sub: actor.id,
+      email: actor.email,
+      name: actor.name,
+      role: actor.role,
+      tenantId: tenant.id,
+      schemaName: tenant.schemaName,
+    })}`,
+  };
+}
+
+async function ensureTenantUser(tenant: TempTenant, user: TenantUser): Promise<TenantUser> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${tenant.schemaName}".users
+       (id, name, email, password_hash, role, status, language, settings)
+     VALUES ($1::uuid, $2, $3, $4, $5, 'active', 'pt-BR', '{}'::jsonb)
+     ON CONFLICT (id)
+     DO UPDATE SET
+       name = EXCLUDED.name,
+       email = EXCLUDED.email,
+       role = EXCLUDED.role,
+       status = 'active',
+       language = 'pt-BR',
+       settings = '{}'::jsonb`,
+    user.id,
+    user.name,
+    user.email,
+    'not_used_in_jwt_tests',
+    user.role,
+  );
+
+  if (user.role !== 'viewer') {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".agent_assignments (user_id)
+       VALUES ($1::uuid)
+       ON CONFLICT (user_id) DO NOTHING`,
+      user.id,
+    );
+  }
+
+  return user;
+}
+
+async function createTempTenant(label: string): Promise<TempTenant> {
+  const token = uniqueToken();
+  const slugLabel = label.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'tenant';
+  const schemaLabel = label.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'tenant';
+  const slug = `admin-${slugLabel}-${token}`;
+  const schemaName = `test_admin_${schemaLabel}_${token}`;
+  const owner: TenantUser = {
+    id: randomUUID(),
+    name: `Owner ${label.toUpperCase()}`,
+    email: `owner.${label}.${token}@ziradesk.test`,
+    role: 'owner',
+  };
+
+  const tenant = await prisma.tenant.create({
+    data: {
+      name: `Tenant Admin ${label.toUpperCase()} ${token}`,
+      slug,
+      schemaName,
+      planId: requireSuitePlanId(),
+      status: 'active',
+      trialEndsAt: null,
+      settings: {},
+    },
+    select: { id: true, slug: true, schemaName: true },
+  });
+
+  try {
+    await provisionTenantSchema(schemaName);
+    const tempTenant = { ...tenant, owner };
+    await ensureTenantUser(tempTenant, owner);
+    tempTenants.push(tempTenant);
+    return tempTenant;
+  } catch (error) {
+    await prisma.tenant.deleteMany({ where: { id: tenant.id } }).catch(() => undefined);
+    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function cleanupTempTenant(tenant: TempTenant): Promise<void> {
+  await prisma.subscription.deleteMany({ where: { tenantId: tenant.id } }).catch(() => undefined);
+  await prisma.tenant.deleteMany({ where: { id: tenant.id } }).catch(() => undefined);
+  await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${tenant.schemaName}" CASCADE`).catch(() => undefined);
+}
+
+async function createTenantUser(tenant: TempTenant, input: {
+  name: string;
+  email: string;
+  role: TenantRole;
+}): Promise<TenantUser> {
+  const user: TenantUser = {
+    id: randomUUID(),
+    name: input.name,
+    email: input.email,
+    role: input.role,
+  };
+
+  return ensureTenantUser(tenant, user);
+}
+
+async function insertChannel(tenant: TempTenant, input: {
+  type: ChannelSeed['type'];
+  name: string;
+  credentials?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
+}): Promise<ChannelSeed> {
+  const channel = {
+    id: randomUUID(),
+    type: input.type,
+    name: input.name,
+  } satisfies ChannelSeed;
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${tenant.schemaName}".channels
+       (id, type, name, credentials, status, settings)
+     VALUES ($1::uuid, $2, $3, $4::jsonb, 'active', $5::jsonb)`,
+    channel.id,
+    channel.type,
+    channel.name,
+    JSON.stringify(input.credentials ?? {}),
+    JSON.stringify(input.settings ?? {}),
+  );
+
+  return channel;
+}
+
+async function getStoredSmtpRow(schemaName: string): Promise<{
+  password: string;
+  last_test_ok: boolean | null;
+  last_tested_at: Date | null;
+}> {
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    password: string;
+    last_test_ok: boolean | null;
+    last_tested_at: Date | null;
+  }>>(
+    `SELECT password, last_test_ok, last_tested_at
+       FROM "${schemaName}".smtp_configs
+      ORDER BY created_at DESC
+      LIMIT 1`,
+  );
+
+  if (!rows[0]) {
+    throw new Error(`Nenhuma configuração SMTP encontrada para ${schemaName}`);
+  }
+
+  return rows[0];
+}
+
+beforeAll(async () => {
+  const token = uniqueToken();
+  const plan = await prisma.plan.create({
+    data: {
+      name: `Plano Admin Integration ${token}`,
+      slug: `admin-integration-plan-${token}`,
+      priceMonth: new Prisma.Decimal('49.90'),
+      priceYear: new Prisma.Decimal('499.00'),
+      maxUsers: 50,
+      maxContacts: 500,
+      isActive: true,
+      features: {},
+    },
+    select: { id: true },
+  });
+
+  suitePlanId = plan.id;
+});
+
+afterEach(async () => {
+  while (tempTenants.length > 0) {
+    await cleanupTempTenant(tempTenants.pop()!);
+  }
+});
+
+afterAll(async () => {
+  while (tempTenants.length > 0) {
+    await cleanupTempTenant(tempTenants.pop()!);
+  }
+
+  if (suitePlanId) {
+    await prisma.plan.deleteMany({ where: { id: suitePlanId } }).catch(() => undefined);
+    suitePlanId = null;
+  }
+});
+
+describe('Admin integration', () => {
+  it('GET /api/admin/users lista usuários apenas do tenant autenticado', async () => {
+    const tenantA = await createTempTenant('a');
+    const tenantB = await createTempTenant('b');
+    const memberA = await createTenantUser(tenantA, {
+      name: 'Tenant A Agent',
+      email: `tenant.a.agent.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+    const memberB = await createTenantUser(tenantB, {
+      name: 'Tenant B Agent',
+      email: `tenant.b.agent.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/users?page=1&per_page=20')
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.meta).toMatchObject({ total: 2, page: 1, per_page: 20 });
+
+    const userIds = response.body.data.map((user: { id: string }) => user.id);
+    expect(userIds).toContain(tenantA.owner.id);
+    expect(userIds).toContain(memberA.id);
+    expect(userIds).not.toContain(memberB.id);
+  });
+
+  it('POST /api/admin/users/invite convida usuário no tenant', async () => {
+    const tenantA = await createTempTenant('invite');
+    const invitedEmail = `invited.${uniqueToken()}@ziradesk.test`;
+
+    vi.resetModules();
+    vi.doMock('../../services/email.service.js', () => ({
+      hasTenantEmailProvider: vi.fn(async () => true),
+      sendEmail: vi.fn(async () => undefined),
+    }));
+
+    const { createIsolatedTestServer } = await import('../../test/setup.js');
+    const localApp = await createIsolatedTestServer();
+
+    try {
+      const response = await request(localApp.server)
+        .post('/api/admin/users/invite')
+        .set(authHeader(tenantA))
+        .send({
+          name: 'Invited User',
+          email: invitedEmail,
+          role: 'agent',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.user).toMatchObject({
+        name: 'Invited User',
+        email: invitedEmail,
+        role: 'agent',
+        status: 'active',
+      });
+
+      const rows = await prisma.$queryRawUnsafe<Array<{ id: string; role: string; status: string }>>(
+        `SELECT id, role, status
+           FROM "${tenantA.schemaName}".users
+          WHERE LOWER(email) = LOWER($1)
+          LIMIT 1`,
+        invitedEmail,
+      );
+
+      expect(rows[0]).toMatchObject({ role: 'agent', status: 'active' });
+    } finally {
+      await localApp.close().catch(() => undefined);
+      vi.doUnmock('../../services/email.service.js');
+      vi.resetModules();
+    }
+  });
+
+  it('PATCH /api/admin/users/:id atualiza role', async () => {
+    const tenantA = await createTempTenant('update-user');
+    const targetUser = await createTenantUser(tenantA, {
+      name: 'Role Target',
+      email: `role.target.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    const response = await createTestApp()
+      .patch(`/api/admin/users/${targetUser.id}`)
+      .set(authHeader(tenantA))
+      .send({ role: 'admin' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      id: targetUser.id,
+      role: 'admin',
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ role: string }>>(
+      `SELECT role
+         FROM "${tenantA.schemaName}".users
+        WHERE id = $1::uuid
+        LIMIT 1`,
+      targetUser.id,
+    );
+
+    expect(rows[0]).toMatchObject({ role: 'admin' });
+  });
+
+  it('GET /api/admin/channels lista canais do tenant', async () => {
+    const tenantA = await createTempTenant('channels-a');
+    const tenantB = await createTempTenant('channels-b');
+    const channelA = await insertChannel(tenantA, {
+      type: 'webchat',
+      name: 'Canal Tenant A',
+      settings: { theme: 'ocean' },
+    });
+    const channelB = await insertChannel(tenantB, {
+      type: 'whatsapp',
+      name: 'Canal Tenant B',
+      credentials: { accessToken: 'secret-b' },
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/channels')
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual([
+      expect.objectContaining({
+        id: channelA.id,
+        name: channelA.name,
+        type: channelA.type,
+      }),
+    ]);
+
+    const responseIds = response.body.data.map((channel: { id: string }) => channel.id);
+    expect(responseIds).not.toContain(channelB.id);
+  });
+
+  it('POST /api/admin/smtp salva config SMTP com credenciais criptografadas', async () => {
+    const tenantA = await createTempTenant('smtp-save');
+    const smtpPassword = 'SuperSecret#123';
+
+    const response = await createTestApp()
+      .post('/api/admin/smtp')
+      .set(authHeader(tenantA))
+      .send({
+        host: 'smtp.tenant-a.test',
+        port: 587,
+        secure: false,
+        username: 'smtp-user-a',
+        password: smtpPassword,
+        fromEmail: 'no-reply@tenant-a.test',
+        fromName: 'Tenant A',
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      host: 'smtp.tenant-a.test',
+      port: 587,
+      secure: false,
+      username: 'smtp-user-a',
+      fromEmail: 'no-reply@tenant-a.test',
+      fromName: 'Tenant A',
+      hasPassword: true,
+      isActive: true,
+    });
+    expect(response.body.data.password).toBeUndefined();
+
+    const smtpRow = await getStoredSmtpRow(tenantA.schemaName);
+
+    expect(smtpRow.password).not.toBe(smtpPassword);
+    expect(decryptCredentials(smtpRow.password)).toMatchObject({ password: smtpPassword });
+  });
+
+  it('POST /api/admin/smtp/test testa conexão SMTP com nodemailer mockado', async () => {
+    const tenantA = await createTempTenant('smtp-test');
+    const verifyMock = vi.fn(async () => undefined);
+    const sendMailMock = vi.fn(async () => ({ messageId: 'smtp-test-message' }));
+    const createTransportMock = vi.fn(() => ({
+      verify: verifyMock,
+      sendMail: sendMailMock,
+    }));
+
+    vi.resetModules();
+    vi.doMock('nodemailer', () => ({
+      default: {
+        createTransport: createTransportMock,
+      },
+    }));
+
+    const { createIsolatedTestServer } = await import('../../test/setup.js');
+    const localApp = await createIsolatedTestServer();
+
+    try {
+      const localClient = request(localApp.server);
+
+      const saveResponse = await localClient
+        .post('/api/admin/smtp')
+        .set(authHeader(tenantA))
+        .send({
+          host: 'smtp.mocked.test',
+          port: 465,
+          secure: true,
+          username: 'smtp-mocked-user',
+          password: 'MockedSecret#456',
+          fromEmail: 'no-reply@mocked.test',
+          fromName: 'Mocked Tenant',
+        });
+
+      expect(saveResponse.status).toBe(201);
+
+      const testResponse = await localClient
+        .post('/api/admin/smtp/test')
+        .set(authHeader(tenantA))
+        .send({});
+
+      expect(testResponse.status).toBe(200);
+      expect(testResponse.body).toMatchObject({
+        success: true,
+        message: 'SMTP configurado corretamente',
+      });
+      expect(createTransportMock).toHaveBeenCalledWith(expect.objectContaining({
+        host: 'smtp.mocked.test',
+        port: 465,
+        secure: true,
+        auth: {
+          user: 'smtp-mocked-user',
+          pass: 'MockedSecret#456',
+        },
+      }));
+      expect(verifyMock).toHaveBeenCalledTimes(1);
+      expect(sendMailMock).toHaveBeenCalledTimes(1);
+
+      const smtpRow = await getStoredSmtpRow(tenantA.schemaName);
+      expect(smtpRow.last_test_ok).toBe(true);
+      expect(smtpRow.last_tested_at).toBeTruthy();
+    } finally {
+      await localApp.close().catch(() => undefined);
+      vi.doUnmock('nodemailer');
+      vi.resetModules();
+    }
+  });
+
+  it('Admin do tenant A não consegue listar usuários do tenant B', async () => {
+    const tenantA = await createTempTenant('isolamento-a');
+    const tenantB = await createTempTenant('isolamento-b');
+    const memberB = await createTenantUser(tenantB, {
+      name: 'Tenant B Hidden User',
+      email: `tenant.b.hidden.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/users?page=1&per_page=20')
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.meta).toMatchObject({ total: 1 });
+
+    const userIds = response.body.data.map((user: { id: string }) => user.id);
+    expect(userIds).toEqual([tenantA.owner.id]);
+    expect(userIds).not.toContain(memberB.id);
+  });
+});
