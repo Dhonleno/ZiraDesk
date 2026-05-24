@@ -4,6 +4,7 @@ import {
   portalCreateTicketSchema,
   portalForgotPasswordSchema,
   portalLoginSchema,
+  portalResetPasswordSchema,
   portalTicketsQuerySchema,
 } from './portal.schema.js';
 import {
@@ -17,6 +18,8 @@ import {
   PortalAuthError,
   PortalForbiddenError,
   PortalNotFoundError,
+  requestPortalPasswordReset,
+  resetPortalPassword,
   verifyPortalToken,
 } from './portal.service.js';
 
@@ -82,8 +85,40 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    request.log.info({ event: 'portal.forgot_password.request', email: parsed.data.email }, 'Solicitação de recuperação de senha do portal');
+    try {
+      await requestPortalPasswordReset(request.headers.host ?? '', parsed.data.email);
+    } catch (err) {
+      request.log.error(
+        {
+          event: 'portal.forgot_password.error',
+          email: parsed.data.email,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'Falha ao processar recuperação de senha do portal',
+      );
+    }
+
     return reply.send({ success: true });
+  });
+
+  app.post('/auth/reset-password', async (request, reply) => {
+    const parsed = portalResetPasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      await resetPortalPassword(parsed.data.token, parsed.data.password);
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalAuthError) {
+        return reply.code(400).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.get('/me', { preHandler: [portalAuth] }, async (request, reply) => {

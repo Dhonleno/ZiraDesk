@@ -35,7 +35,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     const parsed = listContactsQuerySchema.safeParse(request.query);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
-    const result = await listContacts(parsed.data);
+    const result = await listContacts(parsed.data, request.user.schemaName);
     return reply.send({ success: true, ...result });
   });
 
@@ -45,7 +45,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await createContact(parsed.data, request.user.id, request.user.tenantId ?? undefined);
+      const contact = await createContact(parsed.data, request.user.id, request.user.tenantId ?? undefined, request.user.schemaName);
       return reply.code(201).send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof ConflictError)
@@ -59,7 +59,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: contactsViewGuard }, async (request, reply) => {
     try {
-      const contact = await getContact(request.params.id);
+      const contact = await getContact(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -95,7 +95,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await updateContact(request.params.id, parsed.data, request.user.id);
+      const contact = await updateContact(request.params.id, parsed.data, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -109,7 +109,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/contacts/:id
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: contactsDeleteGuard }, async (request, reply) => {
     try {
-      const contact = await deleteContact(request.params.id, request.user.id);
+      const contact = await deleteContact(request.params.id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -126,7 +126,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await linkToOrganization(request.params.id, parsed.data.organization_id, request.user.id);
+      const contact = await linkToOrganization(request.params.id, parsed.data.organization_id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -142,7 +142,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const data = await createPortalAccess(request.params.id, request.user.tenantId);
+      const data = await createPortalAccess(request.params.id, request.user.tenantId, request.user.schemaName);
 
       request.log.info({
         event: 'portal.access.created',
@@ -173,7 +173,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/contacts/:id/portal-access
   app.delete<{ Params: { id: string } }>('/:id/portal-access', { preHandler: managePortalGuard }, async (request, reply) => {
     try {
-      const data = await revokePortalAccess(request.params.id);
+      const data = await revokePortalAccess(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError) {

@@ -373,7 +373,16 @@ async function findChannelByPhoneNumberId(
     );
 
     for (const channel of channels) {
-      const credentials = decryptCredentials(channel.credentials);
+      let credentials: Record<string, string>;
+      try {
+        credentials = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[WhatsApp] Invalid channel credentials payload',
+        );
+        continue;
+      }
       const channelPhoneNumberId = getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id');
       if (channelPhoneNumberId === phoneNumberId) {
         return {

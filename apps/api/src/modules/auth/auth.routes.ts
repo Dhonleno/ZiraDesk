@@ -9,6 +9,7 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
 } from './auth.service.js';
 import { prisma } from '../../config/database.js';
+import { redis } from '../../config/redis.js';
 import { env } from '../../config/env.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
@@ -91,6 +92,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/auth/logout
   app.post('/logout', { preHandler: [authMiddleware] }, async (request, reply) => {
+    const forcedLogoutAt = Math.floor(Date.now() / 1000).toString();
+    await redis.set(`auth:force_logout_after:${request.user.id}`, forcedLogoutAt, 'EX', 60 * 60 * 24 * 30);
+
     if (!request.user.isSuperAdmin && request.user.tenantId) {
       const tenantSchema = request.user.schemaName ?? (
         await prisma.tenant.findUnique({

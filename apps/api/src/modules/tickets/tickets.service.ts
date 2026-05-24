@@ -2,9 +2,9 @@ import { prisma } from '../../config/database.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
-import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { getStorage } from '../../lib/storage/index.js';
 import type {
   CreateTicketInput,
   UpdateTicketInput,
@@ -35,6 +35,13 @@ export class BusinessRuleError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'BusinessRuleError';
+  }
+}
+
+export class PayloadTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PayloadTooLargeError';
   }
 }
 
@@ -205,7 +212,7 @@ function ensureTicketConditionalRules(input: {
   }
 }
 
-async function getTicketTypeRules(typeId: string | null): Promise<TicketTypeRuleRow> {
+async function getTicketTypeRules(typeId: string | null, db: RawExecutor = prisma): Promise<TicketTypeRuleRow> {
   if (!typeId) {
     return {
       require_due_date_for_urgent: true,
@@ -213,7 +220,7 @@ async function getTicketTypeRules(typeId: string | null): Promise<TicketTypeRule
     };
   }
 
-  const rows = await prisma.$queryRawUnsafe<TicketTypeRuleRow[]>(
+  const rows = await db.$queryRawUnsafe<TicketTypeRuleRow[]>(
     `SELECT require_due_date_for_urgent, require_category_for_waiting
      FROM ticket_types
      WHERE id = $1::uuid
@@ -237,7 +244,6 @@ function toPgArray(arr: string[]): string {
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
 }
 
-const ATTACHMENTS_BASE_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'tickets');
 const ALLOWED_ATTACHMENT_MIME = new Set([
   'image/png',
   'image/jpeg',
@@ -258,18 +264,8 @@ function sanitizeFileName(fileName: string): string {
   return normalized || 'arquivo';
 }
 
-async function ensureAttachmentDir(ticketId: string): Promise<string> {
-  const dir = path.join(ATTACHMENTS_BASE_DIR, ticketId);
-  await fs.mkdir(dir, { recursive: true });
-  return dir;
-}
-
-function ensurePathInside(baseDir: string, targetPath: string): void {
-  const resolvedBase = path.resolve(baseDir);
-  const resolvedTarget = path.resolve(targetPath);
-  if (!resolvedTarget.startsWith(resolvedBase)) {
-    throw new ForbiddenError('Caminho de arquivo inválido');
-  }
+function buildAttachmentStorageKey(ticketId: string, attachmentId: string, fileName: string): string {
+  return `tickets/${ticketId}/${attachmentId}-${sanitizeFileName(fileName)}`;
 }
 
 type RawExecutor = typeof prisma;
@@ -292,6 +288,17 @@ async function withTenantSchema<T>(
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
     return runner(tx as RawExecutor);
   });
+}
+
+async function withOptionalSchema<T>(
+  schemaName: string | undefined,
+  runner: (db: RawExecutor) => Promise<T>,
+): Promise<T> {
+  if (schemaName) {
+    return withTenantSchema(schemaName, runner);
+  }
+
+  return runner(prisma);
 }
 
 async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<void> {
@@ -441,6 +448,12 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
   ticketInfraEnsured = true;
 }
 
+export async function ensureTicketInfrastructureForSchema(schemaName: string): Promise<void> {
+  await withTenantSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+  });
+}
+
 async function logTicketEvent(
   ticketId: string,
   userId: string,
@@ -450,7 +463,7 @@ async function logTicketEvent(
   metadata?: Record<string, unknown>,
   tx: RawExecutor = prisma,
 ): Promise<TicketEventRow | null> {
-  await ensureTicketInfrastructure();
+  await ensureTicketInfrastructure(tx);
 
   const rows = await tx.$queryRawUnsafe<TicketEventRow[]>(
     `INSERT INTO ticket_events
@@ -525,115 +538,119 @@ const BASE_SELECT = `
   LEFT JOIN ticket_types  tt ON tt.id = t.type_id`;
 
 /* ── listTickets ─────────────────────────────────────────────────────────── */
-export async function listTickets(query: ListTicketsQuery) {
-  await ensureTicketInfrastructure();
-  const { page, per_page, search, status, priority, assigned_to, source, contact_id, organization_id, category, sort_by, sort_order } = query;
-  const offset = (page - 1) * per_page;
+export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
+  return withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const { page, per_page, search, status, priority, assigned_to, source, contact_id, organization_id, category, sort_by, sort_order } = query;
+    const offset = (page - 1) * per_page;
 
-  const searchParam       = search          ?? null;
-  const statusParam       = status          ?? null;
-  const priorityParam     = priority        ?? null;
-  const assignedParam     = assigned_to     ?? null;
-  const sourceParam       = source          ?? null;
-  const contactParam      = contact_id      ?? null;
-  const organizationParam = organization_id ?? null;
-  const categoryParam     = category        ?? null;
+    const searchParam       = search          ?? null;
+    const statusParam       = status          ?? null;
+    const priorityParam     = priority        ?? null;
+    const assignedParam     = assigned_to     ?? null;
+    const sourceParam       = source          ?? null;
+    const contactParam      = contact_id      ?? null;
+    const organizationParam = organization_id ?? null;
+    const categoryParam     = category        ?? null;
 
-  const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
-  const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
+    const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
+    const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
-  const where = `
-    WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
-      AND ($2::text IS NULL OR t.status         = $2)
-      AND ($3::text IS NULL OR t.priority       = $3)
-      AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
-      AND ($5::text IS NULL OR t.source         = $5)
-      AND ($6::uuid IS NULL OR t.contact_id     = $6::uuid)
-      AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
-      AND ($8::text IS NULL OR t.category       = $8)`;
+    const where = `
+      WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+        AND ($2::text IS NULL OR t.status         = $2)
+        AND ($3::text IS NULL OR t.priority       = $3)
+        AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
+        AND ($5::text IS NULL OR t.source         = $5)
+        AND ($6::uuid IS NULL OR t.contact_id     = $6::uuid)
+        AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
+        AND ($8::text IS NULL OR t.category       = $8)`;
 
-  const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
-    `${BASE_SELECT}${where}
-     ORDER BY ${sortCol} ${sortDir}
-     LIMIT $9 OFFSET $10`,
-    searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
-    per_page, offset,
-  );
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `${BASE_SELECT}${where}
+       ORDER BY ${sortCol} ${sortDir}
+       LIMIT $9 OFFSET $10`,
+      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
+      per_page, offset,
+    );
 
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count
-     FROM tickets t${where}`,
-    searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
-  );
+    const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
+      `SELECT COUNT(*) AS count
+       FROM tickets t${where}`,
+      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
+    );
 
-  const total = Number(countRows[0]?.count ?? 0);
-  return {
-    data: rows,
-    meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
-  };
+    const total = Number(countRows[0]?.count ?? 0);
+    return {
+      data: rows,
+      meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
+    };
+  });
 }
 
 /* ── exportTickets ───────────────────────────────────────────────────────── */
-export async function exportTickets(query: ExportTicketsQuery): Promise<TicketExportRow[]> {
-  await ensureTicketInfrastructure();
+export async function exportTickets(query: ExportTicketsQuery, schemaName?: string): Promise<TicketExportRow[]> {
+  return withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
 
-  const searchParam       = query.search          ?? null;
-  const statusParam       = query.status          ?? null;
-  const priorityParam     = query.priority        ?? null;
-  const assignedParam     = query.assigned_to     ?? null;
-  const sourceParam       = query.source          ?? null;
-  const contactParam      = query.contact_id      ?? null;
-  const organizationParam = query.organization_id ?? null;
-  const categoryParam     = query.category        ?? null;
+    const searchParam       = query.search          ?? null;
+    const statusParam       = query.status          ?? null;
+    const priorityParam     = query.priority        ?? null;
+    const assignedParam     = query.assigned_to     ?? null;
+    const sourceParam       = query.source          ?? null;
+    const contactParam      = query.contact_id      ?? null;
+    const organizationParam = query.organization_id ?? null;
+    const categoryParam     = query.category        ?? null;
 
-  const dateFrom = query.date_from ? new Date(query.date_from) : null;
-  const dateTo = query.date_to ? new Date(query.date_to) : null;
-  const dateFromParam = dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : null;
-  const dateToParam = dateTo && !Number.isNaN(dateTo.getTime()) ? dateTo : null;
+    const dateFrom = query.date_from ? new Date(query.date_from) : null;
+    const dateTo = query.date_to ? new Date(query.date_to) : null;
+    const dateFromParam = dateFrom && !Number.isNaN(dateFrom.getTime()) ? dateFrom : null;
+    const dateToParam = dateTo && !Number.isNaN(dateTo.getTime()) ? dateTo : null;
 
-  return prisma.$queryRawUnsafe<TicketExportRow[]>(
-    `SELECT
-       t.id,
-       t.title,
-       t.status,
-       t.priority,
-       t.category,
-       t.created_at,
-       t.updated_at,
-       t.due_date,
-       t.resolved_at,
-       u.name AS assigned_to_name,
-       ct.name AS contact_name,
-       o.name AS organization_name,
-       tt.name AS ticket_type_name
-     FROM tickets t
-     LEFT JOIN users u ON u.id = t.assigned_to
-     LEFT JOIN contacts ct ON ct.id = t.contact_id
-     LEFT JOIN organizations o ON o.id = t.organization_id
-     LEFT JOIN ticket_types tt ON tt.id = t.type_id
-     WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
-       AND ($2::text IS NULL OR t.status = $2)
-       AND ($3::text IS NULL OR t.priority = $3)
-       AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)
-       AND ($5::text IS NULL OR t.source = $5)
-       AND ($6::uuid IS NULL OR t.contact_id = $6::uuid)
-       AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
-       AND ($8::text IS NULL OR t.category = $8)
-       AND ($9::timestamptz IS NULL OR t.created_at >= $9::timestamptz)
-       AND ($10::timestamptz IS NULL OR t.created_at <= $10::timestamptz)
-     ORDER BY t.created_at DESC
-     LIMIT 10000`,
-    searchParam,
-    statusParam,
-    priorityParam,
-    assignedParam,
-    sourceParam,
-    contactParam,
-    organizationParam,
-    categoryParam,
-    dateFromParam,
-    dateToParam,
-  );
+    return db.$queryRawUnsafe<TicketExportRow[]>(
+      `SELECT
+         t.id,
+         t.title,
+         t.status,
+         t.priority,
+         t.category,
+         t.created_at,
+         t.updated_at,
+         t.due_date,
+         t.resolved_at,
+         u.name AS assigned_to_name,
+         ct.name AS contact_name,
+         o.name AS organization_name,
+         tt.name AS ticket_type_name
+       FROM tickets t
+       LEFT JOIN users u ON u.id = t.assigned_to
+       LEFT JOIN contacts ct ON ct.id = t.contact_id
+       LEFT JOIN organizations o ON o.id = t.organization_id
+       LEFT JOIN ticket_types tt ON tt.id = t.type_id
+       WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+         AND ($2::text IS NULL OR t.status = $2)
+         AND ($3::text IS NULL OR t.priority = $3)
+         AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)
+         AND ($5::text IS NULL OR t.source = $5)
+         AND ($6::uuid IS NULL OR t.contact_id = $6::uuid)
+         AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
+         AND ($8::text IS NULL OR t.category = $8)
+         AND ($9::timestamptz IS NULL OR t.created_at >= $9::timestamptz)
+         AND ($10::timestamptz IS NULL OR t.created_at <= $10::timestamptz)
+       ORDER BY t.created_at DESC
+       LIMIT 10000`,
+      searchParam,
+      statusParam,
+      priorityParam,
+      assignedParam,
+      sourceParam,
+      contactParam,
+      organizationParam,
+      categoryParam,
+      dateFromParam,
+      dateToParam,
+    );
+  });
 }
 
 /* ── getTicket ───────────────────────────────────────────────────────────── */
@@ -666,62 +683,68 @@ export async function getTicket(id: string, schemaName?: string, db?: RawExecuto
 }
 
 /* ── createTicket ────────────────────────────────────────────────────────── */
-export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string) {
-  await ensureTicketInfrastructure();
-  const typeRules = await getTicketTypeRules(data.type_id ?? null);
-  ensureTicketConditionalRules({
-    status: data.status,
-    priority: data.priority,
-    category: data.category ?? null,
-    dueDate: data.due_date ?? null,
-    requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
-    requireCategoryForWaiting: typeRules.require_category_for_waiting,
+export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string, schemaName?: string) {
+  const { ticket, createdEvent } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const typeRules = await getTicketTypeRules(data.type_id ?? null, db);
+    ensureTicketConditionalRules({
+      status: data.status,
+      priority: data.priority,
+      category: data.category ?? null,
+      dueDate: data.due_date ?? null,
+      requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
+      requireCategoryForWaiting: typeRules.require_category_for_waiting,
+    });
+    const tagsLiteral = toPgArray(data.tags ?? []);
+
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `INSERT INTO tickets
+         (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
+          assigned_to, due_date, tags)
+       VALUES
+         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
+       RETURNING
+         id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
+         NULL AS assignee_name, NULL AS assignee_avatar,
+         NULL AS contact_name,  NULL AS organization_name,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
+      data.contact_id      ?? null,
+      data.organization_id ?? null,
+      data.conversation_id ?? null,
+      data.source_conversation_id ?? null,
+      data.type_id ?? null,
+      data.title,
+      data.description     ?? null,
+      data.status,
+      data.priority,
+      data.category        ?? null,
+      data.assigned_to     ?? null,
+      data.due_date        ?? null,
+      tagsLiteral,
+    );
+
+    const ticket = rows[0]!;
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, 'ticket.created', 'ticket', $2::uuid, $3::jsonb)`,
+      createdBy, ticket.id, JSON.stringify(ticket),
+    );
+
+    const createdEvent = await logTicketEvent(
+      ticket.id,
+      createdBy,
+      'created',
+      null,
+      null,
+      { status: ticket.status, priority: ticket.priority },
+      db,
+    );
+
+    return { ticket, createdEvent };
   });
-  const tagsLiteral = toPgArray(data.tags ?? []);
 
-  const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
-    `INSERT INTO tickets
-       (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
-        assigned_to, due_date, tags)
-     VALUES
-       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
-     RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
-       assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
-       NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name,
-       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
-    data.contact_id      ?? null,
-    data.organization_id ?? null,
-    data.conversation_id ?? null,
-    data.source_conversation_id ?? null,
-    data.type_id ?? null,
-    data.title,
-    data.description     ?? null,
-    data.status,
-    data.priority,
-    data.category        ?? null,
-    data.assigned_to     ?? null,
-    data.due_date        ?? null,
-    tagsLiteral,
-  );
-
-  const ticket = rows[0]!;
-
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
-     VALUES ($1::uuid, 'ticket.created', 'ticket', $2::uuid, $3::jsonb)`,
-    createdBy, ticket.id, JSON.stringify(ticket),
-  );
-
-  const createdEvent = await logTicketEvent(
-    ticket.id,
-    createdBy,
-    'created',
-    null,
-    null,
-    { status: ticket.status, priority: ticket.priority },
-  );
   if (createdEvent) emitTicketEvent(tenantId, ticket.id, createdEvent);
 
   try {
@@ -732,143 +755,159 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
   void (async () => {
-    const schemaName = await resolveTenantSchemaName(tenantId);
-    if (!schemaName) return;
-    await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'created');
+    const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
+    if (!resolvedSchemaName) return;
+    await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'created');
   })().catch(() => {});
 
   return ticket;
 }
 
 /* ── updateTicket ────────────────────────────────────────────────────────── */
-export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string) {
-  await ensureTicketInfrastructure();
-  const old = await getTicket(id);
+export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string, schemaName?: string) {
+  const { old, ticket, eventsToEmit, assigneeName } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const old = await getTicket(id, undefined, db);
 
-  const newStatus    = data.status    ?? old.status;
-  ensureValidStatusTransition(old.status, newStatus);
-  const newPriority = data.priority ?? old.priority;
-  const hasCategoryField = Object.prototype.hasOwnProperty.call(data, 'category');
-  const newCategory = hasCategoryField ? (data.category ?? null) : old.category;
-  const newDueDate = data.due_date ?? old.due_date;
-  const hasTypeId = Object.prototype.hasOwnProperty.call(data, 'type_id');
-  const newTypeId = hasTypeId ? (data.type_id ?? null) : old.type_id;
-  const typeRules = await getTicketTypeRules(newTypeId);
-  ensureTicketConditionalRules({
-    status: newStatus,
-    priority: newPriority,
-    category: newCategory,
-    dueDate: newDueDate,
-    requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
-    requireCategoryForWaiting: typeRules.require_category_for_waiting,
-  });
-  const resolvedAt   =
-    newStatus === 'resolved' && old.status !== 'resolved' ? 'NOW()' :
-    newStatus !== 'resolved' && old.status === 'resolved' ? 'NULL'  : null;
+    const newStatus = data.status ?? old.status;
+    ensureValidStatusTransition(old.status, newStatus);
+    const newPriority = data.priority ?? old.priority;
+    const hasCategoryField = Object.prototype.hasOwnProperty.call(data, 'category');
+    const newCategory = hasCategoryField ? (data.category ?? null) : old.category;
+    const newDueDate = data.due_date ?? old.due_date;
+    const hasTypeId = Object.prototype.hasOwnProperty.call(data, 'type_id');
+    const newTypeId = hasTypeId ? (data.type_id ?? null) : old.type_id;
+    const typeRules = await getTicketTypeRules(newTypeId, db);
+    ensureTicketConditionalRules({
+      status: newStatus,
+      priority: newPriority,
+      category: newCategory,
+      dueDate: newDueDate,
+      requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
+      requireCategoryForWaiting: typeRules.require_category_for_waiting,
+    });
+    const resolvedAt =
+      newStatus === 'resolved' && old.status !== 'resolved' ? 'NOW()' :
+      newStatus !== 'resolved' && old.status === 'resolved' ? 'NULL' : null;
 
-  const tagsLiteral  = data.tags !== undefined ? toPgArray(data.tags) : null;
-  const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
-  const hasAssignedTo = Object.prototype.hasOwnProperty.call(data, 'assigned_to');
-  const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
+    const tagsLiteral = data.tags !== undefined ? toPgArray(data.tags) : null;
+    const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
+    const hasAssignedTo = Object.prototype.hasOwnProperty.call(data, 'assigned_to');
+    const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
 
-  const rows = await prisma.$queryRawUnsafe<TicketRow[]>(
-    `UPDATE tickets SET
-       title           = COALESCE($1,        title),
-       description     = COALESCE($2,        description),
-       status          = COALESCE($3,        status),
-       priority        = COALESCE($4,        priority),
-       category        = COALESCE($5,        category),
-       assigned_to     = CASE WHEN $6::boolean THEN $7::uuid ELSE assigned_to END,
-       type_id         = CASE WHEN $8::boolean THEN $9::uuid ELSE type_id END,
-       due_date        = COALESCE($10::timestamptz, due_date),
-       tags            = COALESCE($11::text[], tags),
-       resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
-       updated_at      = NOW()
-     WHERE id = $12::uuid
-     RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
-       assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
-       NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name,
-       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
-    data.title          ?? null,
-    data.description    ?? null,
-    data.status         ?? null,
-    data.priority       ?? null,
-    data.category       ?? null,
-    hasAssignedTo,
-    assignedToValue,
-    hasTypeId,
-    typeIdValue,
-    data.due_date       ?? null,
-    tagsLiteral,
-    id,
-  );
-
-  if (!rows[0]) throw new NotFoundError('Ticket');
-  const ticket = rows[0];
-
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
-     VALUES ($1::uuid, 'ticket.updated', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
-    updatedBy, id, JSON.stringify(old), JSON.stringify(ticket),
-  );
-
-  if (old.status !== ticket.status) {
-    const statusEvent = await logTicketEvent(id, updatedBy, 'status_changed', old.status, ticket.status);
-    if (statusEvent) emitTicketEvent(tenantId, id, statusEvent);
-  }
-
-  if (old.priority !== ticket.priority) {
-    const priorityEvent = await logTicketEvent(id, updatedBy, 'priority_changed', old.priority, ticket.priority);
-    if (priorityEvent) emitTicketEvent(tenantId, id, priorityEvent);
-  }
-
-  if (old.assigned_to !== ticket.assigned_to) {
-    let assigneeName: string | null = null;
-    if (ticket.assigned_to) {
-      const assigneeRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
-        `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
-        ticket.assigned_to,
-      );
-      assigneeName = assigneeRows[0]?.name ?? null;
-    }
-    const assignedEvent = await logTicketEvent(
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `UPDATE tickets SET
+         title           = COALESCE($1,        title),
+         description     = COALESCE($2,        description),
+         status          = COALESCE($3,        status),
+         priority        = COALESCE($4,        priority),
+         category        = COALESCE($5,        category),
+         assigned_to     = CASE WHEN $6::boolean THEN $7::uuid ELSE assigned_to END,
+         type_id         = CASE WHEN $8::boolean THEN $9::uuid ELSE type_id END,
+         due_date        = COALESCE($10::timestamptz, due_date),
+         tags            = COALESCE($11::text[], tags),
+         resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
+         updated_at      = NOW()
+       WHERE id = $12::uuid
+       RETURNING
+         id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
+         NULL AS assignee_name, NULL AS assignee_avatar,
+         NULL AS contact_name, NULL AS organization_name,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
+      data.title ?? null,
+      data.description ?? null,
+      data.status ?? null,
+      data.priority ?? null,
+      data.category ?? null,
+      hasAssignedTo,
+      assignedToValue,
+      hasTypeId,
+      typeIdValue,
+      data.due_date ?? null,
+      tagsLiteral,
       id,
-      updatedBy,
-      'assigned',
-      old.assignee_name ?? null,
-      assigneeName,
-      { old_assigned_to: old.assigned_to, new_assigned_to: ticket.assigned_to },
     );
-    if (assignedEvent) emitTicketEvent(tenantId, id, assignedEvent);
-  }
 
-  const oldTags = new Set(old.tags ?? []);
-  const newTags = new Set(ticket.tags ?? []);
-  const addedTags = [...newTags].filter((tag) => !oldTags.has(tag));
-  const removedTags = [...oldTags].filter((tag) => !newTags.has(tag));
+    if (!rows[0]) throw new NotFoundError('Ticket');
+    const ticket = rows[0];
 
-  for (const tag of addedTags) {
-    const tagAddedEvent = await logTicketEvent(id, updatedBy, 'tag_added', null, tag);
-    if (tagAddedEvent) emitTicketEvent(tenantId, id, tagAddedEvent);
-  }
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.updated', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      updatedBy,
+      id,
+      JSON.stringify(old),
+      JSON.stringify(ticket),
+    );
 
-  for (const tag of removedTags) {
-    const tagRemovedEvent = await logTicketEvent(id, updatedBy, 'tag_removed', tag, null);
-    if (tagRemovedEvent) emitTicketEvent(tenantId, id, tagRemovedEvent);
+    const eventsToEmit: Array<{ event: TicketEventRow; userName?: string | null }> = [];
+
+    if (old.status !== ticket.status) {
+      const statusEvent = await logTicketEvent(id, updatedBy, 'status_changed', old.status, ticket.status, undefined, db);
+      if (statusEvent) eventsToEmit.push({ event: statusEvent });
+    }
+
+    if (old.priority !== ticket.priority) {
+      const priorityEvent = await logTicketEvent(id, updatedBy, 'priority_changed', old.priority, ticket.priority, undefined, db);
+      if (priorityEvent) eventsToEmit.push({ event: priorityEvent });
+    }
+
+    let assigneeName: string | null = null;
+    if (old.assigned_to !== ticket.assigned_to) {
+      if (ticket.assigned_to) {
+        const assigneeRows = await db.$queryRawUnsafe<Array<{ name: string | null }>>(
+          `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+          ticket.assigned_to,
+        );
+        assigneeName = assigneeRows[0]?.name ?? null;
+      }
+
+      const assignedEvent = await logTicketEvent(
+        id,
+        updatedBy,
+        'assigned',
+        old.assignee_name ?? null,
+        assigneeName,
+        { old_assigned_to: old.assigned_to, new_assigned_to: ticket.assigned_to },
+        db,
+      );
+
+      if (assignedEvent) eventsToEmit.push({ event: assignedEvent, userName: assigneeName });
+    }
+
+    const oldTags = new Set(old.tags ?? []);
+    const newTags = new Set(ticket.tags ?? []);
+    const addedTags = [...newTags].filter((tag) => !oldTags.has(tag));
+    const removedTags = [...oldTags].filter((tag) => !newTags.has(tag));
+
+    for (const tag of addedTags) {
+      const tagAddedEvent = await logTicketEvent(id, updatedBy, 'tag_added', null, tag, undefined, db);
+      if (tagAddedEvent) eventsToEmit.push({ event: tagAddedEvent });
+    }
+
+    for (const tag of removedTags) {
+      const tagRemovedEvent = await logTicketEvent(id, updatedBy, 'tag_removed', tag, null, undefined, db);
+      if (tagRemovedEvent) eventsToEmit.push({ event: tagRemovedEvent });
+    }
+
+    return { old, ticket, eventsToEmit, assigneeName };
+  });
+
+  for (const { event, userName } of eventsToEmit) {
+    emitTicketEvent(tenantId, id, event, userName);
   }
 
   if (old.status !== 'resolved' && ticket.status === 'resolved') {
-    const resolvedEvent = await logTicketEvent(id, updatedBy, 'resolved', null, null);
+    const resolvedEvent = await withOptionalSchema(schemaName, async (db) => logTicketEvent(id, updatedBy, 'resolved', null, null, undefined, db));
     if (resolvedEvent) emitTicketEvent(tenantId, id, resolvedEvent);
     void dispatchWebhook(tenantId, 'ticket.resolved', {
       ticket: { id: ticket.id, title: ticket.title, resolvedAt: ticket.resolved_at },
     });
     void (async () => {
-      const schemaName = await resolveTenantSchemaName(tenantId);
-      if (!schemaName) return;
-      await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'resolved');
+      const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
+      if (!resolvedSchemaName) return;
+      await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'resolved');
     })().catch(() => {});
   }
 
@@ -877,9 +916,9 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       ticket: { id: ticket.id, title: ticket.title },
     });
     void (async () => {
-      const schemaName = await resolveTenantSchemaName(tenantId);
-      if (!schemaName) return;
-      await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'closed');
+      const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
+      if (!resolvedSchemaName) return;
+      await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'closed');
     })().catch(() => {});
   }
 
@@ -887,9 +926,9 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
   void (async () => {
-    const schemaName = await resolveTenantSchemaName(tenantId);
-    if (!schemaName) return;
-    await syncTicketToRedmine(tenantId, schemaName, ticket.id, 'updated');
+    const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
+    if (!resolvedSchemaName) return;
+    await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'updated');
   })().catch(() => {});
 
   try {
@@ -900,15 +939,35 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
 }
 
 /* ── deleteTicket ────────────────────────────────────────────────────────── */
-export async function deleteTicket(id: string, deletedBy: string, tenantId: string) {
-  const old = await getTicket(id);
+export async function deleteTicket(id: string, deletedBy: string, tenantId: string, schemaName?: string) {
+  const { old, attachments } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const old = await getTicket(id, undefined, db);
 
-  await prisma.$executeRawUnsafe(`DELETE FROM tickets WHERE id = $1::uuid`, id);
+    const attachments = await db.$queryRawUnsafe<Array<Pick<TicketAttachmentRow, 'id' | 'ticket_id' | 'filename'>>>(
+      `SELECT id, ticket_id, filename
+       FROM ticket_attachments
+       WHERE ticket_id = $1::uuid`,
+      id,
+    );
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
-     VALUES ($1::uuid, 'ticket.deleted', 'ticket', $2::uuid, $3::jsonb)`,
-    deletedBy, id, JSON.stringify(old),
+    await db.$executeRawUnsafe(`DELETE FROM tickets WHERE id = $1::uuid`, id);
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
+       VALUES ($1::uuid, 'ticket.deleted', 'ticket', $2::uuid, $3::jsonb)`,
+      deletedBy,
+      id,
+      JSON.stringify(old),
+    );
+
+    return { old, attachments };
+  });
+
+  await Promise.allSettled(
+    attachments.map((attachment) =>
+      getStorage().delete(buildAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename)),
+    ),
   );
 
   try {
@@ -1251,16 +1310,14 @@ export async function addAttachment(params: {
   fileName: string;
   mimeType: string;
   buffer: Buffer;
+  schemaName?: string;
 }): Promise<TicketAttachmentRow> {
-  await ensureTicketInfrastructure();
-  await getTicket(params.ticketId);
-
   if (!ALLOWED_ATTACHMENT_MIME.has(params.mimeType)) {
     throw new ForbiddenError('Tipo de arquivo não permitido');
   }
 
   if (params.buffer.length > MAX_ATTACHMENT_SIZE) {
-    throw new ForbiddenError('Arquivo excede o limite de 10MB');
+    throw new PayloadTooLargeError('Arquivo excede o limite de 10MB');
   }
 
   if (params.commentId) {
@@ -1281,84 +1338,105 @@ export async function addAttachment(params: {
 
   const attachmentId = randomUUID();
   const safeName = sanitizeFileName(params.fileName);
-  const storedFileName = `${attachmentId}-${safeName}`;
-  const dir = await ensureAttachmentDir(params.ticketId);
-  const filePath = path.join(dir, storedFileName);
-  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
-  await fs.writeFile(filePath, params.buffer);
+  const key = buildAttachmentStorageKey(params.ticketId, attachmentId, safeName);
+  await getStorage().upload(key, params.buffer, params.mimeType);
 
   const fileUrl = `/api/tickets/attachments/${attachmentId}/content`;
 
-  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
-    `INSERT INTO ticket_attachments (id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8)
-     RETURNING id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at`,
-    attachmentId,
-    params.ticketId,
-    params.commentId ?? null,
-    params.userId,
-    safeName,
-    fileUrl,
-    params.buffer.length,
-    params.mimeType,
-  );
+  return withOptionalSchema(params.schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    await getTicket(params.ticketId, undefined, db);
 
-  return rows[0]!;
+    if (params.commentId) {
+      const commentRows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id
+         FROM ticket_comments
+         WHERE id = $1::uuid
+           AND ticket_id = $2::uuid
+         LIMIT 1`,
+        params.commentId,
+        params.ticketId,
+      );
+
+      if (!commentRows[0]) {
+        throw new NotFoundError('Comentário');
+      }
+    }
+
+    const rows = await db.$queryRawUnsafe<TicketAttachmentRow[]>(
+      `INSERT INTO ticket_attachments (id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8)
+       RETURNING id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at`,
+      attachmentId,
+      params.ticketId,
+      params.commentId ?? null,
+      params.userId,
+      safeName,
+      fileUrl,
+      params.buffer.length,
+      params.mimeType,
+    );
+
+    return rows[0]!;
+  });
 }
 
-export async function deleteAttachment(attachmentId: string, userId: string): Promise<{ deleted: true }> {
-  await ensureTicketInfrastructure();
+export async function deleteAttachment(attachmentId: string, userId: string, schemaName?: string): Promise<{ deleted: true }> {
+  const attachment = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
 
-  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
-    `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
-     FROM ticket_attachments
-     WHERE id = $1::uuid
-     LIMIT 1`,
-    attachmentId,
-  );
+    const rows = await db.$queryRawUnsafe<TicketAttachmentRow[]>(
+      `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+       FROM ticket_attachments
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      attachmentId,
+    );
 
-  const attachment = rows[0];
-  if (!attachment) throw new NotFoundError('Anexo');
-  if (!attachment.user_id || attachment.user_id !== userId) {
-    throw new ForbiddenError('Você não pode excluir este anexo');
-  }
+    const attachment = rows[0];
+    if (!attachment) throw new NotFoundError('Anexo');
+    if (!attachment.user_id || attachment.user_id !== userId) {
+      throw new ForbiddenError('Você não pode excluir este anexo');
+    }
 
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM ticket_attachments
-     WHERE id = $1::uuid`,
-    attachmentId,
-  );
+    await db.$executeRawUnsafe(
+      `DELETE FROM ticket_attachments
+       WHERE id = $1::uuid`,
+      attachmentId,
+    );
 
-  const storedFileName = `${attachment.id}-${sanitizeFileName(attachment.filename)}`;
-  const filePath = path.join(ATTACHMENTS_BASE_DIR, attachment.ticket_id, storedFileName);
-  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
-  await fs.rm(filePath, { force: true }).catch(() => undefined);
+    return attachment;
+  });
+
+  const key = buildAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename);
+  await getStorage().delete(key).catch(() => undefined);
 
   return { deleted: true };
 }
 
-export async function readAttachmentContent(attachmentId: string): Promise<{
+export async function readAttachmentContent(attachmentId: string, schemaName?: string): Promise<{
   mimeType: string;
   filename: string;
   content: Buffer;
 }> {
-  await ensureTicketInfrastructure();
+  const attachment = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
 
-  const rows = await prisma.$queryRawUnsafe<TicketAttachmentRow[]>(
-    `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
-     FROM ticket_attachments
-     WHERE id = $1::uuid
-     LIMIT 1`,
-    attachmentId,
-  );
+    const rows = await db.$queryRawUnsafe<TicketAttachmentRow[]>(
+      `SELECT id, ticket_id, comment_id, user_id, filename, file_url, file_size, mime_type, created_at
+       FROM ticket_attachments
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      attachmentId,
+    );
 
-  const attachment = rows[0];
-  if (!attachment) throw new NotFoundError('Anexo');
+    const attachment = rows[0];
+    if (!attachment) throw new NotFoundError('Anexo');
+    return attachment;
+  });
 
-  const storedFileName = `${attachment.id}-${sanitizeFileName(attachment.filename)}`;
-  const filePath = path.join(ATTACHMENTS_BASE_DIR, attachment.ticket_id, storedFileName);
-  ensurePathInside(ATTACHMENTS_BASE_DIR, filePath);
-  const content = await fs.readFile(filePath);
+  const key = buildAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename);
+  const content = await getStorage().download(key);
 
   return {
     mimeType: attachment.mime_type ?? 'application/octet-stream',

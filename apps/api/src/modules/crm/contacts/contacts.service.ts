@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
 import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contacts.schema.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhoneForStorage, PhoneNormalizationError } from '../../../utils/phone.js';
@@ -82,11 +83,15 @@ function normalizeEmailForComparison(value: string | null | undefined): string |
   return normalized || null;
 }
 
-async function assertUniqueContactPhone(phone: string | null, ignoreContactId?: string): Promise<void> {
+async function assertUniqueContactPhone(
+  phone: string | null,
+  ignoreContactId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!phone) return;
 
   const digits = phone.replace(/\D/g, '');
-  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactConflictRow[]>(
     `SELECT id, name
      FROM contacts
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -108,10 +113,14 @@ async function assertUniqueContactPhone(phone: string | null, ignoreContactId?: 
   }
 }
 
-async function assertUniqueContactDocument(document: string | null, ignoreContactId?: string): Promise<void> {
+async function assertUniqueContactDocument(
+  document: string | null,
+  ignoreContactId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!document) return;
 
-  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactConflictRow[]>(
     `SELECT id, name
      FROM contacts
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -127,10 +136,14 @@ async function assertUniqueContactDocument(document: string | null, ignoreContac
   }
 }
 
-async function assertUniqueContactEmail(email: string | null, ignoreContactId?: string): Promise<void> {
+async function assertUniqueContactEmail(
+  email: string | null,
+  ignoreContactId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!email) return;
 
-  const rows = await prisma.$queryRawUnsafe<ContactConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactConflictRow[]>(
     `SELECT id, name
      FROM contacts
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -146,7 +159,7 @@ async function assertUniqueContactEmail(email: string | null, ignoreContactId?: 
   }
 }
 
-async function assertContactPlanLimit(tenantId?: string): Promise<void> {
+async function assertContactPlanLimit(tenantId?: string, db: RawExecutor = prisma): Promise<void> {
   if (!tenantId) return;
 
   const tenant = await prisma.tenant.findUnique({
@@ -158,7 +171,7 @@ async function assertContactPlanLimit(tenantId?: string): Promise<void> {
   const maxContacts = tenant.plan.maxContacts;
   if (maxContacts < 0) return;
 
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+  const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count FROM contacts`,
   );
   const currentContacts = Number(countRows[0]?.count ?? 0);
@@ -180,11 +193,19 @@ const BASE_SELECT = `
   LEFT JOIN organizations o ON o.id = ct.organization_id`;
 
 /* ── listContacts ────────────────────────────────────────────────────────── */
-export async function listContacts(query: ListContactsQuery) {
+export async function listContacts(
+  query: ListContactsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => listContacts(query, undefined, tx));
+  }
+
   const { page, per_page, organization_id, search, standalone_only } = query;
   const offset = (page - 1) * per_page;
 
-  const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
     `${BASE_SELECT}
      WHERE ($1::uuid IS NULL OR ct.organization_id = $1::uuid)
        AND ($2::text IS NULL OR ct.name ILIKE '%' || $2 || '%'
@@ -197,7 +218,7 @@ export async function listContacts(query: ListContactsQuery) {
     organization_id ?? null, search ?? null, standalone_only, per_page, offset,
   );
 
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+  const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count FROM contacts ct
      WHERE ($1::uuid IS NULL OR ct.organization_id = $1::uuid)
        AND ($2::text IS NULL OR ct.name ILIKE '%' || $2 || '%'
@@ -216,8 +237,12 @@ export async function listContacts(query: ListContactsQuery) {
 }
 
 /* ── getContact ──────────────────────────────────────────────────────────── */
-export async function getContact(id: string) {
-  const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
+export async function getContact(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getContact(id, undefined, tx));
+  }
+
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
     `${BASE_SELECT} WHERE ct.id = $1::uuid LIMIT 1`, id,
   );
   if (!rows[0]) throw new NotFoundError('Contato');
@@ -289,7 +314,17 @@ export async function findByWhatsapp(number: string) {
 }
 
 /* ── createContact ───────────────────────────────────────────────────────── */
-export async function createContact(data: CreateContactInput, createdBy: string, tenantId?: string) {
+export async function createContact(
+  data: CreateContactInput,
+  createdBy: string,
+  tenantId?: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => createContact(data, createdBy, tenantId, undefined, tx));
+  }
+
   let normalizedPhone: string | null = null;
   let normalizedWhatsapp: string | null = null;
   const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
@@ -306,7 +341,7 @@ export async function createContact(data: CreateContactInput, createdBy: string,
   }
 
   if (data.is_primary && data.organization_id) {
-    await prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `UPDATE contacts SET is_primary = false WHERE organization_id = $1::uuid AND is_primary = true`,
       data.organization_id,
     );
@@ -315,15 +350,15 @@ export async function createContact(data: CreateContactInput, createdBy: string,
   const tagsLiteral    = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
-  await assertUniqueContactPhone(normalizedPhone);
+  await assertUniqueContactPhone(normalizedPhone, undefined, db);
   if (normalizedWhatsapp !== normalizedPhone) {
-    await assertUniqueContactPhone(normalizedWhatsapp);
+    await assertUniqueContactPhone(normalizedWhatsapp, undefined, db);
   }
-  await assertUniqueContactDocument(normalizedDocument);
-  await assertUniqueContactEmail(normalizedEmail);
-  await assertContactPlanLimit(tenantId);
+  await assertUniqueContactDocument(normalizedDocument, undefined, db);
+  await assertUniqueContactEmail(normalizedEmail, undefined, db);
+  await assertContactPlanLimit(tenantId, db);
 
-  const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
     `INSERT INTO contacts (
        organization_id, name, email, phone, whatsapp, document,
        role, department, is_primary, tags, custom_fields, notes
@@ -336,7 +371,7 @@ export async function createContact(data: CreateContactInput, createdBy: string,
 
   const contact = rows[0]!;
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
      VALUES ($1::uuid, 'contact.created', 'contact', $2::uuid, $3::jsonb)`,
     createdBy, contact.id, JSON.stringify(contact),
@@ -352,8 +387,18 @@ export async function createContact(data: CreateContactInput, createdBy: string,
 }
 
 /* ── updateContact ───────────────────────────────────────────────────────── */
-export async function updateContact(id: string, data: UpdateContactInput, updatedBy: string) {
-  const existing = await getContact(id);
+export async function updateContact(
+  id: string,
+  data: UpdateContactInput,
+  updatedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => updateContact(id, data, updatedBy, undefined, tx));
+  }
+
+  const existing = await getContact(id, undefined, db);
   const normalizedDocument = data.document === undefined
     ? undefined
     : normalizeDocumentForComparison(data.document);
@@ -380,7 +425,7 @@ export async function updateContact(id: string, data: UpdateContactInput, update
   if (data.is_primary === true) {
     const orgId = data.organization_id ?? existing.organization_id;
     if (orgId) {
-      await prisma.$executeRawUnsafe(
+      await db.$executeRawUnsafe(
         `UPDATE contacts SET is_primary = false WHERE organization_id = $1::uuid AND id != $2::uuid AND is_primary = true`,
         orgId, id,
       );
@@ -393,16 +438,16 @@ export async function updateContact(id: string, data: UpdateContactInput, update
     : JSON.stringify(data.custom_fields);
 
   if (normalizedPhone !== undefined) {
-    await assertUniqueContactPhone(normalizedPhone, id);
+    await assertUniqueContactPhone(normalizedPhone, id, db);
   }
   if (normalizedWhatsapp !== undefined && normalizedWhatsapp !== normalizedPhone) {
-    await assertUniqueContactPhone(normalizedWhatsapp, id);
+    await assertUniqueContactPhone(normalizedWhatsapp, id, db);
   }
   if (normalizedDocument !== undefined) {
-    await assertUniqueContactDocument(normalizedDocument, id);
+    await assertUniqueContactDocument(normalizedDocument, id, db);
   }
   if (normalizedEmail !== undefined) {
-    await assertUniqueContactEmail(normalizedEmail, id);
+    await assertUniqueContactEmail(normalizedEmail, id, db);
   }
 
   const hasOrganizationId = Object.prototype.hasOwnProperty.call(data, 'organization_id');
@@ -418,7 +463,7 @@ export async function updateContact(id: string, data: UpdateContactInput, update
   const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
   const hasNotes = Object.prototype.hasOwnProperty.call(data, 'notes');
 
-  const rows = await prisma.$queryRawUnsafe<ContactRow[]>(
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
     `UPDATE contacts SET
        organization_id = CASE WHEN $1::boolean THEN $2::uuid ELSE organization_id END,
        name            = CASE WHEN $3::boolean THEN $4 ELSE name END,
@@ -453,7 +498,7 @@ export async function updateContact(id: string, data: UpdateContactInput, update
   if (!rows[0]) throw new NotFoundError('Contato');
   const updated = rows[0];
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
      VALUES ($1::uuid, 'contact.updated', 'contact', $2::uuid, $3::jsonb, $4::jsonb)`,
     updatedBy, id, JSON.stringify(existing), JSON.stringify(updated),
@@ -463,10 +508,19 @@ export async function updateContact(id: string, data: UpdateContactInput, update
 }
 
 /* ── deleteContact ───────────────────────────────────────────────────────── */
-export async function deleteContact(id: string, deletedBy: string) {
-  const existing = await getContact(id);
+export async function deleteContact(
+  id: string,
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => deleteContact(id, deletedBy, undefined, tx));
+  }
 
-  const linked = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+  const existing = await getContact(id, undefined, db);
+
+  const linked = await db.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count
      FROM conversations
      WHERE contact_id = $1::uuid
@@ -478,9 +532,9 @@ export async function deleteContact(id: string, deletedBy: string) {
     throw new ConflictError('Contato possui conversas ativas. Encerre-as antes de excluir.');
   }
 
-  await prisma.$executeRawUnsafe(`DELETE FROM contacts WHERE id = $1::uuid`, id);
+  await db.$executeRawUnsafe(`DELETE FROM contacts WHERE id = $1::uuid`, id);
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
      VALUES ($1::uuid, 'contact.deleted', 'contact', $2::uuid, $3::jsonb)`,
     deletedBy, id, JSON.stringify(existing),
@@ -490,21 +544,31 @@ export async function deleteContact(id: string, deletedBy: string) {
 }
 
 /* ── linkToOrganization ──────────────────────────────────────────────────── */
-export async function linkToOrganization(contactId: string, organizationId: string, updatedBy: string) {
-  const existing = await getContact(contactId);
+export async function linkToOrganization(
+  contactId: string,
+  organizationId: string,
+  updatedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => linkToOrganization(contactId, organizationId, updatedBy, undefined, tx));
+  }
 
-  await prisma.$executeRawUnsafe(
+  const existing = await getContact(contactId, undefined, db);
+
+  await db.$executeRawUnsafe(
     `UPDATE contacts SET organization_id = $1::uuid, updated_at = NOW() WHERE id = $2::uuid`,
     organizationId, contactId,
   );
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
      VALUES ($1::uuid, 'contact.linked', 'contact', $2::uuid, $3::jsonb, $4::jsonb)`,
     updatedBy, contactId, JSON.stringify(existing), JSON.stringify({ organization_id: organizationId }),
   );
 
-  return getContact(contactId);
+  return getContact(contactId, undefined, db);
 }
 
 function generateTemporaryPassword(length = 8): string {
@@ -516,8 +580,17 @@ function generateTemporaryPassword(length = 8): string {
   return password;
 }
 
-export async function createPortalAccess(contactId: string, tenantId: string) {
-  const rows = await prisma.$queryRawUnsafe<Array<{
+export async function createPortalAccess(
+  contactId: string,
+  tenantId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => createPortalAccess(contactId, tenantId, undefined, tx));
+  }
+
+  const rows = await db.$queryRawUnsafe<Array<{
     id: string;
     name: string;
     email: string | null;
@@ -538,7 +611,7 @@ export async function createPortalAccess(contactId: string, tenantId: string) {
   const tempPassword = generateTemporaryPassword();
   const hash = await bcrypt.hash(tempPassword, 10);
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `UPDATE contacts
      SET portal_enabled = true,
          portal_password_hash = $1,
@@ -564,8 +637,16 @@ export async function createPortalAccess(contactId: string, tenantId: string) {
   };
 }
 
-export async function revokePortalAccess(contactId: string) {
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+export async function revokePortalAccess(
+  contactId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => revokePortalAccess(contactId, undefined, tx));
+  }
+
+  const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE contacts
      SET portal_enabled = false,
          portal_password_hash = NULL

@@ -33,7 +33,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     const parsed = listOrganizationsQuerySchema.safeParse(request.query);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
-    const result = await listOrganizations(parsed.data);
+    const result = await listOrganizations(parsed.data, request.user.schemaName);
     return reply.send({ success: true, ...result });
   });
 
@@ -43,7 +43,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const org = await createOrganization(parsed.data, request.user.id);
+      const org = await createOrganization(parsed.data, request.user.id, request.user.schemaName);
       return reply.code(201).send({ success: true, data: org });
     } catch (err) {
       if (err instanceof ConflictError)
@@ -55,7 +55,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
-      const org = await getOrganization(request.params.id);
+      const org = await getOrganization(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: org });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -70,7 +70,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const org = await updateOrganization(request.params.id, parsed.data, request.user.id);
+      const org = await updateOrganization(request.params.id, parsed.data, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: org });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -84,7 +84,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/organizations/:id
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: organizationsDeleteGuard }, async (request, reply) => {
     try {
-      const org = await deleteOrganization(request.params.id, request.user.id);
+      const org = await deleteOrganization(request.params.id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: org });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -96,7 +96,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations/:id/stats
   app.get<{ Params: { id: string } }>('/:id/stats', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
-      const stats = await getOrganizationStats(request.params.id);
+      const stats = await getOrganizationStats(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: stats });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -108,7 +108,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations/:id/contacts
   app.get<{ Params: { id: string } }>('/:id/contacts', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
-      const contacts = await getOrganizationContacts(request.params.id);
+      const contacts = await getOrganizationContacts(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: contacts });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -120,7 +120,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations/:id/conversations
   app.get<{ Params: { id: string } }>('/:id/conversations', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
-      const convs = await getOrganizationConversations(request.params.id);
+      const convs = await getOrganizationConversations(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: convs });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -132,7 +132,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations/:id/tickets
   app.get<{ Params: { id: string } }>('/:id/tickets', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
-      const tickets = await getOrganizationTickets(request.params.id);
+      const tickets = await getOrganizationTickets(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: tickets });
     } catch (err) {
       if (err instanceof NotFoundError)

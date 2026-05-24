@@ -22,14 +22,30 @@ function resolveSchemaName(user: unknown): string | null {
 }
 
 export async function channelsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', { preHandler: guard }, async (_request, reply) => {
-    const data = await listChannels();
+  app.get('/', { preHandler: guard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request.user);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    const data = await listChannels(schemaName);
     return reply.send({ success: true, data });
   });
 
   app.get<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request.user);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     try {
-      const data = await getChannel(request.params.id);
+      const data = await getChannel(request.params.id, schemaName);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -39,6 +55,14 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/', { preHandler: guard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request.user);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     const parsed = createChannelSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -46,11 +70,19 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Dados inválidos', details: parsed.error.flatten() },
       });
     }
-    const data = await createChannel(parsed.data);
+    const data = await createChannel(parsed.data, schemaName);
     return reply.code(201).send({ success: true, data });
   });
 
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request.user);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     const parsed = updateChannelSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -59,7 +91,7 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const data = await updateChannel(request.params.id, parsed.data);
+      const data = await updateChannel(request.params.id, parsed.data, schemaName);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -69,8 +101,16 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request.user);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
     try {
-      const data = await deleteChannel(request.params.id);
+      const data = await deleteChannel(request.params.id, schemaName);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError)

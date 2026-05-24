@@ -29,7 +29,7 @@ export async function tenantMiddleware(
   }
 
   if (tenant.status !== 'active' && tenant.status !== 'trial') {
-    return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
+    return reply.code(402).send({ error: 'Conta suspensa ou cancelada' });
   }
 
   // Redireciona as queries do Prisma para o schema isolado do tenant

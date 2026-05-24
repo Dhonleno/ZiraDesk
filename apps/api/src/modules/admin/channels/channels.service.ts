@@ -11,6 +11,18 @@ export class NotFoundError extends Error {
   }
 }
 
+function validateSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/.test(schemaName)) {
+    throw new Error('Schema do tenant inválido');
+  }
+
+  return schemaName;
+}
+
+function channelsTable(schemaName: string): string {
+  return `"${validateSchemaName(schemaName)}".channels`;
+}
+
 interface ChannelRow {
   id: string;
   type: string;
@@ -46,9 +58,10 @@ function extractMetaErrorMessage(payload: unknown): string | null {
   return typeof nested.message === 'string' ? nested.message.trim() : null;
 }
 
-async function ensureChannelsInfrastructure(): Promise<void> {
+async function ensureChannelsInfrastructure(schemaName: string): Promise<void> {
+  const tableRef = channelsTable(schemaName);
   await prisma.$executeRawUnsafe(
-    `CREATE TABLE IF NOT EXISTS channels (
+    `CREATE TABLE IF NOT EXISTS ${tableRef} (
        id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
        type        VARCHAR(30)  NOT NULL,
        name        VARCHAR(100) NOT NULL,
@@ -59,11 +72,11 @@ async function ensureChannelsInfrastructure(): Promise<void> {
     )`,
   );
   await prisma.$executeRawUnsafe(
-    `ALTER TABLE channels
+    `ALTER TABLE ${tableRef}
        ADD COLUMN IF NOT EXISTS last_tested_at TIMESTAMPTZ`,
   );
   await prisma.$executeRawUnsafe(
-    `ALTER TABLE channels
+    `ALTER TABLE ${tableRef}
        ADD COLUMN IF NOT EXISTS last_test_ok BOOLEAN`,
   );
 }
@@ -153,21 +166,23 @@ async function testEmailChannel(schemaName: string): Promise<void> {
   }
 }
 
-export async function listChannels() {
-  await ensureChannelsInfrastructure();
+export async function listChannels(schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
     `SELECT id, type, name, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       ORDER BY created_at DESC`,
   );
   return rows;
 }
 
-export async function getChannel(id: string) {
-  await ensureChannelsInfrastructure();
+export async function getChannel(id: string, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRow[]>(
     `SELECT id, type, name, credentials, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
@@ -180,14 +195,15 @@ export async function getChannel(id: string) {
   };
 }
 
-export async function createChannel(data: CreateChannelInput) {
-  await ensureChannelsInfrastructure();
+export async function createChannel(data: CreateChannelInput, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const encryptedCredentials = encryptCredentials(data.credentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
   const settingsJson = JSON.stringify(data.settings ?? {});
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `INSERT INTO channels (type, name, credentials, settings)
+    `INSERT INTO ${tableRef} (type, name, credentials, settings)
      VALUES ($1, $2, $3::jsonb, $4::jsonb)
      RETURNING id, type, name, status, settings, last_tested_at, last_test_ok, created_at`,
     data.type,
@@ -198,11 +214,12 @@ export async function createChannel(data: CreateChannelInput) {
   return rows[0]!;
 }
 
-export async function updateChannel(id: string, data: UpdateChannelInput) {
-  await ensureChannelsInfrastructure();
+export async function updateChannel(id: string, data: UpdateChannelInput, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const existingRows = await prisma.$queryRawUnsafe<ChannelRow[]>(
     `SELECT id, credentials, settings, last_tested_at, last_test_ok
-       FROM channels
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
@@ -231,7 +248,7 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
   const mergedSettings = data.settings ? { ...currentSettings, ...data.settings } : currentSettings;
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `UPDATE channels
+    `UPDATE ${tableRef}
      SET name        = COALESCE($1, name),
          credentials = $2::jsonb,
          settings    = $3::jsonb,
@@ -247,10 +264,11 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
   return rows[0]!;
 }
 
-export async function deleteChannel(id: string) {
-  await ensureChannelsInfrastructure();
+export async function deleteChannel(id: string, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `UPDATE channels
+    `UPDATE ${tableRef}
         SET status = 'inactive',
             last_test_ok = false,
             last_tested_at = NOW()
@@ -263,10 +281,11 @@ export async function deleteChannel(id: string) {
 }
 
 export async function testChannel(id: string, schemaName: string) {
-  await ensureChannelsInfrastructure();
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRow[]>(
     `SELECT id, type, name, credentials, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
@@ -300,7 +319,7 @@ export async function testChannel(id: string, schemaName: string) {
     }
   } catch (error) {
     await prisma.$executeRawUnsafe(
-      `UPDATE channels
+      `UPDATE ${tableRef}
           SET last_tested_at = NOW(),
               last_test_ok = false
         WHERE id = $1::uuid`,
@@ -310,7 +329,7 @@ export async function testChannel(id: string, schemaName: string) {
   }
 
   await prisma.$executeRawUnsafe(
-    `UPDATE channels
+    `UPDATE ${tableRef}
         SET last_tested_at = NOW(),
             last_test_ok = $2
       WHERE id = $1::uuid`,

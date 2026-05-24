@@ -1,15 +1,13 @@
 import multipart from '@fastify/multipart';
 import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
+import { getStorage } from '../../lib/storage/index.js';
 
-const AVATAR_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'avatars');
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -47,39 +45,6 @@ function avatarMimeFromFileName(fileName: string): string {
   return 'application/octet-stream';
 }
 
-async function ensureAvatarDir() {
-  await fs.mkdir(AVATAR_DIR, { recursive: true });
-}
-
-async function removeOldAvatars(userId: string, keepFileName: string) {
-  await ensureAvatarDir();
-  const files = await fs.readdir(AVATAR_DIR);
-
-  await Promise.all(
-    files
-      .filter((file) => file.startsWith(`${userId}-`) && file !== keepFileName)
-      .map(async (file) => {
-        await fs.rm(path.join(AVATAR_DIR, file), { force: true });
-      }),
-  );
-}
-
-function resolveAvatarPath(fileName: string): string | null {
-  if (!/^[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(fileName)) return null;
-  return path.join(AVATAR_DIR, fileName);
-}
-
-async function readAvatarFile(fileName: string): Promise<Buffer | null> {
-  const resolved = resolveAvatarPath(fileName);
-  if (!resolved) return null;
-
-  try {
-    return await fs.readFile(resolved);
-  } catch {
-    return null;
-  }
-}
-
 async function ensureUserProfileColumns(schemaName: string): Promise<void> {
   const usersRef = `${quoteIdent(schemaName)}.users`;
 
@@ -106,14 +71,18 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   const guard = [authMiddleware, tenantSchemaFromJwt];
 
   app.get<{ Params: { fileName: string } }>('/me/avatar/:fileName', async (request, reply) => {
-    const file = await readAvatarFile(request.params.fileName);
-    if (!file) {
+    const { fileName } = request.params;
+    if (!/^[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(fileName)) {
       return reply.code(404).send({ success: false, error: { message: 'Avatar não encontrado' } });
     }
-
-    reply.header('Content-Type', avatarMimeFromFileName(request.params.fileName));
-    reply.header('Cache-Control', 'public, max-age=86400');
-    return reply.send(file);
+    try {
+      const file = await getStorage().download(`avatars/${fileName}`);
+      reply.header('Content-Type', avatarMimeFromFileName(fileName));
+      reply.header('Cache-Control', 'public, max-age=86400');
+      return reply.send(file);
+    } catch {
+      return reply.code(404).send({ success: false, error: { message: 'Avatar não encontrado' } });
+    }
   });
 
   app.get('/me', { preHandler: guard }, async (request, reply) => {
@@ -342,13 +311,22 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ success: false, error: { message: 'Arquivo muito grande. Máximo 2MB' } });
     }
 
-    await ensureAvatarDir();
-    const ext = avatarExtFromMime(mimeType);
-    const fileName = `${request.user.id}-${Date.now()}.${ext}`;
-    await removeOldAvatars(request.user.id, fileName);
-    await fs.writeFile(path.join(AVATAR_DIR, fileName), fileBuffer);
+    const existingRows = await prisma.$queryRawUnsafe<Array<{ avatar_url: string | null }>>(
+      `SELECT avatar_url FROM ${quoteIdent(schemaName)}.users WHERE id = $1::uuid LIMIT 1`,
+      request.user.id,
+    );
+    const oldAvatarUrl = existingRows[0]?.avatar_url ?? null;
+    if (oldAvatarUrl) {
+      const avatarsIdx = oldAvatarUrl.indexOf('avatars/');
+      if (avatarsIdx !== -1) {
+        const oldKey = oldAvatarUrl.slice(avatarsIdx).split('?')[0] ?? '';
+        await getStorage().delete(oldKey).catch(() => {});
+      }
+    }
 
-    const avatarUrl = `/api/auth/me/avatar/${fileName}?v=${Date.now()}`;
+    const ext = avatarExtFromMime(mimeType);
+    const key = `avatars/${request.user.id}-${Date.now()}.${ext}`;
+    const avatarUrl = await getStorage().upload(key, fileBuffer, mimeType);
 
     await ensureUserProfileColumns(schemaName);
     await prisma.$executeRawUnsafe(

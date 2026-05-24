@@ -31,6 +31,7 @@ import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
 import { logger } from './config/logger.js';
+import { getStorage } from './lib/storage/index.js';
 
 const app = Fastify({
   ignoreTrailingSlash: true,
@@ -130,6 +131,30 @@ async function bootstrap(): Promise<void> {
   await app.register(notificationsRoutes, { prefix: '/api/notifications' });
   await app.register(searchRoutes, { prefix: '/api/search' });
   await app.register(callsRoutes, { prefix: '/api/calls' });
+
+  // Rota pública para servir uploads locais (logos e avatares).
+  // Ticket attachments são servidos via rota autenticada própria.
+  app.get('/api/files/*', async (request, reply) => {
+    const key = (request.params as { '*': string })['*'] ?? '';
+    if (key.startsWith('tickets/')) {
+      return reply.code(403).send({ error: 'Acesso negado' });
+    }
+    try {
+      const buffer = await getStorage().download(key);
+      const ext = key.split('.').pop() ?? '';
+      const mime =
+        ext === 'png' ? 'image/png' :
+        ext === 'webp' ? 'image/webp' :
+        ext === 'svg' ? 'image/svg+xml' :
+        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+        'application/octet-stream';
+      reply.header('Content-Type', mime);
+      reply.header('Cache-Control', 'public, max-age=86400');
+      return reply.send(buffer);
+    } catch {
+      return reply.code(404).send({ error: 'Arquivo não encontrado' });
+    }
+  });
 
   app.get('/health', async (_request, reply) => {
     const services = {

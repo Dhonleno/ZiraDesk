@@ -809,6 +809,13 @@ async function createTenantTables(schemaName: string): Promise<void> {
   );
 }
 
+export async function provisionTenantSchema(schemaName: string): Promise<void> {
+  await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+  await createTenantTables(schemaName);
+  await seedCloseConfig(prisma, schemaName);
+  await seedQuickReplies(prisma, schemaName);
+}
+
 export async function createTenant(data: CreateTenantInput): Promise<{
   tenant: { id: string; name: string; slug: string; schemaName: string };
   tempPassword: string;
@@ -839,12 +846,8 @@ export async function createTenant(data: CreateTenantInput): Promise<{
     });
     tenantId = tenant.id;
 
-    await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
     schemaCreated = true;
-
-    await createTenantTables(schemaName);
-    await seedCloseConfig(prisma, schemaName);
-    await seedQuickReplies(prisma, schemaName);
+    await provisionTenantSchema(schemaName);
 
     // Gera senha temporária (12 chars base64url)
     const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
@@ -915,16 +918,27 @@ export async function listTenants(query: ListTenantsQuery) {
   const tenantsWithUsage = await Promise.all(
     tenants.map(async (tenant) => {
       const schemaRef = quoteIdent(tenant.schemaName);
-      const usage = await prisma.$queryRawUnsafe<Array<{ users_count: number; conversations_this_month: number }>>(
-        `SELECT
-           (SELECT COUNT(*)::int FROM ${schemaRef}.users WHERE status = 'active') AS users_count,
-           (SELECT COUNT(*)::int
-              FROM ${schemaRef}.conversations
-             WHERE created_at >= date_trunc('month', now())
-               AND created_at < date_trunc('month', now()) + interval '1 month') AS conversations_this_month`,
-      );
+      let row = { users_count: 0, conversations_this_month: 0 };
 
-      const row = usage[0] ?? { users_count: 0, conversations_this_month: 0 };
+      try {
+        const usage = await prisma.$queryRawUnsafe<Array<{ users_count: number; conversations_this_month: number }>>(
+          `SELECT
+             (SELECT COUNT(*)::int FROM ${schemaRef}.users WHERE status = 'active') AS users_count,
+             (SELECT COUNT(*)::int
+                FROM ${schemaRef}.conversations
+               WHERE created_at >= date_trunc('month', now())
+                 AND created_at < date_trunc('month', now()) + interval '1 month') AS conversations_this_month`,
+        );
+
+        row = usage[0] ?? row;
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        const missingSchema = message.includes(tenant.schemaName.toLowerCase()) && message.includes('does not exist');
+        if (!missingSchema) {
+          throw error;
+        }
+      }
+
       return {
         ...tenant,
         usersCount: Number(row.users_count ?? 0),

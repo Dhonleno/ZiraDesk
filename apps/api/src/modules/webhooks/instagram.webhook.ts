@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { verifyMetaSignature } from '../../middleware/meta-signature.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { getSocketServer } from '../../socket/index.js';
@@ -47,7 +48,16 @@ async function findTenantByPageId(pageId: string) {
     );
 
     for (const channel of channels) {
-      const creds = decryptCredentials(channel.credentials);
+      let creds: Record<string, string>;
+      try {
+        creds = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[Instagram] Invalid channel credentials payload',
+        );
+        continue;
+      }
       if (creds['page_id'] === pageId) {
         return { tenant, channel, credentials: creds };
       }
@@ -118,7 +128,9 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
 
           const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
             `SELECT id, status FROM conversations
-             WHERE contact_id = $1 AND channel_id = $2 AND status IN ('open', 'waiting')
+             WHERE contact_id = $1::uuid
+               AND channel_id = $2::uuid
+               AND status IN ('open', 'waiting')
              ORDER BY created_at DESC
              LIMIT 1`,
             contactId,
@@ -142,7 +154,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           } else {
             const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
               `INSERT INTO conversations (contact_id, channel_id, channel_type, conversation_type, status, metadata)
-               VALUES ($1, $2, 'instagram', 'inbound', 'open', '{"type": "inbound"}'::jsonb)
+               VALUES ($1::uuid, $2::uuid, 'instagram', 'inbound', 'open', '{"type": "inbound"}'::jsonb)
                RETURNING id`,
               contactId,
               channel.id,
@@ -154,7 +166,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             [{ id: string; content: string; created_at: Date; sender_type: string }]
           >(
             `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, external_id, status)
-             VALUES ($1, 'client', $2, $3, 'text', $4, 'delivered')
+             VALUES ($1::uuid, 'client', $2::uuid, $3, 'text', $4, 'delivered')
              RETURNING id, content, created_at, sender_type`,
             conversationId,
             contactId,
@@ -167,7 +179,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             `UPDATE conversations
              SET last_message = $1,
                  last_message_at = NOW()
-             WHERE id = $2`,
+             WHERE id = $2::uuid`,
             text.slice(0, 255),
             conversationId,
           );

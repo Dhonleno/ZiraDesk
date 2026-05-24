@@ -13,7 +13,7 @@ export async function verifyMetaSignature(
   const signature = typeof signatureHeader === 'string' ? signatureHeader : undefined;
 
   if (!signature) {
-    void reply.status(403).send({
+    void reply.status(401).send({
       success: false,
       error: { code: 'MISSING_SIGNATURE', message: 'Missing x-hub-signature-256 header' },
     });
@@ -48,10 +48,9 @@ export async function verifyMetaSignature(
     || !timingSafeEqual(signatureBuffer, expectedBuffer)
   ) {
     request.log.warn({ signature }, 'Invalid Meta webhook signature');
-    void reply.status(403).send({
+    void reply.status(401).send({
       success: false,
       error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' },
     });
   }
 }
-

@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
 import type { CreateOrganizationInput, UpdateOrganizationInput, ListOrganizationsQuery } from './organizations.schema.js';
 
 export class NotFoundError extends Error {
@@ -73,10 +74,14 @@ function normalizeEmailForComparison(value: string | null | undefined): string |
   return normalized || null;
 }
 
-async function assertUniqueOrganizationDocument(document: string | null, ignoreOrganizationId?: string): Promise<void> {
+async function assertUniqueOrganizationDocument(
+  document: string | null,
+  ignoreOrganizationId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!document) return;
 
-  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<OrganizationConflictRow[]>(
     `SELECT id, name
      FROM organizations
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -92,10 +97,14 @@ async function assertUniqueOrganizationDocument(document: string | null, ignoreO
   }
 }
 
-async function assertUniqueOrganizationEmail(email: string | null, ignoreOrganizationId?: string): Promise<void> {
+async function assertUniqueOrganizationEmail(
+  email: string | null,
+  ignoreOrganizationId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!email) return;
 
-  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<OrganizationConflictRow[]>(
     `SELECT id, name
      FROM organizations
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -134,14 +143,22 @@ const BASE_SELECT = `
   LEFT JOIN tickets t      ON t.organization_id = o.id`;
 
 /* ── listOrganizations ───────────────────────────────────────────────────── */
-export async function listOrganizations(query: ListOrganizationsQuery) {
+export async function listOrganizations(
+  query: ListOrganizationsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => listOrganizations(query, undefined, tx));
+  }
+
   const { page, per_page, search, status, segment, responsible_id, tag, sort_by, sort_order } = query;
   const offset = (page - 1) * per_page;
 
   const sortCol = SORT_COLUMNS[sort_by] ?? 'o.created_at';
   const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `${BASE_SELECT}
      WHERE ($1::text IS NULL OR o.name ILIKE '%' || $1 || '%'
                              OR o.email ILIKE '%' || $1 || '%'
@@ -159,7 +176,7 @@ export async function listOrganizations(query: ListOrganizationsQuery) {
     per_page, offset,
   );
 
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+  const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count FROM organizations o
      WHERE ($1::text IS NULL OR o.name ILIKE '%' || $1 || '%'
                              OR o.email ILIKE '%' || $1 || '%'
@@ -181,8 +198,12 @@ export async function listOrganizations(query: ListOrganizationsQuery) {
 }
 
 /* ── getOrganization ─────────────────────────────────────────────────────── */
-export async function getOrganization(id: string) {
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+export async function getOrganization(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganization(id, undefined, tx));
+  }
+
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `${BASE_SELECT}
      WHERE o.id = $1::uuid
      GROUP BY o.id, u.name
@@ -195,10 +216,14 @@ export async function getOrganization(id: string) {
 }
 
 /* ── getOrganizationStats ────────────────────────────────────────────────── */
-export async function getOrganizationStats(id: string) {
-  await getOrganization(id);
+export async function getOrganizationStats(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationStats(id, undefined, tx));
+  }
 
-  const [stats] = await prisma.$queryRawUnsafe<OrgStatsRow[]>(
+  await getOrganization(id, undefined, db);
+
+  const [stats] = await db.$queryRawUnsafe<OrgStatsRow[]>(
     `SELECT
        COUNT(DISTINCT c.id)                                                   AS total_contacts,
        COUNT(DISTINCT conv.id)                                                AS total_conversations,
@@ -226,9 +251,13 @@ export async function getOrganizationStats(id: string) {
 }
 
 /* ── getOrganizationContacts ─────────────────────────────────────────────── */
-export async function getOrganizationContacts(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>>(
+export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationContacts(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>>(
     `SELECT id, name, email, phone, whatsapp, role, is_primary, created_at
      FROM contacts WHERE organization_id = $1::uuid ORDER BY is_primary DESC, name ASC`,
     id,
@@ -236,9 +265,13 @@ export async function getOrganizationContacts(id: string) {
 }
 
 /* ── getOrganizationConversations ────────────────────────────────────────── */
-export async function getOrganizationConversations(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{
+export async function getOrganizationConversations(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationConversations(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<Array<{
     id: string;
     status: string;
     channel_type: string | null;
@@ -268,9 +301,13 @@ export async function getOrganizationConversations(id: string) {
 }
 
 /* ── getOrganizationTickets ──────────────────────────────────────────────── */
-export async function getOrganizationTickets(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>>(
+export async function getOrganizationTickets(id: string, schemaName?: string, db: RawExecutor = prisma) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationTickets(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>>(
     `SELECT id, title, status, priority, created_at
      FROM tickets WHERE organization_id = $1::uuid ORDER BY created_at DESC LIMIT 20`,
     id,
@@ -278,16 +315,25 @@ export async function getOrganizationTickets(id: string) {
 }
 
 /* ── createOrganization ──────────────────────────────────────────────────── */
-export async function createOrganization(data: CreateOrganizationInput, createdBy: string) {
+export async function createOrganization(
+  data: CreateOrganizationInput,
+  createdBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => createOrganization(data, createdBy, undefined, tx));
+  }
+
   const normalizedEmail = normalizeEmailForComparison(data.email ?? null);
   const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
-  await assertUniqueOrganizationEmail(normalizedEmail);
-  await assertUniqueOrganizationDocument(normalizedDocument);
+  await assertUniqueOrganizationEmail(normalizedEmail, undefined, db);
+  await assertUniqueOrganizationDocument(normalizedDocument, undefined, db);
 
   const tagsLiteral    = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `INSERT INTO organizations (
        type, name, document, email, phone, website, status,
        address_street, address_city, address_state, address_zip,
@@ -303,7 +349,7 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
 
   const org = rows[0]!;
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
      VALUES ($1::uuid, 'organization.created', 'organization', $2::uuid, $3::jsonb)`,
     createdBy, org.id, JSON.stringify(org),
@@ -313,16 +359,26 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
 }
 
 /* ── updateOrganization ──────────────────────────────────────────────────── */
-export async function updateOrganization(id: string, data: UpdateOrganizationInput, updatedBy: string) {
-  const existing = await getOrganization(id);
+export async function updateOrganization(
+  id: string,
+  data: UpdateOrganizationInput,
+  updatedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => updateOrganization(id, data, updatedBy, undefined, tx));
+  }
+
+  const existing = await getOrganization(id, undefined, db);
   const normalizedEmail = data.email === undefined ? undefined : normalizeEmailForComparison(data.email);
   const normalizedDocument = data.document === undefined ? undefined : normalizeDocumentForComparison(data.document);
 
   if (normalizedEmail !== undefined) {
-    await assertUniqueOrganizationEmail(normalizedEmail, id);
+    await assertUniqueOrganizationEmail(normalizedEmail, id, db);
   }
   if (normalizedDocument !== undefined) {
-    await assertUniqueOrganizationDocument(normalizedDocument, id);
+    await assertUniqueOrganizationDocument(normalizedDocument, id, db);
   }
 
   const tagsLiteral = data.tags === undefined ? undefined : toPgArray(data.tags ?? []);
@@ -346,7 +402,7 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
   const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
   const hasNotes = Object.prototype.hasOwnProperty.call(data, 'notes');
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `UPDATE organizations SET
        type            = CASE WHEN $1::boolean THEN $2 ELSE type END,
        name            = CASE WHEN $3::boolean THEN $4 ELSE name END,
@@ -391,7 +447,7 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
   if (!rows[0]) throw new NotFoundError('Organização');
   const updated = rows[0];
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
      VALUES ($1::uuid, 'organization.updated', 'organization', $2::uuid, $3::jsonb, $4::jsonb)`,
     updatedBy, id, JSON.stringify(existing), JSON.stringify(updated),
@@ -401,14 +457,23 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
 }
 
 /* ── deleteOrganization ──────────────────────────────────────────────────── */
-export async function deleteOrganization(id: string, deletedBy: string) {
-  const existing = await getOrganization(id);
+export async function deleteOrganization(
+  id: string,
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => deleteOrganization(id, deletedBy, undefined, tx));
+  }
 
-  await prisma.$executeRawUnsafe(
+  const existing = await getOrganization(id, undefined, db);
+
+  await db.$executeRawUnsafe(
     `UPDATE organizations SET status = 'inactive', updated_at = NOW() WHERE id = $1::uuid`, id,
   );
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
      VALUES ($1::uuid, 'organization.deleted', 'organization', $2::uuid, $3::jsonb)`,
     deletedBy, id, JSON.stringify(existing),

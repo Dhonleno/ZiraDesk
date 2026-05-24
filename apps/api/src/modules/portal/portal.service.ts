@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { getSocketServer } from '../../socket/index.js';
+import { sendEmail } from '../../services/email.service.js';
 import type {
   PortalAddCommentInput,
   PortalCreateTicketInput,
@@ -11,6 +12,7 @@ import type {
 } from './portal.schema.js';
 
 const PORTAL_TOKEN_TTL = '7d';
+const PORTAL_RESET_TOKEN_TTL = '1h';
 
 export class PortalAuthError extends Error {}
 export class PortalNotFoundError extends Error {}
@@ -23,6 +25,14 @@ export interface PortalJwtPayload {
   tenantSlug: string;
   organizationId: string | null;
   type: 'portal';
+  exp?: number;
+}
+
+interface PortalResetJwtPayload {
+  sub: string;
+  schemaName: string;
+  tenantSlug: string;
+  type: 'portal-reset';
   exp?: number;
 }
 
@@ -167,6 +177,85 @@ export async function verifyPortalToken(token: string): Promise<PortalJwtPayload
   }
   await ensurePortalInfrastructure(decoded.schemaName);
   return decoded;
+}
+
+function resolvePortalResetUrl(tenantSlug: string, token: string): string {
+  if (env.NODE_ENV === 'production') {
+    return `https://suporte.${tenantSlug}.ziradesk.com.br/reset-password?token=${encodeURIComponent(token)}`;
+  }
+  const appUrl = env.APP_URL.replace(/\/$/, '');
+  return `${appUrl}/portal/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+export async function requestPortalPasswordReset(host: string, email: string): Promise<void> {
+  const hostInfo = resolveHostTenant(host);
+  if (!hostInfo.isPortal || !hostInfo.tenantSlug) {
+    return;
+  }
+
+  const tenant = await getTenantBySlug(hostInfo.tenantSlug);
+  await ensurePortalInfrastructure(tenant.schemaName);
+  const schema = quoteIdent(tenant.schemaName);
+
+  const contacts = await prisma.$queryRawUnsafe<Array<{ id: string; email: string | null }>>(
+    `SELECT id, email
+     FROM ${schema}.contacts
+     WHERE LOWER(email) = LOWER($1)
+       AND portal_enabled = true
+     LIMIT 1`,
+    email,
+  );
+
+  const contact = contacts[0];
+  if (!contact || !contact.email) {
+    return;
+  }
+
+  const token = jwt.sign(
+    {
+      sub: contact.id,
+      schemaName: tenant.schemaName,
+      tenantSlug: tenant.slug,
+      type: 'portal-reset',
+    } satisfies PortalResetJwtPayload,
+    env.JWT_SECRET,
+    { expiresIn: PORTAL_RESET_TOKEN_TTL },
+  );
+
+  const resetUrl = resolvePortalResetUrl(tenant.slug, token);
+  await sendEmail({
+    tenantId: tenant.id,
+    tenantSchema: tenant.schemaName,
+    to: contact.email,
+    subject: 'Redefinição de senha — Portal de Suporte',
+    html: `<p>Clique no link para redefinir sua senha:</p>
+<p><a href="${resetUrl}">Redefinir senha</a></p>
+<p>O link expira em 1 hora.</p>`,
+  });
+}
+
+export async function resetPortalPassword(token: string, password: string): Promise<void> {
+  let payload: PortalResetJwtPayload;
+  try {
+    payload = jwt.verify(token, env.JWT_SECRET) as PortalResetJwtPayload;
+  } catch {
+    throw new PortalAuthError('Token inválido ou expirado');
+  }
+
+  if (payload.type !== 'portal-reset' || !payload.sub || !payload.schemaName) {
+    throw new PortalAuthError('Token inválido');
+  }
+
+  await ensurePortalInfrastructure(payload.schemaName);
+  const schema = quoteIdent(payload.schemaName);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.contacts
+     SET portal_password_hash = $1
+     WHERE id = $2::uuid`,
+    await bcrypt.hash(password, 12),
+    payload.sub,
+  );
 }
 
 export async function portalMe(portalUser: PortalJwtPayload) {

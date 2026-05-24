@@ -2,7 +2,14 @@ import twilio from 'twilio';
 import { env } from '../../config/env.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 
-const twilioClient = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
+let twilioClient: ReturnType<typeof twilio> | null = null;
+
+function getTwilioClient(): ReturnType<typeof twilio> {
+  if (!twilioClient) {
+    twilioClient = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
+  }
+  return twilioClient;
+}
 
 type PrismaLike = {
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
@@ -75,7 +82,7 @@ export async function makeCall(
   conversationId: string,
 ): Promise<string> {
   const baseUrl = apiBaseUrl();
-  const call = await twilioClient.calls.create({
+  const call = await getTwilioClient().calls.create({
     to: toPhone,
     from: env.TWILIO_PHONE_NUMBER,
     url: `${baseUrl}/api/calls/twiml/outbound?agent=${encodeURIComponent(agentId)}&conversation=${encodeURIComponent(conversationId)}`,
@@ -92,7 +99,7 @@ export async function makeCall(
 }
 
 export async function getCallRecordings(callSid: string) {
-  const recordings = await twilioClient.calls(callSid).recordings.list();
+  const recordings = await getTwilioClient().calls(callSid).recordings.list();
 
   return recordings.map((recording) => ({
     sid: recording.sid,

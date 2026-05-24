@@ -28,6 +28,11 @@ export const portalForgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
+export const portalResetPasswordSchema = z.object({
+  token: z.string(),
+  password: z.string().min(8),
+});
+
 export type PortalLoginInput = z.infer<typeof portalLoginSchema>;
 export type PortalTicketsQuery = z.infer<typeof portalTicketsQuerySchema>;
 export type PortalCreateTicketInput = z.infer<typeof portalCreateTicketSchema>;

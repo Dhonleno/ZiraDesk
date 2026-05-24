@@ -1,9 +1,6 @@
 import { prisma } from '../../../config/database.js';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { getStorage } from '../../../lib/storage/index.js';
 import type { UpdateSettingsInput } from './settings.schema.js';
-
-const LOGO_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'logos');
 
 const LOGO_EXT_BY_MIME: Record<string, string> = {
   'image/png': 'png',
@@ -12,6 +9,8 @@ const LOGO_EXT_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/svg+xml': 'svg',
 };
+
+const LOGO_ALL_EXTS = ['png', 'jpg', 'webp', 'svg'] as const;
 
 const DEFAULT_INACTIVITY_WARNING_MESSAGE =
   'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.';
@@ -26,30 +25,19 @@ const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   'Em breve entraremos em contato. 😊',
 ].join('\n');
 
-async function ensureLogoDir() {
-  await fs.mkdir(LOGO_DIR, { recursive: true });
-}
-
-function logoFileName(tenantId: string, mimeType: string): string {
+function logoKey(tenantId: string, mimeType: string): string {
   const ext = LOGO_EXT_BY_MIME[mimeType] ?? 'png';
-  return `${tenantId}.${ext}`;
+  return `logos/${tenantId}.${ext}`;
 }
 
-async function removeOldLogos(tenantId: string, keepFileName: string) {
-  await ensureLogoDir();
-  const files = await fs.readdir(LOGO_DIR);
-  await Promise.all(
-    files
-      .filter((file) => file.startsWith(`${tenantId}.`) && file !== keepFileName)
-      .map(async (file) => {
-        await fs.rm(path.join(LOGO_DIR, file), { force: true });
-      }),
+async function deleteOldLogos(tenantId: string, keepKey: string): Promise<void> {
+  const storage = getStorage();
+  await Promise.allSettled(
+    LOGO_ALL_EXTS.map((ext) => {
+      const key = `logos/${tenantId}.${ext}`;
+      return key !== keepKey ? storage.delete(key) : Promise.resolve();
+    }),
   );
-}
-
-function resolveLogoPath(fileName: string): string | null {
-  if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
-  return path.join(LOGO_DIR, fileName);
 }
 
 function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' {
@@ -64,11 +52,9 @@ function resolveActiveOutboundValidityHours(value: unknown): number {
 }
 
 export async function readLogoFile(fileName: string): Promise<Buffer | null> {
-  const resolved = resolveLogoPath(fileName);
-  if (!resolved) return null;
-
+  if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   try {
-    return await fs.readFile(resolved);
+    return await getStorage().download(`logos/${fileName}`);
   } catch {
     return null;
   }
@@ -226,11 +212,9 @@ export async function uploadLogo(params: {
   fileBuffer: Buffer;
   mimeType: string;
 }) {
-  const fileName = logoFileName(params.tenantId, params.mimeType);
-  const fullPath = path.join(LOGO_DIR, fileName);
-  await ensureLogoDir();
-  await removeOldLogos(params.tenantId, fileName);
-  await fs.writeFile(fullPath, params.fileBuffer);
+  const key = logoKey(params.tenantId, params.mimeType);
+  await deleteOldLogos(params.tenantId, key);
+  const logoUrl = await getStorage().upload(key, params.fileBuffer, params.mimeType);
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: params.tenantId },
@@ -239,16 +223,10 @@ export async function uploadLogo(params: {
   if (!tenant) throw new Error('Tenant não encontrado');
 
   const current = (tenant.settings as Record<string, unknown>) ?? {};
-  const logoUrl = `/api/admin/settings/logo/${fileName}?v=${Date.now()}`;
 
   await prisma.tenant.update({
     where: { id: params.tenantId },
-    data: {
-      settings: {
-        ...current,
-        logo_url: logoUrl,
-      },
-    },
+    data: { settings: { ...current, logo_url: logoUrl } },
   });
 
   return { logo_url: logoUrl };
