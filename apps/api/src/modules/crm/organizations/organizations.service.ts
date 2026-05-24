@@ -202,7 +202,7 @@ export async function getOrganizationStats(id: string) {
     `SELECT
        COUNT(DISTINCT c.id)                                                   AS total_contacts,
        COUNT(DISTINCT conv.id)                                                AS total_conversations,
-       COUNT(DISTINCT conv.id) FILTER (WHERE conv.status IN ('open','pending','in_service')) AS open_conversations,
+       COUNT(DISTINCT conv.id) FILTER (WHERE conv.status = 'open') AS open_conversations,
        COUNT(DISTINCT t.id)                                                   AS total_tickets,
        COUNT(DISTINCT t.id)    FILTER (WHERE t.status NOT IN ('resolved','closed')) AS open_tickets,
        MAX(m.created_at)                                                      AS last_contact_at

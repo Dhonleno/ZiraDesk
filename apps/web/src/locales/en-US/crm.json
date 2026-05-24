@@ -20,12 +20,15 @@
       "inactive": "Inactive"
     },
     "filters": {
+      "toggle": "Filters",
       "segment": "Segment",
       "segmentPlaceholder": "Filter by segment",
       "tag": "Tag",
       "tagPlaceholder": "Filter by tag",
       "responsible": "Owner",
       "responsibleAll": "All owners",
+      "clear": "Clear",
+      "apply": "Apply",
       "clearSearch": "Clear",
       "removeFilter": "Remove filter",
       "clearAll": "Clear filters"
@@ -180,6 +183,8 @@
   "searchOrganization": "Search organization...",
   "unlinkSuccess": "Contact unlinked successfully",
   "transferSuccess": "Contact transferred successfully",
+  "startConversation": "Start conversation",
+  "noPrimaryContactHint": "Set a primary contact to start conversations directly from the organization.",
   "contacts": {
     "title": "Contacts",
     "standalone": "Standalone contacts",

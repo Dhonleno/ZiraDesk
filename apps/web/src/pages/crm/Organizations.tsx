@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
 import { CrmSearchField } from '../../components/crm/CrmSearchField';
 import { CrmActiveFilterChips } from '../../components/crm/CrmActiveFilterChips';
 import { PageShell } from '../../components/layout/PageShell';
+import './Organizations.css';
 
 type StatusFilter = 'all' | 'lead' | 'prospect' | 'client' | 'inactive';
 type SortBy = 'updated_at' | 'created_at' | 'name';
@@ -38,6 +39,10 @@ function parsePage(value: string | null): number {
   return Math.floor(page);
 }
 
+function isNonEmptyString(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export function OrganizationsPage() {
   const { t } = useTranslation('crm');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,10 +56,23 @@ export function OrganizationsPage() {
   const [page, setPage] = useState<number>(parsePage(searchParams.get('page')));
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement | null>(null);
 
   const search = useDebounce(searchRaw, 300);
   const segment = useDebounce(segmentRaw, 300);
   const tag = useDebounce(tagRaw, 300);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   useEffect(() => {
     const id = searchParams.get('id');
@@ -142,6 +160,24 @@ export function OrganizationsPage() {
 
   const organizations = listData?.data ?? [];
   const meta = listData?.meta;
+  const filters = {
+    segment: segmentRaw.trim(),
+    tag: tagRaw.trim(),
+    responsible: responsibleId,
+  };
+  const activeFilterCount = [filters.segment, filters.tag, filters.responsible].filter(Boolean).length;
+  const segmentOptions = Array.from(
+    new Set([
+      ...organizations.map((org) => org.segment).filter(isNonEmptyString).map((value) => value.trim()),
+      ...(filters.segment ? [filters.segment] : []),
+    ]),
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  const tagOptions = Array.from(
+    new Set([
+      ...organizations.flatMap((org) => org.tags).filter(isNonEmptyString).map((value) => value.trim()),
+      ...(filters.tag ? [filters.tag] : []),
+    ]),
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
   useEffect(() => {
     if (organizations.length === 0) {
@@ -273,6 +309,19 @@ export function OrganizationsPage() {
     });
   }
 
+  function clearPopoverFilters() {
+    setSegmentRaw('');
+    setTagRaw('');
+    setResponsibleId('');
+    setPage(1);
+    updateParams({
+      segment: '',
+      tag: '',
+      responsibleId: '',
+      page: 1,
+    });
+  }
+
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', height: '100%', overflow: 'hidden' }}>
@@ -297,129 +346,151 @@ export function OrganizationsPage() {
 
         {/* Search */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-          <CrmSearchField
-            value={searchRaw}
-            onChange={handleSearchChange}
-            placeholder={t('organizations.search')}
-            clearLabel={t('organizations.filters.clearSearch')}
-            onClear={() => handleSearchChange('')}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <select
-              value={sortBy}
-              onChange={(e) => handleSortByChange(e.target.value as SortBy)}
-              style={{
-                height: 30,
-                borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-3)',
-                color: 'var(--txt-2)',
-                fontFamily: 'var(--font)',
-                fontSize: 11,
-                padding: '0 9px',
-                outline: 'none',
-              }}
-              aria-label={t('organizations.sort.label')}
-              title={t('organizations.sort.label')}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {sortByLabels[option]}
-                </option>
-              ))}
-            </select>
+          <div className="organizations-filter-bar" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="search-box" style={{ flex: 1 }}>
+              <CrmSearchField
+                value={searchRaw}
+                onChange={handleSearchChange}
+                placeholder={t('organizations.search')}
+                clearLabel={t('organizations.filters.clearSearch')}
+                onClear={() => handleSearchChange('')}
+              />
+            </div>
+            <div ref={filterRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="tb-btn"
+                onClick={() => setFilterOpen((value) => !value)}
+                style={activeFilterCount > 0 ? { borderColor: 'var(--teal)', color: 'var(--teal)', background: 'var(--teal-dim)' } : {}}
+                aria-label={t('organizations.filters.toggle')}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M2 3h8M3.5 6h5M5 9h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                {t('organizations.filters.toggle')}
+                {activeFilterCount > 0 ? (
+                  <span style={{ background: 'var(--teal)', color: 'var(--on-teal)', borderRadius: 'var(--r-pill)', fontSize: 10, padding: '1px 6px', fontFamily: 'var(--mono)' }}>
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
+              {filterOpen ? (
+                <div
+                  className="organizations-filter-popover"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: 6,
+                    width: 280,
+                    background: 'var(--bg-2)',
+                    border: '1px solid var(--line-2)',
+                    borderRadius: 'var(--r-lg)',
+                    boxShadow: 'var(--shadow-pop)',
+                    padding: 14,
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'block', marginBottom: 6 }}>
+                      {t('organizations.sort.label')}
+                    </label>
+                    <select
+                      className="filter-select"
+                      value={sortBy}
+                      onChange={(event) => handleSortByChange(event.target.value as SortBy)}
+                      aria-label={t('organizations.sort.label')}
+                    >
+                      {SORT_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {sortByLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'block', marginBottom: 6 }}>
+                      {t('organizations.filters.segment')}
+                    </label>
+                    <select
+                      className="filter-select"
+                      value={segmentRaw}
+                      onChange={(event) => handleSegmentChange(event.target.value)}
+                      aria-label={t('organizations.filters.segment')}
+                    >
+                      <option value="">{t('organizations.filters.segmentPlaceholder')}</option>
+                      {segmentOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'block', marginBottom: 6 }}>
+                      {t('organizations.filters.tag')}
+                    </label>
+                    <select
+                      className="filter-select"
+                      value={tagRaw}
+                      onChange={(event) => handleTagChange(event.target.value)}
+                      aria-label={t('organizations.filters.tag')}
+                    >
+                      <option value="">{t('organizations.filters.tagPlaceholder')}</option>
+                      {tagOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt-3)', display: 'block', marginBottom: 6 }}>
+                      {t('organizations.filters.responsible')}
+                    </label>
+                    <select
+                      className="filter-select"
+                      value={responsibleId}
+                      onChange={(event) => handleResponsibleChange(event.target.value)}
+                      aria-label={t('organizations.filters.responsible')}
+                    >
+                      <option value="">{t('organizations.filters.responsibleAll')}</option>
+                      {(usersData?.data ?? []).map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                    <button type="button" className="tb-btn" onClick={clearPopoverFilters}>
+                      {t('organizations.filters.clear')}
+                    </button>
+                    <button type="button" className="tb-btn-primary" onClick={() => setFilterOpen(false)}>
+                      {t('organizations.filters.apply')}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
+              className="tb-icon-btn"
               onClick={handleSortOrderToggle}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                height: 30,
-                minWidth: 32,
-                borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-3)',
-                color: 'var(--txt-2)',
-                cursor: 'pointer',
-                padding: '0 9px',
-              }}
-              aria-label={sortOrder === 'asc' ? t('organizations.sort.orderAsc') : t('organizations.sort.orderDesc')}
               title={sortOrder === 'asc' ? t('organizations.sort.orderAsc') : t('organizations.sort.orderDesc')}
+              aria-label={sortOrder === 'asc' ? t('organizations.sort.orderAsc') : t('organizations.sort.orderDesc')}
             >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                 {sortOrder === 'asc' ? (
-                  <path d="M5.5 1.5v8M2.7 4.3L5.5 1.5l2.8 2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 2v10M4.2 4.8L7 2l2.8 2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 ) : (
-                  <path d="M5.5 9.5v-8M2.7 6.7L5.5 9.5l2.8-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 12V2M4.2 9.2L7 12l2.8-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 )}
               </svg>
             </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-            <input
-              type="text"
-              value={segmentRaw}
-              onChange={(e) => handleSegmentChange(e.target.value)}
-              placeholder={t('organizations.filters.segmentPlaceholder')}
-              style={{
-                height: 30,
-                borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-3)',
-                color: 'var(--txt)',
-                fontFamily: 'var(--font)',
-                fontSize: 11,
-                padding: '0 9px',
-                outline: 'none',
-              }}
-              aria-label={t('organizations.filters.segment')}
-            />
-            <input
-              type="text"
-              value={tagRaw}
-              onChange={(e) => handleTagChange(e.target.value)}
-              placeholder={t('organizations.filters.tagPlaceholder')}
-              style={{
-                height: 30,
-                borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-3)',
-                color: 'var(--txt)',
-                fontFamily: 'var(--font)',
-                fontSize: 11,
-                padding: '0 9px',
-                outline: 'none',
-              }}
-              aria-label={t('organizations.filters.tag')}
-            />
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <select
-              value={responsibleId}
-              onChange={(e) => handleResponsibleChange(e.target.value)}
-              style={{
-                width: '100%',
-                height: 30,
-                borderRadius: 'var(--r)',
-                border: '1px solid var(--line-2)',
-                background: 'var(--bg-3)',
-                color: 'var(--txt-2)',
-                fontFamily: 'var(--font)',
-                fontSize: 11,
-                padding: '0 9px',
-                outline: 'none',
-              }}
-              aria-label={t('organizations.filters.responsible')}
-            >
-              <option value="">{t('organizations.filters.responsibleAll')}</option>
-              {(usersData?.data ?? []).map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 

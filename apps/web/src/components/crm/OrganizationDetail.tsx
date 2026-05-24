@@ -135,7 +135,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const [notes, setNotes] = useState(org.notes ?? '');
   const [notesDirty, setNotesDirty] = useState(false);
   const [showSelectChannel, setShowSelectChannel] = useState(false);
-  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [, setCreatingConversation] = useState(false);
   const [conversationTargetContact, setConversationTargetContact] = useState<CrmContact | null>(null);
   const [unlinkContact, setUnlinkContact] = useState<CrmContact | null>(null);
   const [transferContact, setTransferContact] = useState<CrmContact | null>(null);
@@ -151,7 +151,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const { data: orgContacts = [], isLoading: contactsLoading } = useQuery({
     queryKey: ['org-contacts', org.id],
     queryFn:  () => organizationsApi.getContacts(org.id),
-    enabled:  activeTab === 'contacts',
+    enabled:  Boolean(org.id),
   });
 
   const { data: activeChannels = [] } = useQuery({
@@ -271,6 +271,8 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     urgent: t('organizations.tickets.priorities.urgent'),
   };
   const transferOrganizations = transferOrgData?.data.filter((item) => item.id !== org.id) ?? [];
+  const primaryContact = orgContacts.find((contact) => contact.is_primary) ?? null;
+  const canStartFromOrganization = !contactsLoading && primaryContact !== null;
 
   function getConversationTitle(conv: CrmOrganizationConversation): string {
     return conv.protocol ?? conv.id;
@@ -307,7 +309,21 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     }
   }
 
-  async function handleStartConversation(preferredContact?: CrmContact | null) {
+  function handleStartConversation(contact: CrmContact) {
+    navigate('/omnichannel/conversations', {
+      state: {
+        preselectedContact: {
+          id: contact.id,
+          name: contact.name,
+          phone: contact.whatsapp ?? contact.phone,
+          organizationId: org.id,
+          organizationName: org.name,
+        },
+      },
+    });
+  }
+
+  async function handleStartConversationByChannel(preferredContact?: CrmContact | null) {
     setConversationTargetContact(preferredContact ?? null);
     if (activeChannels.length === 0) {
       toast.error(t('contacts.hasNoActiveChannels', { defaultValue: 'Nenhum canal ativo disponível' }));
@@ -345,14 +361,32 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 8.5l1-1.5 5-5 1.5 1.5-5 5-2 .5.5-1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                   {t('organizations.actions.edit')}
                 </button>
-                <button
-                  onClick={() => void handleStartConversation()}
-                  disabled={creatingConversation}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontFamily: 'var(--font)', fontWeight: 600 }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 7.5V3a1 1 0 011-1h6a1 1 0 011 1v3.5a1 1 0 01-1 1H4.5l-3 2v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                  {t('organizations.actions.startConversation')}
-                </button>
+                {canStartFromOrganization ? (
+                  <button
+                    type="button"
+                    className="tb-btn-primary"
+                    onClick={() => handleStartConversation(primaryContact)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '5px 11px',
+                      borderRadius: 'var(--r)',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      border: '1px solid var(--teal)',
+                      background: 'var(--teal)',
+                      color: 'var(--on-teal)',
+                      fontFamily: 'var(--font)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                      <path d="M14 10c0 .667-.167 1.167-.5 1.5S12.667 12 12 12H4l-2 2V4c0-.667.167-1.167.5-1.5S3.333 2 4 2h8c.667 0 1.167.167 1.5.5S14 3.333 14 4v6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {t('startConversation')}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -428,6 +462,16 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                   {t('organizations.actions.addContact')}
                 </button>
               </div>
+              {!contactsLoading && orgContacts.length > 0 && !primaryContact ? (
+                <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 5, padding: '6px 0' }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M6 5.2V8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <circle cx="6" cy="3.7" r=".7" fill="currentColor"/>
+                  </svg>
+                  {t('noPrimaryContactHint')}
+                </div>
+              ) : null}
               {contactsLoading ? (
                 <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>{t('organizations.loading')}</div>
               ) : orgContacts.length === 0 ? (
@@ -438,7 +482,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     key={c.id}
                     contact={c}
                     onEdit={setEditContact}
-                    onStartConversation={() => { void handleStartConversation(c); }}
+                    onStartConversation={() => { void handleStartConversationByChannel(c); }}
                     onUnlink={() => setUnlinkContact(c)}
                     onTransfer={() => {
                       setTransferContact(c);

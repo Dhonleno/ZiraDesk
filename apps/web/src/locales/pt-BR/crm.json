@@ -20,12 +20,15 @@
       "inactive": "Inativo"
     },
     "filters": {
+      "toggle": "Filtros",
       "segment": "Segmento",
       "segmentPlaceholder": "Filtrar por segmento",
       "tag": "Tag",
       "tagPlaceholder": "Filtrar por tag",
       "responsible": "Responsável",
       "responsibleAll": "Todos os responsáveis",
+      "clear": "Limpar",
+      "apply": "Aplicar",
       "clearSearch": "Limpar",
       "removeFilter": "Remover filtro",
       "clearAll": "Limpar filtros"
@@ -180,6 +183,8 @@
   "searchOrganization": "Buscar organização...",
   "unlinkSuccess": "Contato desvinculado com sucesso",
   "transferSuccess": "Contato transferido com sucesso",
+  "startConversation": "Iniciar atendimento",
+  "noPrimaryContactHint": "Defina um contato primário para iniciar atendimentos direto da organização.",
   "contacts": {
     "title": "Contatos",
     "standalone": "Contatos avulsos",

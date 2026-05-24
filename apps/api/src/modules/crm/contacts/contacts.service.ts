@@ -470,7 +470,7 @@ export async function deleteContact(id: string, deletedBy: string) {
     `SELECT COUNT(*) AS count
      FROM conversations
      WHERE contact_id = $1::uuid
-       AND status IN ('open', 'pending', 'bot')`,
+       AND status = 'open'`,
     id,
   );
 
