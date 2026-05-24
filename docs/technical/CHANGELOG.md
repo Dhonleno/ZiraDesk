@@ -1,5 +1,36 @@
 # Changelog — ZiraDesk
 
+## [0.9.0] — Sprint de Estabilização
+### Adicionado
+- Abstração de storage com interface `StorageProvider`
+- `R2StorageProvider` via `@aws-sdk/client-s3` (Cloudflare R2)
+- `LocalStorageProvider` mantém comportamento de dev
+- 78 testes de integração cobrindo: auth, middleware tenant, omnichannel webhooks, tickets, CRM, notifications, portal, super-admin, admin, calls, search, redmine, templates
+- Portal: `POST /auth/forgot-password` e `POST /auth/reset-password`
+- CI gate no GitHub Actions: testes obrigatórios antes do deploy Railway
+
+### Alterado
+- `settings.service.ts`, `profile.routes.ts`, `tickets.service.ts`: uploads migrados de disco local para `StorageProvider`
+- Zero referências hardcoded a `public/uploads` no código
+
+### Corrigido (correções de produção expostas pelos testes)
+- Logout agora invalida sessão de fato (`auth:force_logout_after`)
+- Tenant suspenso retorna 402 corretamente
+- JWT de tenant A rejeitado em rotas de tenant B (403)
+- HMAC inválido em webhooks retorna 401
+- Webhooks WhatsApp/Instagram ignoram credenciais corrompidas sem quebrar
+- `schemaName` propagado em tickets (`updateTicket`, `deleteTicket`, `attachments`)
+- `schemaName` propagado em CRM (`organizations`, `contacts`)
+- Vazamento de schema em eventos de tickets corrigido
+- `channels.service.ts` e `channels.routes.ts` usam schema qualificado
+- `tenants.service.ts` resiliente a schemas temporários durante agregação
+
+### Documentação
+- Sprint 3 (CRM) e Sprint 4 (Tickets) marcados como ✅ (estavam ❌)
+- `ARQUITETURA_TECNICA.md` sincronizado com código real
+- Nova seção 14: módulos além do MVP original
+- Nova seção 15: dívida técnica conhecida
+
 ## [0.8.0] — Reestruturação do Omnichannel
 ### Adicionado
 - Novo ciclo de status de conversas: `open`, `waiting` e `closed`.
