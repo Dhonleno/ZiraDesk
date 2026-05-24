@@ -44,7 +44,7 @@ import {
 } from '../../../jobs/inactivity.job.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
-import { sendWhatsAppTextMessage } from './csat.service.js';
+import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 
@@ -675,15 +675,30 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const tenantId = tenantUser.tenantId ?? null;
       if (tenantId) {
         await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);
+        try {
+          await sendCsatMessage(request.params.id, schemaName, tenantId, prisma);
+        } catch (csatError) {
+          request.log.error(
+            {
+              err: csatError instanceof Error ? csatError.message : String(csatError),
+              conversationId: request.params.id,
+            },
+            '[Omnichannel] Falha ao disparar CSAT após encerramento',
+          );
+        }
       }
+      const { conversation: refreshedConversation } = await getConversationWithMessages(
+        request.params.id,
+        tenantUser.tenantId,
+      );
 
       const io = getSocketServer();
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:closed', {
         conversationId: request.params.id,
         reason: parsed.data.reason,
       });
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
-      return reply.send({ success: true, data: conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation: refreshedConversation });
+      return reply.send({ success: true, data: refreshedConversation });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
@@ -712,6 +727,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const tenantUser = request.user as AuthUser;
       const patchSchemaName = tenantUser.schemaName ?? null;
       const patchTenantId = tenantUser.tenantId ?? null;
+      let responseConversation = conversation;
 
       if (
         parsed.data.status === 'closed' &&
@@ -724,6 +740,22 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           [conversation.assigned_to],
           patchTenantId,
         );
+        try {
+          await sendCsatMessage(request.params.id, patchSchemaName, patchTenantId, prisma);
+        } catch (csatError) {
+          request.log.error(
+            {
+              err: csatError instanceof Error ? csatError.message : String(csatError),
+              conversationId: request.params.id,
+            },
+            '[Omnichannel] Falha ao disparar CSAT após fechamento via patch',
+          );
+        }
+        const { conversation: refreshedConversation } = await getConversationWithMessages(
+          request.params.id,
+          tenantUser.tenantId,
+        );
+        responseConversation = refreshedConversation;
       }
 
       const io = getSocketServer();
@@ -733,9 +765,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           reason: 'manual',
         });
       }
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation: responseConversation });
 
-      return reply.send({ success: true, data: conversation });
+      return reply.send({ success: true, data: responseConversation });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
