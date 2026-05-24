@@ -405,7 +405,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [totalMessages, setTotalMessages] = useState(0);
+  const [, setTotalMessages] = useState(0);
   const [isMessagesLoading, setIsMessagesLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [localMediaUrls, setLocalMediaUrls] = useState<Record<string, string>>({});
@@ -1401,6 +1401,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const statusStyle = STATUS_STYLE[conversationStage ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
   const isWaitingOutbound = conv?.status === 'waiting' && conv.conversation_type === 'outbound';
+  const showConversationTimer = Boolean(conv?.assigned_at)
+    && conv?.status !== 'closed'
+    && !isWaitingOutbound;
   const shouldForceTemplate = isWaitingOutbound && !withinActiveOutboundWindow;
   const isTemplateMode = isWhatsappConversation && shouldForceTemplate;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
@@ -1597,7 +1600,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                   📋 {conv.protocol_number}
                 </button>
               )}
-              {conv?.assigned_at && conv.status !== 'closed' && (
+              {showConversationTimer && conv?.assigned_at && (
                 <>
                   <span style={{ color: 'var(--txt-2)', fontSize: 11 }}>·</span>
                   <ConversationTimer assignedAt={conv.assigned_at} />
@@ -1620,9 +1623,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                   {conversationStage ? t(`status.${conversationStage}`, { defaultValue: conversationStage }) : ''}
                 </span>
               )}
-              <span style={{ color: 'var(--txt-3)' }}>
-                {t('history.total', { count: totalMessages, defaultValue: `${totalMessages} mensagens` })}
-              </span>
               {helperIndicator && (
                 <div className="helper-indicator">
                   <span>{helperIndicator.helper_name ?? t('help.helping')}</span>
@@ -1916,7 +1916,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                     : isBot
                       ? 'var(--txt-2)'
                       : isAgent
-                        ? 'var(--teal)'
+                        ? 'var(--txt-2)'
                         : 'var(--txt-3)';
                 const mention = msg.metadata?.mention ?? null;
                 const canMentionThisMessage = canSendMessage && !msg.is_internal;
@@ -2062,17 +2062,17 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                           background: msg.is_internal
                             ? 'var(--amber-dim)'
                             : isAgent
-                              ? 'linear-gradient(135deg,#0f5a50,#0b4740)'
+                              ? 'var(--teal-dim)'
                               : isAIMessage
                                 ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
                                 : isBot
                                   ? 'var(--bg-4)'
                                   : 'var(--bg-3)',
-                          color: msg.is_internal ? 'var(--amber)' : isAgent ? '#eafff9' : 'var(--txt)',
+                          color: msg.is_internal ? 'var(--amber)' : isAgent ? 'var(--txt)' : 'var(--txt)',
                           border: msg.is_internal
                             ? '1px solid rgba(245,158,11,.3)'
                             : isAgent
-                              ? '1px solid rgba(0,201,167,.28)'
+                              ? '1px solid rgba(0,201,167,.22)'
                               : isBot
                                 ? '1px solid var(--line)'
                                 : '1px solid var(--line-2)',
