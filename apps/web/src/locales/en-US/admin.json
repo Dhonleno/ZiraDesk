@@ -662,6 +662,7 @@
     "settings": "Settings",
     "history": "History",
     "performance": "Performance",
+    "queue": "Queue",
     "groups": {
       "team": "Team",
       "attendance": "Attendance",

@@ -662,6 +662,7 @@
     "settings": "Configuración",
     "history": "Historial",
     "performance": "Performance",
+    "queue": "Cola",
     "groups": {
       "team": "Equipo",
       "attendance": "Atención",

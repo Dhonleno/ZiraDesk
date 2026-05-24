@@ -239,6 +239,7 @@ export function TenantLayout() {
   const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
   const canViewHistoryNav = canAny('metrics:view');
   const canViewPerformanceNav = canAny('metrics:view');
+  const canViewQueue = canAny('conversations:reply', 'conversations:manage');
   const canViewAdminNav = canAny('settings:manage', 'users:manage');
   const isImpersonating = !!impersonatedTenantName;
   const roleLabel =
@@ -260,6 +261,7 @@ export function TenantLayout() {
     endPause,
     isStartingPause,
     isEndingPause,
+    hasLoadedStatus,
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
 
@@ -274,9 +276,9 @@ export function TenantLayout() {
   }, []);
 
   useEffect(() => {
-    if (!canToggleAvailability) return;
+    if (!canToggleAvailability || !hasLoadedStatus) return;
     setPresenceStatus(agentStatus);
-  }, [agentStatus, canToggleAvailability]);
+  }, [agentStatus, canToggleAvailability, hasLoadedStatus]);
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
@@ -284,6 +286,14 @@ export function TenantLayout() {
     staleTime: 5 * 60_000,
     enabled: canAccessAdminData,
   });
+
+  const { data: queueCountData } = useQuery({
+    queryKey: ['queue-count'],
+    queryFn: () => omnichannelApi.getQueueCount(),
+    refetchInterval: 30_000,
+    enabled: canViewQueue,
+  });
+  const queueCount = queueCountData?.total ?? 0;
 
   const setAvailabilityMutation = useMutation({
     mutationFn: (nextAvailability: boolean) =>
@@ -299,11 +309,12 @@ export function TenantLayout() {
   });
 
   useEffect(() => {
+    if (canToggleAvailability && !hasLoadedStatus) return undefined;
     if (token && user?.tenantId) {
       connectSocket(token, user.tenantId);
     }
     return () => { disconnectSocket(); };
-  }, [token, user?.tenantId]);
+  }, [token, user?.tenantId, canToggleAvailability, hasLoadedStatus]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -561,6 +572,7 @@ export function TenantLayout() {
       } else {
         await setAvailabilityMutation.mutateAsync(true);
       }
+      setPresenceStatus('online');
       setShowStatusMenu(false);
     } catch {
       toast.error(t('tenantAdmin.common.errorSave'));
@@ -570,6 +582,7 @@ export function TenantLayout() {
   const handleStartPause = async (payload: { reason: string; notes?: string }) => {
     try {
       await startPause(payload);
+      setPresenceStatus('paused');
       setShowPauseModal(false);
       toast.success(t('tenantAdmin.pause.messages.started'));
     } catch {
@@ -878,6 +891,20 @@ export function TenantLayout() {
               <path d="M6 7.5h6M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </NavItem>
+
+          {/* Fila */}
+          {canViewQueue && (
+            <NavItem to="/omnichannel/queue" title={t('nav.queue')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M2 5h14M2 9h10M2 13h7"
+                  stroke="currentColor" strokeWidth="1.4"
+                  strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {queueCount > 0 && (
+                <span className="nav-badge">{queueCount > 99 ? '99+' : queueCount}</span>
+              )}
+            </NavItem>
+          )}
 
           {/* Monitor */}
           {isManager && (

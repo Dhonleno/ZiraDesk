@@ -21,7 +21,7 @@
       "total": "Atenciones",
       "tma": "TMA",
       "csat": "CSAT Promedio",
-      "resolved": "Resueltos",
+      "closed": "Cerrados",
       "firstResponse": "1ª Respuesta"
     },
     "charts": {
@@ -49,7 +49,7 @@
       "open": "Abiertos",
       "inProgress": "En progreso",
       "waiting": "En espera",
-      "resolved": "Resueltos",
+      "closed": "Cerrados",
       "avgResolution": "Tiempo promedio de resolución",
       "volumeByPeriod": "Volumen por período",
       "opened": "Abiertos",
@@ -99,22 +99,26 @@
     "noHistory": "Sin historial previo"
   },
   "tabs": {
-    "active": "En atención",
-    "activeOutbound": "Activos",
-    "queue": "Bot",
-    "return": "Retorno",
+    "open": "Abierto",
+    "waiting": "Esperando",
     "closed": "Cerradas"
   },
-  "subTabs": {
-    "all": "Todas",
-    "resolved": "Resueltas",
-    "closed": "Cerradas",
-    "outbound": "Retorno"
-  },
-  "queue": {
-    "assume": "Asumir",
-    "empty": "Ninguna atención en fila",
-    "emptyHint": "Cuando los clientes entren en contacto aparecerán aquí"
+  "closeConversation": "Cerrar",
+  "closeModal": {
+    "title": "Cerrar atención",
+    "reasonLabel": "Motivo del cierre",
+    "typeLabel": "Motivo del cierre",
+    "outcomeLabel": "Resultado",
+    "notesLabel": "Observaciones (opcional)",
+    "reasonPlaceholder": "Seleccione el motivo...",
+    "outcomePlaceholder": "Seleccione el resultado...",
+    "notesPlaceholder": "Detalles adicionales...",
+    "confirm": "Cerrar",
+    "cancel": "Cancelar",
+    "successToast": "Atención cerrada",
+    "errorToast": "Error al cerrar la atención",
+    "loadingConfig": "Cargando motivos de cierre...",
+    "emptyConfig": "No se encontró ningún motivo de cierre activo."
   },
   "notifications": {
     "newMessage": "Nuevo mensaje recibido",
@@ -140,12 +144,10 @@
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Abierto",
-    "active_outbound": "Activo",
-    "in_service": "En atención",
-    "pending": "Pendiente",
-    "resolved": "Resuelto",
+    "queue": "En cola",
+    "awaitingChoice": "Esperando elección",
+    "waiting": "Esperando",
     "closed": "Cerrado",
-    "bot": "Bot",
     "all": "Todos",
     "mine": "Mías"
   },
@@ -518,5 +520,29 @@
     "channelRequired": "Seleccione un canal",
     "initialMessageRequired": "Escribe el mensaje inicial",
     "initialTemplateNameRequired": "Informe el nombre del template"
+  },
+  "queue": {
+    "title": "Cola de atención",
+    "waiting": "en espera",
+    "assume": "Asumir",
+    "assignMe": "Asumir",
+    "assigning": "Asumiendo...",
+    "unknownContact": "Contacto sin nombre",
+    "unclassified": "Sin grupo",
+    "noSubject": "Sin asunto",
+    "columns": {
+      "contact": "Contacto",
+      "group": "Grupo",
+      "subject": "Asunto",
+      "channel": "Canal",
+      "wait": "Espera",
+      "action": "Acción"
+    },
+    "assignedSuccess": "Atención asumida con éxito",
+    "assignedError": "Error al asumir atención",
+    "empty": "No hay atenciones en la cola",
+    "emptyHint": "Las nuevas atenciones aparecerán aquí automáticamente",
+    "allChannels": "Todos los canales",
+    "waitingTime": "Tiempo en cola"
   }
 }

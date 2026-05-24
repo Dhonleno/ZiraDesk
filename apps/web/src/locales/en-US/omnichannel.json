@@ -21,7 +21,7 @@
       "total": "Conversations",
       "tma": "Avg. Handle Time",
       "csat": "Avg. CSAT",
-      "resolved": "Resolved",
+      "closed": "Closed",
       "firstResponse": "First Response"
     },
     "charts": {
@@ -49,7 +49,7 @@
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",
-      "resolved": "Resolved",
+      "closed": "Closed",
       "avgResolution": "Avg. resolution time",
       "volumeByPeriod": "Volume by period",
       "opened": "Opened",
@@ -99,22 +99,26 @@
     "noHistory": "No previous history"
   },
   "tabs": {
-    "active": "In service",
-    "activeOutbound": "Active",
-    "queue": "Bot",
-    "return": "Follow-up",
+    "open": "Open",
+    "waiting": "Waiting",
     "closed": "Closed"
   },
-  "subTabs": {
-    "all": "All",
-    "resolved": "Resolved",
-    "closed": "Closed",
-    "outbound": "Follow-up"
-  },
-  "queue": {
-    "assume": "Take over",
-    "empty": "No attendances in queue",
-    "emptyHint": "New customer contacts will appear here"
+  "closeConversation": "Close",
+  "closeModal": {
+    "title": "Close conversation",
+    "reasonLabel": "Closure reason",
+    "typeLabel": "Closure reason",
+    "outcomeLabel": "Outcome",
+    "notesLabel": "Notes (optional)",
+    "reasonPlaceholder": "Select a reason...",
+    "outcomePlaceholder": "Select an outcome...",
+    "notesPlaceholder": "Additional details...",
+    "confirm": "Close",
+    "cancel": "Cancel",
+    "successToast": "Conversation closed",
+    "errorToast": "Error closing conversation",
+    "loadingConfig": "Loading closure reasons...",
+    "emptyConfig": "No active closure reason was found."
   },
   "notifications": {
     "newMessage": "New message received",
@@ -140,12 +144,10 @@
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Open",
-    "active_outbound": "Active",
-    "in_service": "In service",
-    "pending": "Pending",
-    "resolved": "Resolved",
+    "queue": "In queue",
+    "awaitingChoice": "Awaiting choice",
+    "waiting": "Waiting",
     "closed": "Closed",
-    "bot": "Bot",
     "all": "All",
     "mine": "Mine"
   },
@@ -518,5 +520,29 @@
     "channelRequired": "Please select a channel",
     "initialMessageRequired": "Type the initial message",
     "initialTemplateNameRequired": "Please provide the template name"
+  },
+  "queue": {
+    "title": "Support queue",
+    "waiting": "waiting",
+    "assume": "Take over",
+    "assignMe": "Assign to me",
+    "assigning": "Taking over...",
+    "unknownContact": "Unnamed contact",
+    "unclassified": "No group",
+    "noSubject": "No subject",
+    "columns": {
+      "contact": "Contact",
+      "group": "Group",
+      "subject": "Subject",
+      "channel": "Channel",
+      "wait": "Wait",
+      "action": "Action"
+    },
+    "assignedSuccess": "Conversation assigned successfully",
+    "assignedError": "Error assigning conversation",
+    "empty": "No conversations in queue",
+    "emptyHint": "New conversations will appear here automatically",
+    "allChannels": "All channels",
+    "waitingTime": "Wait time"
   }
 }

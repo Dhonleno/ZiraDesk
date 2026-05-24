@@ -29,16 +29,16 @@ export function useAgentStatus(enabled = true) {
 
   return {
     ...query,
-    status: query.data?.status ?? 'online',
+    status: query.data?.status ?? 'offline',
     pauseReason: query.data?.pause_reason ?? null,
     pauseStartedAt: query.data?.pause_started_at ?? null,
     pauseNotes: query.data?.pause_notes ?? null,
     durationSeconds: query.data?.duration_seconds ?? 0,
-    isAvailable: query.data?.is_available ?? true,
+    isAvailable: query.data?.is_available ?? false,
+    hasLoadedStatus: query.isSuccess,
     startPause: startPause.mutateAsync,
     endPause: endPause.mutateAsync,
     isStartingPause: startPause.isPending,
     isEndingPause: endPause.isPending,
   };
 }
-

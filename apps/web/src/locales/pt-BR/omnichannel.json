@@ -21,7 +21,7 @@
       "total": "Atendimentos",
       "tma": "TMA",
       "csat": "CSAT Médio",
-      "resolved": "Resolvidos",
+      "closed": "Encerrados",
       "firstResponse": "1ª Resposta"
     },
     "charts": {
@@ -49,7 +49,7 @@
       "open": "Abertos",
       "inProgress": "Em andamento",
       "waiting": "Aguardando",
-      "resolved": "Resolvidos",
+      "closed": "Encerrados",
       "avgResolution": "Tempo médio de resolução",
       "volumeByPeriod": "Volume por período",
       "opened": "Abertos",
@@ -99,22 +99,26 @@
     "noHistory": "Sem histórico anterior"
   },
   "tabs": {
-    "active": "Em atendimento",
-    "activeOutbound": "Ativos",
-    "queue": "Bot",
-    "return": "Retorno",
+    "open": "Aberto",
+    "waiting": "Aguardando",
     "closed": "Encerrados"
   },
-  "subTabs": {
-    "all": "Todos",
-    "resolved": "Resolvidos",
-    "closed": "Fechados",
-    "outbound": "Retorno"
-  },
-  "queue": {
-    "assume": "Assumir",
-    "empty": "Nenhum atendimento na fila",
-    "emptyHint": "Quando clientes entrarem em contato aparecerão aqui"
+  "closeConversation": "Encerrar",
+  "closeModal": {
+    "title": "Encerrar atendimento",
+    "reasonLabel": "Motivo do encerramento",
+    "typeLabel": "Motivo do encerramento",
+    "outcomeLabel": "Desfecho",
+    "notesLabel": "Observações (opcional)",
+    "reasonPlaceholder": "Selecione o motivo...",
+    "outcomePlaceholder": "Selecione o desfecho...",
+    "notesPlaceholder": "Detalhes adicionais...",
+    "confirm": "Encerrar",
+    "cancel": "Cancelar",
+    "successToast": "Atendimento encerrado",
+    "errorToast": "Erro ao encerrar atendimento",
+    "loadingConfig": "Carregando motivos de encerramento...",
+    "emptyConfig": "Nenhum motivo de encerramento ativo foi encontrado."
   },
   "notifications": {
     "newMessage": "Nova mensagem recebida",
@@ -140,12 +144,10 @@
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Aberto",
-    "active_outbound": "Ativo",
-    "in_service": "Em atendimento",
-    "pending": "Aguardando",
-    "resolved": "Resolvido",
-    "closed": "Fechado",
-    "bot": "Bot",
+    "queue": "Na fila",
+    "awaitingChoice": "Aguardando escolha",
+    "waiting": "Aguardando",
+    "closed": "Encerrado",
     "all": "Todos",
     "mine": "Meus"
   },
@@ -518,5 +520,29 @@
     "channelRequired": "Selecione um canal",
     "initialMessageRequired": "Digite a mensagem inicial",
     "initialTemplateNameRequired": "Informe o nome do template"
+  },
+  "queue": {
+    "title": "Fila de atendimentos",
+    "waiting": "aguardando",
+    "assume": "Assumir",
+    "assignMe": "Assumir",
+    "assigning": "Assumindo...",
+    "unknownContact": "Contato sem nome",
+    "unclassified": "Sem grupo",
+    "noSubject": "Sem assunto",
+    "columns": {
+      "contact": "Contato",
+      "group": "Grupo",
+      "subject": "Assunto",
+      "channel": "Canal",
+      "wait": "Espera",
+      "action": "Ação"
+    },
+    "assignedSuccess": "Atendimento assumido com sucesso",
+    "assignedError": "Erro ao assumir atendimento",
+    "empty": "Nenhum atendimento na fila",
+    "emptyHint": "Novos atendimentos aparecerão aqui automaticamente",
+    "allChannels": "Todos os canais",
+    "waitingTime": "Tempo na fila"
   }
 }

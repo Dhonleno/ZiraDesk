@@ -13,7 +13,7 @@ import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { emitSocketEvent, subscribeToEvent } from '../../services/socket';
 import { ConversationTimer } from './ConversationTimer';
-import { ResolveModal, type ResolvePayload } from './ResolveModal';
+import { CloseConversationModal } from './CloseConversationModal';
 import { TransferModal } from './TransferModal';
 import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
@@ -120,13 +120,21 @@ const CH_BADGE: Record<string, { bg: string; color: string; border: string; labe
 };
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  open: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
-  active_outbound: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
-  in_service: { color: 'var(--teal)', bg: 'var(--teal-dim)', border: 'rgba(0,201,167,.25)' },
-  pending: { color: 'var(--blue)', bg: 'var(--blue-dim)', border: 'rgba(96,165,250,.25)' },
-  resolved: { color: 'var(--txt-3)', bg: 'var(--bg-4)', border: 'var(--line)' },
+  open: { color: 'var(--teal)', bg: 'var(--teal-dim)', border: 'rgba(0,201,167,.25)' },
+  queue: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
+  awaitingChoice: { color: 'var(--purple)', bg: 'var(--purple-dim)', border: 'rgba(167,139,250,.25)' },
+  waiting: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
   closed: { color: 'var(--txt-3)', bg: 'var(--bg-4)', border: 'var(--line)' },
 };
+
+function getConversationStage(conversation: Conversation | undefined): string | null {
+  if (!conversation) return null;
+  if (conversation.status === 'closed' || conversation.status === 'waiting') return conversation.status;
+  if (conversation.status === 'open' && !conversation.assigned_to) {
+    return conversation.metadata?.['bot_stage'] === 'waiting_choice' ? 'awaitingChoice' : 'queue';
+  }
+  return conversation.status;
+}
 
 function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -320,6 +328,7 @@ function ToolbarButton({ icon, tooltip, onClick, active = false, activeColor = '
 
 interface Props {
   conversationId: string;
+  onClosed?: () => void;
 }
 
 function requiresWhatsappTemplateMessage(
@@ -327,7 +336,9 @@ function requiresWhatsappTemplateMessage(
   withinActiveOutboundWindow: boolean,
 ): boolean {
   if (!conversation || conversation.channel_type !== 'whatsapp') return false;
-  return conversation.status === 'active_outbound' && !withinActiveOutboundWindow;
+  return conversation.status === 'waiting'
+    && conversation.conversation_type === 'outbound'
+    && !withinActiveOutboundWindow;
 }
 
 function extractTemplateNameFromPlaceholder(content: string | null | undefined): string | null {
@@ -378,7 +389,7 @@ function applyTemplateParamsToBody(body: string, params: string[]): string {
   });
 }
 
-export function ChatArea({ conversationId }: Props) {
+export function ChatArea({ conversationId, onClosed }: Props) {
   const { t } = useTranslation('omnichannel');
   const { t: tAdmin } = useTranslation('admin');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -388,7 +399,7 @@ export function ChatArea({ conversationId }: Props) {
   const { can } = usePermission();
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
@@ -559,14 +570,16 @@ export function ChatArea({ conversationId }: Props) {
     retry: shouldRetryQuery,
   });
 
-  const isActiveOutboundConversation = data?.conversation?.status === 'active_outbound';
+  const isWaitingOutboundConversation =
+    data?.conversation?.status === 'waiting'
+    && data.conversation.conversation_type === 'outbound';
   const {
     data: conversationWindowStatus,
     isSuccess: isConversationWindowLoaded,
   } = useQuery({
     queryKey: ['conversation-window', conversationId],
     queryFn: () => omnichannelApi.getConversationWindowStatus(conversationId),
-    enabled: hasValidSession && isActiveOutboundConversation,
+    enabled: hasValidSession && isWaitingOutboundConversation,
     retry: shouldRetryQuery,
   });
   const activeOutboundWindowStatus: ConversationWindowStatus = conversationWindowStatus ?? {
@@ -864,12 +877,6 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
 
-    const unsubResolved = subscribeToEvent<{ conversationId: string }>('conversation:resolved', (event) => {
-      if (event.conversationId !== conversationId) return;
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    });
-
     const unsubTransferred = subscribeToEvent<{ conversationId: string }>('conversation:transferred', (event) => {
       if (event.conversationId !== conversationId) return;
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -959,7 +966,6 @@ export function ChatArea({ conversationId }: Props) {
     return () => {
       unsubNew();
       unsubIncoming();
-      unsubResolved();
       unsubTransferred();
       unsubUpdated();
       unsubClosed();
@@ -1076,17 +1082,19 @@ export function ChatArea({ conversationId }: Props) {
     },
   });
 
-  const endMutation = useMutation({
-    mutationFn: async (payload: ResolvePayload) => {
-      return omnichannelApi.resolveConversation(conversationId, payload);
+  const closeMutation = useMutation({
+    mutationFn: async (payload: { reason: string; notes?: string }) => {
+      return omnichannelApi.closeConversation(conversationId, payload);
     },
     onSuccess: () => {
-      setShowResolveModal(false);
-      toast.success(t('chat.endSuccess', { defaultValue: 'Atendimento encerrado' }));
+      setShowCloseModal(false);
+      setIsConversationClosed(true);
+      toast.success(t('closeModal.successToast', { defaultValue: 'Atendimento encerrado' }));
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      onClosed?.();
     },
-    onError: () => toast.error(t('chat.endError', { defaultValue: 'Erro ao encerrar atendimento' })),
+    onError: () => toast.error(t('closeModal.errorToast', { defaultValue: 'Erro ao encerrar atendimento' })),
   });
 
   const reopenMutation = useMutation({
@@ -1345,7 +1353,7 @@ export function ChatArea({ conversationId }: Props) {
     if (!currentUserId) return;
     setIsAssuming(true);
     try {
-      const updated = await omnichannelApi.assign(conversationId, currentUserId);
+      const updated = await omnichannelApi.assignMe(conversationId);
 
       // Usa dados reais do DB (retornados com JOIN pela rota) para atualizar o cache
       qc.setQueryData(
@@ -1370,9 +1378,10 @@ export function ChatArea({ conversationId }: Props) {
   }
 
   const conv = data?.conversation as Conversation | undefined;
-  const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
-  const isClosedForComposer = isResolved || isConversationClosed;
+  const isClosed = conv?.status === 'closed';
+  const isClosedForComposer = isClosed || isConversationClosed;
   const isUnassigned = !conv?.assigned_to;
+  const isAwaitingBotChoice = conv?.metadata?.['bot_stage'] === 'waiting_choice';
   const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
   const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
   const acceptedHelpers = helpers.filter((helper) => helper.status === 'accepted');
@@ -1381,41 +1390,23 @@ export function ChatArea({ conversationId }: Props) {
   const canManageConversation = can('conversations:manage');
   const canReplyConversation = can('conversations:reply');
   const canSendMessage = canReplyConversation && (isAssignedToMe || isHelper) && !isClosedForComposer;
-  const canAssume = isUnassigned && !isClosedForComposer;
+  const canAssume = isUnassigned && !isAwaitingBotChoice && !isClosedForComposer;
   const canTransfer = canManageConversation && (isAssignedToMe || canManageConversation) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
   const displayName = conv?.contact_name ?? 'Visitante';
   const organizationName = conv?.organization_name?.trim() ?? null;
   const avatarName = conv?.contact_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
-  const statusStyle = STATUS_STYLE[conv?.status ?? ''];
+  const conversationStage = getConversationStage(conv);
+  const statusStyle = STATUS_STYLE[conversationStage ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
-  const isActiveOutbound = conv?.status === 'active_outbound';
-  const isActiveOutboundWhatsappConversation = isWhatsappConversation && isActiveOutbound;
-  const shouldForceTemplate = isActiveOutbound && !withinActiveOutboundWindow;
+  const isWaitingOutbound = conv?.status === 'waiting' && conv.conversation_type === 'outbound';
+  const shouldForceTemplate = isWaitingOutbound && !withinActiveOutboundWindow;
   const isTemplateMode = isWhatsappConversation && shouldForceTemplate;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
   const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
   const showRecordAction = !useTemplateMessage && !hasTypedContent;
-  const activeOutboundReturn = useMemo(() => {
-    if (!conv?.metadata || typeof conv.metadata !== 'object') return null;
-    const metadata = conv.metadata as Record<string, unknown>;
-    if (metadata.active_outbound_returned !== true) return null;
-
-    const originAgentName = typeof metadata.active_outbound_origin_agent_name === 'string'
-      ? metadata.active_outbound_origin_agent_name
-      : null;
-    const returnedAt = typeof metadata.active_outbound_returned_at === 'string'
-      ? metadata.active_outbound_returned_at
-      : null;
-
-    return {
-      originAgentName,
-      returnedAt,
-    };
-  }, [conv?.metadata]);
-
   useEffect(() => {
     if (isWhatsappConversation) return;
     setUseTemplateMessage(false);
@@ -1428,7 +1419,7 @@ export function ChatArea({ conversationId }: Props) {
 
   useEffect(() => {
     if (!isWhatsappConversation) return;
-    if (conv?.status === 'active_outbound' && !isConversationWindowLoaded) return;
+    if (isWaitingOutbound && !isConversationWindowLoaded) return;
 
     setUseTemplateMessage((current) => (current === isTemplateMode ? current : isTemplateMode));
     if (isTemplateMode) {
@@ -1440,14 +1431,14 @@ export function ChatArea({ conversationId }: Props) {
     isConversationWindowLoaded,
     isWhatsappConversation,
     isTemplateMode,
-    conv?.status,
+    isWaitingOutbound,
   ]);
 
   useEffect(() => {
-    if (conv?.status === 'active_outbound') return;
+    if (isWaitingOutbound) return;
     setUseTemplateMessage(false);
     setTemplateError(null);
-  }, [conv?.status]);
+  }, [isWaitingOutbound]);
 
   useEffect(() => {
     if (!useTemplateMessage || !templateName) {
@@ -1606,7 +1597,7 @@ export function ChatArea({ conversationId }: Props) {
                   📋 {conv.protocol_number}
                 </button>
               )}
-              {conv?.assigned_at && conv.status !== 'resolved' && conv.status !== 'closed' && (
+              {conv?.assigned_at && conv.status !== 'closed' && (
                 <>
                   <span style={{ color: 'var(--txt-2)', fontSize: 11 }}>·</span>
                   <ConversationTimer assignedAt={conv.assigned_at} />
@@ -1626,7 +1617,7 @@ export function ChatArea({ conversationId }: Props) {
                     border: `1px solid ${statusStyle.border}`,
                   }}
                 >
-                  {conv?.status ? t(`status.${conv.status}`, { defaultValue: conv.status }) : ''}
+                  {conversationStage ? t(`status.${conversationStage}`, { defaultValue: conversationStage }) : ''}
                 </span>
               )}
               <span style={{ color: 'var(--txt-3)' }}>
@@ -1658,7 +1649,14 @@ export function ChatArea({ conversationId }: Props) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
           {canAssume ? (
             <button
               onClick={() => void handleAssume()}
@@ -1684,7 +1682,7 @@ export function ChatArea({ conversationId }: Props) {
                 <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
                 <path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
               </svg>
-              {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
+              {isAssuming ? t('chat.assuming') : t('chat.assumeButton')}
             </button>
           ) : (
             <>
@@ -1694,6 +1692,7 @@ export function ChatArea({ conversationId }: Props) {
                   className="tb-icon-btn"
                   onClick={() => setShowTagDropdown((value) => !value)}
                   title={t('tags.manage', { defaultValue: 'Gerenciar etiquetas' })}
+                  aria-label={t('tags.manage', { defaultValue: 'Gerenciar etiquetas' })}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <path
@@ -1721,20 +1720,11 @@ export function ChatArea({ conversationId }: Props) {
               <PermissionGate permission="conversations:manage">
                 {canTransfer && (
                   <button
+                    type="button"
+                    className="tb-icon-btn"
                     title={t('chat.transfer')}
+                    aria-label={t('chat.transfer')}
                     onClick={() => setShowTransferModal(true)}
-                    style={{
-                      width: 30,
-                      height: 30,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'none',
-                      border: 'none',
-                      borderRadius: 'var(--r)',
-                      color: 'var(--txt-3)',
-                      cursor: 'pointer',
-                    }}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                       <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -1743,12 +1733,13 @@ export function ChatArea({ conversationId }: Props) {
                 )}
               </PermissionGate>
 
-              {isAssignedToMe && !isResolved && (
+              {isAssignedToMe && !isClosed && (
                 <button
                   type="button"
                   className="tb-icon-btn"
                   onClick={() => setShowHelpModal(true)}
                   title={t('help.request')}
+                  aria-label={t('help.request')}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
@@ -1764,26 +1755,19 @@ export function ChatArea({ conversationId }: Props) {
               )}
 
               <PermissionGate permission="conversations:manage">
-                {isAssignedToMe && !isResolved && (
+                {isAssignedToMe && !isClosed && (
                   <button
-                    onClick={() => setShowResolveModal(true)}
-                    disabled={endMutation.isPending}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      padding: '5px 11px',
-                      borderRadius: 'var(--r)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      border: '1px solid var(--teal)',
-                      background: 'var(--teal)',
-                      color: '#0E1A18',
-                      opacity: endMutation.isPending ? 0.55 : 1,
-                    }}
+                    type="button"
+                    className="tb-btn danger"
+                    onClick={() => setShowCloseModal(true)}
+                    disabled={closeMutation.isPending}
+                    title={t('closeConversation')}
+                    aria-label={t('closeConversation')}
                   >
-                    {t('chat.end', { defaultValue: 'Encerrar' })}
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <path d="M3 3l6 6M9 3 3 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                    {t('closeConversation')}
                   </button>
                 )}
               </PermissionGate>
@@ -1791,31 +1775,6 @@ export function ChatArea({ conversationId }: Props) {
           )}
         </div>
       </div>
-
-      {activeOutboundReturn && (
-        <div
-          style={{
-            margin: '8px 20px 0',
-            padding: '8px 10px',
-            borderRadius: 'var(--r)',
-            border: '1px solid rgba(245,158,11,.28)',
-            background: 'rgba(245,158,11,.10)',
-            color: 'var(--amber)',
-            display: 'grid',
-            gap: 2,
-          }}
-        >
-          <strong style={{ fontSize: 11, fontWeight: 600 }}>
-            {t('chat.activeOutboundReturnHeader')}
-          </strong>
-          <span style={{ fontSize: 11, color: 'var(--txt-2)' }}>
-            {t('chat.activeOutboundReturnSub', {
-              agent: activeOutboundReturn.originAgentName ?? t('chat.activeOutboundFallbackAgent'),
-            })}
-            {activeOutboundReturn.returnedAt ? ` · ${formatTime(activeOutboundReturn.returnedAt)}` : ''}
-          </span>
-        </div>
-      )}
 
       <div
         style={{
@@ -2255,7 +2214,7 @@ export function ChatArea({ conversationId }: Props) {
           position: 'relative',
         }}
       >
-        {isActiveOutboundWhatsappConversation && isConversationWindowLoaded && (
+        {isWhatsappConversation && isWaitingOutbound && isConversationWindowLoaded && (
           <div
             style={{
               margin: '-12px -16px 10px',
@@ -3004,12 +2963,12 @@ export function ChatArea({ conversationId }: Props) {
         )}
       </div>
 
-      <ResolveModal
-        open={showResolveModal}
-        onClose={() => setShowResolveModal(false)}
-        isSubmitting={endMutation.isPending}
+      <CloseConversationModal
+        isOpen={showCloseModal}
+        onClose={() => setShowCloseModal(false)}
+        isLoading={closeMutation.isPending}
         onConfirm={async (payload) => {
-          await endMutation.mutateAsync(payload);
+          await closeMutation.mutateAsync(payload);
         }}
       />
 

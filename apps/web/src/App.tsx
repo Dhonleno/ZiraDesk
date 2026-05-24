@@ -16,6 +16,7 @@ import { ConversationsPage } from './pages/omnichannel/Conversations';
 import { MetricsPage } from './pages/omnichannel/Metrics';
 import { HistoryPage } from './pages/omnichannel/History';
 import { PerformancePage } from './pages/omnichannel/Performance';
+import { QueuePage } from './pages/omnichannel/Queue';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
 import { TicketsPage } from './pages/tickets/Tickets';
@@ -136,6 +137,7 @@ export function App() {
             <Route path="monitor" element={<TVDashboard />} />
             <Route path="omnichannel" element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
+            <Route path="omnichannel/queue" element={<QueuePage />} />
             <Route path="omnichannel/monitor" element={<Navigate to="/monitor" replace />} />
             <Route
               path="omnichannel/metrics"

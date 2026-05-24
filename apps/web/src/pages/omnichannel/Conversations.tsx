@@ -101,7 +101,7 @@ export function ConversationsPage() {
 
         {selectedId ? (
           <>
-            <ChatArea conversationId={selectedId} />
+            <ChatArea conversationId={selectedId} onClosed={() => setSelectedId(null)} />
             <InfoPanel conversationId={selectedId} />
           </>
         ) : (

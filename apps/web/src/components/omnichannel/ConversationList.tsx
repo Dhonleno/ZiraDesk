@@ -4,12 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { api, conversationTags, type ConversationTag } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useNotification } from '../../hooks/useNotification';
-import { usePermission } from '../../hooks/usePermission';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
-import { isConversationBotControlled } from '../../utils/conversationNotifications';
 import { AgentStatsModal } from './AgentStatsModal';
 import { PermissionGate } from '../ui/PermissionGate';
 
@@ -75,14 +73,18 @@ interface ConversationCreatedEventPayload {
   contactName?: string | null;
 }
 
-type TabKey = 'active' | 'queue' | 'active_outbound' | 'closed';
-type ClosedSubStatus = null | 'resolved' | 'closed' | 'outbound';
+const TABS = [
+  { key: 'open', labelKey: 'tabs.open' },
+  { key: 'waiting', labelKey: 'tabs.waiting' },
+  { key: 'closed', labelKey: 'tabs.closed' },
+] as const;
+
+type TabKey = 'open' | 'waiting' | 'closed';
 
 interface ConversationCounts {
-  active: number;
-  return: number;
+  open: number;
+  waiting: number;
   mine: number;
-  queue: number;
   closed: number;
 }
 
@@ -178,14 +180,11 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const { showNotification } = useNotification();
-  const { role: currentUserRole } = usePermission();
-  const isManagerRole = ['owner', 'admin', 'supervisor'].includes(currentUserRole ?? '');
   const currentUserId = useAuthStore((state) => state.user?.id);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<TabKey>('active');
-  const [assignedToMe, setAssignedToMe] = useState(!initialAgentId && !isManagerRole);
+  const [activeTab, setActiveTab] = useState<TabKey>('open');
+  const [assignedToMe, setAssignedToMe] = useState(!initialAgentId);
   const [filterAgentId, setFilterAgentId] = useState(initialAgentId ?? '');
-  const [subStatus, setSubStatus] = useState<ClosedSubStatus>(null);
   const [filterTagId, setFilterTagId] = useState<string | null>(null);
   const [showTagFilterDropdown, setShowTagFilterDropdown] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -196,16 +195,14 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
   const desktopPermissionDeniedRef = useRef(false);
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const mainTabsRef = useRef<HTMLDivElement | null>(null);
-  const closedSubTabsRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
 
   useEffect(() => {
     setFilterAgentId(initialAgentId ?? '');
-    setAssignedToMe(!initialAgentId && !isManagerRole);
-    setActiveTab('active');
-    setSubStatus(null);
-  }, [initialAgentId, isManagerRole]);
+    setAssignedToMe(!initialAgentId);
+    setActiveTab('open');
+  }, [initialAgentId]);
 
   const revealSelectedTab = useCallback((selector: string, container: HTMLDivElement | null) => {
     if (!container) return;
@@ -223,12 +220,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
   useEffect(() => {
     revealSelectedTab(`button[data-tab-key="${activeTab}"]`, mainTabsRef.current);
   }, [activeTab, revealSelectedTab]);
-
-  useEffect(() => {
-    if (activeTab !== 'closed') return;
-    const key = subStatus ?? 'all';
-    revealSelectedTab(`button[data-subtab-key="${key}"]`, closedSubTabsRef.current);
-  }, [activeTab, revealSelectedTab, subStatus]);
 
   const clearTimer = useCallback((timers: Map<string, number>, id: string) => {
     const timer = timers.get(id);
@@ -373,8 +364,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
     const onAssumed = (event: Event) => {
       const detail = (event as CustomEvent<{ conversationId?: string }>).detail;
       setAssignedToMe(true);
-      setActiveTab('active');
-      setSubStatus(null);
+      setActiveTab('open');
       if (detail?.conversationId) {
         handleSelectConversation(detail.conversationId);
       }
@@ -399,12 +389,11 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
     };
 
     const syncToActiveTabForCurrentUser = (conversationId?: string) => {
-      const shouldMoveToActive = activeTab === 'queue' || selectedId === conversationId;
+      const shouldMoveToActive = activeTab === 'open' || selectedId === conversationId;
       if (!shouldMoveToActive) return;
 
       setAssignedToMe(true);
-      setActiveTab('active');
-      setSubStatus(null);
+      setActiveTab('open');
       if (conversationId) {
         handleSelectConversation(conversationId);
       }
@@ -425,16 +414,9 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
         ?? data.conversation?.assignedAgentId
         ?? cachedConversation?.assigned_to
         ?? null;
-      const conversationStatus = data.conversation?.status ?? cachedConversation?.status ?? null;
-      const conversationMetadata = data.conversation?.metadata ?? cachedConversation?.metadata ?? null;
 
       if (conversationId) {
         markConversationActivity(conversationId);
-      }
-
-      // Não notificar enquanto o bot está respondendo pela conversa.
-      if (isConversationBotControlled({ status: conversationStatus, metadata: conversationMetadata })) {
-        return;
       }
 
       if (!currentUserId || assignedAgentId !== currentUserId) {
@@ -507,7 +489,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
     const handleCreated = (data: ConversationCreatedEventPayload) => {
       invalidateConversationData();
       const conversationId = data.conversationId ?? data.conversation?.id;
-      if (isConversationBotControlled(data.conversation)) return;
 
       if (conversationId) {
         markNewConversation(conversationId);
@@ -642,20 +623,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
     t,
   ]);
 
-  const TABS: Array<{ key: TabKey; labelKey: string }> = [
-    { key: 'active', labelKey: 'tabs.active' },
-    { key: 'active_outbound', labelKey: 'tabs.activeOutbound' },
-    { key: 'queue', labelKey: 'tabs.queue' },
-    { key: 'closed', labelKey: 'tabs.closed' },
-  ];
-
-  const CLOSED_SUB_TABS: Array<{ key: ClosedSubStatus; labelKey: string }> = [
-    { key: null, labelKey: 'subTabs.all' },
-    { key: 'resolved', labelKey: 'subTabs.resolved' },
-    { key: 'closed', labelKey: 'subTabs.closed' },
-    { key: 'outbound', labelKey: 'subTabs.outbound' },
-  ];
-
   const { data: counts } = useQuery({
     queryKey: ['conversation-counts'],
     queryFn: async () => {
@@ -675,20 +642,19 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
   const selectedTag = allTags.find((tag) => tag.id === filterTagId) ?? null;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['conversations', activeTab, assignedToMe, subStatus, debouncedSearch, filterTagId, filterAgentId],
+    queryKey: ['conversations', activeTab, assignedToMe, debouncedSearch, filterTagId, filterAgentId],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
         '/omnichannel/conversations',
         {
           params: {
             perPage: 50,
-            tab: activeTab === 'active_outbound' ? 'return' : activeTab,
+            tab: activeTab,
             assigned_to_me:
-              (activeTab === 'active' || activeTab === 'active_outbound') && !filterAgentId
+              (activeTab === 'open' || activeTab === 'waiting') && !filterAgentId
                 ? (assignedToMe ? true : undefined)
                 : undefined,
             agent_id: filterAgentId || undefined,
-            sub_status: activeTab === 'closed' ? subStatus ?? undefined : undefined,
             search: debouncedSearch || undefined,
             tag_id: filterTagId ?? undefined,
           },
@@ -701,10 +667,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
 
   const assumeMutation = useMutation({
     mutationFn: async (conversationId: string) => {
-      if (!currentUserId) throw new Error('missing-user');
-      const res = await api.post(`/omnichannel/conversations/${conversationId}/assign`, {
-        user_id: currentUserId,
-      });
+      const res = await api.post(`/omnichannel/queue/${conversationId}/assign-me`);
       return res.data;
     },
     onSuccess: (_data, conversationId) => {
@@ -957,7 +920,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
               type="button"
               onClick={() => {
                 setFilterAgentId('');
-                setAssignedToMe(!isManagerRole);
+                setAssignedToMe(true);
               }}
               style={{
                 border: 'none',
@@ -972,7 +935,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
           </div>
         )}
 
-        {activeTab === 'active' && !filterAgentId && (
+        {activeTab === 'open' && !filterAgentId && (
           <button
             onClick={() => setAssignedToMe((v) => !v)}
             style={{
@@ -1052,22 +1015,14 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
       }}
       >
         {TABS.map((tab) => {
-          const isQueueTab = tab.key === 'queue';
-          const isAmberCounter = isQueueTab;
-          const tabCount = tab.key === 'active'
-            ? counts?.active
-            : tab.key === 'queue'
-              ? counts?.queue
-              : tab.key === 'active_outbound'
-                ? counts?.return
-                : counts?.closed;
+          const isAmberCounter = tab.key === 'waiting';
+          const tabCount = counts?.[tab.key];
           return (
             <button
               key={tab.key}
               data-tab-key={tab.key}
               onClick={() => {
                 setActiveTab(tab.key);
-                setSubStatus(null);
               }}
               style={{
                 padding: '6px 12px',
@@ -1109,46 +1064,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
         })}
       </div>
 
-      {activeTab === 'closed' && (
-        <div
-          className="omni-tabs-scroll"
-          ref={closedSubTabsRef}
-          style={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          gap: 4,
-          padding: '8px 14px',
-          borderBottom: '1px solid var(--line)',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'var(--bg-5) transparent',
-        }}
-        >
-          {CLOSED_SUB_TABS.map((tab) => (
-            <button
-              key={tab.key ?? 'all'}
-              data-subtab-key={tab.key ?? 'all'}
-              onClick={() => setSubStatus(tab.key)}
-              style={{
-                padding: '3px 8px',
-                borderRadius: 'var(--r-pill)',
-                fontSize: 10,
-                fontWeight: 500,
-                cursor: 'pointer',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-                border: subStatus === tab.key ? '1px solid rgba(0,201,167,.2)' : '1px solid transparent',
-                background: subStatus === tab.key ? 'var(--teal-dim)' : 'transparent',
-                color: subStatus === tab.key ? 'var(--teal)' : 'var(--txt-3)',
-              }}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* List */}
       <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin' }}>
         {isLoading
@@ -1162,13 +1077,8 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
           ? (
               <div style={{ padding: '48px 16px', textAlign: 'center' }}>
                 <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                  {activeTab === 'queue' ? t('queue.empty') : t('noConversations')}
+                  {t('noConversations')}
                 </div>
-                {activeTab === 'queue' && (
-                  <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: 'var(--txt-3)' }}>
-                    {t('queue.emptyHint')}
-                  </div>
-                )}
               </div>
             )
           : (data ?? []).map((conv) => {
@@ -1183,6 +1093,8 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                 typeof conv.metadata?.bot_department === 'string'
                   ? conv.metadata.bot_department
                   : null;
+              const isAwaitingBotChoice = conv.metadata?.bot_stage === 'waiting_choice';
+              const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice;
               const itemClassName = [
                 hasNewActivity ? 'zd-flash' : '',
                 isNewConversation ? 'zd-slide-down' : '',
@@ -1290,7 +1202,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                         {isNewConversation && (
                           <span className="zd-badge-new">Novo</span>
                         )}
-                        {activeTab === 'queue' && (
+                        {canAssumeConversation && (
                           <button
                             type="button"
                             disabled={assumeMutation.isPending}
@@ -1347,7 +1259,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                     </p>
 
                     <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
-                      {conv.status === 'active_outbound' && (
+                      {conv.status === 'waiting' && conv.conversation_type === 'outbound' && (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 600,
@@ -1367,7 +1279,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                           {t('outbound.badge')}
                         </span>
                       )}
-                      {conv.conversation_type === 'outbound' && conv.status !== 'active_outbound' && (
+                      {conv.conversation_type === 'outbound' && conv.status !== 'waiting' && (
                         <span style={{
                           fontSize: 10,
                           fontWeight: 600,
@@ -1379,20 +1291,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                           whiteSpace: 'nowrap',
                         }}>
                           {t('outboundBadge')}
-                        </span>
-                      )}
-                      {conv.status === 'bot' && (
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          padding: '1px 7px',
-                          borderRadius: 'var(--r-pill)',
-                          background: 'var(--purple-dim)',
-                          color: 'var(--purple)',
-                          border: '1px solid rgba(167,139,250,.2)',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {t('botBadge')}
                         </span>
                       )}
                       {botDepartment && (
@@ -1410,17 +1308,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                           textOverflow: 'ellipsis',
                         }}>
                           {botDepartment}
-                        </span>
-                      )}
-                      {conv.status === 'resolved' && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 500,
-                          padding: '1px 7px', borderRadius: 'var(--r-pill)',
-                          background: 'var(--bg-4)', color: 'var(--txt-3)',
-                          border: '1px solid var(--line)',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {t('status.resolved')}
                         </span>
                       )}
                       {activeTab === 'closed' && conv.csat_score ? (

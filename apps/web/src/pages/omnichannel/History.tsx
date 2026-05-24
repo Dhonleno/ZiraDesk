@@ -23,12 +23,8 @@ const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = 
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
   open: 'status-open',
-  pending: 'status-pending',
-  in_service: 'status-in_service',
-  active_outbound: 'status-active_outbound',
-  resolved: 'status-resolved',
+  waiting: 'status-waiting',
   closed: 'status-closed',
-  bot: 'status-bot',
 };
 
 function channelIcon(channelType: string) {
@@ -324,12 +320,8 @@ export function HistoryPage() {
               >
                 <option value="">{t('history.filters.status')}</option>
                 <option value="open">{t('status.open')}</option>
-                <option value="pending">{t('status.pending')}</option>
-                <option value="in_service">{t('status.in_service')}</option>
-                <option value="resolved">{t('status.resolved')}</option>
+                <option value="waiting">{t('status.waiting')}</option>
                 <option value="closed">{t('status.closed')}</option>
-                <option value="bot">{t('status.bot')}</option>
-                <option value="active_outbound">{t('status.active_outbound')}</option>
               </select>
 
               <select
@@ -445,7 +437,7 @@ export function HistoryPage() {
                       </td>
                       <td>{conversation.bot_department ?? '—'}</td>
                       <td>
-                        <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-pending'}`}>
+                        <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-open'}`}>
                           {t(`status.${conversation.status}`)}
                         </span>
                       </td>
