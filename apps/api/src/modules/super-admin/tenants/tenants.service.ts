@@ -401,6 +401,10 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TYPE "${schemaName}".conversation_status AS ENUM ('open', 'waiting', 'closed')
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
@@ -410,12 +414,15 @@ async function createTenantTables(schemaName: string): Promise<void> {
       external_id     VARCHAR(255),
       protocol_number VARCHAR(20)  UNIQUE,
       conversation_type VARCHAR(20) NOT NULL DEFAULT 'inbound',
-      status          VARCHAR(20)  NOT NULL DEFAULT 'open',
+      status          "${schemaName}".conversation_status NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       assigned_at     TIMESTAMPTZ,
       close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
       close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
       closed_at       TIMESTAMPTZ,
+      closure_reason  JSONB,
+      waiting_expires_at TIMESTAMPTZ,
+      queue_entered_at TIMESTAMPTZ,
       subject         VARCHAR(255),
       last_message    TEXT,
       last_message_at TIMESTAMPTZ,

@@ -98,9 +98,9 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
     }>>(
       `SELECT
          COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
-         COUNT(*) FILTER (WHERE status IN ('open', 'pending')) AS open,
-         COUNT(*) FILTER (WHERE status = 'bot') AS bot
+         COUNT(*) FILTER (WHERE status = 'closed') AS resolved,
+         COUNT(*) FILTER (WHERE status = 'open') AS open,
+         COUNT(*) FILTER (WHERE status = 'waiting') AS bot
        FROM conversations
        ${whereSql}`,
       ...params,
@@ -119,7 +119,7 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
          )) / 60))::integer AS avg_minutes
        FROM conversations
        ${whereSql}
-       ${whereSql ? 'AND' : 'WHERE'} status = 'resolved'
+       ${whereSql ? 'AND' : 'WHERE'} status = 'closed'
        AND resolved_at IS NOT NULL`,
       ...params,
     );
@@ -183,7 +183,7 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 
     const total = totalRows[0];
     const csat = csatRows[0];
-    const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status IN ('resolved', 'closed')`];
+    const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status = 'closed'`];
     const byTypeParams: unknown[] = [];
     addCommonFilters(byTypeWhere, byTypeParams, filters, 'c');
     const byTypeWhereSql = byTypeWhere.length ? `WHERE ${byTypeWhere.join(' AND ')}` : '';
@@ -285,7 +285,7 @@ export async function getVolumeByPeriod(filters: MetricsFilters, schemaName: str
       `SELECT
          DATE(created_at) AS date,
          COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status = 'resolved') AS resolved
+         COUNT(*) FILTER (WHERE status = 'closed') AS resolved
        FROM conversations
        ${whereSql}
        GROUP BY DATE(created_at)
@@ -322,7 +322,7 @@ export async function getByAgent(filters: MetricsFilters, schemaName: string, db
          u.name AS agent_name,
          u.id AS agent_id,
          COUNT(c.id) AS total,
-         COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved,
          ROUND(AVG(EXTRACT(EPOCH FROM (
            c.resolved_at - COALESCE(
              CASE
@@ -456,7 +456,7 @@ export async function getMyStats(
     }>>(
       `SELECT
          COUNT(c.id) AS total,
-         COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved,
          ROUND(AVG(EXTRACT(EPOCH FROM (
            c.resolved_at - COALESCE(
              CASE WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at ELSE NULL END,
@@ -481,7 +481,7 @@ export async function getMyStats(
        ) fr ON true
        WHERE c.assigned_to = $1::uuid
          AND c.conversation_type IS DISTINCT FROM 'outbound'
-         AND (c.metadata->>'origin') IS DISTINCT FROM 'active_outbound'
+         AND (c.metadata->>'origin') IS DISTINCT FROM 'outbound'
          AND c.created_at >= (($2::date)::timestamp AT TIME ZONE $4::text)
          AND c.created_at < ((($3::date + INTERVAL '1 day')::timestamp) AT TIME ZONE $4::text)`,
       agentId,

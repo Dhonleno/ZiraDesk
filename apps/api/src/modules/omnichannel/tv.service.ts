@@ -76,7 +76,7 @@ interface TvConversationCard {
 
 interface TvQueryRow {
   queued: number | null;
-  in_service: number | null;
+  open_total: number | null;
   resolved_today: number | null;
   abandoned: number | null;
   tme: number | null;
@@ -107,10 +107,10 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
       LEFT JOIN users u ON u.id = c.assigned_to
       WHERE (
         c.assigned_to IS NULL
-        AND c.status IN ('open', 'pending', 'bot')
+        AND c.status = 'open'
       ) OR (
         c.assigned_to IS NOT NULL
-        AND c.status IN ('open', 'in_service', 'pending', 'bot')
+        AND c.status = 'open'
       )
     ),
     first_response AS (
@@ -128,14 +128,14 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
     SELECT
       COUNT(*) FILTER (
         WHERE c.assigned_to IS NULL
-          AND c.status IN ('open', 'pending', 'bot')
+          AND c.status = 'open'
       )::integer AS queued,
       COUNT(*) FILTER (
         WHERE c.assigned_to IS NOT NULL
-          AND c.status IN ('open', 'in_service', 'pending', 'bot')
-      )::integer AS in_service,
+          AND c.status = 'open'
+      )::integer AS open_total,
       COUNT(*) FILTER (
-        WHERE c.status = 'resolved'
+        WHERE c.status = 'closed'
           AND c.resolved_at IS NOT NULL
           AND c.resolved_at::date = CURRENT_DATE
       )::integer AS resolved_today,
@@ -151,7 +151,7 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
         ))::integer AS tme,
       ROUND(AVG(EXTRACT(EPOCH FROM (c.resolved_at - c.assigned_at)) / 60.0)
         FILTER (
-          WHERE c.status = 'resolved'
+          WHERE c.status = 'closed'
             AND c.assigned_at IS NOT NULL
             AND c.resolved_at IS NOT NULL
             AND c.resolved_at::date = CURRENT_DATE
@@ -280,7 +280,7 @@ export async function getTvSnapshot(
     },
     conversations: {
       queued: Number(row?.queued ?? 0),
-      inService: Number(row?.in_service ?? 0),
+      inService: Number(row?.open_total ?? 0),
       resolvedToday: Number(row?.resolved_today ?? 0),
       abandoned: Number(row?.abandoned ?? 0),
     },

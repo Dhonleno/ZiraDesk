@@ -15,9 +15,8 @@ export const listConversationsQuerySchema = z
     page: z.coerce.number().int().positive().default(1),
     perPage: z.coerce.number().int().positive().max(100).optional(),
     per_page: z.coerce.number().int().positive().max(100).optional(),
-    tab: z.enum(['active', 'queue', 'return', 'active_outbound', 'closed']).optional(),
-    sub_status: z.enum(['resolved', 'closed', 'outbound']).optional(),
-    status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
+    tab: z.enum(['open', 'waiting', 'closed']).optional(),
+    status: z.enum(['open', 'waiting', 'closed']).optional(),
     search: z.string().optional(),
     assigned_to_me: booleanQueryParamSchema.optional(),
     agent_id: z.string().uuid().optional(),
@@ -90,7 +89,7 @@ export const listMessagesQuerySchema = z.object({
 
 export const updateConversationBodySchema = z
   .object({
-    status: z.enum(['open', 'active_outbound', 'in_service', 'pending', 'resolved', 'bot', 'closed']).optional(),
+    status: z.enum(['open', 'waiting', 'closed']).optional(),
     assignedTo: z.string().uuid().nullable().optional(),
     csat_score: z.number().min(1).max(5).optional(),
     csat_comment: z.string().optional(),
@@ -122,11 +121,17 @@ export const availabilityBodySchema = z.object({
   is_available: z.boolean(),
 });
 
-export const resolveConversationBodySchema = z.object({
-  closeTypeId: z.string().cuid(),
-  closeOutcomeId: z.string().cuid(),
-  csatMode: z.enum(['resolve', 'close']),
-  internalNote: z.string().trim().max(4000).optional(),
+export const closeConversationSchema = z.object({
+  reason: z.string().min(1).max(200),
+  notes: z.string().max(1000).optional(),
+  closeTypeId: z.string().max(30).optional(),
+  closeOutcomeId: z.string().max(30).optional(),
+});
+
+export const listQueueQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  channel_type: z.string().trim().max(30).optional(),
 });
 
 export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema>;
@@ -138,4 +143,5 @@ export type AssignConversationBody = z.infer<typeof assignConversationBodySchema
 export type TransferConversationBody = z.infer<typeof transferConversationBodySchema>;
 export type RequestHelpBody = z.infer<typeof requestHelpBodySchema>;
 export type AvailabilityBody = z.infer<typeof availabilityBodySchema>;
-export type ResolveConversationBody = z.infer<typeof resolveConversationBodySchema>;
+export type CloseConversationDto = z.infer<typeof closeConversationSchema>;
+export type ListQueueQuery = z.infer<typeof listQueueQuerySchema>;

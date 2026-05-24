@@ -170,20 +170,20 @@ async function seedDemoConversations() {
     { id: 'd0000001-0000-0000-0000-000000000001', contactId: 'c0000001-0000-0000-0000-000000000001', channelId: wpp,  channelType: 'whatsapp',  status: 'open',       assignedTo: null,    subject: 'Problema com boleto', lastMsg: 'Oi, não consigo gerar o boleto do meu plano.', ago: '2 hours' },
     { id: 'd0000001-0000-0000-0000-000000000002', contactId: 'c0000001-0000-0000-0000-000000000003', channelId: mail, channelType: 'email',     status: 'open',       assignedTo: null,    subject: 'Solicitação de proposta', lastMsg: 'Gostaria de receber uma proposta comercial para minha equipe.', ago: '5 hours' },
     { id: 'd0000001-0000-0000-0000-000000000003', contactId: 'c0000001-0000-0000-0000-000000000005', channelId: chat, channelType: 'live_chat', status: 'open',       assignedTo: null,    subject: null, lastMsg: 'Olá, tenho uma dúvida sobre o plano Enterprise.', ago: '30 minutes' },
-    // in_service — com agente
-    { id: 'd0000001-0000-0000-0000-000000000004', contactId: 'c0000001-0000-0000-0000-000000000002', channelId: wpp,  channelType: 'whatsapp',  status: 'in_service', assignedTo: ownerId, subject: 'Integração WhatsApp', lastMsg: 'Pode me enviar o QR code de novo, por favor?', ago: '1 hour' },
-    { id: 'd0000001-0000-0000-0000-000000000005', contactId: 'c0000001-0000-0000-0000-000000000004', channelId: mail, channelType: 'email',     status: 'in_service', assignedTo: agentId, subject: 'Erro ao importar contatos', lastMsg: 'Arquivo CSV em anexo — consegue verificar?', ago: '3 hours' },
-    { id: 'd0000001-0000-0000-0000-000000000006', contactId: 'c0000001-0000-0000-0000-000000000007', channelId: chat, channelType: 'live_chat', status: 'in_service', assignedTo: agentId, subject: null, lastMsg: 'Vou verificar e já retorno.', ago: '45 minutes' },
-    // resolved
-    { id: 'd0000001-0000-0000-0000-000000000007', contactId: 'c0000001-0000-0000-0000-000000000006', channelId: wpp,  channelType: 'whatsapp',  status: 'resolved',   assignedTo: ownerId, subject: 'Atualização de cadastro', lastMsg: 'Perfeito, obrigado pelo atendimento!', ago: '1 day' },
-    { id: 'd0000001-0000-0000-0000-000000000008', contactId: 'c0000001-0000-0000-0000-000000000008', channelId: mail, channelType: 'email',     status: 'resolved',   assignedTo: agentId, subject: 'Cancelamento de conta', lastMsg: 'Cancelamento processado com sucesso.', ago: '2 days' },
-    { id: 'd0000001-0000-0000-0000-000000000009', contactId: 'c0000001-0000-0000-0000-000000000001', channelId: chat, channelType: 'live_chat', status: 'resolved',   assignedTo: ownerId, subject: 'Dúvida sobre relatórios', lastMsg: 'Entendido! Muito obrigada.', ago: '3 days' },
+    // open — com agente
+    { id: 'd0000001-0000-0000-0000-000000000004', contactId: 'c0000001-0000-0000-0000-000000000002', channelId: wpp,  channelType: 'whatsapp',  status: 'open',   assignedTo: ownerId, subject: 'Integração WhatsApp', lastMsg: 'Pode me enviar o QR code de novo, por favor?', ago: '1 hour' },
+    { id: 'd0000001-0000-0000-0000-000000000005', contactId: 'c0000001-0000-0000-0000-000000000004', channelId: mail, channelType: 'email',     status: 'open',   assignedTo: agentId, subject: 'Erro ao importar contatos', lastMsg: 'Arquivo CSV em anexo — consegue verificar?', ago: '3 hours' },
+    { id: 'd0000001-0000-0000-0000-000000000006', contactId: 'c0000001-0000-0000-0000-000000000007', channelId: chat, channelType: 'live_chat', status: 'open',   assignedTo: agentId, subject: null, lastMsg: 'Vou verificar e já retorno.', ago: '45 minutes' },
+    // closed
+    { id: 'd0000001-0000-0000-0000-000000000007', contactId: 'c0000001-0000-0000-0000-000000000006', channelId: wpp,  channelType: 'whatsapp',  status: 'closed', assignedTo: ownerId, subject: 'Atualização de cadastro', lastMsg: 'Perfeito, obrigado pelo atendimento!', ago: '1 day' },
+    { id: 'd0000001-0000-0000-0000-000000000008', contactId: 'c0000001-0000-0000-0000-000000000008', channelId: mail, channelType: 'email',     status: 'closed', assignedTo: agentId, subject: 'Cancelamento de conta', lastMsg: 'Cancelamento processado com sucesso.', ago: '2 days' },
+    { id: 'd0000001-0000-0000-0000-000000000009', contactId: 'c0000001-0000-0000-0000-000000000001', channelId: chat, channelType: 'live_chat', status: 'closed', assignedTo: ownerId, subject: 'Dúvida sobre relatórios', lastMsg: 'Entendido! Muito obrigada.', ago: '3 days' },
   ];
 
   for (const c of conversations) {
     const assignedSql = c.assignedTo ? `'${c.assignedTo}'` : 'NULL';
     const subjectSql  = c.subject    ? `'${c.subject.replace(/'/g, "''")}'` : 'NULL';
-    const resolvedSql = c.status === 'resolved' ? `NOW() - INTERVAL '${c.ago}'` : 'NULL';
+    const resolvedSql = c.status === 'closed' ? `NOW() - INTERVAL '${c.ago}'` : 'NULL';
     await prisma.$executeRawUnsafe(`
       INSERT INTO "${s}".conversations
         (id, contact_id, channel_id, channel_type, conversation_type, status, assigned_to, subject, last_message, last_message_at, resolved_at, created_at)
@@ -213,37 +213,37 @@ async function seedDemoConversations() {
     // Conv 3 — enterprise (open, sem agente)
     { convId: 'd0000001-0000-0000-0000-000000000003', senderType: 'client', senderId: null,    content: 'Olá, tenho uma dúvida sobre o plano Enterprise.', minsAgo: 32 },
 
-    // Conv 4 — WhatsApp integration (in_service, owner)
+    // Conv 4 — WhatsApp integration (open, owner)
     { convId: 'd0000001-0000-0000-0000-000000000004', senderType: 'client', senderId: null,    content: 'Oi, preciso de ajuda para conectar o WhatsApp.', minsAgo: 75 },
     { convId: 'd0000001-0000-0000-0000-000000000004', senderType: 'agent',  senderId: ownerId, content: 'Olá! Claro, vou te ajudar. Acesse Configurações → Canais → WhatsApp e clique em "Conectar".', minsAgo: 72 },
     { convId: 'd0000001-0000-0000-0000-000000000004', senderType: 'client', senderId: null,    content: 'Fiz isso mas o QR code expirou antes de eu conseguir escanear.', minsAgo: 68 },
     { convId: 'd0000001-0000-0000-0000-000000000004', senderType: 'agent',  senderId: ownerId, content: 'Entendido! O QR expira em 60 segundos. Abra o WhatsApp no celular ANTES de clicar em conectar.', minsAgo: 65 },
     { convId: 'd0000001-0000-0000-0000-000000000004', senderType: 'client', senderId: null,    content: 'Pode me enviar o QR code de novo, por favor?', minsAgo: 60 },
 
-    // Conv 5 — CSV import (in_service, agent)
+    // Conv 5 — CSV import (open, agent)
     { convId: 'd0000001-0000-0000-0000-000000000005', senderType: 'client', senderId: null,    content: 'Tentei importar 500 contatos via CSV mas o sistema retornou erro na linha 47.', minsAgo: 185 },
     { convId: 'd0000001-0000-0000-0000-000000000005', senderType: 'agent',  senderId: agentId, content: 'Olá Roberto! Pode me enviar o arquivo para eu verificar o formato?', minsAgo: 180 },
     { convId: 'd0000001-0000-0000-0000-000000000005', senderType: 'client', senderId: null,    content: 'Arquivo CSV em anexo — consegue verificar?', minsAgo: 175 },
 
-    // Conv 6 — chat (in_service, agent)
+    // Conv 6 — chat (open, agent)
     { convId: 'd0000001-0000-0000-0000-000000000006', senderType: 'client', senderId: null,    content: 'Boa tarde! Meu relatório de atendimentos não está carregando.', minsAgo: 50 },
     { convId: 'd0000001-0000-0000-0000-000000000006', senderType: 'agent',  senderId: agentId, content: 'Boa tarde, Camila! Vou verificar e já retorno.', minsAgo: 45 },
 
-    // Conv 7 — atualização cadastro (resolved)
+    // Conv 7 — atualização cadastro (closed)
     { convId: 'd0000001-0000-0000-0000-000000000007', senderType: 'client', senderId: null,    content: 'Preciso atualizar meu e-mail de cadastro.', minsAgo: 1450 },
     { convId: 'd0000001-0000-0000-0000-000000000007', senderType: 'agent',  senderId: ownerId, content: 'Olá Pedro! Me informe o novo e-mail e vou atualizar para você.', minsAgo: 1440 },
     { convId: 'd0000001-0000-0000-0000-000000000007', senderType: 'client', senderId: null,    content: 'O novo e-mail é pedro.novo@empresa.net', minsAgo: 1435 },
     { convId: 'd0000001-0000-0000-0000-000000000007', senderType: 'agent',  senderId: ownerId, content: 'Feito! Seu cadastro foi atualizado com sucesso.', minsAgo: 1430 },
     { convId: 'd0000001-0000-0000-0000-000000000007', senderType: 'client', senderId: null,    content: 'Perfeito, obrigado pelo atendimento!', minsAgo: 1425 },
 
-    // Conv 8 — cancelamento (resolved)
+    // Conv 8 — cancelamento (closed)
     { convId: 'd0000001-0000-0000-0000-000000000008', senderType: 'client', senderId: null,    content: 'Gostaria de cancelar minha conta.', minsAgo: 2900 },
     { convId: 'd0000001-0000-0000-0000-000000000008', senderType: 'agent',  senderId: agentId, content: 'Olá Lucas! Lamentamos que queira cancelar. Pode nos dizer o motivo?', minsAgo: 2880 },
     { convId: 'd0000001-0000-0000-0000-000000000008', senderType: 'client', senderId: null,    content: 'Estamos mudando de plataforma internamente.', minsAgo: 2870 },
     { convId: 'd0000001-0000-0000-0000-000000000008', senderType: 'agent',  senderId: agentId, content: 'Entendido. Processarei o cancelamento. Obrigado por ter sido nosso cliente!', minsAgo: 2860 },
     { convId: 'd0000001-0000-0000-0000-000000000008', senderType: 'client', senderId: null,    content: 'Cancelamento processado com sucesso.', minsAgo: 2855 },
 
-    // Conv 9 — relatórios (resolved)
+    // Conv 9 — relatórios (closed)
     { convId: 'd0000001-0000-0000-0000-000000000009', senderType: 'client', senderId: null,    content: 'Como exporto o relatório de atendimentos do mês?', minsAgo: 4325 },
     { convId: 'd0000001-0000-0000-0000-000000000009', senderType: 'agent',  senderId: ownerId, content: 'Olá Ana! Vá em Admin → Dashboard → botão "Exportar" no canto superior direito.', minsAgo: 4315 },
     { convId: 'd0000001-0000-0000-0000-000000000009', senderType: 'client', senderId: null,    content: 'Entendido! Muito obrigada.', minsAgo: 4310 },

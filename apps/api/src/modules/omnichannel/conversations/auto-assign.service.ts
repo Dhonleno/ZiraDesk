@@ -42,6 +42,14 @@ function tableRef(schemaName: string, table: string): string {
   return `${quoteIdent(schemaName)}.${table}`;
 }
 
+function humanQueueEligibilityCondition(alias?: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}assigned_to IS NULL
+       AND ${prefix}status = 'open'
+       AND COALESCE(${prefix}metadata->>'bot_stage', '') <> 'waiting_choice'
+       AND COALESCE(${prefix}metadata->>'ai_agent_active', 'false') <> 'true'`;
+}
+
 function parseAutoAssignSettings(settings: unknown): AutoAssignSettings {
   const safe = typeof settings === 'object' && settings !== null
     ? (settings as Record<string, unknown>)
@@ -318,7 +326,7 @@ async function syncAllActiveConversationCounters(
        SELECT assigned_to AS user_id, COUNT(*)::integer AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
        GROUP BY assigned_to
      ) conv
      WHERE aa.user_id = conv.user_id`,
@@ -331,7 +339,7 @@ async function syncAllActiveConversationCounters(
        SELECT DISTINCT assigned_to
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
      )`,
   );
 }
@@ -353,9 +361,22 @@ async function persistAutoAssignment(
     `UPDATE ${conversationsRef}
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
-         status = 'open'
+         status = 'open',
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL,
+         waiting_expires_at = NULL
      WHERE id = $2::uuid
        AND assigned_to IS NULL
+       AND status = 'open'
+       AND COALESCE(metadata->>'bot_stage', '') <> 'waiting_choice'
+       AND COALESCE(metadata->>'ai_agent_active', 'false') <> 'true'
      RETURNING id`,
     agentId,
     conversationId,
@@ -370,7 +391,7 @@ async function persistAutoAssignment(
            SELECT COUNT(*)::integer
            FROM ${conversationsRef}
            WHERE assigned_to = $1::uuid
-             AND status IN ('open', 'in_service', 'pending', 'bot')
+             AND status = 'open'
          )
      WHERE user_id = $1::uuid`,
     agentId,
@@ -520,7 +541,7 @@ export async function syncAgentAvailability(
          SELECT COUNT(*)::integer
          FROM ${conversationsRef}
          WHERE assigned_to = $1::uuid
-           AND status IN ('open', 'in_service', 'pending', 'bot')
+           AND status = 'open'
        )
        WHERE user_id = $1::uuid
        RETURNING user_id, active_conversations, max_conversations, status, is_available`,
@@ -619,9 +640,8 @@ export async function autoAssignNextQueuedConversation(
   const queueRows = await prisma.$queryRawUnsafe<QueueConversationRow[]>(
     `SELECT id
      FROM ${conversationsRef}
-     WHERE assigned_to IS NULL
-       AND status IN ('open', 'pending', 'bot')
-     ORDER BY last_message_at ASC NULLS FIRST, created_at ASC
+     WHERE ${humanQueueEligibilityCondition()}
+     ORDER BY queue_entered_at ASC NULLS LAST, created_at ASC
      LIMIT 1`,
   );
 

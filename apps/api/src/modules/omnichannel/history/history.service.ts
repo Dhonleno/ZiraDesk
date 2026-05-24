@@ -174,12 +174,8 @@ function channelLabel(channelType: string): string {
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
     open: 'Aberto',
-    active_outbound: 'Ativo',
-    in_service: 'Em atendimento',
-    pending: 'Aguardando',
-    resolved: 'Resolvido',
+    waiting: 'Aguardando',
     closed: 'Fechado',
-    bot: 'Bot',
   };
   return map[status] ?? status;
 }

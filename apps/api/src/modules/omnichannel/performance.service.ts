@@ -223,7 +223,7 @@ function getPerformanceBaseFilters(
   const dateToToken = pushParam(dateToLocal);
   const timezoneToken = pushParam(timezone);
 
-  conditions.push(`c.status <> 'bot'`);
+  conditions.push(`c.status IN ('open', 'waiting', 'closed')`);
   conditions.push(`c.created_at >= ((${dateFromToken}::date)::timestamp AT TIME ZONE ${timezoneToken}::text)`);
   conditions.push(`c.created_at < ((((${dateToToken}::date + INTERVAL '1 day')::timestamp) AT TIME ZONE ${timezoneToken}::text))`);
 
@@ -328,7 +328,7 @@ export async function listPerformance(
           COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
         )) / 60
       ) FILTER (
-        WHERE fc.status IN ('resolved', 'closed')
+        WHERE fc.status = 'closed'
           AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
       ) AS avg_tma_minutes,
       AVG(
@@ -392,7 +392,7 @@ export async function listPerformance(
           COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
         )) / 60
       ) FILTER (
-        WHERE fc.status IN ('resolved', 'closed')
+        WHERE fc.status = 'closed'
           AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
       ) AS avg_tma_minutes,
       AVG(

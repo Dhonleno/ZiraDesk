@@ -33,6 +33,7 @@ interface ChannelRow {
 
 interface ConversationRow {
   id: string;
+  status?: string | null;
 }
 
 async function findTenantByPageId(pageId: string) {
@@ -116,8 +117,8 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           }
 
           const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-            `SELECT id FROM conversations
-             WHERE contact_id = $1 AND channel_id = $2 AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+            `SELECT id, status FROM conversations
+             WHERE contact_id = $1 AND channel_id = $2 AND status IN ('open', 'waiting')
              ORDER BY created_at DESC
              LIMIT 1`,
             contactId,
@@ -125,8 +126,19 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           );
 
           let conversationId: string;
+          let changedFromWaiting = false;
           if (convRows[0]) {
             conversationId = convRows[0].id;
+            if (convRows[0].status === 'waiting') {
+              await tx.$executeRawUnsafe(
+                `UPDATE conversations
+                 SET status = 'open',
+                     waiting_expires_at = NULL
+                 WHERE id = $1::uuid`,
+                conversationId,
+              );
+              changedFromWaiting = true;
+            }
           } else {
             const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
               `INSERT INTO conversations (contact_id, channel_id, channel_type, conversation_type, status, metadata)
@@ -180,6 +192,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             assignedUserId: assignment?.assigned_to ?? null,
             contactName: assignment?.contact_name ?? `Instagram user ${senderId}`,
             conversationStatus: assignment?.status ?? null,
+            changedFromWaiting,
           };
         });
 
@@ -194,18 +207,17 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           message: result.message,
           conversation: conversation ?? undefined,
         });
+        if (result.changedFromWaiting) {
+          io.to(`tenant:${tenant.id}`).emit('conversation:status_changed', {
+            conversationId: result.conversationId,
+            status: 'open',
+          });
+        }
 
         const senderType = result.message.sender_type;
         const preview = text.trim();
-        const isNumericOnly = /^\d+$/.test(preview);
-        if (
-          result.assignedUserId
-          && senderType === 'client'
-          && !(isNumericOnly && result.conversationStatus === 'bot')
-        ) {
-          const notificationPreview = isNumericOnly
-            ? `Mensagem de ${result.contactName}`
-            : (preview.substring(0, 100) || 'Nova mensagem');
+        if (result.assignedUserId && senderType === 'client') {
+          const notificationPreview = preview.substring(0, 100) || `Mensagem de ${result.contactName}`;
 
           await prisma.$transaction(async (tx) => {
             await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);

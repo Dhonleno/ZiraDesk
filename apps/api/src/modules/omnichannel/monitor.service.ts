@@ -88,7 +88,7 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
              SELECT COUNT(*)::integer
              FROM ${conversationsRef} c_active
              WHERE c_active.assigned_to = u.id
-               AND c_active.status IN ('open', 'in_service', 'pending', 'bot')
+               AND c_active.status = 'open'
            ),
            0
          ) AS active_conversations,
@@ -131,14 +131,14 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          COUNT(*) AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NULL
-         AND status IN ('open', 'pending', 'bot')
+         AND status = 'open'
        GROUP BY tag`,
     ),
     prisma.$queryRawUnsafe<Array<{ agent_id: string; total: bigint }>>(
       `SELECT assigned_to::text AS agent_id, COUNT(*) AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
        GROUP BY assigned_to`,
     ),
     prisma.$queryRawUnsafe<Array<{

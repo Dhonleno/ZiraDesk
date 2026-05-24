@@ -242,7 +242,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       );
       const protocolNumber = protocolRows[0]?.protocol ?? null;
 
-      let resolvedTemplateBody: string | null = null;
+      let renderedTemplateBody: string | null = null;
       if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
         const templateRows = await tx.$queryRawUnsafe<Array<{
           body: string | null;
@@ -319,7 +319,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
           };
         }
         if (selectedTemplate.body) {
-          resolvedTemplateBody = applyBodyParams(
+          renderedTemplateBody = applyBodyParams(
             selectedTemplate.body,
             extractBodyParamsFromComponents(normalizedTemplateComponents),
           );
@@ -328,10 +328,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
 
       const metadata = {
         type: 'outbound',
-        origin: 'active_outbound',
-        active_outbound: true,
-        active_outbound_started_at: new Date().toISOString(),
-        active_outbound_origin_agent_id: userId,
+        origin: 'outbound',
+        outbound_started_at: new Date().toISOString(),
+        outbound_origin_agent_id: userId,
       };
 
       const inserted = await tx.$queryRawUnsafe<ConversationInsertRow[]>(
@@ -343,6 +342,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            status,
            assigned_to,
            assigned_at,
+           waiting_expires_at,
            protocol_number,
            subject,
            metadata
@@ -351,9 +351,10 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            $2::uuid,
            $3,
            'outbound',
-           'active_outbound',
+           'waiting',
            $4::uuid,
            NOW(),
+           NOW() + INTERVAL '24 hours',
            $5,
            $6,
            $7::jsonb
@@ -390,7 +391,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       }
 
       const initialContent = channel.type === 'whatsapp' && useTemplate
-        ? (resolvedTemplateBody ?? `[Template WhatsApp: ${templateNameNormalized}]`)
+        ? (renderedTemplateBody ?? `[Template WhatsApp: ${templateNameNormalized}]`)
         : normalizedMessage;
       const initialContentType = channel.type === 'whatsapp' && useTemplate ? 'template' : 'text';
       const initialMetadata = channel.type === 'whatsapp' && useTemplate
@@ -495,7 +496,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     void dispatchWebhook(tenantId, 'conversation.created', {
       conversation: {
         id: conversation.id,
-        status: 'active_outbound',
+        status: 'waiting',
         channelType: channelType,
       },
     });

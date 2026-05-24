@@ -20,6 +20,7 @@ import {
   buildProtocolMessage,
   callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
+  quoteIdent,
 } from '../omnichannel/conversations/protocols.js';
 import { loadConversationSocketPayload } from '../omnichannel/conversations/socket-payload.js';
 import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
@@ -199,7 +200,7 @@ interface ActiveConversationByPhoneRow {
   id: string;
 }
 
-const ACTIVE_CONVERSATION_STATUSES = "'open', 'pending', 'active_outbound', 'in_service', 'in_progress', 'bot'";
+const ACTIVE_CONVERSATION_STATUSES = "'open', 'waiting'";
 const CLOSE_KEYWORD = '#sair';
 const CLOSE_MESSAGE = 'Seu atendimento foi encerrado. Obrigado pelo contato! 😊';
 const CLOSE_HINT = '\n\nDigite *#sair* a qualquer momento para encerrar o atendimento.';
@@ -348,7 +349,7 @@ async function syncActiveConversationCounters(
          SELECT COUNT(*)::integer
          FROM conversations c
          WHERE c.assigned_to = aa.user_id
-           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+           AND c.status = 'open'
        )
        WHERE aa.user_id = $1::uuid`,
       userId,
@@ -498,6 +499,20 @@ async function sendConversationWhatsAppText(
     phoneNumberId: outgoingPhoneNumberId,
     accessToken: outgoingAccessToken,
   });
+}
+
+async function markMessageDispatchStatus(
+  schemaName: string,
+  messageId: string,
+  status: 'sent' | 'failed',
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${quoteIdent(schemaName)}.messages
+     SET status = $2
+     WHERE id = $1::uuid`,
+    messageId,
+    status,
+  );
 }
 
 async function sendWhatsAppInteractiveMenu(
@@ -914,14 +929,14 @@ async function processIncomingMessage(
            metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
-         AND status = 'active_outbound'
-         AND outbound_expires_at IS NOT NULL
-         AND outbound_expires_at <= NOW()`,
+         AND status = 'waiting'
+         AND waiting_expires_at IS NOT NULL
+         AND waiting_expires_at <= NOW()`,
       contactId,
       channelId,
       JSON.stringify({
-        active_outbound_expired: true,
-        active_outbound_expired_at: new Date().toISOString(),
+        waiting_expired: true,
+        waiting_expired_at: new Date().toISOString(),
       }),
     );
 
@@ -929,7 +944,7 @@ async function processIncomingMessage(
       `SELECT id, status, csat_stage, csat_score, csat_expires_at
               , assigned_to
               , outbound_origin_agent_id
-              , outbound_expires_at
+              , waiting_expires_at AS outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
               , metadata->>'bot_tag' AS bot_tag
               , metadata->>'bot_department' AS bot_department
@@ -940,10 +955,7 @@ async function processIncomingMessage(
          AND channel_id = $2::uuid
          AND (
            status IN (${ACTIVE_CONVERSATION_STATUSES})
-           OR (
-             status = 'resolved'
-             AND csat_stage IN ('sent', 'waiting_comment')
-           )
+           OR csat_stage IN ('sent', 'waiting_comment')
          )
        ORDER BY created_at DESC
        LIMIT 1`,
@@ -1040,7 +1052,7 @@ async function processIncomingMessage(
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
     const currentCsatExpiresAt = currentConversation?.csat_expires_at ?? null;
-    const isActiveOutboundReturnFlow = currentConversation?.status === 'active_outbound';
+    const isWaitingReturnFlow = currentConversation?.status === 'waiting';
 
     let mentionMetadata: Record<string, unknown> | null = null;
     if (quotedExternalId) {
@@ -1309,11 +1321,11 @@ async function processIncomingMessage(
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
     const isWaitingForHumanQueue = !isNewConversation
       && !hasAssignedAgent
-      && !isActiveOutboundReturnFlow
+      && !isWaitingReturnFlow
       && !isAIAgentActive
       && (currentBotStage === null || currentBotStage === 'choice');
 
-    if (isActiveOutboundReturnFlow) {
+    if (isWaitingReturnFlow) {
       const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
       let preferredAgentName: string | null = null;
       if (preferredAgentId) {
@@ -1344,18 +1356,18 @@ async function processIncomingMessage(
       await tx.$executeRawUnsafe(
         `UPDATE conversations
          SET status = 'open',
-             outbound_returned_at = NOW(),
+             waiting_expires_at = NULL,
              metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
          WHERE id = $1::uuid`,
         conversationId,
         JSON.stringify({
-          active_outbound_returned: true,
-          active_outbound_returned_at: new Date().toISOString(),
-          active_outbound_origin_agent_id: preferredAgentId,
-          active_outbound_origin_agent_name: preferredAgentName,
-          active_outbound_received_by_agent_id: selectedAgent?.user_id ?? null,
-          active_outbound_received_by_agent_name: selectedAgent?.name ?? null,
-          active_outbound_replied_within_window: true,
+          waiting_returned: true,
+          waiting_returned_at: new Date().toISOString(),
+          waiting_origin_agent_id: preferredAgentId,
+          waiting_origin_agent_name: preferredAgentName,
+          waiting_received_by_agent_id: selectedAgent?.user_id ?? null,
+          waiting_received_by_agent_name: selectedAgent?.name ?? null,
+          waiting_replied_within_window: true,
         }),
       );
 
@@ -1383,7 +1395,7 @@ async function processIncomingMessage(
     }
 
     let botResponse: Awaited<ReturnType<typeof processBotMessage>> | null = null;
-    if (!hasAssignedAgent && !isActiveOutboundReturnFlow && !isAIAgentActive) {
+    if (!hasAssignedAgent && !isWaitingReturnFlow && !isAIAgentActive) {
       const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
       const skipBot = currentBotStage === 'done';
       if (!skipBot && canProcessBot) {
@@ -1428,6 +1440,18 @@ async function processIncomingMessage(
       outsideBusinessHours,
     );
 
+    if (isNewConversation && protocolNumber) {
+      protocolMessageContent = buildProtocolMessage(protocolNumber);
+      const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+         VALUES ($1::uuid, 'system', $2, 'text', false)
+         RETURNING id`,
+        conversationId,
+        protocolMessageContent,
+      );
+      protocolMessageId = protocolRows[0]!.id;
+    }
+
     if (botResponse) {
       const botText = isNewConversation ? withCloseHint(botResponse.text) : botResponse.text;
       let resolvedBotText = botText;
@@ -1444,7 +1468,9 @@ async function processIncomingMessage(
           `SELECT COUNT(*)::text AS count
            FROM conversations
            WHERE assigned_to IS NULL
-             AND status IN ('open', 'pending', 'bot')
+             AND status = 'open'
+             AND COALESCE(metadata->>'bot_stage', '') <> 'waiting_choice'
+             AND COALESCE(metadata->>'ai_agent_active', 'false') <> 'true'
              AND id != $1::uuid`,
           conversationId,
         );
@@ -1472,6 +1498,7 @@ async function processIncomingMessage(
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET status = 'open',
+               queue_entered_at = COALESCE(queue_entered_at, NOW()),
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
@@ -1481,7 +1508,8 @@ async function processIncomingMessage(
       } else {
         await tx.$executeRawUnsafe(
           `UPDATE conversations
-           SET status = 'bot',
+           SET status = 'open',
+               queue_entered_at = NULL,
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
@@ -1491,24 +1519,12 @@ async function processIncomingMessage(
       }
     }
 
-    if (isNewConversation && protocolNumber) {
-      protocolMessageContent = buildProtocolMessage(protocolNumber);
-      const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
-         VALUES ($1::uuid, 'system', $2, 'text', false)
-         RETURNING id`,
-        conversationId,
-        protocolMessageContent,
-      );
-      protocolMessageId = protocolRows[0]!.id;
-    }
-
     return {
       conversationId,
       closeByKeyword: false as const,
       isNewConversation,
-      isBotLeafTransfer: !isActiveOutboundReturnFlow && botResponse?.type === 'choice',
-      shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
+      isBotLeafTransfer: !isWaitingReturnFlow && botResponse?.type === 'choice',
+      shouldAutoAssign: !isWaitingReturnFlow && !isWaitingForHumanQueue && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
       botTag: botResponse?.type === 'choice'
         ? (botResponse.option?.tag ?? undefined)
         : (currentConversation?.bot_tag ?? undefined),
@@ -1534,11 +1550,11 @@ async function processIncomingMessage(
       refreshInactivityForAssignedConversation: hasAssignedAgent,
       shouldProcessAI: (botResponse === null || botResponse?.type === 'invalid')
         && !hasAssignedAgent
-        && !isActiveOutboundReturnFlow
+        && !isWaitingReturnFlow
         && currentBotStage !== 'done'
         && !isAIAgentActive
         && !isWaitingForHumanQueue,
-      shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
+      shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isWaitingReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
       conversationStatus: currentConversation?.status ?? null,
       activeOutboundReplyAgentId,
@@ -1598,9 +1614,13 @@ async function processIncomingMessage(
   }
 
   if (result.activeOutboundReplyAgentId) {
-    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('active_outbound:replied', {
+    io.to(`tenant:${tenantId}`).emit('conversation:status_changed', {
       conversationId: result.conversationId,
-      contactName: result.contactName,
+      status: 'open',
+    });
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:status_changed', {
+      conversationId: result.conversationId,
+      status: 'open',
     });
   }
 
@@ -1657,16 +1677,26 @@ async function processIncomingMessage(
   }
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
-    await messageQueue.add('send', {
-      messageId: result.protocolMessageId,
-      conversationId: result.conversationId,
-      tenantId,
-      tenantSchema: schemaName,
-      channelType: 'whatsapp',
+    const protocolSent = await sendConversationWhatsAppText(
       channelCredentials,
-      content: result.protocolMessageContent,
-      to: formattedPhone,
-    });
+      formattedPhone,
+      result.protocolMessageContent,
+    );
+
+    if (protocolSent) {
+      await markMessageDispatchStatus(schemaName, result.protocolMessageId, 'sent');
+    } else {
+      await messageQueue.add('send', {
+        messageId: result.protocolMessageId,
+        conversationId: result.conversationId,
+        tenantId,
+        tenantSchema: schemaName,
+        channelType: 'whatsapp',
+        channelCredentials,
+        content: result.protocolMessageContent,
+        to: formattedPhone,
+      });
+    }
   }
 
   // Pre-check AI config when bot reached a leaf node, so we can decide whether to send
@@ -1733,7 +1763,7 @@ async function processIncomingMessage(
 
       await prisma.$executeRawUnsafe(
         `UPDATE "${schemaName}".conversations
-         SET status = 'bot',
+         SET status = 'open',
              metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":true,"ai_attempts":0}'::jsonb
          WHERE id = $1::uuid`,
         result.conversationId,
@@ -1841,7 +1871,7 @@ async function processIncomingMessage(
             );
             await prisma.$executeRawUnsafe(
               `UPDATE "${schemaName}".conversations
-               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+               SET status = 'open', last_message = $1, last_message_at = NOW(),
                    metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                WHERE id = $3::uuid`,
               clarification.slice(0, 255),
@@ -1883,7 +1913,7 @@ async function processIncomingMessage(
             );
             await prisma.$executeRawUnsafe(
               `UPDATE "${schemaName}".conversations
-               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+               SET status = 'open', last_message = $1, last_message_at = NOW(),
                    metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                WHERE id = $3::uuid`,
               clarification.slice(0, 255),
@@ -1923,7 +1953,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                  WHERE id = $3::uuid`,
                 aiResult.response.slice(0, 255),
@@ -2005,7 +2035,7 @@ async function processIncomingMessage(
           );
           await prisma.$executeRawUnsafe(
             `UPDATE "${schemaName}".conversations
-             SET status = 'bot', last_message = $1, last_message_at = NOW(),
+             SET status = 'open', last_message = $1, last_message_at = NOW(),
                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
              WHERE id = $3::uuid`,
             clarification.slice(0, 255),
@@ -2049,7 +2079,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                  WHERE id = $3::uuid`,
                 clarification.slice(0, 255),
@@ -2089,7 +2119,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
                  WHERE id = $2::uuid`,
                 aiResult.response.slice(0, 255),
@@ -2251,7 +2281,7 @@ async function processStatusUpdate(
           result[0].conversation_id,
         );
 
-        if (convRows[0]?.status === 'active_outbound') {
+        if (convRows[0]?.status === 'waiting') {
           await prisma.$executeRawUnsafe(
             `INSERT INTO "${tenant.schema_name}".messages (
                id,

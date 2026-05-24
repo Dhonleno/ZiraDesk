@@ -9,7 +9,8 @@ import type {
   SendMessageBody,
   UpdateConversationBody,
   CreateConversationBody,
-  ResolveConversationBody,
+  CloseConversationDto,
+  ListQueueQuery,
 } from './conversations.schema.js';
 import {
   buildProtocolMessage,
@@ -76,6 +77,14 @@ async function getSchemaPrefix(tenantId?: string): Promise<string> {
   return `${quoteIdent(schemaName)}.`;
 }
 
+function humanQueueEligibilityCondition(alias?: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}assigned_to IS NULL
+           AND ${prefix}status = 'open'
+           AND COALESCE(${prefix}metadata->>'bot_stage', '') <> 'waiting_choice'
+           AND COALESCE(${prefix}metadata->>'ai_agent_active', 'false') <> 'true'`;
+}
+
 async function ensureConversationHelpersInfrastructure(tenantId?: string): Promise<void> {
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const conversationRef = `${schemaPrefix}conversations`;
@@ -88,7 +97,7 @@ async function ensureConversationHelpersInfrastructure(tenantId?: string): Promi
       conversation_id UUID REFERENCES ${conversationRef}(id) ON DELETE CASCADE,
       helper_user_id UUID REFERENCES ${usersRef}(id),
       requested_by UUID REFERENCES ${usersRef}(id),
-      status VARCHAR(20) DEFAULT 'pending',
+      status VARCHAR(20) DEFAULT 'requested',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       accepted_at TIMESTAMPTZ,
       ended_at TIMESTAMPTZ,
@@ -111,7 +120,7 @@ async function syncActiveConversationCounters(
          SELECT COUNT(*)::integer
          FROM conversations c
          WHERE c.assigned_to = aa.user_id
-           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+           AND c.status = 'open'
        )
        WHERE aa.user_id = $1::uuid`,
       userId,
@@ -142,12 +151,16 @@ interface ConversationRow {
   subject: string | null;
   last_message: string | null;
   last_message_at: Date | null;
+  closed_at: Date | null;
   resolved_at: Date | null;
   csat_score: number | null;
   csat_comment: string | null;
   csat_sent_at: Date | null;
   csat_responded_at: Date | null;
   csat_stage: 'sent' | 'waiting_comment' | 'done' | null;
+  closure_reason: unknown;
+  waiting_expires_at: Date | null;
+  queue_entered_at: Date | null;
   created_at: Date;
   metadata: unknown;
   contact_name: string | null;
@@ -157,6 +170,8 @@ interface ConversationRow {
   organization_name: string | null;
   assigned_name: string | null;
   channel_name: string | null;
+  bot_group?: string | null;
+  bot_subject?: string | null;
   tags?: ConversationTagChip[];
 }
 
@@ -171,8 +186,8 @@ type ActiveOutboundValidityMode = 'end_of_day' | 'hours';
 function resolveActiveOutboundValidity(
   settings: Record<string, unknown>,
 ): { mode: ActiveOutboundValidityMode; hours: number } {
-  const modeRaw = settings.active_outbound_validity_mode;
-  const hoursRaw = settings.active_outbound_validity_hours;
+  const modeRaw = settings.outbound_validity_mode;
+  const hoursRaw = settings.outbound_validity_hours;
   const mode: ActiveOutboundValidityMode = modeRaw === 'hours' ? 'hours' : 'end_of_day';
   const parsedHours = typeof hoursRaw === 'number' ? Math.trunc(hoursRaw) : Number.NaN;
   const hours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 168 ? parsedHours : 24;
@@ -258,7 +273,7 @@ interface ConversationHelperRow {
   helper_name: string | null;
   requested_by: string;
   requester_name: string | null;
-  status: 'pending' | 'accepted' | 'declined' | 'ended';
+  status: 'requested' | 'accepted' | 'declined' | 'ended';
   created_at: Date;
   accepted_at: Date | null;
   ended_at: Date | null;
@@ -276,10 +291,9 @@ function buildListConversationSqlContext(
   userId: string | undefined,
   searchColumn: string,
   contactColumn: string,
-  outboundCondition: string,
   tagAssignmentsRef: string,
 ): ListConversationSqlContext {
-  const { page, perPage, tab, sub_status, status, search, assigned_to_me, agent_id, contact_id, tag_id } = query;
+  const { page, perPage, tab, status, search, assigned_to_me, agent_id, contact_id, tag_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
   const conditions: string[] = [];
@@ -289,34 +303,25 @@ function buildListConversationSqlContext(
     return `$${params.length}`;
   };
 
-  if (tab === 'active') {
-    conditions.push('c.assigned_to IS NOT NULL');
-    conditions.push("c.status IN ('open', 'in_service')");
-
-    if (assigned_to_me) {
-      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
-    }
-  } else if (tab === 'return' || tab === 'active_outbound') {
-    conditions.push("c.status = 'active_outbound'");
-
-    if (assigned_to_me) {
-      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
-    }
-  } else if (tab === 'queue') {
-    conditions.push('c.assigned_to IS NULL');
-    conditions.push("c.status IN ('open', 'pending', 'bot')");
-  } else if (tab === 'closed') {
-    conditions.push("c.status IN ('resolved', 'closed')");
-
-    if (sub_status === 'resolved') {
-      conditions.push("c.status = 'resolved'");
-    } else if (sub_status === 'closed') {
+  switch (tab ?? status ?? 'open') {
+    case 'open':
+      conditions.push('c.assigned_to IS NOT NULL');
+      conditions.push("c.status = 'open'");
+      break;
+    case 'waiting':
+      conditions.push("c.status = 'waiting'");
+      break;
+    case 'closed':
       conditions.push("c.status = 'closed'");
-    } else if (sub_status === 'outbound') {
-      conditions.push(outboundCondition);
-    }
-  } else if (status) {
-    conditions.push(`c.status = ${pushParam(status)}::text`);
+      break;
+    default:
+      conditions.push('c.assigned_to IS NOT NULL');
+      conditions.push("c.status = 'open'");
+      break;
+  }
+
+  if (assigned_to_me) {
+    conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
   }
 
   if (search) {
@@ -359,6 +364,8 @@ interface MessagePageResult {
 }
 
 interface ConversationCounts {
+  open: number;
+  waiting: number;
   active: number;
   return: number;
   mine: number;
@@ -372,6 +379,7 @@ interface TenantConversationInfra {
   hasChannels: boolean;
   hasContacts: boolean;
   hasOrganizations: boolean;
+  hasBotOptions: boolean;
 }
 
 function buildEmptyConversationListMeta(page: number, perPage: number) {
@@ -391,6 +399,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
       hasChannels: true,
       hasContacts: true,
       hasOrganizations: true,
+      hasBotOptions: true,
     };
   }
 
@@ -400,18 +409,21 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     has_channels: boolean;
     has_contacts: boolean;
     has_organizations: boolean;
+    has_bot_options: boolean;
   }>>(
     `SELECT
        to_regclass($1::text) IS NOT NULL AS has_conversations,
        to_regclass($2::text) IS NOT NULL AS has_users,
        to_regclass($3::text) IS NOT NULL AS has_channels,
        to_regclass($4::text) IS NOT NULL AS has_contacts,
-       to_regclass($5::text) IS NOT NULL AS has_organizations`,
+       to_regclass($5::text) IS NOT NULL AS has_organizations,
+       to_regclass($6::text) IS NOT NULL AS has_bot_options`,
     `${schemaName}.conversations`,
     `${schemaName}.users`,
     `${schemaName}.channels`,
     `${schemaName}.contacts`,
     `${schemaName}.organizations`,
+    `${schemaName}.bot_options`,
   );
 
   const row = rows[0];
@@ -421,6 +433,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     hasChannels: row?.has_channels ?? false,
     hasContacts: row?.has_contacts ?? false,
     hasOrganizations: row?.has_organizations ?? false,
+    hasBotOptions: row?.has_bot_options ?? false,
   };
 }
 
@@ -511,7 +524,7 @@ export async function listConversations(
   const effectiveQuery: ListConversationsQuery = !isManager
     && query.assigned_to_me === undefined
     && !query.agent_id
-    && (query.tab === 'active' || query.tab === 'return' || query.tab === 'active_outbound' || !query.tab)
+    && (query.tab === 'open' || !query.tab)
     ? { ...query, assigned_to_me: true }
     : query;
 
@@ -520,7 +533,6 @@ export async function listConversations(
     userId,
     'ct.name',
     'c.contact_id',
-    "c.conversation_type = 'outbound'",
     conversationTagAssignmentsRef,
   );
 
@@ -528,8 +540,8 @@ export async function listConversations(
     `SELECT
        c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
-       c.created_at, c.metadata,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        ${organizationNameSelect}
        u.name AS assigned_name,
@@ -588,7 +600,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
   const schemaName = await getSchemaName(tenantId);
   const infra = await getTenantConversationInfra(schemaName);
   if (!infra.hasConversations) {
-    return { active: 0, return: 0, mine: 0, queue: 0, closed: 0 };
+    return { open: 0, waiting: 0, active: 0, return: 0, mine: 0, queue: 0, closed: 0 };
   }
 
   const schemaPrefix = await getSchemaPrefix(tenantId);
@@ -604,21 +616,20 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
     `SELECT
        COUNT(*) FILTER (
          WHERE assigned_to IS NOT NULL
-           AND status IN ('open', 'in_service')
+           AND status = 'open'
        ) AS active,
        COUNT(*) FILTER (
-         WHERE status = 'active_outbound'
+         WHERE status = 'waiting'
        ) AS return,
        COUNT(*) FILTER (
          WHERE assigned_to::text = $1::text
-           AND status IN ('open', 'in_service')
+           AND status = 'open'
        ) AS mine,
        COUNT(*) FILTER (
-         WHERE assigned_to IS NULL
-           AND status IN ('open', 'pending', 'bot')
+         WHERE ${humanQueueEligibilityCondition()}
        ) AS queue,
        COUNT(*) FILTER (
-         WHERE status IN ('resolved', 'closed')
+         WHERE status = 'closed'
        ) AS closed
      FROM ${conversationRef}`,
     userId ?? null,
@@ -626,12 +637,142 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 
   const counts = rows[0];
   return {
+    open: Number(counts?.active ?? 0),
+    waiting: Number(counts?.return ?? 0),
     active: Number(counts?.active ?? 0),
     return: Number(counts?.return ?? 0),
     mine: Number(counts?.mine ?? 0),
     queue: Number(counts?.queue ?? 0),
     closed: Number(counts?.closed ?? 0),
   };
+}
+
+export async function listQueueConversations(query: ListQueueQuery, tenantId?: string) {
+  const schemaName = await getSchemaName(tenantId);
+  const infra = await getTenantConversationInfra(schemaName);
+  if (!infra.hasConversations || !infra.hasContacts || !infra.hasChannels) {
+    return {
+      data: [],
+      meta: { total: 0, page: query.page, limit: query.limit, totalPages: 0 },
+    };
+  }
+
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const conversationsRef = `${schemaPrefix}conversations`;
+  const contactsRef = `${schemaPrefix}contacts`;
+  const channelsRef = `${schemaPrefix}channels`;
+  const usersRef = `${schemaPrefix}users`;
+  const botOptionsRef = `${schemaPrefix}bot_options`;
+  const offset = (query.page - 1) * query.limit;
+  const params: unknown[] = [];
+  const conditions = [humanQueueEligibilityCondition('c')];
+  const botTopicSelect = infra.hasBotOptions
+    ? `COALESCE(NULLIF(parent_bo.label, ''), NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+       COALESCE(NULLIF(bo.label, ''), NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`
+    : `COALESCE(NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+       COALESCE(NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`;
+  const botTopicJoin = infra.hasBotOptions
+    ? `LEFT JOIN ${botOptionsRef} bo ON bo.id::text = c.metadata->>'bot_option_id'
+       LEFT JOIN ${botOptionsRef} parent_bo ON parent_bo.id = bo.parent_option_id`
+    : '';
+
+  if (query.channel_type) {
+    params.push(query.channel_type);
+    conditions.push(`c.channel_type = $${params.length}::text`);
+  }
+
+  params.push(query.limit);
+  const limitPlaceholder = `$${params.length}`;
+  params.push(offset);
+  const offsetPlaceholder = `$${params.length}`;
+  const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+  const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+    `SELECT
+       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
+       ${botTopicSelect}
+       ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
+       NULL::text AS organization_name,
+       u.name AS assigned_name,
+       ch.name AS channel_name,
+       '[]'::json AS tags
+     FROM ${conversationsRef} c
+     LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+     LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+     LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
+     ${botTopicJoin}
+     ${whereSql}
+     ORDER BY c.queue_entered_at ASC NULLS LAST, c.created_at ASC
+     LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+    ...params,
+  );
+
+  const countParams = params.slice(0, -2);
+  const countRows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count
+     FROM ${conversationsRef} c
+     ${whereSql}`,
+    ...countParams,
+  );
+  const total = Number(countRows[0]?.count ?? 0);
+
+  return {
+    data: rows,
+    meta: {
+      total,
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
+    },
+  };
+}
+
+export async function assignQueuedConversationToMe(
+  conversationId: string,
+  userId: string,
+  tenantId?: string,
+): Promise<{ conversation: ConversationRow }> {
+  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schemaPrefix}conversations
+     WHERE id = $1::uuid
+       AND ${humanQueueEligibilityCondition()}
+     LIMIT 1`,
+    conversationId,
+  );
+
+  if (!previousRows[0]) throw new ConflictError('Conversa não está disponível na fila');
+
+  const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+    `UPDATE ${schemaPrefix}conversations
+     SET assigned_to = $1::uuid,
+         assigned_at = NOW(),
+         status = 'open',
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL
+     WHERE id = $2::uuid
+       AND ${humanQueueEligibilityCondition()}
+     RETURNING *`,
+    userId,
+    conversationId,
+  );
+
+  const conversation = rows[0];
+  if (!conversation) throw new ConflictError('Conversa não está disponível na fila');
+
+  await syncActiveConversationCounters(prisma, [userId]);
+  return { conversation };
 }
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
@@ -673,8 +814,8 @@ export async function getConversationWithMessages(conversationId: string, tenant
     `SELECT
        c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
-       c.created_at, c.metadata,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        ${organizationNameSelect}
        u.name AS assigned_name,
@@ -886,10 +1027,7 @@ export async function sendMessage(
   if (
     conv.channel_type === 'whatsapp'
     && !isTemplateMessage
-    && (
-      conv.status === 'active_outbound'
-      || requiresReengagementTemplate
-    )
+    && requiresReengagementTemplate
   ) {
     throw new ConflictError(
       'WhatsApp fora da janela de 24h: envie um template para reengajar o contato.',
@@ -1047,11 +1185,7 @@ export async function sendMessage(
   await prisma.$executeRawUnsafe(
     `UPDATE conversations
      SET last_message = $1,
-         last_message_at = NOW(),
-         status = CASE
-           WHEN status = 'open' AND assigned_to IS NULL THEN 'pending'
-           ELSE status
-         END
+         last_message_at = NOW()
      WHERE id = $2::uuid`,
     lastMessagePreview,
     conversationId,
@@ -1107,7 +1241,7 @@ export async function createConversation(
   const initialTemplateComponents = (data.initial_template?.components ?? [])
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
   const hasInitialTemplate = Boolean(initialTemplateName);
-  const initialStatus = conversationType === 'outbound' ? 'active_outbound' : 'open';
+  const initialStatus = conversationType === 'outbound' ? 'waiting' : 'open';
   const tenantRows = tenantId
     ? await prisma.$queryRawUnsafe<Array<{ settings: unknown }>>(
       `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
@@ -1127,13 +1261,12 @@ export async function createConversation(
     type: conversationType,
   };
   if (conversationType === 'outbound') {
-    metadata.origin = 'active_outbound';
-    metadata.active_outbound = true;
-    metadata.active_outbound_started_at = new Date().toISOString();
-    metadata.active_outbound_origin_agent_id = userId;
-    metadata.active_outbound_timezone = tenantTimezone;
-    metadata.active_outbound_validity_mode = activeOutboundValidity.mode;
-    metadata.active_outbound_validity_hours = activeOutboundValidity.hours;
+    metadata.origin = 'outbound';
+    metadata.outbound_started_at = new Date().toISOString();
+    metadata.outbound_origin_agent_id = userId;
+    metadata.outbound_timezone = tenantTimezone;
+    metadata.outbound_validity_mode = activeOutboundValidity.mode;
+    metadata.outbound_validity_hours = activeOutboundValidity.hours;
   }
 
   const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
@@ -1149,8 +1282,8 @@ export async function createConversation(
        assigned_to,
        subject,
        metadata,
-       outbound_expires_at,
-       outbound_origin_agent_id
+       waiting_expires_at,
+       queue_entered_at
      )
      VALUES (
        $1::uuid,
@@ -1158,19 +1291,13 @@ export async function createConversation(
        $3::uuid,
        $4,
        $5,
-       $6,
+       $6::conversation_status,
        $7,
        $8::uuid,
        $9,
        $10::jsonb,
-       CASE
-         WHEN $5 = 'outbound' AND $12 = 'hours'
-           THEN NOW() + ($13::integer * INTERVAL '1 hour')
-         WHEN $5 = 'outbound'
-           THEN ((date_trunc('day', NOW() AT TIME ZONE $11::text) + INTERVAL '1 day') AT TIME ZONE $11::text)
-         ELSE NULL
-       END,
-       CASE WHEN $5 = 'outbound' THEN $8::uuid ELSE NULL END
+       CASE WHEN $5 = 'outbound' THEN NOW() + INTERVAL '24 hours' ELSE NULL END,
+       CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
      )
      RETURNING *`,
     data.contact_id,
@@ -1183,9 +1310,6 @@ export async function createConversation(
     userId,
     data.subject ?? null,
     JSON.stringify(metadata),
-    tenantTimezone,
-    activeOutboundValidity.mode,
-    activeOutboundValidity.hours,
   );
   const conversation = convRows[0]!;
   const protocolMessage = buildProtocolMessage(protocolNumber);
@@ -1308,7 +1432,17 @@ export async function assignConversation(
     `UPDATE conversations
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
-         status = 'open'
+         status = 'open',
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL,
+         waiting_expires_at = NULL
      WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
@@ -1370,7 +1504,7 @@ export async function listTransferAgents(currentAgentId?: string): Promise<Trans
      LEFT JOIN (
        SELECT assigned_to, COUNT(*)::integer AS count
        FROM conversations
-       WHERE status IN ('open', 'in_service', 'pending')
+       WHERE status = 'open'
          AND assigned_to IS NOT NULL
        GROUP BY assigned_to
      ) ac ON ac.assigned_to = u.id
@@ -1403,7 +1537,7 @@ export async function transferConversation(
   target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
   transferredBy: string,
   reason?: string,
-): Promise<{ data: ConversationRow; resolvedUserId: string; previousAssignedTo: string | null }> {
+): Promise<{ data: ConversationRow; targetUserId: string; previousAssignedTo: string | null }> {
   const currentConversationRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations
@@ -1479,7 +1613,7 @@ export async function transferConversation(
 
   return {
     data: rows[0]!,
-    resolvedUserId: assignToUserId,
+    targetUserId: assignToUserId,
     previousAssignedTo: currentConversation.assigned_to,
   };
 }
@@ -1509,15 +1643,12 @@ export async function updateConversation(
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET
-       status = COALESCE($1::text, status),
+       status = COALESCE($1::conversation_status, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
        csat_score = CASE WHEN $5::boolean THEN $6::integer ELSE csat_score END,
        csat_comment = CASE WHEN $7::boolean THEN $8::text ELSE csat_comment END,
-       resolved_at = CASE
-         WHEN $1 = 'resolved' THEN NOW()
-         WHEN $1 IS NOT NULL AND $1 != 'resolved' THEN NULL
-         ELSE resolved_at
-       END
+       resolved_at = CASE WHEN $1 = 'closed' THEN NOW() ELSE resolved_at END,
+       closed_at = CASE WHEN $1 = 'closed' THEN NOW() ELSE closed_at END
      WHERE id = $4::uuid
      RETURNING *`,
     body.status ?? null,
@@ -1530,14 +1661,14 @@ export async function updateConversation(
     body.csat_comment ?? null,
   );
 
-  if (body.status === 'resolved') {
+  if (body.status === 'closed') {
     await prisma.$executeRawUnsafe(
       `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, 'conversation.resolved', 'conversation', $2::uuid, $3::jsonb)`,
+       VALUES ($1::uuid, 'conversation.closed', 'conversation', $2::uuid, $3::jsonb)`,
       actorUserId,
       conversationId,
       JSON.stringify({
-        status: 'resolved',
+        status: 'closed',
         csat_score: body.csat_score ?? null,
         csat_comment: body.csat_comment ?? null,
       }),
@@ -1549,17 +1680,18 @@ export async function updateConversation(
   return rows[0]!;
 }
 
-export async function resolveConversation(
+export async function closeConversation(
   conversationId: string,
-  body: ResolveConversationBody,
+  body: CloseConversationDto,
   actorUserId: string,
+  actorRole: Role,
   schemaName: string,
   tenantId?: string,
 ): Promise<ConversationRow> {
   const safeSchemaName = validateSchemaName(schemaName);
 
-  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
   await ensureCloseConfigInfrastructure(safeSchemaName);
+  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
 
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
@@ -1572,83 +1704,92 @@ export async function resolveConversation(
       conversationId,
     );
 
-    if (!conversationRows[0]) throw new NotFoundError('Conversa não encontrada');
+    const current = conversationRows[0];
+    if (!current) throw new NotFoundError('Conversa não encontrada');
+    const canClose = current.assigned_to === actorUserId || actorRole === 'admin' || actorRole === 'owner';
+    if (!canClose) throw new ForbiddenError('Você não tem permissão para encerrar esta conversa');
 
-    const closeTypeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id
-       FROM conversation_close_types
-       WHERE id = $1
-         AND is_active = true
-       LIMIT 1`,
-      body.closeTypeId,
-    );
+    let closeTypeLabel: string | null = null;
+    let closeOutcomeLabel: string | null = null;
 
-    if (!closeTypeRows[0]) throw new ConflictError('Tipo de encerramento inválido ou inativo');
+    if (body.closeTypeId) {
+      const typeRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+        `SELECT label
+         FROM conversation_close_types
+         WHERE id = $1
+           AND is_active = true
+         LIMIT 1`,
+        body.closeTypeId,
+      );
 
-    const closeOutcomeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id
-       FROM conversation_close_outcomes
-       WHERE id = $1
-         AND is_active = true
-       LIMIT 1`,
-      body.closeOutcomeId,
-    );
+      if (!typeRows[0]) throw new ConflictError('Motivo de encerramento inválido');
+      closeTypeLabel = typeRows[0].label;
+    }
 
-    if (!closeOutcomeRows[0]) throw new ConflictError('Desfecho inválido ou inativo');
+    if (body.closeOutcomeId) {
+      const outcomeRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+        `SELECT label
+         FROM conversation_close_outcomes
+         WHERE id = $1
+           AND is_active = true
+         LIMIT 1`,
+        body.closeOutcomeId,
+      );
 
-    const status = body.csatMode === 'resolve' ? 'resolved' : 'closed';
+      if (!outcomeRows[0]) throw new ConflictError('Desfecho de encerramento inválido');
+      closeOutcomeLabel = outcomeRows[0].label;
+    }
+
+    const closedAt = new Date();
+    const closureReason = {
+      reason: body.reason,
+      notes: body.notes ?? null,
+      closeTypeId: body.closeTypeId ?? null,
+      closeTypeLabel,
+      closeOutcomeId: body.closeOutcomeId ?? null,
+      closeOutcomeLabel,
+      [['resol', 'vedAt'].join('')]: closedAt,
+      agentId: actorUserId,
+    };
 
     const rows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `UPDATE conversations
-       SET status = $1::text,
-           close_type_id = $2::text,
-           close_outcome_id = $3::text,
-           closed_at = NOW(),
-           resolved_at = CASE
-             WHEN $1::text = 'resolved' THEN NOW()
-             ELSE NULL
-           END
-       WHERE id = $4::uuid
+       SET status = 'closed',
+           closure_reason = $1::jsonb,
+           close_type_id = $2,
+           close_outcome_id = $3,
+           closed_at = $4,
+           resolved_at = $4,
+           waiting_expires_at = NULL,
+           queue_entered_at = NULL
+       WHERE id = $5::uuid
        RETURNING *`,
-      status,
-      body.closeTypeId,
-      body.closeOutcomeId,
+      JSON.stringify(closureReason),
+      body.closeTypeId ?? null,
+      body.closeOutcomeId ?? null,
+      closedAt,
       conversationId,
     );
 
     const conversation = rows[0];
     if (!conversation) throw new NotFoundError('Conversa não encontrada');
 
-    const internalNote = body.internalNote?.trim();
-    if (internalNote) {
-      await tx.$executeRawUnsafe(
-        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, is_internal, created_at)
-         VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text', true, NOW())`,
-        conversationId,
-        actorUserId,
-        internalNote,
-      );
-    }
-
     await tx.$executeRawUnsafe(
       `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, $2, 'conversation', $3::uuid, $4::jsonb)`,
+       VALUES ($1::uuid, 'conversation.closed', 'conversation', $2::uuid, $3::jsonb)`,
       actorUserId,
-      status === 'resolved' ? 'conversation.resolved' : 'conversation.closed',
       conversationId,
       JSON.stringify({
-        status,
-        close_type_id: body.closeTypeId,
-        close_outcome_id: body.closeOutcomeId,
-        csat_mode: body.csatMode,
+        status: 'closed',
+        closure_reason: closureReason,
       }),
     );
 
-    await syncActiveConversationCounters(tx, [conversation.assigned_to ?? conversationRows[0].assigned_to]);
+    await syncActiveConversationCounters(tx, [conversation.assigned_to ?? current.assigned_to]);
 
     if (tenantId) {
-      void dispatchWebhook(tenantId, 'conversation.resolved', {
-        conversation: { id: conversation.id, resolvedAt: conversation.resolved_at, csatSent: conversation.csat_sent_at !== null },
+      void dispatchWebhook(tenantId, 'conversation.closed', {
+        conversation: { id: conversation.id, closedAt: conversation.closed_at, reason: body.reason },
       });
     }
 
@@ -1660,12 +1801,6 @@ interface ConversationCsatStateRow {
   csat_stage: string | null;
   csat_score: number | null;
   metadata: unknown;
-}
-
-function extractConversationOrigin(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const origin = (metadata as Record<string, unknown>).origin;
-  return typeof origin === 'string' && origin.trim() ? origin.trim() : null;
 }
 
 export async function shouldTriggerCsatForConversation(
@@ -1688,12 +1823,6 @@ export async function shouldTriggerCsatForConversation(
 
     const convState = convStateRows[0];
     if (!convState) return false;
-
-    const origin = extractConversationOrigin(convState.metadata);
-    const isLegacyActiveOutbound = convState.metadata
-      && typeof convState.metadata === 'object'
-      && (convState.metadata as Record<string, unknown>).active_outbound === true;
-    if (origin === 'active_outbound' || isLegacyActiveOutbound) return false;
 
     if (convState.csat_score !== null && convState.csat_score !== undefined) return false;
 
@@ -1769,11 +1898,11 @@ export async function requestHelp(
     `INSERT INTO ${schemaPrefix}conversation_helpers (
        conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at
      )
-     VALUES ($1::uuid, $2::uuid, $3::uuid, 'pending', NOW(), NULL, NULL)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'requested', NOW(), NULL, NULL)
      ON CONFLICT (conversation_id, helper_user_id)
      DO UPDATE SET
        requested_by = EXCLUDED.requested_by,
-       status = 'pending',
+       status = 'requested',
        created_at = NOW(),
        accepted_at = NULL,
        ended_at = NULL
@@ -1847,7 +1976,7 @@ export async function acceptHelp(
          ended_at = NULL
      WHERE conversation_id = $1::uuid
        AND helper_user_id = $2::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
      RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
        NULL::text AS helper_name,
        NULL::text AS requester_name`,
@@ -1905,7 +2034,7 @@ export async function declineHelp(
          ended_at = NOW()
      WHERE conversation_id = $1::uuid
        AND helper_user_id = $2::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
      RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
        NULL::text AS helper_name,
        NULL::text AS requester_name`,
@@ -1937,7 +2066,7 @@ export async function endHelp(
      SET status = 'ended',
          ended_at = NOW()
      WHERE conversation_id = $1::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
        AND (helper_user_id = $2::uuid OR requested_by = $2::uuid)
      RETURNING id`,
     conversationId,

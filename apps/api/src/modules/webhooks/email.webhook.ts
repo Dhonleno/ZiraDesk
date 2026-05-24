@@ -299,25 +299,38 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
      FROM ${schema}.conversations
      WHERE contact_id = $1::uuid
        AND channel_type = 'email'
-       AND status IN ('open', 'pending', 'in_service', 'active_outbound', 'bot')
+       AND status IN ('open', 'waiting')
      ORDER BY created_at DESC
      LIMIT 1`,
     contact.id,
   );
   const linkedConversation = conversationRows[0];
   const assignedUserId = linkedConversation?.assigned_to ?? null;
+  if (linkedConversation?.status === 'waiting') {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${schema}.conversations
+       SET status = 'open',
+           waiting_expires_at = NULL
+       WHERE id = $1::uuid`,
+      linkedConversation.id,
+    );
+    try {
+      getSocketServer().to(`tenant:${tenant.id}`).emit('conversation:status_changed', {
+        conversationId: linkedConversation.id,
+        status: 'open',
+      });
+    } catch {
+      // socket pode não estar disponível em testes
+    }
+  }
   if (linkedConversation && assignedUserId) {
     const previewSource = (description || inbound.subject || '').trim();
-    const isNumericOnly = /^\d+$/.test(previewSource);
-    if (!(isNumericOnly && linkedConversation.status === 'bot')) {
-      const notificationPreview = isNumericOnly
-        ? `Mensagem de ${contact.name ?? 'Cliente'}`
-        : (previewSource.substring(0, 100) || 'Nova mensagem');
+    const notificationPreview = previewSource.substring(0, 100) || 'Nova mensagem';
 
-      await prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
-        await tx.$executeRawUnsafe(
-          `INSERT INTO audit_logs (
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (
              user_id, action, entity, entity_id, new_data, created_at
            ) VALUES (
              $1::uuid,
@@ -327,17 +340,16 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
              $3::jsonb,
              NOW()
            )`,
-          assignedUserId,
-          linkedConversation.id,
-          JSON.stringify({
-            assigned_to: assignedUserId,
-            contact_name: contact.name ?? 'Cliente',
-            preview: notificationPreview,
-            channel: 'email',
-          }),
-        );
-      });
-    }
+        assignedUserId,
+        linkedConversation.id,
+        JSON.stringify({
+          assigned_to: assignedUserId,
+          contact_name: contact.name ?? 'Cliente',
+          preview: notificationPreview,
+          channel: 'email',
+        }),
+      );
+    });
   }
 
   try {

@@ -9,7 +9,7 @@ import {
   createConversationBodySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
-  resolveConversationBodySchema,
+  closeConversationSchema,
   assignConversationBodySchema,
   transferConversationBodySchema,
   requestHelpBodySchema,
@@ -21,7 +21,7 @@ import {
   listConversationMessages,
   sendMessage,
   updateConversation,
-  resolveConversation,
+  closeConversation,
   createConversation,
   assignConversation,
   transferConversation,
@@ -30,7 +30,6 @@ import {
   declineHelp,
   endHelp,
   getConversationHelpers,
-  shouldTriggerCsatForConversation,
   NotFoundError,
   ConflictError,
   ForbiddenError,
@@ -45,7 +44,7 @@ import {
 } from '../../../jobs/inactivity.job.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { prisma } from '../../../config/database.js';
-import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
+import { sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 
@@ -578,7 +577,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        const destinationAgentName = await getAgentName(schemaName, result.resolvedUserId);
+        const destinationAgentName = await getAgentName(schemaName, result.targetUserId);
 
         const transferMsg = `Seu atendimento foi transferido. Agora você está sendo atendido por *${destinationAgentName}*.`;
         const systemMsg = `Atendimento transferido para ${destinationAgentName}${parsed.data.reason ? ` - Motivo: ${parsed.data.reason}` : ''}`;
@@ -590,7 +589,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           }
         } catch (error) {
           request.log.error(
-            { error, conversationId, assignedTo: result.resolvedUserId },
+            { error, conversationId, assignedTo: result.targetUserId },
             '[Omnichannel] Falha ao enviar mensagem de transferência via WhatsApp',
           );
         }
@@ -607,23 +606,23 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         await syncAgentAvailability(
           prisma,
           schemaName,
-          [result.previousAssignedTo, result.resolvedUserId],
+          [result.previousAssignedTo, result.targetUserId],
           tenantId,
         );
 
         const io = getSocketServer();
-        io.to(`agent:${result.resolvedUserId}`).emit('conversation:transferred', {
+        io.to(`agent:${result.targetUserId}`).emit('conversation:transferred', {
           conversationId,
           reason: parsed.data.reason,
         });
-        io.to(`agent:${result.resolvedUserId}`).emit('conversation:assigned', {
+        io.to(`agent:${result.targetUserId}`).emit('conversation:assigned', {
           conversationId,
-          agentId: result.resolvedUserId,
+          agentId: result.targetUserId,
         });
         io.to(`tenant:${tenantId}`).emit('conversation:updated', {
           conversationId,
-          assignedTo: result.resolvedUserId,
-          assigned_to: result.resolvedUserId,
+          assignedTo: result.targetUserId,
+          assigned_to: result.targetUserId,
           status: 'open',
         });
 
@@ -643,9 +642,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /api/omnichannel/conversations/:id/resolve
-  app.patch<{ Params: { id: string } }>('/:id/resolve', { preHandler: conversationsManageGuard }, async (request, reply) => {
-    const parsed = resolveConversationBodySchema.safeParse(request.body);
+  // POST /api/omnichannel/conversations/:id/close
+  app.post<{ Params: { id: string } }>('/:id/close', { preHandler: conversationsManageGuard }, async (request, reply) => {
+    const parsed = closeConversationSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
         success: false,
@@ -664,10 +663,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const conversation = await resolveConversation(
+      const conversation = await closeConversation(
         request.params.id,
         parsed.data,
         request.user.id,
+        request.user.role,
         schemaName,
         tenantUser.tenantId,
       );
@@ -678,26 +678,10 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const io = getSocketServer();
-
-      if (parsed.data.csatMode === 'resolve') {
-        const shouldTriggerCsat = await shouldTriggerCsatForConversation(
-          request.params.id,
-          schemaName,
-        );
-
-        if (shouldTriggerCsat) {
-          sendCsatMessage(request.params.id, schemaName, tenantUser.tenantId, prisma).catch((err: unknown) => {
-            request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-          });
-        } else {
-          request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on resolve');
-        }
-
-        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
-          conversationId: request.params.id,
-        });
-      }
-
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:closed', {
+        conversationId: request.params.id,
+        reason: parsed.data.reason,
+      });
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
       return reply.send({ success: true, data: conversation });
     } catch (err) {
@@ -706,6 +690,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
       if (err instanceof ConflictError) {
         return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }
@@ -727,7 +714,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const patchTenantId = tenantUser.tenantId ?? null;
 
       if (
-        (parsed.data.status === 'resolved' || parsed.data.status === 'closed') &&
+        parsed.data.status === 'closed' &&
         patchSchemaName &&
         patchTenantId
       ) {
@@ -740,22 +727,10 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const io = getSocketServer();
-      if (parsed.data.status === 'resolved') {
-        if (patchSchemaName) {
-          const shouldTriggerCsat = await shouldTriggerCsatForConversation(
-            request.params.id,
-            patchSchemaName,
-          );
-          if (shouldTriggerCsat) {
-            sendCsatMessage(request.params.id, patchSchemaName, patchTenantId, prisma).catch((err: unknown) => {
-              request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-            });
-          } else {
-            request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on status update');
-          }
-        }
-        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
+      if (parsed.data.status === 'closed') {
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:closed', {
           conversationId: request.params.id,
+          reason: 'manual',
         });
       }
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });

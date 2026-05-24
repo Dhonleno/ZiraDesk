@@ -173,9 +173,9 @@ export async function sendCsatMessage(
     const origin = extractConversationOrigin(conversation.metadata);
     const isLegacyActiveOutbound = conversation.metadata
       && typeof conversation.metadata === 'object'
-      && (conversation.metadata as Record<string, unknown>).active_outbound === true;
-    if (origin === 'active_outbound' || isLegacyActiveOutbound) {
-      logger.info({ conversationId }, '[CSAT] Skipping — active_outbound origin');
+      && (conversation.metadata as Record<string, unknown>).outbound === true;
+    if (origin === 'outbound' || isLegacyActiveOutbound) {
+      logger.info({ conversationId }, '[CSAT] Skipping outbound origin');
       return;
     }
 

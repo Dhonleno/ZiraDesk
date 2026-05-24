@@ -215,8 +215,8 @@ export async function generateConversationProtocol(
 
 export function buildProtocolMessage(protocolNumber: string): string {
   return (
-    'Olá! Seu atendimento foi iniciado com sucesso.\n\n' +
-    `📋 *Protocolo:* ${protocolNumber}\n\n` +
-    'Guarde este número para acompanhar seu atendimento.'
+    '*Protocolo do atendimento*\n' +
+    `\`\`\`${protocolNumber}\`\`\`\n\n` +
+    'Use este número para consultar este atendimento.'
   );
 }

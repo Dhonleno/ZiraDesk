@@ -582,14 +582,19 @@ async function handleTransferToAgent(
   db: BotDbClient,
 ): Promise<BotResponse> {
   const responseText = option?.response?.trim() || 'Transferindo para um atendente. Aguarde...';
+  const parentOption = option?.parent_option_id ? await getOptionById(db, option.parent_option_id) : null;
+  const botGroup = parentOption?.label ?? option?.label ?? null;
+  const botSubject = option?.label ?? option?.tag ?? null;
 
   await updateBotMetadata(
     conversationId,
     {
       bot_stage: 'done',
       bot_option_id: option?.id ?? null,
-      bot_department: option?.label ?? null,
-      bot_tag: option?.tag ?? null,
+      bot_group: botGroup,
+      bot_subject: botSubject,
+      bot_department: botGroup,
+      bot_tag: botSubject,
       bot_path: [],
       bot_current_parent: null,
       bot_current_menu_text: null,
@@ -600,16 +605,19 @@ async function handleTransferToAgent(
   await db.$executeRawUnsafe(
     `UPDATE conversations
      SET status = 'open',
+         queue_entered_at = COALESCE(queue_entered_at, NOW()),
          metadata = COALESCE(metadata, '{}'::jsonb)
            || jsonb_build_object(
              'bot_option_id', $1::uuid,
              'bot_department', $2::text,
-             'bot_tag', $3::text
+             'bot_tag', $3::text,
+             'bot_group', $2::text,
+             'bot_subject', $3::text
            )
      WHERE id = $4::uuid`,
     option?.id ?? null,
-    option?.label ?? '',
-    option?.tag ?? '',
+    botGroup ?? '',
+    botSubject ?? '',
     conversationId,
   );
 

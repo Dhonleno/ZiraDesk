@@ -26,6 +26,11 @@ interface PresencePayload {
   status?: string;
 }
 
+interface AgentPresenceTransition {
+  previousStatus: string | null;
+  currentStatus: 'online' | 'paused';
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -129,29 +134,43 @@ async function setAgentPresenceState(
   schemaName: string,
   userId: string,
   nextStatus: 'online' | 'paused',
-): Promise<string | null> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ previous_status: string | null }>>(
-    `WITH previous AS (
-       SELECT status
+): Promise<AgentPresenceTransition | null> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ previous_status: string | null; current_status: 'online' | 'paused' }>>(
+    `WITH target AS (
+       SELECT
+         status AS previous_status,
+         CASE
+           WHEN status = 'paused' AND $2::text = 'online' THEN 'paused'
+           ELSE $2::text
+         END AS next_status
        FROM ${quoteIdent(schemaName)}.agent_assignments
        WHERE user_id = $1::uuid
      )
      UPDATE ${quoteIdent(schemaName)}.agent_assignments
-     SET status = $2::text,
-         is_available = CASE WHEN $2::text = 'online' THEN true ELSE false END,
+     SET status = target.next_status,
+         is_available = CASE WHEN target.next_status = 'online' THEN true ELSE false END,
          last_seen_at = NOW(),
          online_since = CASE
-           WHEN $2::text = 'online' AND COALESCE(status, 'offline') = 'offline' THEN NOW()
-           WHEN $2::text <> 'online' THEN NULL
+           WHEN target.next_status = 'online' AND COALESCE(agent_assignments.status, 'offline') = 'offline' THEN NOW()
+           WHEN target.next_status <> 'online' THEN NULL
            ELSE online_since
          END
+     FROM target
      WHERE user_id = $1::uuid
-     RETURNING (SELECT status FROM previous LIMIT 1) AS previous_status`,
+     RETURNING
+       target.previous_status,
+       agent_assignments.status AS current_status`,
     userId,
     nextStatus,
   );
 
-  return rows[0]?.previous_status ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    previousStatus: row.previous_status ?? null,
+    currentStatus: row.current_status,
+  };
 }
 
 async function resolveSchemaName(tenantId: string): Promise<string> {
@@ -183,7 +202,7 @@ async function requeueAgentConversations(
         `SELECT id::text AS id, protocol_number::text AS protocol_number
          FROM conversations
          WHERE assigned_to = $1::uuid
-           AND status IN ('open', 'in_service', 'active_outbound')`,
+           AND status IN ('open', 'waiting')`,
         userId,
       );
     });
@@ -197,10 +216,11 @@ async function requeueAgentConversations(
       await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
       await tx.$executeRawUnsafe(
         `UPDATE conversations
-         SET status = 'pending',
-             assigned_to = NULL
+         SET status = 'open',
+             assigned_to = NULL,
+             queue_entered_at = NOW()
          WHERE assigned_to = $1::uuid
-           AND status IN ('open', 'in_service', 'active_outbound')`,
+           AND status IN ('open', 'waiting')`,
         userId,
       );
     });
@@ -366,19 +386,20 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
         return;
       }
 
-      const status = normalizePresenceStatus(presencePayload.status);
-      const previousStatus = await setAgentPresenceState(schemaName, userId, status);
+      const requestedStatus = normalizePresenceStatus(presencePayload.status);
+      const transition = await setAgentPresenceState(schemaName, userId, requestedStatus);
       await refreshAgentPresence(schemaName, userId);
+      const status = transition?.currentStatus ?? requestedStatus;
       await touchPresenceKey(tenantId, userId, status);
       await cancelPendingRequeue(tenantId, userId, 'presence');
 
-      if (previousStatus === null) return;
-      if (previousStatus === status) return;
+      if (!transition || transition.previousStatus === null) return;
+      if (transition.previousStatus === status) return;
       if (status === 'paused') {
         socketServer.to(`tenant:${tenantId}`).emit('agent:paused', { userId });
         return;
       }
-      if (previousStatus === 'paused') {
+      if (transition.previousStatus === 'paused') {
         socketServer.to(`tenant:${tenantId}`).emit('agent:resumed', { userId });
         return;
       }
