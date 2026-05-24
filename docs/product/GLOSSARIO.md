@@ -26,6 +26,21 @@ Integração de comunicação configurada no tenant. Exemplos: WhatsApp Business
 **Conversa**
 Interação entre um cliente e a equipe, originada em um canal específico. Uma conversa pode conter múltiplas mensagens.
 
+**Status de conversa**
+Estado operacional do atendimento omnichannel:
+- `open`: conversa aberta. Sem agente (`assigned_to = null`) representa fila; com agente representa atendimento humano em andamento.
+- `waiting`: envio ativo aguardando resposta do cliente.
+- `closed`: atendimento encerrado com motivo/desfecho registrado.
+
+**Fila de atendimentos**
+Lista de conversas `open` sem agente atribuído. A fila é ordenada pelo momento de entrada (`queue_entered_at`) e permite que um agente assuma manualmente o atendimento.
+
+**Envio ativo**
+Atendimento iniciado pela equipe para contato outbound. É identificado por `conversation_type = outbound` e usa status `waiting` enquanto aguarda resposta do cliente.
+
+**Motivo de encerramento**
+Classificação cadastrável usada ao encerrar um atendimento. Fica registrada no atendimento junto com desfecho, observações, agente e data de encerramento.
+
 **Ticket**
 Demanda formal registrada para um cliente. Possui status, prioridade, categoria e responsável.
 

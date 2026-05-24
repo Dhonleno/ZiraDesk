@@ -357,7 +357,7 @@ window.addEventListener('storage', e => {
 | Arquivo | Padrões cobertos |
 |---|---|
 | `Clientes.html` | Lista com tabela densa, filtros (search + chips), segmentos (tabs), paginação, painel de detalhe lateral, hero com avatar grande, KPIs, ações rápidas (`.dact`), timeline |
-| `Omnichannel - Modais.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar, modais (Novo atendimento, Transferir, Resolver com CSAT) |
+| `Omnichannel - Modais.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar, modais (Novo atendimento, Transferir, Encerrar) |
 
 **Ao criar tela nova:** abrir as duas e copiar a estrutura mais próxima como ponto de partida. Não começar do zero.
 
@@ -557,16 +557,29 @@ CREATE TABLE conversations (
   organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   channel_id    UUID REFERENCES channels(id),
   channel_type  VARCHAR(30) NOT NULL,
+  conversation_type VARCHAR(20) DEFAULT 'inbound', -- inbound | outbound
   external_id   VARCHAR(255),              -- ID da conversa no canal externo
-  status        VARCHAR(20) DEFAULT 'open', -- open | pending | resolved | bot
+  status        VARCHAR(20) DEFAULT 'open', -- open | waiting | closed
   assigned_to   UUID REFERENCES users(id),
+  assigned_at   TIMESTAMPTZ,
   subject       VARCHAR(255),
   last_message  TEXT,
   last_message_at TIMESTAMPTZ,
+  closed_at     TIMESTAMPTZ,
   resolved_at   TIMESTAMPTZ,
+  closure_reason JSONB,      -- { reason, notes?, resolvedAt, agentId, closeTypeId?, closeOutcomeId? }
+  waiting_expires_at TIMESTAMPTZ,
+  queue_entered_at TIMESTAMPTZ,
+  close_type_id VARCHAR(30),
+  close_outcome_id VARCHAR(30),
   metadata      JSONB DEFAULT '{}',
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Status de conversas
+-- open: atendimento aberto. Se assigned_to IS NULL, está na fila; se assigned_to preenchido, está em atendimento humano.
+-- waiting: envio ativo aguardando resposta do cliente. O tipo segue indicado por conversation_type = 'outbound'.
+-- closed: atendimento encerrado com justificativa em closure_reason.
 
 -- Mensagens
 CREATE TABLE messages (
@@ -687,14 +700,17 @@ CREATE TABLE audit_logs (
     DELETE /contacts/:id/portal-access
 
   /omnichannel
-    GET    /conversations     ← lista com filtros
+    GET    /conversations     ← lista com filtros tab=open|waiting|closed
     GET    /conversations/:id
     PATCH  /conversations/:id
     POST   /conversations/:id/assign
-    POST   /conversations/:id/resolve
+    POST   /conversations/:id/close
     GET    /conversations/:id/messages
     POST   /conversations/:id/messages
     POST   /conversations/:id/transfer
+    GET    /close-config      ← motivos/desfechos ativos de encerramento
+    GET    /queue             ← fila de conversas open sem agente
+    POST   /queue/:id/assign-me
 
   /tickets
     GET    /tickets
