@@ -345,6 +345,7 @@
   "performance": {
     "title": "Agent Performance",
     "subtitle": "Track team metrics and goals",
+    "outboundRule": "Active outbound is counted in KPIs only after the customer replies.",
     "columns": {
       "agent": "Agent",
       "volume": "Volume",

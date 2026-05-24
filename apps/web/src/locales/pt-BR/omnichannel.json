@@ -345,6 +345,7 @@
   "performance": {
     "title": "Performance de Agentes",
     "subtitle": "Acompanhe métricas e metas da equipe",
+    "outboundRule": "Envio ativo só entra nos indicadores após resposta do cliente.",
     "columns": {
       "agent": "Agente",
       "volume": "Volume",
