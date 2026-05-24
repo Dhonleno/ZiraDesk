@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/auth.store';
 let socket: Socket | null = null;
 let heartbeatInterval: number | null = null;
 let currentPresenceStatus = 'online';
-let visibilityListenerAttached = false;
+let lifecycleListenersAttached = false;
 const pendingHandlers: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
 const HEARTBEAT_INTERVAL_MS = 25_000;
 
@@ -50,6 +50,7 @@ function emitHeartbeat(): void {
 function startHeartbeat(): void {
   if (heartbeatInterval !== null) return;
 
+  emitHeartbeat();
   heartbeatInterval = window.setInterval(() => {
     emitHeartbeat();
   }, HEARTBEAT_INTERVAL_MS);
@@ -61,8 +62,9 @@ function stopHeartbeat(): void {
   heartbeatInterval = null;
 }
 
-function onVisibilityChange(): void {
-  if (document.visibilityState !== 'visible' || !socket) return;
+function syncPresenceAfterForegroundResume(): void {
+  if (!socket) return;
+  if (document.visibilityState !== 'visible') return;
 
   if (!socket.connected) {
     socket.connect();
@@ -70,18 +72,47 @@ function onVisibilityChange(): void {
   }
 
   emitPresenceOnline();
+  emitHeartbeat();
+  // Alguns navegadores retomam timers/socket com atraso ao restaurar janela minimizada.
+  // Reforçamos o anúncio de presença em seguida para evitar exigir refresh manual.
+  window.setTimeout(() => {
+    emitPresenceOnline();
+    emitHeartbeat();
+  }, 800);
 }
 
-function attachVisibilityListener(): void {
-  if (visibilityListenerAttached) return;
+function onVisibilityChange(): void {
+  syncPresenceAfterForegroundResume();
+}
+
+function onWindowFocus(): void {
+  syncPresenceAfterForegroundResume();
+}
+
+function onPageShow(): void {
+  syncPresenceAfterForegroundResume();
+}
+
+function onNetworkOnline(): void {
+  syncPresenceAfterForegroundResume();
+}
+
+function attachLifecycleListeners(): void {
+  if (lifecycleListenersAttached) return;
   document.addEventListener('visibilitychange', onVisibilityChange);
-  visibilityListenerAttached = true;
+  window.addEventListener('focus', onWindowFocus);
+  window.addEventListener('pageshow', onPageShow);
+  window.addEventListener('online', onNetworkOnline);
+  lifecycleListenersAttached = true;
 }
 
-function detachVisibilityListener(): void {
-  if (!visibilityListenerAttached) return;
+function detachLifecycleListeners(): void {
+  if (!lifecycleListenersAttached) return;
   document.removeEventListener('visibilitychange', onVisibilityChange);
-  visibilityListenerAttached = false;
+  window.removeEventListener('focus', onWindowFocus);
+  window.removeEventListener('pageshow', onPageShow);
+  window.removeEventListener('online', onNetworkOnline);
+  lifecycleListenersAttached = false;
 }
 
 function attachLifecycleHandlers(): void {
@@ -131,7 +162,7 @@ export function connectSocket(token: string, tenantId: string): void {
   });
 
   attachLifecycleHandlers();
-  attachVisibilityListener();
+  attachLifecycleListeners();
 
   for (const { event, handler } of pendingHandlers) {
     socket.on(event, handler);
@@ -140,7 +171,7 @@ export function connectSocket(token: string, tenantId: string): void {
 
 export function disconnectSocket(): void {
   stopHeartbeat();
-  detachVisibilityListener();
+  detachLifecycleListeners();
   socket?.disconnect();
   socket = null;
   pendingHandlers.length = 0;

@@ -280,6 +280,27 @@ export function TenantLayout() {
     setPresenceStatus(agentStatus);
   }, [agentStatus, canToggleAvailability, hasLoadedStatus]);
 
+  useEffect(() => {
+    if (!canToggleAvailability || !user?.id) return;
+
+    const refreshOwnPresence = (payload: { userId?: string } | undefined) => {
+      if (!payload?.userId || payload.userId !== user.id) return;
+      void queryClient.invalidateQueries({ queryKey: ['agent-status'] });
+    };
+
+    const unsubOnline = subscribeToEvent<{ userId: string }>('agent:online', refreshOwnPresence);
+    const unsubOffline = subscribeToEvent<{ userId: string }>('agent:offline', refreshOwnPresence);
+    const unsubPaused = subscribeToEvent<{ userId: string }>('agent:paused', refreshOwnPresence);
+    const unsubResumed = subscribeToEvent<{ userId: string }>('agent:resumed', refreshOwnPresence);
+
+    return () => {
+      unsubOnline();
+      unsubOffline();
+      unsubPaused();
+      unsubResumed();
+    };
+  }, [canToggleAvailability, queryClient, user?.id]);
+
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
