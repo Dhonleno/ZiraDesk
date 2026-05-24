@@ -9,7 +9,6 @@ import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
-import { PermissionGate } from '../ui/PermissionGate';
 
 interface ConversationItem {
   id: string;
@@ -171,12 +170,10 @@ function ChannelDot({ type }: { type: string }) {
 interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onNew?: () => void;
-  onNewActiveOutbound?: () => void;
   initialAgentId?: string;
 }
 
-export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbound, initialAgentId }: Props) {
+export function ConversationList({ selectedId, onSelect, initialAgentId }: Props) {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const { showNotification } = useNotification();
@@ -652,7 +649,7 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
             tab: activeTab,
             assigned_to_me:
               (activeTab === 'open' || activeTab === 'waiting') && !filterAgentId
-                ? (assignedToMe ? true : undefined)
+                ? assignedToMe
                 : undefined,
             agent_id: filterAgentId || undefined,
             search: debouncedSearch || undefined,
@@ -732,44 +729,6 @@ export function ConversationList({ selectedId, onSelect, onNew, onNewActiveOutbo
                 <rect x="8" y="1" width="2" height="9" rx="0.5" fill="currentColor" />
               </svg>
             </button>
-            {onNewActiveOutbound && (
-              <PermissionGate permission="conversations:reply">
-                <button
-                  onClick={onNewActiveOutbound}
-                  title={t('activeOutbound.button')}
-                  style={{
-                    width: 24, height: 24,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'var(--bg-3)', border: '1px solid var(--line-2)',
-                    borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--teal)',
-                    transition: 'all .15s',
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                    <path d="M2 9L9 2M9 2H4.5M9 2V6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </PermissionGate>
-            )}
-            {onNew && (
-              <PermissionGate permission="conversations:reply">
-                <button
-                  onClick={onNew}
-                  title={t('new')}
-                  style={{
-                    width: 24, height: 24,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'var(--teal)', border: 'none',
-                    borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--on-teal)',
-                    transition: 'all .15s',
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                    <path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                  </svg>
-                </button>
-              </PermissionGate>
-            )}
           </div>
         </div>
 

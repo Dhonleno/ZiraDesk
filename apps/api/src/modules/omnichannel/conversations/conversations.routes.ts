@@ -75,6 +75,13 @@ interface ConversationWindowStatusRow {
   last_message_at: Date | null;
 }
 
+interface ConversationChannelRow {
+  id: string;
+  type: string;
+  name: string;
+  status: string;
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -215,6 +222,30 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       request.user.role,
     );
     return reply.send({ success: true, ...result });
+  });
+
+  // GET /api/omnichannel/conversations/channels
+  app.get('/channels', { preHandler: conversationsReplyGuard }, async (request, reply) => {
+    const tenantUser = request.user as AuthUser;
+    const schemaName = tenantUser.schemaName;
+
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    const channels = await withTenantSchema(schemaName, (tx) =>
+      tx.$queryRawUnsafe<ConversationChannelRow[]>(
+        `SELECT id::text AS id, type::text AS type, name::text AS name, status::text AS status
+         FROM channels
+         WHERE status = 'active'
+         ORDER BY name ASC`,
+      ),
+    );
+
+    return reply.send({ success: true, data: channels });
   });
 
   // GET /api/omnichannel/conversations/counts

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { omnichannelApi, adminApi, contactsApi } from '../../services/api';
+import { omnichannelApi, contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -45,9 +45,10 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   const selectedChannelId = watch('channel_id');
 
   const { data: channels = [] } = useQuery({
-    queryKey: ['admin-channels'],
-    queryFn: () => adminApi.listChannels(),
+    queryKey: ['omnichannel-conversation-channels'],
+    queryFn: () => omnichannelApi.listConversationChannels(),
   });
+  const activeChannels = channels.filter((channel) => channel.status === 'active');
 
   const { data: contactsResult } = useQuery({
     queryKey: ['crm-contacts-search', debouncedSearch],
@@ -95,6 +96,21 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!selectedChannelId && activeChannels.length === 1) {
+      setValue('channel_id', activeChannels[0]!.id, { shouldValidate: true });
+      return;
+    }
+
+    if (
+      selectedChannelId
+      && activeChannels.length > 0
+      && !activeChannels.some((channel) => channel.id === selectedChannelId)
+    ) {
+      setValue('channel_id', '', { shouldValidate: true });
+    }
+  }, [activeChannels, selectedChannelId, setValue]);
 
   return (
     <div
@@ -350,7 +366,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               }}
             >
               <option value="">{t('form.channelPlaceholder')}</option>
-              {channels.filter((channel) => channel.status === 'active').map((channel) => (
+              {activeChannels.map((channel) => (
                 <option key={channel.id} value={channel.id} style={{ background: 'var(--bg-3)' }}>
                   {channel.name} ({channel.type})
                 </option>

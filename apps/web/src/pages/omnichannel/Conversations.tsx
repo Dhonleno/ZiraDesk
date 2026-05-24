@@ -94,8 +94,6 @@ export function ConversationsPage() {
         <ConversationList
           selectedId={selectedId}
           onSelect={setSelectedId}
-          onNew={() => setShowModal(true)}
-          onNewActiveOutbound={() => setShowActiveOutboundModal(true)}
           initialAgentId={filterAgentId}
         />
 

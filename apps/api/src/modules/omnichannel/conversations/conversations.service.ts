@@ -1312,7 +1312,11 @@ export async function createConversation(
     JSON.stringify(metadata),
   );
   const conversation = convRows[0]!;
-  const protocolMessage = buildProtocolMessage(protocolNumber);
+  const protocolMessage = buildProtocolMessage(protocolNumber, {
+    context: 'agent_initiated',
+    startedAt: new Date(),
+    timeZone: tenantTimezone,
+  });
   const protocolMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
      VALUES ($1::uuid, 'system', $2, 'text', false)

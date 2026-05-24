@@ -9,6 +9,7 @@ import { messageQueue } from '../../jobs/queue.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { getSocketServer } from '../../socket/index.js';
 import { loadConversationSocketPayload } from './conversations/socket-payload.js';
+import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
 
@@ -377,7 +378,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         };
       }
 
-      const protocolMessage = protocolNumber ? `Protocolo do atendimento: *${protocolNumber}*` : null;
+      const protocolMessage = protocolNumber
+        ? buildProtocolMessage(protocolNumber, { context: 'agent_initiated', startedAt: new Date() })
+        : null;
       let protocolMessageId: string | null = null;
       if (protocolMessage) {
         const protocolMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(

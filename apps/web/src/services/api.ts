@@ -2415,6 +2415,13 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
+  listConversationChannels: async (): Promise<Array<Pick<Channel, 'id' | 'type' | 'name' | 'status'>>> => {
+    const res = await api.get<{ success: boolean; data: Array<Pick<Channel, 'id' | 'type' | 'name' | 'status'>> }>(
+      '/omnichannel/conversations/channels',
+    );
+    return res.data.data;
+  },
+
   getCloseConfig: async (): Promise<ConversationCloseConfigPreview> => {
     const res = await api.get<{ success: boolean; data: ConversationCloseConfigPreview }>(
       '/omnichannel/close-config',
