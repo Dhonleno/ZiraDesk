@@ -301,6 +301,12 @@ export async function listPerformance(
         c.id,
         c.assigned_to,
         c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
         c.assigned_at,
         c.resolved_at,
         c.closed_at,
@@ -310,11 +316,19 @@ export async function listPerformance(
         fr.first_response_seconds
       FROM ${safeSchema}.conversations c
       LEFT JOIN LATERAL (
-        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
         FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
         WHERE m.conversation_id = c.id
           AND m.sender_type = 'agent'
           AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
       ) fr ON TRUE
       WHERE ${conversationWhereSql}
     )
@@ -325,17 +339,22 @@ export async function listPerformance(
       COUNT(fc.id)::bigint AS total_conversations,
       AVG(
         EXTRACT(EPOCH FROM (
-          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
+          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
         )) / 60
       ) FILTER (
         WHERE fc.status = 'closed'
           AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+          AND fc.performance_start_at IS NOT NULL
       ) AS avg_tma_minutes,
       AVG(
-        EXTRACT(EPOCH FROM (
-          fc.assigned_at - fc.created_at
-        )) / 60
-      ) FILTER (WHERE fc.assigned_at IS NOT NULL) AS avg_tme_minutes,
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
       AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
       COUNT(fc.id) FILTER (WHERE fc.csat_score IS NOT NULL)::bigint AS csat_count,
       ROUND(
@@ -368,6 +387,12 @@ export async function listPerformance(
       SELECT
         c.id,
         c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
         c.assigned_at,
         c.resolved_at,
         c.closed_at,
@@ -377,11 +402,19 @@ export async function listPerformance(
         fr.first_response_seconds
       FROM ${safeSchema}.conversations c
       LEFT JOIN LATERAL (
-        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
         FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
         WHERE m.conversation_id = c.id
           AND m.sender_type = 'agent'
           AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
       ) fr ON TRUE
       WHERE ${conversationWhereSql}
     )
@@ -389,17 +422,22 @@ export async function listPerformance(
       COUNT(fc.id)::bigint AS total_volume,
       AVG(
         EXTRACT(EPOCH FROM (
-          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
+          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
         )) / 60
       ) FILTER (
         WHERE fc.status = 'closed'
           AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+          AND fc.performance_start_at IS NOT NULL
       ) AS avg_tma_minutes,
       AVG(
-        EXTRACT(EPOCH FROM (
-          fc.assigned_at - fc.created_at
-        )) / 60
-      ) FILTER (WHERE fc.assigned_at IS NOT NULL) AS avg_tme_minutes,
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
       AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
       ROUND(
         100.0 * COUNT(fc.id) FILTER (
