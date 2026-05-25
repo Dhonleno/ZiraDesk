@@ -209,7 +209,7 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
                   borderRadius: 'var(--r)',
                   padding: '6px 10px',
                   fontSize: 12,
-                  color: '#0E1A18',
+                  color: 'var(--on-teal)',
                   cursor: 'pointer',
                   opacity: isUploading ? 0.6 : 1,
                 }}

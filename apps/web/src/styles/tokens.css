@@ -54,6 +54,14 @@
   --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--line);
   --backdrop:   rgba(8, 9, 11, 0.72);
 
+  /* Channel brand colors (fixed — não variam com tema) */
+  --channel-whatsapp:      #25D366;
+  --channel-whatsapp-dim:  rgba(37, 211, 102, 0.15);
+  --channel-instagram:     #E1306C;
+  --channel-instagram-dim: rgba(225, 48, 108, 0.15);
+  --channel-email:         #EA4335;
+  --channel-email-dim:     rgba(234, 67, 53, 0.15);
+
   color-scheme: dark;
 }
 
@@ -94,6 +102,22 @@
 
   color-scheme: light;
 }
+
+/* ── Avatar gradient classes ─────────────────────────────────────────────── */
+/* Uso: className={avatarClass(seed)} — fundo + texto definidos aqui.        */
+.av-pink,
+.av-purple,
+.av-green,
+.av-rose,
+.av-blue,
+.av-amber { color: #fff; }
+
+.av-pink   { background: linear-gradient(135deg, #f093fb, #f5576c); }
+.av-purple { background: linear-gradient(135deg, #667eea, #764ba2); }
+.av-green  { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+.av-rose   { background: linear-gradient(135deg, #fa709a, #fee140); }
+.av-blue   { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+.av-amber  { background: linear-gradient(135deg, #a18cd1, #fbc2eb); }
 
 /* ── Logo — classes temáveis ──────────────────────────────────────────────── */
 .brand-logo-bg     { fill: #1E293B; }
@@ -1121,6 +1145,11 @@
   gap: 8px;
   align-items: center;
   cursor: pointer;
+}
+
+.agent-item:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 .agent-item.selected {

@@ -209,7 +209,7 @@ export function CloseConversationModal({
             style={{
               background: 'var(--red)',
               borderColor: 'var(--red)',
-              color: '#fff',
+              color: 'var(--on-teal)',
               fontWeight: 600,
               opacity: canConfirm ? 1 : 0.6,
               cursor: canConfirm ? 'pointer' : 'not-allowed',

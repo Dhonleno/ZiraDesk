@@ -90,7 +90,15 @@ export function ConversationsPage() {
 
   return (
     <PageShell padding={0} contentStyle={{ overflowX: 'visible', overflowY: 'hidden' }}>
-      <div className="flex h-full" style={{ overflowX: 'visible', overflowY: 'hidden' }}>
+      <div
+        className="h-full w-full"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '320px minmax(0, 1fr) 360px',
+          overflowX: 'visible',
+          overflowY: 'hidden',
+        }}
+      >
         <ConversationList
           selectedId={selectedId}
           onSelect={setSelectedId}
@@ -99,11 +107,13 @@ export function ConversationsPage() {
 
         {selectedId ? (
           <>
-            <ChatArea conversationId={selectedId} onClosed={() => setSelectedId(null)} />
+            <div style={{ minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              <ChatArea conversationId={selectedId} onClosed={() => setSelectedId(null)} />
+            </div>
             <InfoPanel conversationId={selectedId} />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center">
+          <div className="flex items-center justify-center" style={{ gridColumn: '2 / 4' }}>
             <div className="text-center">
               <div className="mb-3 flex justify-center">
                 <svg viewBox="0 0 24 24" fill="none" className="h-12 w-12 text-txt-3" aria-hidden>

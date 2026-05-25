@@ -9,6 +9,7 @@ import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
 import { CallWidget } from './CallWidget';
+import { avatarClass } from '../../utils/avatar';
 
 interface Conversation {
   id: string;
@@ -42,23 +43,9 @@ interface ClientStats {
   open_tickets: number;
 }
 
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#667eea,#764ba2)',
-  'linear-gradient(135deg,#f093fb,#f5576c)',
-  'linear-gradient(135deg,#4facfe,#00f2fe)',
-  'linear-gradient(135deg,#43e97b,#38f9d7)',
-  'linear-gradient(135deg,#fa709a,#fee140)',
-  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
-];
-
-function avatarGradient(name: string | null) {
-  const idx = (name?.charCodeAt(0) ?? 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx] ?? AVATAR_GRADIENTS[0];
-}
-
 const CH_BADGE: Record<string, { bg: string; color: string; border: string; label: string }> = {
-  whatsapp: { bg: 'rgba(37,211,102,.15)', color: '#25D366', border: 'rgba(37,211,102,.25)', label: 'WhatsApp' },
-  instagram:{ bg: 'rgba(244,114,182,.15)', color: '#F472B6', border: 'rgba(244,114,182,.25)', label: 'Instagram' },
+  whatsapp: { bg: 'var(--channel-whatsapp-dim)', color: 'var(--channel-whatsapp)', border: 'rgba(37,211,102,.25)', label: 'WhatsApp' },
+  instagram:{ bg: 'var(--channel-instagram-dim)', color: 'var(--channel-instagram)', border: 'rgba(225,48,108,.25)', label: 'Instagram' },
   email:    { bg: 'var(--blue-dim)',      color: 'var(--blue)', border: 'rgba(96,165,250,.25)', label: 'E-mail' },
   live_chat:{ bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
   chat:     { bg: 'var(--bg-5)',          color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
@@ -93,20 +80,20 @@ function Skeleton({ height = 20 }: { height?: number }) {
   );
 }
 
-function relativeTime(dateStr: string | null | undefined): string {
+function relativeTime(dateStr: string | null | undefined, nowLabel: string): string {
   if (!dateStr) return '—';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'agora';
+  if (mins < 1) return nowLabel;
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
   return `${Math.floor(hrs / 24)}d`;
 }
 
-function formatDateTime(dateStr: string): string {
+function formatDateTime(dateStr: string, locale: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleString('pt-BR', {
+  return date.toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -170,7 +157,7 @@ interface Props {
 }
 
 export function InfoPanel({ conversationId }: Props) {
-  const { t } = useTranslation('omnichannel');
+  const { t, i18n } = useTranslation('omnichannel');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('contact');
@@ -292,8 +279,7 @@ export function InfoPanel({ conversationId }: Props) {
   const contactName = (contactData?.name ?? conv?.contact_name ?? null)?.trim();
   const organizationId = contactData?.organization_id ?? conv?.organization_id ?? null;
   const organizationName = (contactData?.organization_name ?? conv?.organization_name ?? null)?.trim() || null;
-  const name = contactName || 'Contato não identificado';
-  const contactBadgeLabel = 'Contato';
+  const name = contactName || t('info.unknown');
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
   const currentChannelSub =
     conv?.channel_type === 'email'
@@ -339,7 +325,7 @@ export function InfoPanel({ conversationId }: Props) {
 
   return (
     <div style={{
-      width: 300, minWidth: 300,
+      width: 360, minWidth: 360,
       display: 'flex', flexDirection: 'column',
       background: 'var(--bg-2)',
       borderLeft: '1px solid var(--line)',
@@ -381,18 +367,20 @@ export function InfoPanel({ conversationId }: Props) {
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               textAlign: 'center', gap: 10,
             }}>
-              <div style={{
-                width: 60, height: 60, borderRadius: '50%',
-                background: avatarGradient(contactName ?? null),
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22, fontWeight: 700, color: '#fff',
-                border: '3px solid var(--bg-4)',
-              }}>
+              <div
+                className={avatarClass(contactName ?? name)}
+                style={{
+                  width: 60, height: 60, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 22, fontWeight: 500,
+                  border: '3px solid var(--bg-4)',
+                }}
+              >
                 {name.charAt(0).toUpperCase()}
               </div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)' }}>{name}</div>
-                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{contactBadgeLabel}</div>
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', marginTop: 2 }}>{t('info.contact')}</div>
               </div>
               {/* Links CRM */}
               {contactId && (
@@ -415,7 +403,7 @@ export function InfoPanel({ conversationId }: Props) {
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; }}
                     >
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><rect x="1" y="2.5" width="9" height="6.5" rx="1.3" stroke="currentColor" strokeWidth="1.1"/><path d="M3.5 2.5V2a1 1 0 011-1h2a1 1 0 011 1v.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                      {organizationName ?? 'Ver organização'}
+                      {organizationName ?? t('info.viewOrganization')}
                     </button>
                   ) : (
                     <button
@@ -425,7 +413,7 @@ export function InfoPanel({ conversationId }: Props) {
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; e.currentTarget.style.color = 'var(--txt-3)'; }}
                     >
                       <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                      Vincular organização
+                      {t('info.linkOrganization')}
                     </button>
                   )}
                 </div>
@@ -444,7 +432,7 @@ export function InfoPanel({ conversationId }: Props) {
                 ([
                   { val: contactId ? String(clientStats?.total_messages ?? 0) : '—', lbl: t('info.messages') },
                   { val: contactId ? String(clientStats?.total_conversations ?? 0) : '—', lbl: t('info.attendances') },
-                  { val: contactId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: 'Tickets abertos' },
+                  { val: contactId ? String(clientStats?.open_tickets ?? 0) : '—', lbl: t('info.openTickets') },
                 ] as { val: string; lbl: string }[]).map(({ val, lbl }) => (
                   <div key={lbl} style={{ background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
                     <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.5px', fontFamily: 'var(--mono)' }}>{val}</div>
@@ -463,16 +451,16 @@ export function InfoPanel({ conversationId }: Props) {
                     onClick={() => setShowEditContact(true)}
                     style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}
                   >
-                    Editar
+                    {t('info.edit')}
                   </button>
                 )}
               >
                 {t('info.information')}
               </SectionTitle>
               <InfoField
-                label="Organização"
+                label={t('info.organization')}
                 value={organizationName}
-                empty="Sem organização"
+                empty={t('info.noOrganization')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <rect x="1.5" y="3" width="11" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.2" />
@@ -505,7 +493,7 @@ export function InfoPanel({ conversationId }: Props) {
               {contactPhone ? (
                 <div style={{ marginTop: 12 }}>
                   <CallWidget
-                    contactName={contactName ?? 'Contato'}
+                    contactName={contactName ?? t('info.contact')}
                     contactPhone={contactPhone}
                     conversationId={conversationId}
                   />
@@ -527,11 +515,11 @@ export function InfoPanel({ conversationId }: Props) {
                       fontSize: 10,
                     }}
                   >
-                    + {t('info.addTag', { defaultValue: 'Adicionar' })}
+                    + {t('info.addTag')}
                   </button>
                 )}
               >
-                {t('info.tags', { defaultValue: 'Etiquetas' })}
+                {t('info.tags')}
               </SectionTitle>
 
               <div>
@@ -551,7 +539,7 @@ export function InfoPanel({ conversationId }: Props) {
                 ))}
                 {convTags.length === 0 && (
                   <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                    {t('info.noTags', { defaultValue: 'Nenhuma etiqueta aplicada' })}
+                    {t('info.noTags')}
                   </span>
                 )}
               </div>
@@ -566,7 +554,7 @@ export function InfoPanel({ conversationId }: Props) {
 
             {(conv?.csat_score || conv?.csat_stage === 'sent' || conv?.csat_stage === 'waiting_comment') ? (
               <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-                <SectionTitle>{t('csat.title', { defaultValue: 'Avaliação (CSAT)' })}</SectionTitle>
+                <SectionTitle>{t('csat.title')}</SectionTitle>
 
                 {conv.csat_stage === 'sent' && !conv.csat_score ? (
                   <div style={{
@@ -578,7 +566,7 @@ export function InfoPanel({ conversationId }: Props) {
                     fontStyle: 'italic',
                   }}>
                     <span className="zd-pulse-dot" />
-                    {t('csat.pending', { defaultValue: 'Aguardando avaliação do cliente...' })}
+                    {t('csat.pending')}
                   </div>
                 ) : null}
 
@@ -592,7 +580,7 @@ export function InfoPanel({ conversationId }: Props) {
                     fontStyle: 'italic',
                   }}>
                     <span className="zd-pulse-dot" />
-                    {t('csat.waitingComment', { defaultValue: 'Aguardando comentário...' })}
+                    {t('csat.waitingComment')}
                   </div>
                 ) : null}
 
@@ -604,7 +592,7 @@ export function InfoPanel({ conversationId }: Props) {
                           key={item}
                           style={{
                             fontSize: 20,
-                            color: item <= conv.csat_score! ? '#F59E0B' : 'var(--line-2)',
+                            color: item <= conv.csat_score! ? 'var(--amber)' : 'var(--line-2)',
                             transition: 'color .15s',
                           }}
                         >
@@ -612,7 +600,7 @@ export function InfoPanel({ conversationId }: Props) {
                         </span>
                       ))}
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginLeft: 6 }}>
-                        {t('csat.score', { score: conv.csat_score, defaultValue: `${conv.csat_score}/5` })}
+                        {t('csat.score', { score: conv.csat_score })}
                       </span>
                     </div>
 
@@ -625,7 +613,7 @@ export function InfoPanel({ conversationId }: Props) {
                         borderRadius: 'var(--r)',
                         padding: '8px 10px',
                         marginTop: 4,
-                        borderLeft: '3px solid #F59E0B',
+                        borderLeft: '3px solid var(--amber)',
                       }}>
                         "{conv.csat_comment}"
                       </div>
@@ -634,8 +622,7 @@ export function InfoPanel({ conversationId }: Props) {
                     {conv.csat_responded_at ? (
                       <div style={{ fontSize: 11, color: 'var(--txt-3)', marginTop: 6 }}>
                         {t('csat.respondedAt', {
-                          date: formatDateTime(conv.csat_responded_at),
-                          defaultValue: `Avaliado em ${formatDateTime(conv.csat_responded_at)}`,
+                          date: formatDateTime(conv.csat_responded_at, i18n.language),
                         })}
                       </div>
                     ) : null}
@@ -688,18 +675,18 @@ export function InfoPanel({ conversationId }: Props) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500 }}>{badge.label}</div>
                       <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>
-                        {item.count} conversa(s) · último: {relativeTime(item.lastUsed)}
+                        {t('info.conversationCount', { count: item.count, time: relativeTime(item.lastUsed, t('now')) })}
                       </div>
                     </div>
                   </div>
                 );
               }) : (
-                <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>Nenhum canal identificado</div>
+                <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>{t('info.noChannel')}</div>
               )}
 
               {conv && chBadge && currentChannelSub && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt-3)' }}>
-                  Canal atual: {chBadge.label} · {currentChannelSub}
+                  {t('info.currentChannel', { label: chBadge.label, sub: currentChannelSub })}
                 </div>
               )}
 
@@ -708,7 +695,7 @@ export function InfoPanel({ conversationId }: Props) {
                   onClick={() => navigate(`/crm/contacts?id=${contactId}`)}
                   style={{ marginTop: 12, width: '100%', padding: '8px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--bg-3)', color: 'var(--teal)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font)', cursor: 'pointer' }}
                 >
-                  Ver perfil completo
+                  {t('info.viewFullProfile')}
                 </button>
               )}
             </div>
@@ -725,7 +712,7 @@ export function InfoPanel({ conversationId }: Props) {
                 <Skeleton height={52} />
               </div>
             ) : !contactId || history.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>Nenhum atendimento anterior</div>
+              <div style={{ fontSize: 12, color: 'var(--txt-3)', padding: '8px 0' }}>{t('info.noPreviousConversations')}</div>
             ) : (
               <div>
                 {history.map((item) => {
@@ -749,12 +736,12 @@ export function InfoPanel({ conversationId }: Props) {
                           )}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {(item.last_message ?? item.subject ?? 'Sem mensagens').slice(0, 60)}
+                          {(item.last_message ?? item.subject ?? t('info.noMessages')).slice(0, 60)}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
-                          {relativeTime(item.last_message_at ?? item.created_at)}
+                          {relativeTime(item.last_message_at ?? item.created_at, t('now'))}
                         </div>
                         <div style={{ marginTop: 2, fontSize: 10, color: 'var(--txt-3)' }}>
                           {item.status}
