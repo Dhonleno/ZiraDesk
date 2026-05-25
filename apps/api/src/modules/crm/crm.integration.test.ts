@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { prisma } from '../../config/database.js';
 import { createTestApp, createTestJWT } from '../../test/setup.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
+import { ensureCrmInfrastructure } from './crm.infrastructure.js';
 
 interface TempTenant {
   id: string;
@@ -89,6 +90,8 @@ async function ensureTenantUser(schemaName: string): Promise<void> {
 }
 
 async function resetTenantCrmData(schemaName: string): Promise<void> {
+  await ensureCrmInfrastructure(schemaName);
+
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "${schemaName}".messages,
@@ -99,6 +102,7 @@ async function resetTenantCrmData(schemaName: string): Promise<void> {
       "${schemaName}".ticket_checklists,
       "${schemaName}".ticket_relations,
       "${schemaName}".tickets,
+      "${schemaName}".lgpd_requests,
       "${schemaName}".contacts,
       "${schemaName}".organizations,
       "${schemaName}".audit_logs
@@ -688,5 +692,190 @@ describe('CRM integration', () => {
     expect(secondResponse.status).toBe(201);
     expect(firstResponse.body.data.email).toBe(sharedEmail);
     expect(secondResponse.body.data.email).toBe(sharedEmail);
+  });
+
+  it('PATCH /api/crm/contacts/:id/lgpd/consent atualiza consentimento e cria trilha LGPD', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Consentimento',
+      email: uniqueEmail('lgpd.consent'),
+      phone: uniquePhone(903),
+      document: uniqueDocument(903),
+    });
+
+    const response = await createTestApp()
+      .patch(`/api/crm/contacts/${contact.id}/lgpd/consent`)
+      .set(authHeader())
+      .send({
+        status: 'granted',
+        source: 'whatsapp_opt_in',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.contact).toMatchObject({
+      id: contact.id,
+      lgpd_consent_status: 'granted',
+      lgpd_consent_source: 'whatsapp_opt_in',
+    });
+    expect(response.body.data.contact.lgpd_consent_at).toEqual(expect.any(String));
+    expect(response.body.data.request).toMatchObject({
+      request_type: 'consent_update',
+      status: 'processed',
+      contact_id: contact.id,
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ total: bigint }>>(
+      `SELECT COUNT(*) AS total
+       FROM "${tenant.schemaName}".lgpd_requests
+       WHERE contact_id = $1::uuid
+         AND request_type = 'consent_update'`,
+      contact.id,
+    );
+    expect(Number(rows[0]?.total ?? 0)).toBe(1);
+  });
+
+  it('GET /api/crm/contacts/:id/lgpd/export retorna pacote de dados do titular', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Exportacao',
+      email: uniqueEmail('lgpd.export'),
+      phone: uniquePhone(904),
+      document: uniqueDocument(904),
+    });
+    const conversationId = randomUUID();
+    const ticketId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".conversations
+         (id, contact_id, channel_type, protocol_number, status, subject, last_message, last_message_at)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', $3, 'open', 'Solicitação de dados', 'Mensagem inicial', NOW())`,
+      conversationId,
+      contact.id,
+      uniqueProtocol(),
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".messages
+         (conversation_id, sender_type, content, content_type, status)
+       VALUES ($1::uuid, 'client', 'Preciso dos meus dados', 'text', 'sent')`,
+      conversationId,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".tickets
+         (id, contact_id, title, status, priority)
+       VALUES ($1::uuid, $2::uuid, $3, 'open', 'medium')`,
+      ticketId,
+      contact.id,
+      uniqueText('Ticket LGPD'),
+    );
+
+    const response = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/lgpd/export`)
+      .query({ include_messages: true })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.contact).toMatchObject({ id: contact.id });
+    expect(response.body.data.generated_at).toEqual(expect.any(String));
+    expect(response.body.data.request_id).toEqual(expect.any(String));
+    expect(response.body.data.conversations).toHaveLength(1);
+    expect(response.body.data.messages).toHaveLength(1);
+    expect(response.body.data.tickets).toHaveLength(1);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ lgpd_last_export_at: Date | null }>>(
+      `SELECT lgpd_last_export_at
+       FROM "${tenant.schemaName}".contacts
+       WHERE id = $1::uuid`,
+      contact.id,
+    );
+    expect(rows[0]?.lgpd_last_export_at).toBeInstanceOf(Date);
+  });
+
+  it('POST /api/crm/contacts/:id/lgpd/anonymize anonimiza contato e mascara mensagens do cliente', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Anonimizar',
+      email: uniqueEmail('lgpd.anon'),
+      phone: uniquePhone(905),
+      document: uniqueDocument(905),
+    });
+    const conversationId = randomUUID();
+    const callId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".conversations
+         (id, contact_id, channel_type, protocol_number, status, subject, last_message, last_message_at)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', $3, 'open', 'Dados sensíveis', 'Meu CPF é 123', NOW())`,
+      conversationId,
+      contact.id,
+      uniqueProtocol(),
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".messages
+         (conversation_id, sender_type, content, content_type, status)
+       VALUES
+         ($1::uuid, 'client', 'Meu CPF é 123', 'text', 'sent'),
+         ($1::uuid, 'agent', 'Recebido', 'text', 'sent')`,
+      conversationId,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".call_records
+         (id, conversation_id, call_sid, to_phone, from_phone, status)
+       VALUES ($1::uuid, $2::uuid, $3, '+5511991111111', '+5511992222222', 'completed')`,
+      callId,
+      conversationId,
+      `CA${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    );
+
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/${contact.id}/lgpd/anonymize`)
+      .set(authHeader())
+      .send({
+        reason: 'Solicitação do titular',
+        redact_messages: true,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.contact).toMatchObject({
+      id: contact.id,
+      email: null,
+      phone: null,
+      whatsapp: null,
+      document: null,
+      lgpd_consent_status: 'revoked',
+    });
+    expect(response.body.data.contact.name).toContain('Titular anonimizado');
+    expect(response.body.data.contact.lgpd_anonymized_at).toEqual(expect.any(String));
+    expect(response.body.data.summary).toMatchObject({
+      conversations_updated: 1,
+      messages_redacted: 1,
+    });
+
+    const messageRows = await prisma.$queryRawUnsafe<Array<{ sender_type: string; content: string | null }>>(
+      `SELECT sender_type, content
+       FROM "${tenant.schemaName}".messages
+       WHERE conversation_id = $1::uuid
+       ORDER BY sender_type ASC`,
+      conversationId,
+    );
+    const agentMessage = messageRows.find((row) => row.sender_type === 'agent');
+    const clientMessage = messageRows.find((row) => row.sender_type === 'client');
+
+    expect(clientMessage?.content).toBe('[mensagem anonimizada por LGPD]');
+    expect(agentMessage?.content).toBe('Recebido');
+
+    const callRows = await prisma.$queryRawUnsafe<Array<{ to_phone: string | null; from_phone: string | null }>>(
+      `SELECT to_phone, from_phone
+       FROM "${tenant.schemaName}".call_records
+       WHERE id = $1::uuid`,
+      callId,
+    );
+    expect(callRows[0]).toMatchObject({ to_phone: null, from_phone: null });
   });
 });

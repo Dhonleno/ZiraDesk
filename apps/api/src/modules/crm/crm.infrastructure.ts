@@ -70,6 +70,12 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
         portal_password_hash VARCHAR(255),
         portal_last_login TIMESTAMPTZ,
         portal_invited_at TIMESTAMPTZ,
+        lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        lgpd_consent_at TIMESTAMPTZ,
+        lgpd_consent_source VARCHAR(100),
+        lgpd_last_export_at TIMESTAMPTZ,
+        lgpd_anonymized_at TIMESTAMPTZ,
+        lgpd_anonymization_reason TEXT,
         tags            TEXT[]       NOT NULL DEFAULT '{}',
         custom_fields   JSONB        NOT NULL DEFAULT '{}',
         notes           TEXT,
@@ -93,8 +99,33 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
       ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT false,
       ADD COLUMN IF NOT EXISTS portal_password_hash VARCHAR(255),
       ADD COLUMN IF NOT EXISTS portal_last_login TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      ADD COLUMN IF NOT EXISTS lgpd_consent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS lgpd_consent_source VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS lgpd_last_export_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS lgpd_anonymized_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS lgpd_anonymization_reason TEXT
     `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+        request_type VARCHAR(30) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'processed',
+        requested_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+        processed_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+        payload JSONB NOT NULL DEFAULT '{}',
+        result JSONB NOT NULL DEFAULT '{}',
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        processed_at TIMESTAMPTZ
+      )
+    `);
+
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact ON ${schema}.lgpd_requests(contact_id)`,
+    );
 
     if (await tableExists(schemaName, 'conversations')) {
       await prisma.$executeRawUnsafe(`

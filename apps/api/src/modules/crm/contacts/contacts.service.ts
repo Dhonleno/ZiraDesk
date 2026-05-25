@@ -1,6 +1,13 @@
 import { prisma } from '../../../config/database.js';
 import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
-import type { CreateContactInput, UpdateContactInput, ListContactsQuery } from './contacts.schema.js';
+import type {
+  CreateContactInput,
+  UpdateContactInput,
+  ListContactsQuery,
+  UpdateContactLgpdConsentInput,
+  AnonymizeContactLgpdInput,
+  ListLgpdRequestsQuery,
+} from './contacts.schema.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhoneForStorage, PhoneNormalizationError } from '../../../utils/phone.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
@@ -43,11 +50,33 @@ interface ContactRow {
   portal_enabled: boolean;
   portal_last_login: Date | null;
   portal_invited_at: Date | null;
+  lgpd_consent_status: string;
+  lgpd_consent_at: Date | null;
+  lgpd_consent_source: string | null;
+  lgpd_last_export_at: Date | null;
+  lgpd_anonymized_at: Date | null;
+  lgpd_anonymization_reason: string | null;
   tags: string[];
   custom_fields: unknown;
   notes: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+interface LgpdRequestRow {
+  id: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  request_type: string;
+  status: string;
+  requested_by: string | null;
+  requested_by_name: string | null;
+  processed_by: string | null;
+  processed_by_name: string | null;
+  payload: unknown;
+  result: unknown;
+  requested_at: Date;
+  processed_at: Date | null;
 }
 
 interface ContactStatsRow {
@@ -186,6 +215,8 @@ const BASE_SELECT = `
     ct.id, ct.organization_id, ct.name, ct.email, ct.phone, ct.whatsapp,
     ct.document, ct.role, ct.department, ct.is_primary, ct.avatar_url,
     ct.portal_enabled, ct.portal_last_login, ct.portal_invited_at,
+    ct.lgpd_consent_status, ct.lgpd_consent_at, ct.lgpd_consent_source,
+    ct.lgpd_last_export_at, ct.lgpd_anonymized_at, ct.lgpd_anonymization_reason,
     ct.tags, ct.custom_fields, ct.notes, ct.created_at, ct.updated_at,
     o.name   AS organization_name,
     o.status AS organization_status
@@ -569,6 +600,412 @@ export async function linkToOrganization(
   );
 
   return getContact(contactId, undefined, db);
+}
+
+interface LgpdConversationRow {
+  id: string;
+  channel_type: string;
+  status: string;
+  subject: string | null;
+  last_message: string | null;
+  created_at: Date;
+  closed_at: Date | null;
+}
+
+interface LgpdMessageRow {
+  id: string;
+  conversation_id: string;
+  sender_type: string;
+  content: string | null;
+  content_type: string;
+  media_url: string | null;
+  status: string;
+  is_internal: boolean;
+  created_at: Date;
+}
+
+interface LgpdTicketRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  created_at: Date;
+}
+
+async function createLgpdRequestRecord(
+  contactId: string,
+  requestType: string,
+  actorUserId: string | null,
+  payload: Record<string, unknown>,
+  result: Record<string, unknown>,
+  db: RawExecutor = prisma,
+): Promise<LgpdRequestRow> {
+  const rows = await db.$queryRawUnsafe<LgpdRequestRow[]>(
+    `INSERT INTO lgpd_requests (
+      contact_id, request_type, status, requested_by, processed_by, payload, result, processed_at
+    )
+    VALUES ($1::uuid, $2, 'processed', $3::uuid, $3::uuid, $4::jsonb, $5::jsonb, NOW())
+    RETURNING *`,
+    contactId,
+    requestType,
+    actorUserId ?? null,
+    JSON.stringify(payload),
+    JSON.stringify(result),
+  );
+
+  return rows[0]!;
+}
+
+export async function listLgpdRequests(
+  query: ListLgpdRequestsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => listLgpdRequests(query, undefined, tx));
+  }
+
+  const { page, per_page, contact_id, request_type, status } = query;
+  const offset = (page - 1) * per_page;
+
+  const data = await db.$queryRawUnsafe<LgpdRequestRow[]>(
+    `SELECT
+      lr.id,
+      lr.contact_id,
+      ct.name AS contact_name,
+      lr.request_type,
+      lr.status,
+      lr.requested_by,
+      ru.name AS requested_by_name,
+      lr.processed_by,
+      pu.name AS processed_by_name,
+      lr.payload,
+      lr.result,
+      lr.requested_at,
+      lr.processed_at
+    FROM lgpd_requests lr
+    LEFT JOIN contacts ct ON ct.id = lr.contact_id
+    LEFT JOIN users ru ON ru.id = lr.requested_by
+    LEFT JOIN users pu ON pu.id = lr.processed_by
+    WHERE ($1::uuid IS NULL OR lr.contact_id = $1::uuid)
+      AND ($2::text IS NULL OR lr.request_type = $2::text)
+      AND ($3::text IS NULL OR lr.status = $3::text)
+    ORDER BY lr.requested_at DESC
+    LIMIT $4 OFFSET $5`,
+    contact_id ?? null,
+    request_type ?? null,
+    status ?? null,
+    per_page,
+    offset,
+  );
+
+  const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
+    `SELECT COUNT(*) AS count
+    FROM lgpd_requests lr
+    WHERE ($1::uuid IS NULL OR lr.contact_id = $1::uuid)
+      AND ($2::text IS NULL OR lr.request_type = $2::text)
+      AND ($3::text IS NULL OR lr.status = $3::text)`,
+    contact_id ?? null,
+    request_type ?? null,
+    status ?? null,
+  );
+
+  const total = Number(countRows[0]?.count ?? 0);
+
+  return {
+    data,
+    meta: {
+      total,
+      page,
+      per_page,
+      total_pages: Math.ceil(total / per_page),
+    },
+  };
+}
+
+export async function updateContactLgpdConsent(
+  id: string,
+  data: UpdateContactLgpdConsentInput,
+  updatedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => updateContactLgpdConsent(id, data, updatedBy, undefined, tx));
+  }
+
+  const previous = await getContact(id, undefined, db);
+
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
+    `UPDATE contacts SET
+       lgpd_consent_status = $1,
+       lgpd_consent_source = CASE WHEN $2::boolean THEN $3 ELSE lgpd_consent_source END,
+       lgpd_consent_at = NOW(),
+       updated_at = NOW()
+     WHERE id = $4::uuid
+     RETURNING *`,
+    data.status,
+    data.source !== undefined,
+    data.source ?? null,
+    id,
+  );
+  if (!rows[0]) throw new NotFoundError('Contato');
+
+  const updated = rows[0];
+  const request = await createLgpdRequestRecord(
+    id,
+    'consent_update',
+    updatedBy,
+    { status: data.status, source: data.source ?? null },
+    { consent_at: updated.lgpd_consent_at?.toISOString() ?? null },
+    db,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+     VALUES ($1::uuid, 'contact.lgpd.consent_updated', 'contact', $2::uuid, $3::jsonb, $4::jsonb)`,
+    updatedBy,
+    id,
+    JSON.stringify({
+      lgpd_consent_status: previous.lgpd_consent_status,
+      lgpd_consent_source: previous.lgpd_consent_source,
+      lgpd_consent_at: previous.lgpd_consent_at,
+    }),
+    JSON.stringify({
+      lgpd_consent_status: updated.lgpd_consent_status,
+      lgpd_consent_source: updated.lgpd_consent_source,
+      lgpd_consent_at: updated.lgpd_consent_at,
+      lgpd_request_id: request.id,
+    }),
+  );
+
+  return { contact: updated, request };
+}
+
+export async function exportContactLgpdData(
+  id: string,
+  actorUserId: string,
+  options: { includeMessages: boolean },
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => exportContactLgpdData(id, actorUserId, options, undefined, tx));
+  }
+
+  const contact = await getContact(id, undefined, db);
+
+  const organizationRows = contact.organization_id
+    ? await db.$queryRawUnsafe<Array<{ id: string; name: string; status: string; email: string | null; phone: string | null }>>(
+      `SELECT id, name, status, email, phone
+       FROM organizations
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      contact.organization_id,
+    )
+    : [];
+
+  const conversations = await db.$queryRawUnsafe<LgpdConversationRow[]>(
+    `SELECT id, channel_type, status, subject, last_message, created_at, closed_at
+     FROM conversations
+     WHERE contact_id = $1::uuid
+     ORDER BY created_at DESC`,
+    id,
+  );
+
+  const tickets = await db.$queryRawUnsafe<LgpdTicketRow[]>(
+    `SELECT id, title, status, priority, created_at
+     FROM tickets
+     WHERE contact_id = $1::uuid
+     ORDER BY created_at DESC`,
+    id,
+  );
+
+  const messages = options.includeMessages
+    ? await db.$queryRawUnsafe<LgpdMessageRow[]>(
+      `SELECT m.id, m.conversation_id, m.sender_type, m.content, m.content_type, m.media_url, m.status, m.is_internal, m.created_at
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.contact_id = $1::uuid
+       ORDER BY m.created_at ASC`,
+      id,
+    )
+    : [];
+
+  const requests = await db.$queryRawUnsafe<LgpdRequestRow[]>(
+    `SELECT id, contact_id, request_type, status, requested_by, processed_by, payload, result, requested_at, processed_at
+     FROM lgpd_requests
+     WHERE contact_id = $1::uuid
+     ORDER BY requested_at DESC
+     LIMIT 100`,
+    id,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE contacts
+     SET lgpd_last_export_at = NOW(), updated_at = NOW()
+     WHERE id = $1::uuid`,
+    id,
+  );
+
+  const request = await createLgpdRequestRecord(
+    id,
+    'access',
+    actorUserId,
+    { include_messages: options.includeMessages },
+    {
+      conversations: conversations.length,
+      tickets: tickets.length,
+      messages: messages.length,
+      requests: requests.length,
+    },
+    db,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'contact.lgpd.exported', 'contact', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    id,
+    JSON.stringify({
+      include_messages: options.includeMessages,
+      exported_at: new Date().toISOString(),
+      lgpd_request_id: request.id,
+    }),
+  );
+
+  return {
+    generated_at: new Date().toISOString(),
+    request_id: request.id,
+    contact: {
+      ...contact,
+      lgpd_last_export_at: new Date().toISOString(),
+    },
+    organization: organizationRows[0] ?? null,
+    conversations,
+    tickets,
+    messages,
+    lgpd_requests: requests,
+  };
+}
+
+export async function anonymizeContactForLgpd(
+  id: string,
+  actorUserId: string | null,
+  input: AnonymizeContactLgpdInput,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+) {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => anonymizeContactForLgpd(id, actorUserId, input, undefined, tx));
+  }
+
+  const existing = await getContact(id, undefined, db);
+  const anonymizedName = `Titular anonimizado ${id.slice(0, 8)}`;
+  const reason = input.reason?.trim() || 'Solicitação LGPD';
+
+  const redactedMessagesRows = input.redact_messages
+    ? await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `UPDATE messages m
+       SET content = '[mensagem anonimizada por LGPD]',
+           media_url = NULL,
+           metadata = COALESCE(m.metadata, '{}'::jsonb) || '{"lgpd_redacted": true}'::jsonb
+       FROM conversations c
+       WHERE c.id = m.conversation_id
+         AND c.contact_id = $1::uuid
+         AND m.sender_type = 'client'
+       RETURNING m.id`,
+      id,
+    )
+    : [];
+
+  const updatedConversationsRows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+    `UPDATE conversations
+     SET last_message = CASE WHEN last_message IS NULL THEN NULL ELSE '[mensagem anonimizada por LGPD]' END
+     WHERE contact_id = $1::uuid
+     RETURNING id`,
+    id,
+  );
+
+  await db.$executeRawUnsafe(
+    `UPDATE call_records cr
+     SET to_phone = NULL,
+         from_phone = NULL
+     FROM conversations c
+     WHERE c.id = cr.conversation_id
+       AND c.contact_id = $1::uuid`,
+    id,
+  );
+
+  const rows = await db.$queryRawUnsafe<ContactRow[]>(
+    `UPDATE contacts SET
+       organization_id = NULL,
+       name = $1,
+       email = NULL,
+       phone = NULL,
+       whatsapp = NULL,
+       document = NULL,
+       role = NULL,
+       department = NULL,
+       avatar_url = NULL,
+       portal_enabled = false,
+       portal_password_hash = NULL,
+       portal_last_login = NULL,
+       portal_invited_at = NULL,
+       lgpd_consent_status = 'revoked',
+       lgpd_consent_source = 'lgpd_anonymization',
+       lgpd_consent_at = NOW(),
+       lgpd_anonymized_at = NOW(),
+       lgpd_anonymization_reason = $2,
+       tags = '{}'::text[],
+       custom_fields = '{}'::jsonb,
+       notes = NULL,
+       updated_at = NOW()
+     WHERE id = $3::uuid
+     RETURNING *`,
+    anonymizedName,
+    reason,
+    id,
+  );
+  if (!rows[0]) throw new NotFoundError('Contato');
+
+  const updated = rows[0];
+
+  const request = await createLgpdRequestRecord(
+    id,
+    'anonymization',
+    actorUserId,
+    { reason, redact_messages: input.redact_messages },
+    {
+      conversations_updated: updatedConversationsRows.length,
+      messages_redacted: redactedMessagesRows.length,
+      anonymized_at: updated.lgpd_anonymized_at?.toISOString() ?? null,
+    },
+    db,
+  );
+
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+     VALUES ($1::uuid, 'contact.lgpd.anonymized', 'contact', $2::uuid, $3::jsonb, $4::jsonb)`,
+    actorUserId,
+    id,
+    JSON.stringify(existing),
+    JSON.stringify({
+      id: updated.id,
+      name: updated.name,
+      lgpd_anonymized_at: updated.lgpd_anonymized_at,
+      lgpd_request_id: request.id,
+    }),
+  );
+
+  return {
+    contact: updated,
+    request,
+    summary: {
+      conversations_updated: updatedConversationsRows.length,
+      messages_redacted: redactedMessagesRows.length,
+    },
+  };
 }
 
 function generateTemporaryPassword(length = 8): string {
