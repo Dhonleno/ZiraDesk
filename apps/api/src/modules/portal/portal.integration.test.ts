@@ -198,6 +198,23 @@ async function createTicketRecord(
   return ticketId;
 }
 
+async function listLgpdRequests(schemaName: string, contactId: string) {
+  return prisma.$queryRawUnsafe<Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    payload: unknown;
+    result: unknown;
+    processed_at: Date | null;
+  }>>(
+    `SELECT id, request_type, status, payload, result, processed_at
+     FROM "${schemaName}".lgpd_requests
+     WHERE contact_id = $1::uuid
+     ORDER BY requested_at DESC`,
+    contactId,
+  );
+}
+
 async function buildPortalTestApp(): Promise<{ app: FastifyInstance; emailServiceMock: EmailServiceMock }> {
   vi.resetModules();
 
@@ -217,7 +234,7 @@ async function buildPortalTestApp(): Promise<{ app: FastifyInstance; emailServic
 }
 
 async function portalRequest(options: {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PATCH';
   url: string;
   headers?: Record<string, string>;
   payload?: string | Buffer | Record<string, unknown>;
@@ -493,6 +510,110 @@ describe('Portal integration', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.success).toBe(false);
+  });
+
+  it('PATCH /api/portal/lgpd/consent atualiza consentimento e cria trilha processada', async () => {
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'PATCH',
+      url: '/api/portal/lgpd/consent',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { status: 'granted', source: 'portal_opt_in' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      status: 'granted',
+      source: 'portal_opt_in',
+    });
+
+    const contactRows = await prisma.$queryRawUnsafe<Array<{
+      lgpd_consent_status: string;
+      lgpd_consent_source: string | null;
+      lgpd_consent_at: Date | null;
+    }>>(
+      `SELECT lgpd_consent_status, lgpd_consent_source, lgpd_consent_at
+       FROM "${requireSuiteTenant().schemaName}".contacts
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      requireSuiteContact().id,
+    );
+
+    expect(contactRows[0]).toMatchObject({
+      lgpd_consent_status: 'granted',
+      lgpd_consent_source: 'portal_opt_in',
+    });
+    expect(contactRows[0]?.lgpd_consent_at).toBeInstanceOf(Date);
+
+    const requests = await listLgpdRequests(requireSuiteTenant().schemaName, requireSuiteContact().id);
+    expect(requests[0]).toMatchObject({
+      request_type: 'consent_update',
+      status: 'processed',
+    });
+    expect(requests[0]?.processed_at).toBeInstanceOf(Date);
+  });
+
+  it('POST /api/portal/lgpd/requests cria solicitação pendente de anonimização', async () => {
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'POST',
+      url: '/api/portal/lgpd/requests',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        request_type: 'anonymization',
+        reason: 'Solicito anonimização dos meus dados',
+      },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      request_type: 'anonymization',
+      status: 'pending',
+    });
+
+    const requests = await listLgpdRequests(requireSuiteTenant().schemaName, requireSuiteContact().id);
+    const request = requests.find((item) => item.id === response.body.data.id);
+    expect(request).toBeDefined();
+    expect(request).toMatchObject({
+      request_type: 'anonymization',
+      status: 'pending',
+    });
+  });
+
+  it('GET /api/portal/lgpd retorna estado e histórico LGPD do titular', async () => {
+    const token = await loginAndGetToken();
+
+    await portalRequest({
+      method: 'PATCH',
+      url: '/api/portal/lgpd/consent',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { status: 'denied' },
+    });
+
+    await portalRequest({
+      method: 'POST',
+      url: '/api/portal/lgpd/requests',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { request_type: 'access', include_messages: true },
+    });
+
+    const response = await portalRequest({
+      method: 'GET',
+      url: '/api/portal/lgpd',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.consent).toMatchObject({
+      status: 'denied',
+    });
+    expect(Array.isArray(response.body.data.requests)).toBe(true);
+    expect(response.body.data.requests.length).toBeGreaterThanOrEqual(2);
   });
 
   it('GET /api/portal/tickets lista tickets do contato autenticado', async () => {

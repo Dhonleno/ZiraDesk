@@ -33,7 +33,20 @@ export const portalResetPasswordSchema = z.object({
   password: z.string().min(8),
 });
 
+export const portalLgpdConsentSchema = z.object({
+  status: z.enum(['pending', 'granted', 'denied', 'revoked']),
+  source: z.string().trim().min(2).max(100).optional(),
+});
+
+export const portalLgpdRequestSchema = z.object({
+  request_type: z.enum(['access', 'anonymization']),
+  reason: z.string().trim().min(3).max(500).optional(),
+  include_messages: z.coerce.boolean().optional(),
+});
+
 export type PortalLoginInput = z.infer<typeof portalLoginSchema>;
 export type PortalTicketsQuery = z.infer<typeof portalTicketsQuerySchema>;
 export type PortalCreateTicketInput = z.infer<typeof portalCreateTicketSchema>;
 export type PortalAddCommentInput = z.infer<typeof portalAddCommentSchema>;
+export type PortalLgpdConsentInput = z.infer<typeof portalLgpdConsentSchema>;
+export type PortalLgpdRequestInput = z.infer<typeof portalLgpdRequestSchema>;

@@ -7,6 +7,8 @@ import { sendEmail } from '../../services/email.service.js';
 import type {
   PortalAddCommentInput,
   PortalCreateTicketInput,
+  PortalLgpdConsentInput,
+  PortalLgpdRequestInput,
   PortalLoginInput,
   PortalTicketsQuery,
 } from './portal.schema.js';
@@ -34,6 +36,16 @@ interface PortalResetJwtPayload {
   tenantSlug: string;
   type: 'portal-reset';
   exp?: number;
+}
+
+interface PortalLgpdRequestRow {
+  id: string;
+  request_type: string;
+  status: string;
+  payload: unknown;
+  result: unknown;
+  requested_at: Date;
+  processed_at: Date | null;
 }
 
 function quoteIdent(identifier: string): string {
@@ -77,7 +89,13 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
     ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS portal_password_hash VARCHAR(255),
     ADD COLUMN IF NOT EXISTS portal_last_login TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    ADD COLUMN IF NOT EXISTS lgpd_consent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_consent_source VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS lgpd_last_export_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_anonymized_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_anonymization_reason TEXT
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -101,6 +119,26 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.ticket_comments
     ALTER COLUMN user_id DROP NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+      request_type VARCHAR(30) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      requested_by UUID REFERENCES ${schema}.users(id),
+      processed_by UUID REFERENCES ${schema}.users(id),
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      result JSONB NOT NULL DEFAULT '{}'::jsonb,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact
+    ON ${schema}.lgpd_requests(contact_id)
   `);
 }
 
@@ -292,6 +330,177 @@ export async function portalMe(portalUser: PortalJwtPayload) {
   const contact = rows[0];
   if (!contact) throw new PortalNotFoundError('Contato não encontrado');
   return contact;
+}
+
+export async function getPortalLgpdState(portalUser: PortalJwtPayload): Promise<{
+  consent: {
+    status: string;
+    at: Date | null;
+    source: string | null;
+    last_export_at: Date | null;
+    anonymized_at: Date | null;
+    anonymization_reason: string | null;
+  };
+  requests: PortalLgpdRequestRow[];
+}> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const contacts = await prisma.$queryRawUnsafe<Array<{
+    lgpd_consent_status: string;
+    lgpd_consent_at: Date | null;
+    lgpd_consent_source: string | null;
+    lgpd_last_export_at: Date | null;
+    lgpd_anonymized_at: Date | null;
+    lgpd_anonymization_reason: string | null;
+  }>>(
+    `SELECT
+       lgpd_consent_status,
+       lgpd_consent_at,
+       lgpd_consent_source,
+       lgpd_last_export_at,
+       lgpd_anonymized_at,
+       lgpd_anonymization_reason
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  const contact = contacts[0];
+  if (!contact) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requests = await prisma.$queryRawUnsafe<PortalLgpdRequestRow[]>(
+    `SELECT id, request_type, status, payload, result, requested_at, processed_at
+     FROM ${schema}.lgpd_requests
+     WHERE contact_id = $1::uuid
+     ORDER BY requested_at DESC
+     LIMIT 30`,
+    portalUser.contactId,
+  );
+
+  return {
+    consent: {
+      status: contact.lgpd_consent_status,
+      at: contact.lgpd_consent_at,
+      source: contact.lgpd_consent_source,
+      last_export_at: contact.lgpd_last_export_at,
+      anonymized_at: contact.lgpd_anonymized_at,
+      anonymization_reason: contact.lgpd_anonymization_reason,
+    },
+    requests,
+  };
+}
+
+export async function updatePortalLgpdConsent(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdConsentInput,
+): Promise<{ status: string; consent_at: Date | null; source: string | null; request_id: string }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+  const source = payload.source?.trim() || 'portal_self_service';
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    lgpd_consent_status: string;
+    lgpd_consent_at: Date | null;
+    lgpd_consent_source: string | null;
+  }>>(
+    `UPDATE ${schema}.contacts
+     SET lgpd_consent_status = $1,
+         lgpd_consent_source = $2,
+         lgpd_consent_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $3::uuid
+       AND portal_enabled = true
+     RETURNING id, lgpd_consent_status, lgpd_consent_at, lgpd_consent_source`,
+    payload.status,
+    source,
+    portalUser.contactId,
+  );
+
+  const contact = rows[0];
+  if (!contact) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, processed_by, payload, result, processed_at
+    )
+    VALUES (
+      $1::uuid, 'consent_update', 'processed', NULL, NULL, $2::jsonb, $3::jsonb, NOW()
+    )
+    RETURNING id`,
+    portalUser.contactId,
+    JSON.stringify({ channel: 'portal', status: payload.status, source }),
+    JSON.stringify({ consent_at: contact.lgpd_consent_at?.toISOString() ?? null }),
+  );
+
+  const requestId = requestRows[0]?.id;
+  if (!requestId) {
+    throw new PortalNotFoundError('Falha ao registrar trilha LGPD');
+  }
+
+  return {
+    status: contact.lgpd_consent_status,
+    consent_at: contact.lgpd_consent_at,
+    source: contact.lgpd_consent_source,
+    request_id: requestId,
+  };
+}
+
+export async function submitPortalLgpdRequest(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdRequestInput,
+): Promise<{ id: string; request_type: string; status: string; requested_at: Date }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const ticketRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  if (!ticketRows[0]) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    requested_at: Date;
+  }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, payload, result
+    )
+    VALUES (
+      $1::uuid, $2, 'pending', NULL, $3::jsonb, '{}'::jsonb
+    )
+    RETURNING id, request_type, status, requested_at`,
+    portalUser.contactId,
+    payload.request_type,
+    JSON.stringify({
+      channel: 'portal',
+      reason: payload.reason ?? null,
+      include_messages: payload.include_messages ?? true,
+    }),
+  );
+
+  const request = requestRows[0];
+  if (!request) {
+    throw new PortalNotFoundError('Falha ao criar solicitação LGPD');
+  }
+
+  return request;
 }
 
 export async function listPortalTickets(portalUser: PortalJwtPayload, query: PortalTicketsQuery) {
