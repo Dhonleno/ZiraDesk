@@ -617,6 +617,7 @@
       "settings:manage": "Settings — Manage",
       "users:manage": "Users — Manage",
       "channels:manage": "Channels — Manage",
+      "lgpd:manage": "LGPD — Manage",
       "contacts:view": "Contacts — View",
       "contacts:edit": "Contacts — Edit",
       "contacts:delete": "Contacts — Delete",
@@ -660,6 +661,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
     "settings": "Settings",
+    "lgpd": "LGPD",
     "history": "History",
     "performance": "Performance",
     "queue": "Queue",
@@ -737,6 +739,72 @@
     "imageMaxSize": "Image size must be up to 2MB.",
     "addressCopied": "Address copied",
     "addressCopyError": "Unable to copy address"
+  },
+  "lgpd": {
+    "title": "LGPD",
+    "subtitle": "Manage consent, export, anonymization and data retention policies.",
+    "loading": "Loading...",
+    "emptyContacts": "No contacts found",
+    "emptyRequests": "No LGPD requests found",
+    "confirmAnonymize": "Anonymize contact {{name}}? This action cannot be undone.",
+    "anonymizeReasonPrompt": "Provide an anonymization reason",
+    "anonymizeDefaultReason": "LGPD request via admin panel",
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "actions": {
+      "export": "Export",
+      "anonymize": "Anonymize"
+    },
+    "consentStatus": {
+      "pending": "Pending",
+      "granted": "Granted",
+      "denied": "Denied",
+      "revoked": "Revoked"
+    },
+    "requestTypes": {
+      "access": "Access",
+      "consent_update": "Consent update",
+      "anonymization": "Anonymization"
+    },
+    "messages": {
+      "consentUpdated": "Consent updated",
+      "retentionSaved": "Retention policy saved",
+      "exportDone": "Export generated successfully",
+      "anonymized": "Contact anonymized successfully"
+    },
+    "retention": {
+      "title": "Retention policy",
+      "subtitle": "When enabled, the daily routine anonymizes eligible contacts with no open conversations.",
+      "enabled": "Enable automatic retention",
+      "days": "Retention days"
+    },
+    "contacts": {
+      "title": "Contacts and consent",
+      "subtitle": "Adjust consent status and execute data subject actions.",
+      "searchPlaceholder": "Search contact by name, email or phone...",
+      "apply": "Update",
+      "total": "{{count}} contact(s)",
+      "columns": {
+        "name": "Contact",
+        "email": "Email",
+        "consent": "Consent",
+        "updatedAt": "Updated at",
+        "actions": "Actions"
+      }
+    },
+    "requests": {
+      "title": "LGPD requests",
+      "subtitle": "Recent history of processed requests.",
+      "columns": {
+        "when": "Date",
+        "contact": "Contact",
+        "type": "Type",
+        "status": "Status",
+        "by": "Requested by"
+      }
+    }
   },
   "superAdmin": {
     "title": "Super Admin",

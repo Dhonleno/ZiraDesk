@@ -40,6 +40,7 @@ const PERMISSION_ORDER: Permission[] = [
   'settings:manage',
   'users:manage',
   'channels:manage',
+  'lgpd:manage',
   'contacts:view',
   'contacts:edit',
   'contacts:delete',

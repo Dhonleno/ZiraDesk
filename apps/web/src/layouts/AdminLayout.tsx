@@ -280,6 +280,17 @@ const NAV_GROUPS: NavGroup[] = [
     ),
     items: [
       {
+        label: 'nav.lgpd',
+        path: '/admin/lgpd',
+        permission: 'lgpd:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M8 1.8 3 3.8v4.2c0 3.2 2.1 5.9 5 6.8 2.9-.9 5-3.6 5-6.8V3.8L8 1.8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path d="M6.1 7.8 7.3 9l2.6-2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.settings',
         path: '/admin/settings',
         permission: 'settings:manage',

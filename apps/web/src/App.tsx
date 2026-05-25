@@ -40,6 +40,7 @@ import { AIAgentPage as AdminAIAgent } from './pages/admin/AIAgent';
 import { Webhooks as AdminWebhooks } from './pages/admin/Webhooks';
 import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
 import { Templates as AdminTemplates } from './pages/admin/Templates';
+import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -226,6 +227,14 @@ export function App() {
               <Route path="ai-agent" element={<AdminAIAgent />} />
               <Route path="integrations" element={<AdminIntegrations />} />
               <Route path="webhooks" element={<AdminWebhooks />} />
+              <Route
+                path="lgpd"
+                element={(
+                  <ProtectedRoute permission="lgpd:manage">
+                    <AdminLgpd />
+                  </ProtectedRoute>
+                )}
+              />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />

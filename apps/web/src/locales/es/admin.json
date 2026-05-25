@@ -617,6 +617,7 @@
       "settings:manage": "Configuraciones — Gestionar",
       "users:manage": "Usuarios — Gestionar",
       "channels:manage": "Canales — Gestionar",
+      "lgpd:manage": "LGPD — Gestionar",
       "contacts:view": "Contactos — Visualizar",
       "contacts:edit": "Contactos — Editar",
       "contacts:delete": "Contactos — Eliminar",
@@ -660,6 +661,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Reglas de Atención",
     "settings": "Configuración",
+    "lgpd": "LGPD",
     "history": "Historial",
     "performance": "Performance",
     "queue": "Cola",
@@ -737,6 +739,72 @@
     "imageMaxSize": "La imagen debe tener como máximo 2MB.",
     "addressCopied": "Dirección copiada",
     "addressCopyError": "No fue posible copiar la dirección"
+  },
+  "lgpd": {
+    "title": "LGPD",
+    "subtitle": "Gestiona consentimiento, exportación, anonimización y políticas de retención de datos.",
+    "loading": "Cargando...",
+    "emptyContacts": "No se encontraron contactos",
+    "emptyRequests": "No se encontraron solicitudes LGPD",
+    "confirmAnonymize": "¿Deseas anonimizar el contacto {{name}}? Esta acción no se puede deshacer.",
+    "anonymizeReasonPrompt": "Informa el motivo de la anonimización",
+    "anonymizeDefaultReason": "Solicitud LGPD desde panel administrativo",
+    "pagination": {
+      "prev": "Anterior",
+      "next": "Siguiente"
+    },
+    "actions": {
+      "export": "Exportar",
+      "anonymize": "Anonimizar"
+    },
+    "consentStatus": {
+      "pending": "Pendiente",
+      "granted": "Concedido",
+      "denied": "Denegado",
+      "revoked": "Revocado"
+    },
+    "requestTypes": {
+      "access": "Acceso",
+      "consent_update": "Actualización de consentimiento",
+      "anonymization": "Anonimización"
+    },
+    "messages": {
+      "consentUpdated": "Consentimiento actualizado",
+      "retentionSaved": "Política de retención guardada",
+      "exportDone": "Exportación generada con éxito",
+      "anonymized": "Contacto anonimizado con éxito"
+    },
+    "retention": {
+      "title": "Política de retención",
+      "subtitle": "Cuando está activa, la rutina diaria anonimiza contactos elegibles sin conversaciones abiertas.",
+      "enabled": "Activar retención automática",
+      "days": "Días de retención"
+    },
+    "contacts": {
+      "title": "Contactos y consentimiento",
+      "subtitle": "Ajusta el estado del consentimiento y ejecuta acciones del titular.",
+      "searchPlaceholder": "Buscar contacto por nombre, correo o teléfono...",
+      "apply": "Actualizar",
+      "total": "{{count}} contacto(s)",
+      "columns": {
+        "name": "Contacto",
+        "email": "Correo",
+        "consent": "Consentimiento",
+        "updatedAt": "Actualizado en",
+        "actions": "Acciones"
+      }
+    },
+    "requests": {
+      "title": "Solicitudes LGPD",
+      "subtitle": "Historial reciente de solicitudes procesadas.",
+      "columns": {
+        "when": "Fecha",
+        "contact": "Contacto",
+        "type": "Tipo",
+        "status": "Estado",
+        "by": "Solicitado por"
+      }
+    }
   },
   "superAdmin": {
     "title": "Super Admin",

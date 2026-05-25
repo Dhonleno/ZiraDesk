@@ -96,6 +96,7 @@ function Breadcrumb() {
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/close-config': t('tenantAdmin.closeConfig.title'),
+    '/admin/lgpd': t('nav.lgpd'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 

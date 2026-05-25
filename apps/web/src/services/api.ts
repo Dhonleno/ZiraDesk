@@ -26,6 +26,8 @@ interface TenantSettings {
   active_outbound_validity_hours?: number;
   bot_assigned_message?: string;
   max_conversations_per_agent?: number | null;
+  lgpd_retention_enabled?: boolean;
+  lgpd_retention_days?: number;
   created_at?: string;
   plan?: {
     id: string;
@@ -660,11 +662,44 @@ export interface CrmContact {
   portal_enabled?: boolean;
   portal_last_login?: string | null;
   portal_invited_at?: string | null;
+  lgpd_consent_status?: 'pending' | 'granted' | 'denied' | 'revoked' | string;
+  lgpd_consent_at?: string | null;
+  lgpd_consent_source?: string | null;
+  lgpd_last_export_at?: string | null;
+  lgpd_anonymized_at?: string | null;
+  lgpd_anonymization_reason?: string | null;
   tags: string[];
   custom_fields: Record<string, unknown>;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LgpdRequest {
+  id: string;
+  contact_id: string | null;
+  contact_name?: string | null;
+  request_type: 'access' | 'consent_update' | 'anonymization' | string;
+  status: string;
+  requested_by: string | null;
+  requested_by_name?: string | null;
+  processed_by: string | null;
+  processed_by_name?: string | null;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface LgpdExportPayload {
+  generated_at: string;
+  request_id: string;
+  contact: CrmContact;
+  organization: Record<string, unknown> | null;
+  conversations: Array<Record<string, unknown>>;
+  tickets: Array<Record<string, unknown>>;
+  messages: Array<Record<string, unknown>>;
+  lgpd_requests: LgpdRequest[];
 }
 
 export interface CrmOrganizationStats {
@@ -793,6 +828,53 @@ export const contactsApi = {
   delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
   linkOrganization: async (id: string, organization_id: string) =>
     api.post(`/crm/contacts/${id}/link-organization`, { organization_id }),
+  listLgpdRequests: async (params?: {
+    page?: number;
+    per_page?: number;
+    contact_id?: string;
+    request_type?: 'access' | 'consent_update' | 'anonymization';
+    status?: string;
+  }): Promise<{ data: LgpdRequest[]; meta: CrmListMeta }> => {
+    const res = await api.get<{ success: boolean; data: LgpdRequest[]; meta: CrmListMeta }>(
+      '/crm/contacts/lgpd/requests',
+      { params },
+    );
+    return { data: res.data.data, meta: res.data.meta };
+  },
+  updateLgpdConsent: async (
+    id: string,
+    payload: { status: 'pending' | 'granted' | 'denied' | 'revoked'; source?: string },
+  ): Promise<{ contact: CrmContact; request: LgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { contact: CrmContact; request: LgpdRequest } }>(
+      `/crm/contacts/${id}/lgpd/consent`,
+      payload,
+    );
+    return res.data.data;
+  },
+  exportLgpdData: async (
+    id: string,
+    params?: { include_messages?: boolean },
+  ): Promise<LgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: LgpdExportPayload }>(
+      `/crm/contacts/${id}/lgpd/export`,
+      { params },
+    );
+    return res.data.data;
+  },
+  anonymizeLgpd: async (
+    id: string,
+    payload?: { reason?: string; redact_messages?: boolean },
+  ): Promise<{ contact: CrmContact; request: LgpdRequest; summary: { conversations_updated: number; messages_redacted: number } }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: {
+        contact: CrmContact;
+        request: LgpdRequest;
+        summary: { conversations_updated: number; messages_redacted: number };
+      };
+    }>(`/crm/contacts/${id}/lgpd/anonymize`, payload);
+    return res.data.data;
+  },
   portalAccess: {
     create: async (contactId: string): Promise<{
       temp_password: string;
