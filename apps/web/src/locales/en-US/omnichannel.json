@@ -159,6 +159,7 @@
     "live_chat": "Live Chat"
   },
   "chat": {
+    "composeAriaLabel": "Type your message",
     "inputPlaceholder": "Type your message...",
     "resolvedPlaceholder": "This conversation has been resolved",
     "closedByClient": "This conversation was closed by the customer",
@@ -211,7 +212,31 @@
     "templateNameRequired": "Please provide the WhatsApp template name.",
     "activeOutboundReturnHeader": "Active follow-up return",
     "activeOutboundReturnSub": "Customer replied within the active follow-up window started by {{agent}}.",
-    "activeOutboundFallbackAgent": "assigned agent"
+    "activeOutboundFallbackAgent": "assigned agent",
+    "protocolCopied": "Protocol copied!",
+    "protocolCopyError": "Could not copy protocol",
+    "protocol": "Protocol number",
+    "closedByAgent": "This conversation was closed",
+    "internalNotePlaceholder": "Write an internal note...",
+    "replyingTo": "Replying to {{name}}",
+    "mentionMessage": "Reply to message",
+    "removeReply": "Remove reply",
+    "attachFile": "Attach file",
+    "imageOrVideo": "Image or video",
+    "noAgent": "No agent",
+    "systemLabel": "System",
+    "mentionImage": "[Image]",
+    "mentionAudio": "[Audio]",
+    "mentionVideo": "[Video]",
+    "mentionDocument": "[Document]",
+    "mentionDefault": "[Message]",
+    "mentionSticker": "Sticker",
+    "mentionPhoto": "Photo",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "unseenMessages": "1 new message",
+    "unseenMessages_plural": "{{count}} new messages",
+    "callRecording": "Call recording"
   },
   "resolve": {
     "title": "Resolve conversation",
@@ -227,6 +252,7 @@
     "resolved": "Conversation resolved",
     "resolvedBanner": "This conversation has been resolved",
     "reopen": "Reopen conversation",
+    "reopenError": "Error reopening conversation",
     "ratings": {
       "1": "Very bad",
       "2": "Bad",
@@ -314,7 +340,8 @@
     },
     "loadMore": "Load previous messages",
     "loading": "Loading...",
-    "noMore": "Start of the conversation"
+    "noMore": "Start of the conversation",
+    "error": "Error loading messages"
   },
   "goals": {
     "title": "Goals",
@@ -379,7 +406,18 @@
     "typeNotSupported": "File type not supported",
     "permissionDenied": "Microphone permission denied",
     "uploadError": "Error uploading file",
-    "downloadFile": "Download file"
+    "downloadFile": "Download file",
+    "browserNotSupported": "Browser does not support audio recording.",
+    "sending": "Sending audio...",
+    "converting": "Converting audio... {{pct}}%",
+    "discard": "Discard",
+    "pausePlayback": "Pause",
+    "listenRecording": "Listen to recording",
+    "confirmSend": "Confirm send",
+    "resumeRecording": "Resume recording",
+    "paused": "Paused",
+    "goToReview": "Go to review",
+    "stopAndReview": "Stop and review"
   },
   "skills": {
     "title": "Skills",
@@ -463,7 +501,10 @@
     "accepted": "{{name}} is helping you",
     "helping": "Helping",
     "endHelp": "End help",
-    "noAgentsAvailable": "No available agents to help"
+    "noAgentsAvailable": "No available agents to help",
+    "endHelpError": "Error ending help session",
+    "requestError": "Could not request help",
+    "sending": "Sending..."
   },
   "info": {
     "contact": "Contact",
@@ -490,7 +531,22 @@
     "messages": "Messages exchanged",
     "attendances": "Attendances",
     "firstContact": "1st contact",
-    "engagement": "Engagement"
+    "engagement": "Engagement",
+    "unknown": "Unknown contact",
+    "linkOrganization": "Link organization",
+    "viewOrganization": "View organization",
+    "openTickets": "Open tickets",
+    "organization": "Organization",
+    "noOrganization": "No organization",
+    "noChannel": "No channel identified",
+    "currentChannel": "Current channel: {{label}} · {{sub}}",
+    "noPreviousConversations": "No previous conversations",
+    "noMessages": "No messages",
+    "edit": "Edit",
+    "addTag": "Add",
+    "tags": "Tags",
+    "noTags": "No tags applied",
+    "conversationCount": "{{count}} conversation(s) · last: {{time}}"
   },
   "form": {
     "client": "Contact",
@@ -545,5 +601,10 @@
     "emptyHint": "New conversations will appear here automatically",
     "allChannels": "All channels",
     "waitingTime": "Wait time"
-  }
+  },
+  "visitor": "Visitor",
+  "agentFilter": "Agent filter",
+  "clear": "Clear",
+  "newBadge": "New",
+  "now": "just now"
 }

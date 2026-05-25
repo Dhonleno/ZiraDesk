@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { omnichannelApi, contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import { avatarClass } from '../../utils/avatar';
 
 const schema = z.object({
   contact_id: z.string().min(1),
@@ -218,17 +219,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 {selectedContactId ? (
                   <>
                     <div
+                      className={avatarClass(contactLabel)}
                       style={{
                         width: 24,
                         height: 24,
                         borderRadius: '50%',
-                        background: 'linear-gradient(135deg,#667eea,#764ba2)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 10,
-                        fontWeight: 600,
-                        color: '#fff',
+                        fontWeight: 500,
                         flexShrink: 0,
                       }}
                     >
@@ -264,7 +264,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                         setShowContactDropdown(true);
                       }}
                       onFocus={() => setShowContactDropdown(true)}
-                      style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
+                      style={{ flex: 1, background: 'none', border: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
                     />
                   </>
                 )}
@@ -313,17 +313,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                       }}
                     >
                       <div
+                        className={avatarClass(contact.name)}
                         style={{
                           width: 28,
                           height: 28,
                           borderRadius: '50%',
-                          background: 'linear-gradient(135deg,#667eea,#764ba2)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: 11,
-                          fontWeight: 600,
-                          color: '#fff',
+                          fontWeight: 500,
                           flexShrink: 0,
                         }}
                       >
@@ -360,7 +359,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: selectedChannelId ? 'var(--txt)' : 'var(--txt-3)',
-                outline: 'none',
                 cursor: 'pointer',
                 appearance: 'none',
               }}
@@ -394,7 +392,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: 'var(--txt)',
-                outline: 'none',
               }}
             />
           </div>
@@ -416,7 +413,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: 'var(--txt)',
-                outline: 'none',
                 resize: 'vertical',
                 lineHeight: 1.5,
               }}

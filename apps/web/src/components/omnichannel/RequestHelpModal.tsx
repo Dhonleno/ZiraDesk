@@ -43,7 +43,7 @@ export function RequestHelpModal({
       onClose();
     },
     onError: () => {
-      toast.error('Não foi possível solicitar ajuda');
+      toast.error(t('help.requestError'));
     },
   });
 
@@ -59,7 +59,16 @@ export function RequestHelpModal({
             <div
               key={agent.id}
               className={`agent-item ${selectedAgent === agent.id ? 'selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`${agent.name} - ${agent.status === 'online' ? 'online' : agent.status}`}
               onClick={() => setSelectedAgent(agent.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedAgent(agent.id);
+                }
+              }}
             >
               <ContactAvatar id={agent.id} name={agent.name} size={32} />
               <div>
@@ -95,7 +104,7 @@ export function RequestHelpModal({
             cursor: 'pointer',
           }}
         >
-          Cancelar
+          {t('closeModal.cancel')}
         </button>
         <button
           type="button"
@@ -104,7 +113,7 @@ export function RequestHelpModal({
           style={{
             border: '1px solid var(--teal)',
             background: 'var(--teal)',
-            color: '#0E1A18',
+            color: 'var(--on-teal)',
             borderRadius: 'var(--r)',
             padding: '6px 10px',
             fontSize: 12,
@@ -113,7 +122,7 @@ export function RequestHelpModal({
             opacity: !selectedAgent || requestMutation.isPending ? 0.6 : 1,
           }}
         >
-          {requestMutation.isPending ? 'Enviando...' : t('help.send')}
+          {requestMutation.isPending ? t('help.sending') : t('help.send')}
         </button>
       </div>
     </Modal>

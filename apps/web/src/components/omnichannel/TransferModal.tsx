@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { omnichannelApi, type TransferAgent, type TransferSkill } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { avatarClass } from '../../utils/avatar';
 
 interface Props {
   open: boolean;
@@ -226,7 +227,6 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                   fontSize: 13,
                   fontFamily: 'var(--font)',
                   padding: '9px 11px',
-                  outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
@@ -252,8 +252,8 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                   filteredAgents.map((agent: TransferAgent) => {
                     const selected = selectedAgentId === agent.id;
                     const available = agent.is_available && agent.active_conversations === 0;
-                    const badgeColor = available ? 'var(--teal)' : 'var(--yellow, #f59e0b)';
-                    const badgeBg = available ? 'var(--teal-dim)' : 'color-mix(in srgb, var(--yellow, #f59e0b) 15%, transparent)';
+                    const badgeColor = available ? 'var(--teal)' : 'var(--amber)';
+                    const badgeBg = available ? 'var(--teal-dim)' : 'color-mix(in srgb, var(--amber) 15%, transparent)';
                     const badgeLabel = available
                       ? t('transfer.available')
                       : t('transfer.inService', { count: agent.active_conversations });
@@ -277,13 +277,12 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                         }}
                       >
                         <div
+                          className={avatarClass(agent.name)}
                           style={{
                             width: 32,
                             height: 32,
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg,#667eea,#764ba2)',
-                            color: '#fff',
-                            fontWeight: 600,
+                            fontWeight: 500,
                             fontSize: 13,
                             display: 'flex',
                             alignItems: 'center',
@@ -407,7 +406,6 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                 fontSize: 13,
                 padding: '10px 12px',
                 resize: 'vertical',
-                outline: 'none',
                 minHeight: 78,
                 boxSizing: 'border-box',
               }}
@@ -442,7 +440,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                 borderRadius: 'var(--r)',
                 border: '1px solid var(--teal)',
                 background: 'var(--teal)',
-                color: '#0E1A18',
+                color: 'var(--on-teal)',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 fontSize: 13,
                 fontWeight: 600,

@@ -159,6 +159,7 @@
     "live_chat": "Chat"
   },
   "chat": {
+    "composeAriaLabel": "Escribe tu mensaje",
     "inputPlaceholder": "Escribe tu mensaje...",
     "resolvedPlaceholder": "Esta conversación ha sido resuelta",
     "closedByClient": "Esta atención fue cerrada por el cliente",
@@ -211,7 +212,31 @@
     "templateNameRequired": "Informe el nombre del template de WhatsApp.",
     "activeOutboundReturnHeader": "Retorno de envío activo",
     "activeOutboundReturnSub": "El cliente respondió dentro de la validez del envío activo iniciado por {{agent}}.",
-    "activeOutboundFallbackAgent": "agente responsable"
+    "activeOutboundFallbackAgent": "agente responsable",
+    "protocolCopied": "¡Protocolo copiado!",
+    "protocolCopyError": "No se pudo copiar el protocolo",
+    "protocol": "Número de protocolo",
+    "closedByAgent": "Esta atención fue cerrada",
+    "internalNotePlaceholder": "Escribe una nota interna...",
+    "replyingTo": "Respondiendo a {{name}}",
+    "mentionMessage": "Responder mensaje",
+    "removeReply": "Quitar respuesta",
+    "attachFile": "Adjuntar archivo",
+    "imageOrVideo": "Imagen o video",
+    "noAgent": "Sin agente",
+    "systemLabel": "Sistema",
+    "mentionImage": "[Imagen]",
+    "mentionAudio": "[Audio]",
+    "mentionVideo": "[Video]",
+    "mentionDocument": "[Documento]",
+    "mentionDefault": "[Mensaje]",
+    "mentionSticker": "Sticker",
+    "mentionPhoto": "Foto",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "unseenMessages": "1 mensaje nuevo",
+    "unseenMessages_plural": "{{count}} mensajes nuevos",
+    "callRecording": "Grabación de llamada"
   },
   "resolve": {
     "title": "Resolver atención",
@@ -227,6 +252,7 @@
     "resolved": "Atención resuelta",
     "resolvedBanner": "Esta atención fue resuelta",
     "reopen": "Reabrir atención",
+    "reopenError": "Error al reabrir la atención",
     "ratings": {
       "1": "Muy mala",
       "2": "Mala",
@@ -314,7 +340,8 @@
     },
     "loadMore": "Cargar mensajes anteriores",
     "loading": "Cargando...",
-    "noMore": "Inicio de la conversación"
+    "noMore": "Inicio de la conversación",
+    "error": "Error al cargar mensajes"
   },
   "goals": {
     "title": "Metas",
@@ -379,7 +406,18 @@
     "typeNotSupported": "Tipo de archivo no compatible",
     "permissionDenied": "Permiso de micrófono denegado",
     "uploadError": "Error al enviar archivo",
-    "downloadFile": "Descargar archivo"
+    "downloadFile": "Descargar archivo",
+    "browserNotSupported": "El navegador no admite grabación de audio.",
+    "sending": "Enviando audio...",
+    "converting": "Convirtiendo audio... {{pct}}%",
+    "discard": "Descartar",
+    "pausePlayback": "Pausar",
+    "listenRecording": "Escuchar grabación",
+    "confirmSend": "Confirmar envío",
+    "resumeRecording": "Reanudar grabación",
+    "paused": "Pausado",
+    "goToReview": "Ir a revisión",
+    "stopAndReview": "Detener y revisar"
   },
   "skills": {
     "title": "Habilidades",
@@ -463,7 +501,10 @@
     "accepted": "{{name}} te está ayudando",
     "helping": "Ayudando",
     "endHelp": "Finalizar ayuda",
-    "noAgentsAvailable": "No hay agentes disponibles para ayudar"
+    "noAgentsAvailable": "No hay agentes disponibles para ayudar",
+    "endHelpError": "Error al finalizar la ayuda",
+    "requestError": "No se pudo solicitar ayuda",
+    "sending": "Enviando..."
   },
   "info": {
     "contact": "Contacto",
@@ -490,7 +531,22 @@
     "messages": "Mensajes intercambiados",
     "attendances": "Atenciones",
     "firstContact": "1er contacto",
-    "engagement": "Participación"
+    "engagement": "Participación",
+    "unknown": "Contacto no identificado",
+    "linkOrganization": "Vincular organización",
+    "viewOrganization": "Ver organización",
+    "openTickets": "Tickets abiertos",
+    "organization": "Organización",
+    "noOrganization": "Sin organización",
+    "noChannel": "Ningún canal identificado",
+    "currentChannel": "Canal actual: {{label}} · {{sub}}",
+    "noPreviousConversations": "No hay atenciones anteriores",
+    "noMessages": "Sin mensajes",
+    "edit": "Editar",
+    "addTag": "Añadir",
+    "tags": "Etiquetas",
+    "noTags": "Ninguna etiqueta aplicada",
+    "conversationCount": "{{count}} conversación(es) · último: {{time}}"
   },
   "form": {
     "client": "Contacto",
@@ -545,5 +601,10 @@
     "emptyHint": "Las nuevas atenciones aparecerán aquí automáticamente",
     "allChannels": "Todos los canales",
     "waitingTime": "Tiempo en cola"
-  }
+  },
+  "visitor": "Visitante",
+  "agentFilter": "Filtro por agente",
+  "clear": "Limpiar",
+  "newBadge": "Nuevo",
+  "now": "ahora"
 }
