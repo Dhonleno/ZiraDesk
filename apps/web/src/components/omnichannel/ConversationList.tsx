@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { api, conversationTags, type ConversationTag } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -9,6 +10,7 @@ import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
+import { avatarClass } from '../../utils/avatar';
 
 interface ConversationItem {
   id: string;
@@ -87,26 +89,11 @@ interface ConversationCounts {
   closed: number;
 }
 
-/* avatar gradient por inicial */
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#667eea,#764ba2)',
-  'linear-gradient(135deg,#f093fb,#f5576c)',
-  'linear-gradient(135deg,#4facfe,#00f2fe)',
-  'linear-gradient(135deg,#43e97b,#38f9d7)',
-  'linear-gradient(135deg,#fa709a,#fee140)',
-  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
-];
-
-function avatarGradient(name: string | null) {
-  const idx = (name?.charCodeAt(0) ?? 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx] ?? AVATAR_GRADIENTS[0];
-}
-
-function relativeTime(dateStr: string | null): string {
+function relativeTime(dateStr: string | null, nowLabel: string): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'agora';
+  if (mins < 1) return nowLabel;
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
@@ -124,8 +111,8 @@ function getMessageSenderId(message?: SocketMessagePayload): string | null {
 /* channel badge */
 const CH_STYLE: Record<string, { bg: string; color: string; border: string; label: string }> = {
   whatsapp: {
-    bg: 'rgba(37,211,102,.15)',
-    color: '#25D366',
+    bg: 'var(--channel-whatsapp-dim)',
+    color: 'var(--channel-whatsapp)',
     border: 'rgba(37,211,102,.25)',
     label: 'WhatsApp',
   },
@@ -192,6 +179,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
   const desktopPermissionDeniedRef = useRef(false);
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
   const mainTabsRef = useRef<HTMLDivElement | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
   const qc = useQueryClient();
 
@@ -677,11 +665,301 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
   });
 
   const count = data?.length ?? 0;
+  const conversations = data ?? [];
+  const shouldVirtualizeConversations = !isLoading && conversations.length >= 50;
+  const conversationVirtualizer = useVirtualizer({
+    count: shouldVirtualizeConversations ? conversations.length : 0,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: () => 88,
+    measureElement: (element) => element?.getBoundingClientRect().height ?? 88,
+    overscan: 5,
+  });
+
+  const renderConversationItem = useCallback((conv: ConversationItem) => {
+    const isActive = selectedId === conv.id;
+    const displayName = conv.contact_name ?? t('visitor');
+    const organizationName = conv.organization_name?.trim() ?? null;
+    const avatarName = conv.contact_name ?? null;
+    const hasUnread = (conv.unread_count ?? 0) > 0;
+    const hasNewActivity = newActivity.has(conv.id);
+    const isNewConversation = newConversations.has(conv.id);
+    const botDepartment =
+      typeof conv.metadata?.bot_department === 'string'
+        ? conv.metadata.bot_department
+        : null;
+    const isAwaitingBotChoice = conv.metadata?.bot_stage === 'waiting_choice';
+    const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice;
+    const itemClassName = [
+      hasNewActivity ? 'zd-flash' : '',
+      isNewConversation ? 'zd-slide-down' : '',
+    ].filter(Boolean).join(' ');
+
+    return (
+      <div
+        className={itemClassName}
+        role="button"
+        tabIndex={0}
+        onClick={() => handleSelectConversation(conv.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSelectConversation(conv.id);
+          }
+        }}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          padding: '12px 14px',
+          cursor: 'pointer',
+          borderBottom: '1px solid var(--line)',
+          background: isActive ? 'var(--bg-3)' : 'transparent',
+          boxShadow: isActive ? 'inset 3px 0 0 var(--teal)' : 'none',
+          transition: 'background .15s',
+          borderTop: 'none',
+          borderLeft: 'none',
+          borderRight: 'none',
+        }}
+        onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; }}
+        onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div
+            className={avatarClass(avatarName ?? displayName)}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+          <ChannelDot type={conv.channel_type} />
+          {(hasNewActivity || isNewConversation) && (
+            <span
+              className="zd-pulse-dot"
+              style={{ position: 'absolute', top: -2, right: -2, zIndex: 10 }}
+            />
+          )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{
+                fontSize: 13,
+                fontWeight: hasUnread ? 600 : 500,
+                color: 'var(--txt)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {displayName}
+              </span>
+              {organizationName && (
+                <span
+                  title={organizationName}
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--txt-3)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: 150,
+                  }}
+                >
+                  {organizationName}
+                </span>
+              )}
+              {conv.protocol_number && (
+                <span
+                  title={conv.protocol_number}
+                  style={{
+                    fontSize: 10,
+                    fontFamily: 'var(--mono)',
+                    color: 'var(--txt-3)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {conv.protocol_number}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 6 }}>
+              {isNewConversation && (
+                <span className="zd-badge-new">{t('newBadge')}</span>
+              )}
+              {canAssumeConversation && (
+                <button
+                  type="button"
+                  disabled={assumeMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    assumeMutation.mutate(conv.id);
+                  }}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: '3px 10px',
+                    borderRadius: 'var(--r-pill)',
+                    background: 'var(--teal-dim)',
+                    border: '1px solid rgba(0,201,167,.25)',
+                    color: 'var(--teal)',
+                    cursor: assumeMutation.isPending ? 'wait' : 'pointer',
+                    transition: 'all .15s',
+                    whiteSpace: 'nowrap',
+                    opacity: assumeMutation.isPending ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (assumeMutation.isPending) return;
+                    e.currentTarget.style.background = 'var(--teal)';
+                    e.currentTarget.style.color = 'var(--on-teal)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--teal-dim)';
+                    e.currentTarget.style.color = 'var(--teal)';
+                  }}
+                >
+                  {t('queue.assume')}
+                </button>
+              )}
+              {hasUnread && (
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: 'var(--teal)',
+                  boxShadow: '0 0 0 2px var(--teal-dim)',
+                }} />
+              )}
+              <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                {relativeTime(conv.last_message_at ?? conv.created_at, t('now'))}
+              </span>
+            </div>
+          </div>
+
+          <p style={{
+            fontSize: 12,
+            color: hasUnread ? 'var(--txt-2)' : 'var(--txt-3)',
+            fontWeight: hasUnread ? 500 : 400,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {conv.last_message ?? conv.subject ?? '—'}
+          </p>
+
+          <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
+            {conv.status === 'waiting' && conv.conversation_type === 'outbound' && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '1px 7px',
+                borderRadius: 'var(--r-pill)',
+                background: 'var(--teal-dim)',
+                color: 'var(--teal)',
+                border: '1px solid rgba(0,201,167,.28)',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+                  <path d="M2 8L8 2M8 2H4.5M8 2V5.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t('outbound.badge')}
+              </span>
+            )}
+            {conv.conversation_type === 'outbound' && conv.status !== 'waiting' && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '1px 7px',
+                borderRadius: 'var(--r-pill)',
+                background: 'rgba(245,158,11,.14)',
+                color: 'var(--amber)',
+                border: '1px solid rgba(245,158,11,.28)',
+                whiteSpace: 'nowrap',
+              }}>
+                {t('outboundBadge')}
+              </span>
+            )}
+            {botDepartment && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 500,
+                padding: '1px 7px',
+                borderRadius: 'var(--r-pill)',
+                background: 'var(--blue-dim)',
+                color: 'var(--blue)',
+                border: '1px solid rgba(96,165,250,.2)',
+                whiteSpace: 'nowrap',
+                maxWidth: 110,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                {botDepartment}
+              </span>
+            )}
+            {activeTab === 'closed' && conv.csat_score ? (
+              <span style={{
+                fontSize: 10,
+                color: 'var(--amber)',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 2,
+              }}>
+                {Array.from({ length: conv.csat_score }).map((_, i) => (
+                  <svg key={i} width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                ))}
+                {conv.csat_score}/5
+              </span>
+            ) : null}
+          </div>
+
+          {conv.tags && conv.tags.length > 0 && (
+            <div className="conv-tags">
+              {conv.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag.id}
+                  className="conv-tag-chip"
+                  style={{
+                    background: `${tag.color}22`,
+                    color: tag.color,
+                    borderColor: `${tag.color}44`,
+                  }}
+                >
+                  {tag.name}
+                </span>
+              ))}
+              {conv.tags.length > 3 && (
+                <span className="conv-tag-more">+{conv.tags.length - 3}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }, [
+    activeTab,
+    assumeMutation,
+    handleSelectConversation,
+    newActivity,
+    newConversations,
+    onSelect,
+    selectedId,
+    t,
+  ]);
 
   return (
     <div style={{
-      width: 280,
-      minWidth: 280,
+      width: 320,
+      minWidth: 320,
       display: 'flex',
       flexDirection: 'column',
       background: 'var(--bg-2)',
@@ -707,6 +985,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
             <button
               onClick={() => setShowStats(true)}
               title={t('myStats.title')}
+              aria-label={t('myStats.title')}
               style={{
                 width: 24, height: 24,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -757,7 +1036,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
             style={{
               background: 'none',
               border: 'none',
-              outline: 'none',
               fontSize: 12,
               fontFamily: 'var(--font)',
               color: 'var(--txt)',
@@ -796,7 +1074,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
               fontFamily: 'var(--font)',
             }}
           >
-            <span>{t('tags.filter', { defaultValue: 'Filtrar por etiqueta' })}</span>
+            <span>{t('tags.filter')}</span>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
               <path d="M2 3h8L7 6.5v2L5 9V6.5L2 3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
             </svg>
@@ -828,7 +1106,8 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                   fontSize: 13,
                   lineHeight: 1,
                 }}
-                title={t('tags.clearFilter', { defaultValue: 'Limpar filtro' })}
+                title={t('tags.clearFilter')}
+                aria-label={t('tags.clearFilter')}
               >
                 ×
               </button>
@@ -838,7 +1117,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
           {showTagFilterDropdown && (
             <div className="tag-dropdown" style={{ top: 'calc(100% + 6px)', left: 0, right: 0, minWidth: 0 }}>
               <div className="tag-dropdown-header">
-                <span>{t('tags.title', { defaultValue: 'Etiquetas' })}</span>
+                <span>{t('tags.title')}</span>
                 <button type="button" onClick={() => setShowTagFilterDropdown(false)}>×</button>
               </div>
               <div className="tag-dropdown-list">
@@ -873,7 +1152,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 padding: '2px 8px',
               }}
             >
-              Filtro por agente
+              {t('agentFilter')}
             </span>
             <button
               type="button"
@@ -889,7 +1168,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 fontSize: 12,
               }}
             >
-              Limpar
+              {t('clear')}
             </button>
           </div>
         )}
@@ -933,7 +1212,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                   background: 'rgba(0,201,167,.14)',
                   color: 'var(--teal)',
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 600,
                 }}>
                   {counts.mine}
                 </span>
@@ -948,7 +1227,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 position: 'absolute', top: 2,
                 left: assignedToMe ? 14 : 2,
                 width: 12, height: 12, borderRadius: '50%',
-                background: assignedToMe ? '#0E1A18' : 'var(--txt-3)',
+                background: assignedToMe ? 'var(--on-teal)' : 'var(--txt-3)',
                 transition: 'left .15s',
               }} />
             </div>
@@ -1011,9 +1290,9 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                   alignItems: 'center',
                   justifyContent: 'center',
                   background: isAmberCounter ? 'rgba(245,158,11,.18)' : 'rgba(0,201,167,.14)',
-                  color: isAmberCounter ? '#F59E0B' : 'var(--teal)',
+                  color: isAmberCounter ? 'var(--amber)' : 'var(--teal)',
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 600,
                 }}>
                   {tabCount}
                 </span>
@@ -1024,7 +1303,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin' }}>
+      <div ref={listScrollRef} style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin' }}>
         {isLoading
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
@@ -1032,279 +1311,50 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 <div style={{ height: 10, width: 180, borderRadius: 4, background: 'var(--bg-4)', animation: 'pulse 1.5s ease infinite' }} />
               </div>
             ))
-          : (data ?? []).length === 0
-          ? (
-              <div style={{ padding: '48px 16px', textAlign: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                  {t('noConversations')}
-                </div>
-              </div>
-            )
-          : (data ?? []).map((conv) => {
-              const isActive = selectedId === conv.id;
-              const displayName = conv.contact_name ?? 'Visitante';
-              const organizationName = conv.organization_name?.trim() ?? null;
-              const avatarName = conv.contact_name ?? null;
-              const hasUnread = (conv.unread_count ?? 0) > 0;
-              const hasNewActivity = newActivity.has(conv.id);
-              const isNewConversation = newConversations.has(conv.id);
-              const botDepartment =
-                typeof conv.metadata?.bot_department === 'string'
-                  ? conv.metadata.bot_department
-                  : null;
-              const isAwaitingBotChoice = conv.metadata?.bot_stage === 'waiting_choice';
-              const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice;
-              const itemClassName = [
-                hasNewActivity ? 'zd-flash' : '',
-                isNewConversation ? 'zd-slide-down' : '',
-              ].filter(Boolean).join(' ');
-
-              return (
-                <div
-                  key={conv.id}
-                  className={itemClassName}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleSelectConversation(conv.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleSelectConversation(conv.id);
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 10,
-                    padding: '12px 14px',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid var(--line)',
-                    background: isActive ? 'var(--bg-3)' : 'transparent',
-                    boxShadow: isActive ? 'inset 3px 0 0 var(--teal)' : 'none',
-                    transition: 'background .15s',
-                    borderTop: 'none',
-                    borderLeft: 'none',
-                    borderRight: 'none',
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; }}
-                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {/* Avatar + channel dot */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: '50%',
-                      background: avatarGradient(avatarName),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: '#fff',
-                    }}>
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                    <ChannelDot type={conv.channel_type} />
-                    {(hasNewActivity || isNewConversation) && (
-                      <span
-                        className="zd-pulse-dot"
-                        style={{ position: 'absolute', top: -2, right: -2, zIndex: 10 }}
-                      />
-                    )}
-                  </div>
-
-                  {/* Body */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{
-                          fontSize: 13,
-                          fontWeight: hasUnread ? 600 : 500,
-                          color: 'var(--txt)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {displayName}
-                        </span>
-                        {organizationName && (
-                          <span
-                            title={organizationName}
-                            style={{
-                              fontSize: 10,
-                              color: 'var(--txt-3)',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: 150,
-                            }}
-                          >
-                            {organizationName}
-                          </span>
-                        )}
-                        {conv.protocol_number && (
-                          <span
-                            title={conv.protocol_number}
-                            style={{
-                              fontSize: 10,
-                              fontFamily: 'var(--mono)',
-                              color: 'var(--txt-3)',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {conv.protocol_number}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 6 }}>
-                        {isNewConversation && (
-                          <span className="zd-badge-new">Novo</span>
-                        )}
-                        {canAssumeConversation && (
-                          <button
-                            type="button"
-                            disabled={assumeMutation.isPending}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              assumeMutation.mutate(conv.id);
-                            }}
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 600,
-                              padding: '3px 10px',
-                              borderRadius: 'var(--r-pill)',
-                              background: 'var(--teal-dim)',
-                              border: '1px solid rgba(0,201,167,.25)',
-                              color: 'var(--teal)',
-                              cursor: assumeMutation.isPending ? 'wait' : 'pointer',
-                              transition: 'all .15s',
-                              whiteSpace: 'nowrap',
-                              opacity: assumeMutation.isPending ? 0.7 : 1,
-                            }}
-                            onMouseEnter={(e) => {
-                              if (assumeMutation.isPending) return;
-                              e.currentTarget.style.background = 'var(--teal)';
-                              e.currentTarget.style.color = '#0a1a18';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'var(--teal-dim)';
-                              e.currentTarget.style.color = 'var(--teal)';
-                            }}
-                          >
-                            {t('queue.assume')}
-                          </button>
-                        )}
-                        {hasUnread && (
-                          <div style={{
-                            width: 8, height: 8, borderRadius: '50%',
-                            background: 'var(--teal)',
-                            boxShadow: '0 0 0 2px var(--teal-dim)',
-                          }} />
-                        )}
-                        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
-                          {relativeTime(conv.last_message_at ?? conv.created_at)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p style={{
-                      fontSize: 12,
-                      color: hasUnread ? 'var(--txt-2)' : 'var(--txt-3)',
-                      fontWeight: hasUnread ? 500 : 400,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {conv.last_message ?? conv.subject ?? '—'}
-                    </p>
-
-                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5 }}>
-                      {conv.status === 'waiting' && conv.conversation_type === 'outbound' && (
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          padding: '1px 7px',
-                          borderRadius: 'var(--r-pill)',
-                          background: 'var(--teal-dim)',
-                          color: 'var(--teal)',
-                          border: '1px solid rgba(0,201,167,.28)',
-                          whiteSpace: 'nowrap',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}>
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-                            <path d="M2 8L8 2M8 2H4.5M8 2V5.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          {t('outbound.badge')}
-                        </span>
-                      )}
-                      {conv.conversation_type === 'outbound' && conv.status !== 'waiting' && (
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          padding: '1px 7px',
-                          borderRadius: 'var(--r-pill)',
-                          background: 'rgba(245,158,11,.14)',
-                          color: '#F59E0B',
-                          border: '1px solid rgba(245,158,11,.28)',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {t('outboundBadge')}
-                        </span>
-                      )}
-                      {botDepartment && (
-                        <span style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          padding: '1px 7px',
-                          borderRadius: 'var(--r-pill)',
-                          background: 'var(--blue-dim)',
-                          color: 'var(--blue)',
-                          border: '1px solid rgba(96,165,250,.2)',
-                          whiteSpace: 'nowrap',
-                          maxWidth: 110,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}>
-                          {botDepartment}
-                        </span>
-                      )}
-                      {activeTab === 'closed' && conv.csat_score ? (
-                        <span style={{
-                          fontSize: 10,
-                          color: '#F59E0B',
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {'⭐'.repeat(conv.csat_score)} {conv.csat_score}/5
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {conv.tags && conv.tags.length > 0 && (
-                      <div className="conv-tags">
-                        {conv.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="conv-tag-chip"
-                            style={{
-                              background: `${tag.color}22`,
-                              color: tag.color,
-                              borderColor: `${tag.color}44`,
-                            }}
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
-                        {conv.tags.length > 3 && (
-                          <span className="conv-tag-more">+{conv.tags.length - 3}</span>
-                        )}
-                      </div>
-                    )}
+          : conversations.length === 0
+            ? (
+                <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                    {t('noConversations')}
                   </div>
                 </div>
-              );
-            })}
+              )
+            : shouldVirtualizeConversations
+              ? (
+                  <div
+                    style={{
+                      height: conversationVirtualizer.getTotalSize(),
+                      width: '100%',
+                      position: 'relative',
+                    }}
+                  >
+                    {conversationVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const conversation = conversations[virtualRow.index];
+                      if (!conversation) return null;
+                      return (
+                        <div
+                          key={conversation.id}
+                          data-index={virtualRow.index}
+                          ref={conversationVirtualizer.measureElement}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          {renderConversationItem(conversation)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              : conversations.map((conv) => (
+                  <div key={conv.id}>
+                    {renderConversationItem(conv)}
+                  </div>
+                ))}
       </div>
 
       <AgentStatsModal open={showStats} onClose={() => setShowStats(false)} />
