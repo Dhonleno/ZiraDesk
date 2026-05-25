@@ -21,6 +21,8 @@ export const updateSettingsSchema = z.object({
   active_outbound_validity_hours: z.number().int().min(1).max(168).optional(),
   bot_assigned_message: z.string().max(1000).optional(),
   max_conversations_per_agent: z.number().int().min(1).max(500).nullable().optional(),
+  lgpd_retention_enabled: z.boolean().optional(),
+  lgpd_retention_days: z.number().int().min(1).max(3650).optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined

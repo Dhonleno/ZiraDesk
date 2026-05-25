@@ -5,6 +5,7 @@ import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
 import './jobs/waiting-expiry.job.js'; // fecha conversas waiting expiradas
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import './jobs/process-pending-queue.job.js'; // processa conversas pending periodicamente
+import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';

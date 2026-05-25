@@ -18,6 +18,7 @@ const DEFAULT_INACTIVITY_CLOSE_MESSAGE =
   'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊';
 const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE = 'end_of_day';
 const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS = 24;
+const DEFAULT_LGPD_RETENTION_DAYS = 180;
 const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   '✅ Seu atendimento foi aceito!',
   '',
@@ -48,6 +49,13 @@ function resolveActiveOutboundValidityHours(value: unknown): number {
   if (typeof value !== 'number') return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS;
   const parsed = Math.trunc(value);
   if (parsed < 1 || parsed > 168) return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS;
+  return parsed;
+}
+
+function resolveLgpdRetentionDays(value: unknown): number {
+  if (typeof value !== 'number') return DEFAULT_LGPD_RETENTION_DAYS;
+  const parsed = Math.trunc(value);
+  if (parsed < 1 || parsed > 3650) return DEFAULT_LGPD_RETENTION_DAYS;
   return parsed;
 }
 
@@ -111,6 +119,8 @@ export async function getSettings(tenantId: string) {
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
+    lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -163,6 +173,12 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...('max_conversations_per_agent' in data
       ? { max_conversations_per_agent: data.max_conversations_per_agent ?? null }
       : {}),
+    ...(data.lgpd_retention_enabled !== undefined
+      ? { lgpd_retention_enabled: data.lgpd_retention_enabled }
+      : {}),
+    ...(data.lgpd_retention_days !== undefined
+      ? { lgpd_retention_days: data.lgpd_retention_days }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -204,6 +220,8 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
+    lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
   };
 }
 
