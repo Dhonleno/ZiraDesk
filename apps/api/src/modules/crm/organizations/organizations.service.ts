@@ -57,6 +57,28 @@ interface OrganizationConflictRow {
   name: string;
 }
 
+interface PaginationMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+interface OrganizationSummary extends Omit<OrgRow, 'contacts_count' | 'conversations_count' | 'tickets_count'> {
+  contacts_count: number;
+  conversations_count: number;
+  tickets_count: number;
+}
+
+interface OrganizationStatsResult {
+  total_contacts: number;
+  total_conversations: number;
+  open_conversations: number;
+  total_tickets: number;
+  open_tickets: number;
+  last_contact_at: Date | null;
+}
+
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
@@ -147,7 +169,7 @@ export async function listOrganizations(
   query: ListOrganizationsQuery,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<{ data: OrganizationSummary[]; meta: PaginationMeta }> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => listOrganizations(query, undefined, tx));
   }
@@ -198,7 +220,7 @@ export async function listOrganizations(
 }
 
 /* ── getOrganization ─────────────────────────────────────────────────────── */
-export async function getOrganization(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getOrganization(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationSummary> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganization(id, undefined, tx));
   }
@@ -216,7 +238,7 @@ export async function getOrganization(id: string, schemaName?: string, db: RawEx
 }
 
 /* ── getOrganizationStats ────────────────────────────────────────────────── */
-export async function getOrganizationStats(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getOrganizationStats(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationStatsResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganizationStats(id, undefined, tx));
   }
@@ -251,7 +273,7 @@ export async function getOrganizationStats(id: string, schemaName?: string, db: 
 }
 
 /* ── getOrganizationContacts ─────────────────────────────────────────────── */
-export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganizationContacts(id, undefined, tx));
   }
@@ -265,7 +287,17 @@ export async function getOrganizationContacts(id: string, schemaName?: string, d
 }
 
 /* ── getOrganizationConversations ────────────────────────────────────────── */
-export async function getOrganizationConversations(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getOrganizationConversations(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{
+  id: string;
+  status: string;
+  channel_type: string | null;
+  protocol: string | null;
+  subject: string | null;
+  bot_department: string | null;
+  last_message: string | null;
+  last_message_at: Date | null;
+  created_at: Date;
+}>> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganizationConversations(id, undefined, tx));
   }
@@ -301,7 +333,7 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
 }
 
 /* ── getOrganizationTickets ──────────────────────────────────────────────── */
-export async function getOrganizationTickets(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getOrganizationTickets(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganizationTickets(id, undefined, tx));
   }
@@ -320,7 +352,7 @@ export async function createOrganization(
   createdBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<OrgRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => createOrganization(data, createdBy, undefined, tx));
   }
@@ -365,7 +397,7 @@ export async function updateOrganization(
   updatedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<OrgRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => updateOrganization(id, data, updatedBy, undefined, tx));
   }
@@ -462,7 +494,7 @@ export async function deleteOrganization(
   deletedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<OrganizationSummary> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => deleteOrganization(id, deletedBy, undefined, tx));
   }

@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { getSocketServer } from '../socket/index.js';
 import { PRESENCE_TIMEOUT_MS } from '../modules/omnichannel/presence.constants.js';
@@ -20,7 +20,7 @@ interface OfflineAgentRow {
 const PRESENCE_CLEANUP_JOB_ID = 'presence-cleanup-every-2-minutes';
 
 export const presenceCleanupQueue = new Queue<PresenceCleanupJobData>('ziradesk-presence-cleanup', {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 async function cleanupStalePresence(): Promise<void> {
@@ -69,7 +69,7 @@ export const presenceCleanupWorker = new Worker<PresenceCleanupJobData>(
   async () => {
     await cleanupStalePresence();
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 presenceCleanupWorker.on('failed', (job, err) => {
@@ -88,3 +88,4 @@ void presenceCleanupQueue.add(
 ).catch((err) => {
   logger.error({ err: err instanceof Error ? err.message : String(err) }, '[Presence Cleanup] Failed to schedule cleanup job');
 });
+

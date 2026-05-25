@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { getSocketServer } from '../socket/index.js';
 
@@ -19,7 +19,7 @@ const WAITING_EXPIRY_JOB_ID = 'waiting-expiry-every-15-minutes';
 const WAITING_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
 
 export const waitingExpiryQueue = new Queue<WaitingExpiryJobData>('ziradesk-waiting-expiry', {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 async function closeExpiredWaitingConversations(): Promise<void> {
@@ -83,7 +83,7 @@ export const waitingExpiryWorker = new Worker<WaitingExpiryJobData>(
   async () => {
     await closeExpiredWaitingConversations();
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 waitingExpiryWorker.on('failed', (job, err) => {
@@ -102,3 +102,4 @@ void waitingExpiryQueue.add(
 ).catch((err) => {
   logger.error({ err: err instanceof Error ? err.message : String(err) }, '[WaitingExpiry] Failed to schedule job');
 });
+

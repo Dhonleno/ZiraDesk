@@ -220,16 +220,23 @@ async function portalRequest(options: {
   method: 'GET' | 'POST';
   url: string;
   headers?: Record<string, string>;
-  payload?: unknown;
-  query?: Record<string, unknown>;
+  payload?: string | Buffer | Record<string, unknown>;
 }): Promise<{ status: number; body: any; headers: Record<string, string | string[] | undefined> }> {
-  const response = await requireApp().inject({
+  const injectOptions: Record<string, unknown> = {
     method: options.method,
     url: options.url,
     headers: options.headers,
-    payload: options.payload,
-    query: options.query,
-  });
+  };
+
+  if (options.payload !== undefined) {
+    injectOptions['payload'] = options.payload;
+  }
+
+  const response = await (requireApp() as any).inject(injectOptions) as {
+    statusCode: number;
+    json: () => any;
+    headers: Record<string, string | string[] | undefined>;
+  };
 
   return {
     status: response.statusCode,
@@ -260,13 +267,21 @@ function extractResetToken(html: string): string {
     throw new Error('Token de reset não encontrado no HTML do e-mail');
   }
 
-  return decodeURIComponent(match[1]);
+  const token = match[1];
+  if (!token) {
+    throw new Error('Token de reset inválido');
+  }
+
+  return decodeURIComponent(token);
 }
 
 async function issuePasswordResetAndCaptureToken(email = requireSuiteContact().email): Promise<string> {
   let capturedToken: string | null = null;
 
   vi.mocked(requireEmailServiceMock().sendEmail).mockImplementationOnce(async (payload) => {
+    if (typeof payload.html !== 'string') {
+      throw new Error('Template de reset sem HTML');
+    }
     capturedToken = extractResetToken(payload.html);
   });
 
@@ -379,18 +394,6 @@ describe('Portal integration', () => {
   });
 
   it('POST /api/portal/auth/forgot-password com email válido envia email', async () => {
-    let payloadSnapshot: {
-      tenantId: string;
-      tenantSchema: string;
-      to: string;
-      subject: string;
-      html: string;
-    } | null = null;
-
-    vi.mocked(requireEmailServiceMock().sendEmail).mockImplementationOnce(async (payload) => {
-      payloadSnapshot = payload;
-    });
-
     const response = await portalRequest({
       method: 'POST',
       url: '/api/portal/auth/forgot-password',
@@ -401,13 +404,22 @@ describe('Portal integration', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ success: true });
     expect(requireEmailServiceMock().sendEmail).toHaveBeenCalledTimes(1);
-    expect(payloadSnapshot).toMatchObject({
+
+    const sentPayload = vi.mocked(requireEmailServiceMock().sendEmail).mock.calls[0]?.[0] as {
+      tenantId: string;
+      tenantSchema: string;
+      to: string;
+      subject: string;
+      html?: string;
+    } | undefined;
+
+    expect(sentPayload).toMatchObject({
       tenantId: requireSuiteTenant().id,
       tenantSchema: requireSuiteTenant().schemaName,
       to: requireSuiteContact().email,
       subject: 'Redefinição de senha — Portal de Suporte',
     });
-    expect((payloadSnapshot as { html: string }).html).toContain('/portal/reset-password?token=');
+    expect(sentPayload?.html ?? '').toContain('/portal/reset-password?token=');
   });
 
   it('POST /api/portal/auth/reset-password com token válido atualiza a senha', async () => {

@@ -835,7 +835,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         fileName,
         mimeType,
         buffer: fileBuffer,
-        schemaName,
+        ...(schemaName ? { schemaName } : {}),
       });
       return reply.code(201).send({ success: true, data });
     } catch (err) {

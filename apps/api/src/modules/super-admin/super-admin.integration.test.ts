@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { prisma } from '../../config/database.js';

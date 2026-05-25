@@ -1,9 +1,13 @@
+import type { ConnectionOptions } from 'bullmq';
 import { Redis } from 'ioredis';
 import { env } from './env.js';
 
 interface RedisClientLike {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ...args: unknown[]): Promise<string>;
+  setex(key: string, seconds: number, value: string): Promise<string>;
+  expire(key: string, seconds: number): Promise<number>;
+  exists(key: string): Promise<number>;
   del(key: string): Promise<number>;
   ping(): Promise<string>;
   disconnect(): void;
@@ -37,6 +41,27 @@ class InMemoryRedisClient implements RedisClientLike {
 
     this.store.set(key, { value, expiresAt });
     return 'OK';
+  }
+
+  async setex(key: string, seconds: number, value: string): Promise<string> {
+    return this.set(key, value, 'EX', seconds);
+  }
+
+  async expire(key: string, seconds: number): Promise<number> {
+    this.purgeIfExpired(key);
+    const current = this.store.get(key);
+    if (!current) {
+      return 0;
+    }
+
+    current.expiresAt = Date.now() + seconds * 1000;
+    this.store.set(key, current);
+    return 1;
+  }
+
+  async exists(key: string): Promise<number> {
+    this.purgeIfExpired(key);
+    return this.store.has(key) ? 1 : 0;
   }
 
   async del(key: string): Promise<number> {
@@ -74,3 +99,4 @@ function createRedisClient(): RedisClientLike {
 }
 
 export const redis = createRedisClient();
+export const bullmqConnection = redis as unknown as ConnectionOptions;

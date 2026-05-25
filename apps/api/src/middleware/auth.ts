@@ -4,9 +4,14 @@ import { env } from '../config/env.js';
 import { redis } from '../config/redis.js';
 import type { AuthenticatedUser } from '@ziradesk/shared';
 
+type RequestUser = AuthenticatedUser & {
+  tenantId?: string;
+  schemaName?: string;
+};
+
 declare module 'fastify' {
   interface FastifyRequest {
-    user: AuthenticatedUser;
+    user: RequestUser;
   }
 }
 

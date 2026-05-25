@@ -91,6 +91,55 @@ interface ContactConflictRow {
   name: string;
 }
 
+interface PaginationMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+interface ListContactsResult {
+  data: ContactRow[];
+  meta: PaginationMeta;
+}
+
+interface ListLgpdRequestsResult {
+  data: LgpdRequestRow[];
+  meta: PaginationMeta;
+}
+
+interface ContactStatsResult {
+  total_conversations: number;
+  total_messages: number;
+  open_tickets: number;
+}
+
+interface UpdateLgpdConsentResult {
+  contact: ContactRow;
+  request: LgpdRequestRow;
+}
+
+interface AnonymizeLgpdResult {
+  contact: ContactRow;
+  request: LgpdRequestRow;
+  summary: {
+    conversations_updated: number;
+    messages_redacted: number;
+  };
+}
+
+interface PortalAccessContact {
+  id: string;
+  name: string;
+  email: string | null;
+}
+
+interface CreatePortalAccessResult {
+  contact: PortalAccessContact;
+  portalUrl: string;
+  tempPassword: string;
+}
+
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
@@ -228,7 +277,7 @@ export async function listContacts(
   query: ListContactsQuery,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ListContactsResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => listContacts(query, undefined, tx));
   }
@@ -268,7 +317,7 @@ export async function listContacts(
 }
 
 /* ── getContact ──────────────────────────────────────────────────────────── */
-export async function getContact(id: string, schemaName?: string, db: RawExecutor = prisma) {
+export async function getContact(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<ContactRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getContact(id, undefined, tx));
   }
@@ -281,7 +330,7 @@ export async function getContact(id: string, schemaName?: string, db: RawExecuto
 }
 
 /* ── getContactStats ─────────────────────────────────────────────────────── */
-export async function getContactStats(id: string, schemaName: string) {
+export async function getContactStats(id: string, schemaName: string): Promise<ContactStatsResult> {
   const schema = quoteIdent(schemaName);
   const contactsRef = `${schema}.contacts`;
   const conversationsRef = `${schema}.conversations`;
@@ -327,7 +376,7 @@ export async function getContactStats(id: string, schemaName: string) {
 }
 
 /* ── findByWhatsapp ──────────────────────────────────────────────────────── */
-export async function findByWhatsapp(number: string) {
+export async function findByWhatsapp(number: string): Promise<ContactRow | null> {
   const normalized = normalizePhoneForStorage(number);
   const digits = number.replace(/\D/g, '');
 
@@ -351,7 +400,7 @@ export async function createContact(
   tenantId?: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ContactRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => createContact(data, createdBy, tenantId, undefined, tx));
   }
@@ -424,7 +473,7 @@ export async function updateContact(
   updatedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ContactRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => updateContact(id, data, updatedBy, undefined, tx));
   }
@@ -544,7 +593,7 @@ export async function deleteContact(
   deletedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ContactRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => deleteContact(id, deletedBy, undefined, tx));
   }
@@ -581,7 +630,7 @@ export async function linkToOrganization(
   updatedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ContactRow> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => linkToOrganization(contactId, organizationId, updatedBy, undefined, tx));
   }
@@ -660,7 +709,7 @@ export async function listLgpdRequests(
   query: ListLgpdRequestsQuery,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<ListLgpdRequestsResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => listLgpdRequests(query, undefined, tx));
   }
@@ -729,7 +778,7 @@ export async function updateContactLgpdConsent(
   updatedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<UpdateLgpdConsentResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => updateContactLgpdConsent(id, data, updatedBy, undefined, tx));
   }
@@ -788,7 +837,7 @@ export async function exportContactLgpdData(
   options: { includeMessages: boolean },
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<Record<string, unknown>> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => exportContactLgpdData(id, actorUserId, options, undefined, tx));
   }
@@ -895,7 +944,7 @@ export async function anonymizeContactForLgpd(
   input: AnonymizeContactLgpdInput,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<AnonymizeLgpdResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => anonymizeContactForLgpd(id, actorUserId, input, undefined, tx));
   }
@@ -1022,7 +1071,7 @@ export async function createPortalAccess(
   tenantId: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<CreatePortalAccessResult> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => createPortalAccess(contactId, tenantId, undefined, tx));
   }
@@ -1078,7 +1127,7 @@ export async function revokePortalAccess(
   contactId: string,
   schemaName?: string,
   db: RawExecutor = prisma,
-) {
+): Promise<{ revoked: boolean }> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => revokePortalAccess(contactId, undefined, tx));
   }

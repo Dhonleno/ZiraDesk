@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { ensureCrmInfrastructure } from '../modules/crm/crm.infrastructure.js';
 import { anonymizeContactForLgpd } from '../modules/crm/contacts/contacts.service.js';
@@ -24,7 +24,7 @@ const LGPD_RETENTION_DEFAULT_DAYS = 180;
 const LGPD_RETENTION_BATCH_SIZE = 100;
 
 export const lgpdRetentionQueue = new Queue<LgpdRetentionJobData>(LGPD_RETENTION_QUEUE_NAME, {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 function normalizeRetentionEnabled(settings: Record<string, unknown>): boolean {
@@ -148,7 +148,7 @@ export const lgpdRetentionWorker = new Worker<LgpdRetentionJobData>(
   async () => {
     await runLgpdRetention();
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 lgpdRetentionWorker.on('failed', (job, err) => {
@@ -173,3 +173,4 @@ void lgpdRetentionQueue.add(
     '[LGPD Retention] Failed to schedule daily job',
   );
 });
+

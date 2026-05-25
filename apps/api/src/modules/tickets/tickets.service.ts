@@ -765,7 +765,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 
 /* ── updateTicket ────────────────────────────────────────────────────────── */
 export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string, schemaName?: string) {
-  const { old, ticket, eventsToEmit, assigneeName } = await withOptionalSchema(schemaName, async (db) => {
+  const { old, ticket, eventsToEmit } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
     const old = await getTicket(id, undefined, db);
 
@@ -891,7 +891,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       if (tagRemovedEvent) eventsToEmit.push({ event: tagRemovedEvent });
     }
 
-    return { old, ticket, eventsToEmit, assigneeName };
+    return { old, ticket, eventsToEmit };
   });
 
   for (const { event, userName } of eventsToEmit) {
@@ -940,7 +940,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
 
 /* ── deleteTicket ────────────────────────────────────────────────────────── */
 export async function deleteTicket(id: string, deletedBy: string, tenantId: string, schemaName?: string) {
-  const { old, attachments } = await withOptionalSchema(schemaName, async (db) => {
+  const { attachments } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
     const old = await getTicket(id, undefined, db);
 
@@ -961,7 +961,7 @@ export async function deleteTicket(id: string, deletedBy: string, tenantId: stri
       JSON.stringify(old),
     );
 
-    return { old, attachments };
+    return { attachments };
   });
 
   await Promise.allSettled(

@@ -1,8 +1,8 @@
 import { Queue } from 'bullmq';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 
 export const messageQueue = new Queue('ziradesk-messages', {
-  connection: redis,
+  connection: bullmqConnection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 2000 },
@@ -10,3 +10,4 @@ export const messageQueue = new Queue('ziradesk-messages', {
 });
 
 export { knowledgeIndexQueue } from './knowledge-index.job.js';
+

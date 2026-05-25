@@ -7,7 +7,7 @@ import { createTestApp, createTestJWT } from '../../test/setup.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
 
-type TenantRole = 'owner' | 'admin' | 'supervisor' | 'agent' | 'viewer';
+type TenantRole = 'owner' | 'admin' | 'agent' | 'viewer';
 
 interface TenantUser {
   id: string;

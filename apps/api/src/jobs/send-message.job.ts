@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
@@ -576,7 +576,7 @@ const worker = new Worker<SendMessageJob>(
       }
     }
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 worker.on('failed', (job, err) => {
@@ -592,3 +592,4 @@ worker.on('completed', (job) => {
 });
 
 export { worker };
+
