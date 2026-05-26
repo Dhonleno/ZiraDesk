@@ -606,5 +606,10 @@
   "agentFilter": "Filtro por agente",
   "clear": "Limpar",
   "newBadge": "Novo",
-  "now": "agora"
+  "now": "agora",
+  "pii": {
+    "reveal": "Revelar",
+    "hide": "Ocultar dados",
+    "revealing": "Revelando..."
+  }
 }

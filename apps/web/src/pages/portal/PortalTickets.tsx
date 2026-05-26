@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { portalApi, type TicketStatus } from '../../services/api';
 
-const tabs: Array<{ key: TicketStatus | 'all'; label: string }> = [
-  { key: 'all', label: 'Todos' },
-  { key: 'open', label: 'Abertos' },
-  { key: 'in_progress', label: 'Em andamento' },
-  { key: 'resolved', label: 'Resolvidos' },
+const tabs: Array<{ key: TicketStatus | 'all' }> = [
+  { key: 'all' },
+  { key: 'open' },
+  { key: 'in_progress' },
+  { key: 'resolved' },
 ];
 
 export function PortalTickets() {
+  const { t, i18n } = useTranslation('portal');
   const [status, setStatus] = useState<TicketStatus | 'all'>('all');
 
   const { data: result } = useQuery({
@@ -24,11 +26,11 @@ export function PortalTickets() {
     <div className="portal-section">
       <div className="portal-page-header">
         <div>
-          <h2>Meus Tickets</h2>
-          <p>Acompanhe o andamento dos chamados</p>
+          <h2>{t('ticket.pageTitle')}</h2>
+          <p>{t('ticket.pageSubtitle')}</p>
         </div>
         <Link to="/portal/tickets/new" className="portal-btn-primary portal-btn-inline">
-          + Novo ticket
+          {t('dashboard.newTicket')}
         </Link>
       </div>
 
@@ -40,7 +42,7 @@ export function PortalTickets() {
             className={status === tab.key ? 'active' : ''}
             onClick={() => setStatus(tab.key)}
           >
-            {tab.label}
+            {t(`ticket.tabs.${tab.key}`, { defaultValue: tab.key })}
           </button>
         ))}
       </div>
@@ -51,13 +53,15 @@ export function PortalTickets() {
             <div>
               <div className="portal-ticket-title">{ticket.title}</div>
               <div className="portal-ticket-meta">
-                {ticket.type_icon ?? '🎫'} {ticket.type_name ?? 'Ticket'} · {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
+                {ticket.type_name ?? t('ticket.typeFallback')} · {new Date(ticket.created_at).toLocaleDateString(i18n.language)}
               </div>
             </div>
-            <span className={`portal-status portal-status-${ticket.status}`}>{ticket.status}</span>
+            <span className={`portal-status portal-status-${ticket.status}`}>
+              {t(`ticket.status.${ticket.status}`, { defaultValue: ticket.status })}
+            </span>
           </Link>
         ))}
-        {tickets.length === 0 ? <p className="portal-empty">Nenhum ticket para o filtro selecionado</p> : null}
+        {tickets.length === 0 ? <p className="portal-empty">{t('ticket.emptyFiltered')}</p> : null}
       </div>
     </div>
   );

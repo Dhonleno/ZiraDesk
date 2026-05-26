@@ -61,6 +61,50 @@ export interface TenantUser {
   status: string;
   last_seen_at: string | null;
   created_at: string;
+  lgpd_consent_status?: 'pending' | 'granted' | 'denied' | 'revoked' | string;
+  lgpd_consent_at?: string | null;
+  lgpd_consent_source?: string | null;
+  lgpd_last_export_at?: string | null;
+  lgpd_anonymized_at?: string | null;
+  lgpd_anonymization_reason?: string | null;
+}
+
+export interface UserLgpdRequest {
+  id: string;
+  user_id: string | null;
+  user_name?: string | null;
+  subject_type: string;
+  request_type: 'access' | 'consent_update' | 'anonymization' | string;
+  status: string;
+  requested_by: string | null;
+  requested_by_name?: string | null;
+  processed_by: string | null;
+  processed_by_name?: string | null;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface UserLgpdExportPayload {
+  generated_at: string;
+  request_id: string;
+  user: TenantUser;
+  tickets: Array<Record<string, unknown>>;
+  conversations: Array<Record<string, unknown>>;
+  audit_logs: Array<Record<string, unknown>>;
+  lgpd_requests: UserLgpdRequest[];
+}
+
+export interface ProfileLgpdState {
+  consent: {
+    status: string;
+    updated_at: string | null;
+    source: string | null;
+    last_export_at: string | null;
+    anonymized_at: string | null;
+  };
+  requests: UserLgpdRequest[];
 }
 
 interface Channel {
@@ -679,6 +723,9 @@ export interface LgpdRequest {
   id: string;
   contact_id: string | null;
   contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_document?: string | null;
   request_type: 'access' | 'consent_update' | 'anonymization' | string;
   status: string;
   requested_by: string | null;
@@ -795,6 +842,10 @@ export const organizationsApi = {
     const res = await api.get(`/crm/organizations/${id}/tickets`);
     return res.data;
   },
+  revealPii: async (id: string): Promise<CrmOrganization> => {
+    const res = await api.post<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}/pii/reveal`);
+    return res.data.data;
+  },
 };
 
 export const contactsApi = {
@@ -832,7 +883,7 @@ export const contactsApi = {
     page?: number;
     per_page?: number;
     contact_id?: string;
-    request_type?: 'access' | 'consent_update' | 'anonymization';
+    request_type?: 'access' | 'consent_update' | 'anonymization' | 'rectification';
     status?: string;
   }): Promise<{ data: LgpdRequest[]; meta: CrmListMeta }> => {
     const res = await api.get<{ success: boolean; data: LgpdRequest[]; meta: CrmListMeta }>(
@@ -875,6 +926,19 @@ export const contactsApi = {
     }>(`/crm/contacts/${id}/lgpd/anonymize`, payload);
     return res.data.data;
   },
+  approveLgpdRequest: async (id: string): Promise<{ id: string; status: string; contact: CrmContact }> => {
+    const res = await api.post<{ success: boolean; data: { id: string; status: string; contact: CrmContact } }>(
+      `/crm/contacts/lgpd/requests/${id}/approve`,
+    );
+    return res.data.data;
+  },
+  rejectLgpdRequest: async (id: string, payload: { reason: string }): Promise<{ id: string; status: string }> => {
+    const res = await api.post<{ success: boolean; data: { id: string; status: string } }>(
+      `/crm/contacts/lgpd/requests/${id}/reject`,
+      payload,
+    );
+    return res.data.data;
+  },
   portalAccess: {
     create: async (contactId: string): Promise<{
       temp_password: string;
@@ -893,6 +957,10 @@ export const contactsApi = {
       );
       return res.data.data;
     },
+  },
+  revealPii: async (contactId: string): Promise<CrmContact> => {
+    const res = await api.post<{ success: boolean; data: CrmContact }>(`/crm/contacts/${contactId}/pii/reveal`);
+    return res.data.data;
   },
 };
 
@@ -1129,6 +1197,128 @@ export const adminApi = {
   resetUserPassword: async (id: string) => {
     const res = await api.post<{ success: boolean; data: { tempPassword: string } }>(`/admin/users/${id}/reset-password`);
     return res.data;
+  },
+
+  listUserLgpdRequests: async (params?: {
+    page?: number; per_page?: number; user_id?: string;
+    request_type?: string; status?: string;
+  }): Promise<{ data: UserLgpdRequest[]; meta: { total: number; page: number; per_page: number; total_pages: number } }> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdRequest[]; meta: { total: number; page: number; per_page: number; total_pages: number } }>(
+      '/admin/users/lgpd/requests',
+      { params },
+    );
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  updateUserLgpdConsent: async (id: string, payload: { status: string; source?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      `/admin/users/${id}/lgpd/consent`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  exportUserLgpdData: async (id: string, params?: { include_audit_logs?: boolean }): Promise<UserLgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdExportPayload }>(
+      `/admin/users/${id}/lgpd/export`,
+      { params },
+    );
+    return res.data.data;
+  },
+
+  anonymizeUserLgpd: async (id: string, payload: { reason?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.post<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      `/admin/users/${id}/lgpd/anonymize`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  anonymizeByExternalId: async (payload: {
+    external_id: string;
+    reason: string;
+  }): Promise<{ request_id: string; summary: { conversations_anonymized: number; messages_redacted: number } }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { request_id: string; summary: { conversations_anonymized: number; messages_redacted: number } };
+    }>('/admin/omnichannel/conversations/anonymize-by-external-id', payload);
+    return res.data.data;
+  },
+
+  listExternalLgpdRequests: async (params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+  }): Promise<{
+    data: Array<{
+      id: string;
+      subject_type: string;
+      request_type: string;
+      status: string;
+      requested_by: string | null;
+      requested_by_name: string | null;
+      payload: Record<string, unknown>;
+      result: Record<string, unknown>;
+      requested_at: string;
+      processed_at: string | null;
+    }>;
+    meta: { total: number; page: number; per_page: number; total_pages: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: Array<{
+        id: string;
+        subject_type: string;
+        request_type: string;
+        status: string;
+        requested_by: string | null;
+        requested_by_name: string | null;
+        payload: Record<string, unknown>;
+        result: Record<string, unknown>;
+        requested_at: string;
+        processed_at: string | null;
+      }>;
+      meta: { total: number; page: number; per_page: number; total_pages: number };
+    }>('/admin/omnichannel/conversations/external-requests', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  getLgpdDashboard: async (): Promise<{
+    total_pending: number;
+    expiring_7d: number;
+    expiring_24h: number;
+    breached: number;
+    oldest_pending: Array<{
+      id: string;
+      subject_type: string;
+      request_type: string;
+      status: string;
+      requested_at: string;
+      sla_deadline: string | null;
+      subject_label: string;
+    }>;
+  }> => {
+    const res = await api.get<{ success: boolean; data: {
+      total_pending: number;
+      expiring_7d: number;
+      expiring_24h: number;
+      breached: number;
+      oldest_pending: Array<{
+        id: string;
+        subject_type: string;
+        request_type: string;
+        status: string;
+        requested_at: string;
+        sla_deadline: string | null;
+        subject_label: string;
+      }>;
+    } }>('/admin/lgpd/dashboard');
+    return res.data.data;
+  },
+
+  processLgpdRequest: async (id: string, payload: { action: 'approve' | 'reject'; notes?: string | undefined }): Promise<{ id: string; status: string }> => {
+    const res = await api.patch<{ success: boolean; data: { id: string; status: string } }>(`/admin/lgpd/requests/${id}`, payload);
+    return res.data.data;
   },
 
   listChannels: async (): Promise<Channel[]> => {
@@ -1628,6 +1818,49 @@ export const adminApi = {
         return res.data.data;
       },
     },
+  },
+};
+
+interface TenantLgpdMetrics {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  counts: { total: number; pending: number; processed: number; rejected: number; breached: number; near_sla: number };
+  avg_response_hours: number | null;
+  breached_requests: Array<{
+    id: string;
+    subject_type: string;
+    request_type: string;
+    requested_at: string;
+    sla_deadline: string | null;
+    days_overdue: number;
+  }>;
+}
+
+export const superAdminApi = {
+  getLgpdMetrics: async (): Promise<{
+    tenants: TenantLgpdMetrics[];
+    summary: {
+      total_tenants: number;
+      tenants_with_pending: number;
+      tenants_with_breaches: number;
+      global_pending: number;
+      global_breached: number;
+      global_near_sla: number;
+    };
+  }> => {
+    const res = await api.get<{ success: boolean; data: {
+      tenants: TenantLgpdMetrics[];
+      summary: {
+        total_tenants: number;
+        tenants_with_pending: number;
+        tenants_with_breaches: number;
+        global_pending: number;
+        global_breached: number;
+        global_near_sla: number;
+      };
+    } }>('/super-admin/metrics/lgpd');
+    return res.data.data;
   },
 };
 
@@ -2808,6 +3041,32 @@ export const profileApi = {
     const res = await api.post<{ success: boolean; data: { avatar_url: string } }>('/auth/me/avatar', form);
     return res.data.data;
   },
+
+  getLgpdState: async (): Promise<ProfileLgpdState> => {
+    const res = await api.get<{ success: boolean; data: ProfileLgpdState }>('/auth/me/lgpd');
+    return res.data.data;
+  },
+
+  updateLgpdConsent: async (payload: { status: string; source?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      '/auth/me/lgpd/consent',
+      payload,
+    );
+    return res.data.data;
+  },
+
+  exportLgpdData: async (params?: { include_audit_logs?: boolean }): Promise<UserLgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdExportPayload }>(
+      '/auth/me/lgpd/export',
+      { params },
+    );
+    return res.data.data;
+  },
+
+  createAnonymizeRequest: async (payload: { reason?: string }): Promise<UserLgpdRequest> => {
+    const res = await api.post<{ success: boolean; data: UserLgpdRequest }>('/auth/me/lgpd/anonymize-request', payload);
+    return res.data.data;
+  },
 };
 
 export const searchApi = {
@@ -3154,6 +3413,40 @@ export interface PortalTicketDetail extends PortalTicket {
   comments: PortalTicketComment[];
 }
 
+export type PortalLgpdConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked';
+export type PortalLgpdRequestType = 'access' | 'anonymization' | 'consent_update' | 'rectification';
+export type PortalLgpdRequestStatus = 'pending' | 'processed' | 'rejected';
+
+export interface PortalLgpdRequest {
+  id: string;
+  request_type: PortalLgpdRequestType | string;
+  status: PortalLgpdRequestStatus | string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface PortalLgpdState {
+  consent: {
+    status: PortalLgpdConsentStatus | string;
+    at: string | null;
+    source: string | null;
+    last_export_at: string | null;
+    anonymized_at: string | null;
+    anonymization_reason: string | null;
+  };
+  requests: PortalLgpdRequest[];
+}
+
+export interface LegalDpoInfo {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  privacyPolicyUrl: string | null;
+  termsUrl: string | null;
+}
+
 function resolvePortalTenantSlug(): string {
   if (typeof window === 'undefined') return 'demo';
   const host = window.location.hostname.toLowerCase();
@@ -3162,6 +3455,11 @@ function resolvePortalTenantSlug(): string {
   if (host === 'localhost' || host === '127.0.0.1') return 'demo';
   return 'demo';
 }
+
+const legalHttp = axios.create({
+  baseURL: '/api/legal',
+  withCredentials: false,
+});
 
 const portalHttp = axios.create({
   baseURL: '/api/portal',
@@ -3244,5 +3542,79 @@ export const portalApi = {
 
   addComment: async (ticketId: string, content: string): Promise<void> => {
     await portalHttp.post(`/tickets/${ticketId}/comments`, { content }, withPortalAuth());
+  },
+
+  getLgpdState: async (): Promise<PortalLgpdState> => {
+    const res = await portalHttp.get<{ success: boolean; data: PortalLgpdState }>('/lgpd', withPortalAuth());
+    return res.data.data;
+  },
+
+  updateLgpdConsent: async (payload: { status: PortalLgpdConsentStatus; source?: string }): Promise<{
+    status: PortalLgpdConsentStatus | string;
+    consent_at: string | null;
+    source: string | null;
+    request_id: string;
+  }> => {
+    const res = await portalHttp.patch<{
+      success: boolean;
+      data: {
+        status: PortalLgpdConsentStatus | string;
+        consent_at: string | null;
+        source: string | null;
+        request_id: string;
+      };
+    }>('/lgpd/consent', payload, withPortalAuth());
+    return res.data.data;
+  },
+
+  createLgpdRequest: async (payload: {
+    request_type: Extract<PortalLgpdRequestType, 'access' | 'anonymization'>;
+    reason?: string;
+    include_messages?: boolean;
+  }): Promise<{
+    id: string;
+    request_type: PortalLgpdRequestType | string;
+    status: PortalLgpdRequestStatus | string;
+    requested_at: string;
+  }> => {
+    const res = await portalHttp.post<{
+      success: boolean;
+      data: {
+        id: string;
+        request_type: PortalLgpdRequestType | string;
+        status: PortalLgpdRequestStatus | string;
+        requested_at: string;
+      };
+    }>('/lgpd/requests', payload, withPortalAuth());
+    return res.data.data;
+  },
+  requestContactDataRectification: async (payload: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    document?: string;
+  }): Promise<{
+    id: string;
+    request_type: PortalLgpdRequestType | string;
+    status: PortalLgpdRequestStatus | string;
+    requested_at: string;
+  }> => {
+    const res = await portalHttp.patch<{
+      success: boolean;
+      data: {
+        id: string;
+        request_type: PortalLgpdRequestType | string;
+        status: PortalLgpdRequestStatus | string;
+        requested_at: string;
+      };
+    }>('/lgpd/contact-data', payload, withPortalAuth());
+    return res.data.data;
+  },
+};
+
+export const legalApi = {
+  getDpo: async (): Promise<LegalDpoInfo> => {
+    const res = await legalHttp.get<LegalDpoInfo>('/dpo');
+    return res.data;
   },
 };

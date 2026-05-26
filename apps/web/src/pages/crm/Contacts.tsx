@@ -16,6 +16,7 @@ import { CrmSearchField } from '../../components/crm/CrmSearchField';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
+import { maskEmail, maskPhone } from '../../utils/pii-mask';
 
 export function ContactsPage() {
   const { t } = useTranslation('crm');
@@ -229,7 +230,7 @@ export function ContactsPage() {
                         {contact.name}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {contact.email ?? contact.whatsapp ?? t('contacts.standalone_badge')}
+                        {maskEmail(contact.email) ?? maskPhone(contact.whatsapp) ?? t('contacts.standalone_badge')}
                       </div>
                     </div>
                   </button>

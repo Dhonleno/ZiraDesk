@@ -23,5 +23,11 @@
     "newMessage": "New message",
     "open": "Open",
     "now": "now"
+  },
+  "pii": {
+    "noPermission": "You don't have permission to reveal sensitive data",
+    "maskedHint": "Masked data — click the eye to reveal",
+    "revealTimeRemaining": "Visible for {{seconds}}s",
+    "revealed": "Revealed"
   }
 }

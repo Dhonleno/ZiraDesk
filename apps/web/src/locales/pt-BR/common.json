@@ -23,5 +23,11 @@
     "newMessage": "Nova mensagem",
     "open": "Abrir",
     "now": "agora"
+  },
+  "pii": {
+    "noPermission": "Você não tem permissão para revelar dados sensíveis",
+    "maskedHint": "Dados mascarados — clique no olho para revelar",
+    "revealTimeRemaining": "Visível por {{seconds}}s",
+    "revealed": "Revelado"
   }
 }

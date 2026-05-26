@@ -10,6 +10,7 @@ import { NotificationCenter } from '../components/ui/NotificationCenter';
 import { FloatingChatBubble } from '../components/ui/FloatingChatBubble';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
 import { BrandLogo } from '../components/layout/BrandLogo';
+import { LegalDpoLink } from '../components/legal/LegalDpoLink';
 import { useAgentStatus } from '../hooks/useAgentStatus';
 import { PauseModal } from '../components/omnichannel/PauseModal';
 import { usePermission } from '../hooks/usePermission';
@@ -1067,7 +1068,14 @@ export function TenantLayout() {
 
         {/* Content area */}
         <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Outlet />
+          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+            <Outlet />
+          </div>
+          <footer className="app-legal-footer">
+            <span>Powered by ZiraDesk</span>
+            <span className="app-legal-footer-separator" aria-hidden>•</span>
+            <LegalDpoLink />
+          </footer>
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />

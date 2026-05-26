@@ -1,0 +1,10 @@
+{
+  "dpo": {
+    "title": "Encarregado de Dados",
+    "email": "E-mail",
+    "phone": "Telefone",
+    "contact": "Contato"
+  },
+  "privacyPolicy": "Política de Privacidade",
+  "termsOfService": "Termos de Serviço"
+}

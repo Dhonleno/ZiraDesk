@@ -606,5 +606,10 @@
   "agentFilter": "Agent filter",
   "clear": "Clear",
   "newBadge": "New",
-  "now": "just now"
+  "now": "just now",
+  "pii": {
+    "reveal": "Reveal",
+    "hide": "Hide data",
+    "revealing": "Revealing..."
+  }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -17,6 +17,8 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import { PiiReveal } from '../common/PiiReveal';
+import { maskEmail, maskPhone, maskDocument } from '../../utils/pii-mask';
 
 type Tab = 'data' | 'contacts' | 'conversations' | 'tickets' | 'notes';
 
@@ -64,6 +66,15 @@ function relativeDateLabel(dateStr: string | null | undefined, locale: string, t
   const days = Math.floor(hrs / 24);
   if (days < 7) return t('organizations.time.daysAgo', { count: days });
   return new Date(dateStr).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+}
+
+function PiiField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 12 }}>{children}</span>
+    </div>
+  );
 }
 
 function KV({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
@@ -351,7 +362,9 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                 <OrgStatusBadge status={org.status} label={statusLabels[org.status] ?? org.status} />
               </div>
               {org.document && (
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--txt-3)', marginBottom: 6 }}>{org.document}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--txt-3)', marginBottom: 6 }}>
+                  <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskDocument(org.document ?? null)} fullValue={org.document ?? null} />
+                </div>
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
@@ -423,10 +436,16 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
               <div>
                 <SectionTitle>{t('organizations.sections.generalInfo')}</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-                  <KV label={t('organizations.fields.email')}   value={org.email} />
-                  <KV label={t('organizations.fields.phone')}   value={org.phone} mono />
+                  <PiiField label={t('organizations.fields.email')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskEmail(org.email ?? null)} fullValue={org.email ?? null} />
+                  </PiiField>
+                  <PiiField label={t('organizations.fields.phone')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskPhone(org.phone ?? null)} fullValue={org.phone ?? null} />
+                  </PiiField>
                   <KV label={t('organizations.fields.website')} value={org.website} />
-                  <KV label={t('organizations.fields.document')} value={org.document} mono />
+                  <PiiField label={t('organizations.fields.document')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskDocument(org.document ?? null)} fullValue={org.document ?? null} />
+                  </PiiField>
                 </div>
               </div>
               <div>

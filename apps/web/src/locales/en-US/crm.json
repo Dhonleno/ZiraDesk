@@ -273,5 +273,10 @@
       "submit": "Link",
       "submitting": "Linking..."
     }
+  },
+  "pii": {
+    "reveal": "Reveal data",
+    "hide": "Hide data",
+    "revealing": "Revealing..."
   }
 }

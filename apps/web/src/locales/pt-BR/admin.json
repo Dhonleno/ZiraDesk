@@ -777,7 +777,9 @@
     "requestTypes": {
       "access": "Acesso",
       "consent_update": "Atualização de consentimento",
-      "anonymization": "Anonimização"
+      "anonymization": "Anonimização",
+      "rectification": "Retificação",
+      "external_anonymization": "Anonimização externa"
     },
     "messages": {
       "consentUpdated": "Consentimento atualizado",
@@ -813,7 +815,160 @@
         "contact": "Contato",
         "type": "Tipo",
         "status": "Status",
+        "by": "Solicitado por",
+        "actions": "Ações"
+      },
+      "showDiff": "Ver diff",
+      "hideDiff": "Ocultar diff",
+      "noDiff": "Sem diferenças detectadas para os campos informados.",
+      "approve": "Aprovar",
+      "reject": "Rejeitar",
+      "rejectReasonPrompt": "Informe o motivo da rejeição",
+      "rejectReasonRequired": "Informe o motivo para rejeitar a solicitação"
+    },
+    "rectification": {
+      "fields": {
+        "name": "Nome",
+        "email": "E-mail",
+        "phone": "Telefone",
+        "document": "Documento"
+      }
+    },
+    "rejectModal": {
+      "title": "Rejeitar solicitação",
+      "reasonLabel": "Motivo da rejeição",
+      "reasonPlaceholder": "Descreva o motivo pelo qual a solicitação está sendo rejeitada...",
+      "minCharsError": "O motivo deve ter pelo menos 10 caracteres.",
+      "cancelButton": "Cancelar",
+      "confirmButton": "Confirmar rejeição"
+    },
+    "tabs": {
+      "contacts": "Contatos",
+      "users": "Usuários",
+      "external": "Solicitações Externas"
+    },
+    "external": {
+      "formTitle": "Anonimizar por identificador externo",
+      "formSubtitle": "Use quando o titular nunca foi cadastrado como contato. O número WhatsApp (external_id) e o conteúdo das mensagens serão anonimizados.",
+      "externalIdPlaceholder": "Número WhatsApp (ex: +5511999999999)",
+      "reasonPlaceholder": "Motivo da anonimização",
+      "submitBtn": "Anonimizar",
+      "processing": "Processando...",
+      "confirmAnonymize": "Anonimizar todas as conversas e mensagens de {{id}}? Esta ação não pode ser desfeita.",
+      "anonymized": "{{conversations}} conversa(s) e {{messages}} mensagem(ns) anonimizadas com sucesso.",
+      "listTitle": "Histórico de solicitações externas",
+      "listSubtitle": "Pedidos de anonimização de titulares sem cadastro como contato.",
+      "empty": "Nenhuma solicitação externa encontrada",
+      "total": "{{count}} solicitação(ões)",
+      "filter": {
+        "all": "Todos",
+        "pending": "Pendentes",
+        "processed": "Processados",
+        "rejected": "Rejeitados"
+      },
+      "columns": {
+        "result": "Resultado"
+      },
+      "resultSummary": "{{conversations}} conv., {{messages}} msg."
+    },
+    "users": {
+      "title": "Usuários e consentimento",
+      "subtitle": "Ajuste o status de consentimento e execute ações LGPD sobre usuários do tenant.",
+      "searchPlaceholder": "Buscar usuário por nome ou e-mail...",
+      "apply": "Atualizar",
+      "total": "{{count}} usuário(s)",
+      "columns": {
+        "name": "Usuário",
+        "email": "E-mail",
+        "role": "Perfil",
+        "consent": "Consentimento",
+        "updatedAt": "Atualizado em",
+        "actions": "Ações"
+      }
+    },
+    "userRequests": {
+      "title": "Solicitações de usuários",
+      "subtitle": "Histórico recente de solicitações LGPD de usuários do tenant.",
+      "columns": {
+        "when": "Data",
+        "user": "Usuário",
+        "type": "Tipo",
+        "status": "Status",
         "by": "Solicitado por"
+      }
+    },
+    "messages": {
+      "userConsentUpdated": "Consentimento do usuário atualizado",
+      "userExportDone": "Exportação gerada com sucesso",
+      "userAnonymized": "Usuário anonimizado com sucesso",
+      "requestApproved": "Solicitação aprovada com sucesso",
+      "requestRejected": "Solicitação rejeitada"
+    },
+    "confirmAnonymizeUser": "Deseja anonimizar o usuário {{name}}? Esta ação não pode ser desfeita.",
+    "anonymizeUserReasonPrompt": "Informe o motivo da anonimização do usuário",
+    "dashboard": {
+      "title": "Status LGPD",
+      "pending": "Pendentes",
+      "expiring7d": "Vence em 7 dias",
+      "expiring24h": "Vence em 24h",
+      "breached": "SLA expirado",
+      "oldestPending": "Solicitações mais antigas pendentes",
+      "noOldestPending": "Nenhuma solicitação pendente",
+      "slaDeadline": "Prazo",
+      "process": "Processar"
+    },
+    "processModal": {
+      "title": "Processar solicitação LGPD",
+      "subtitle": "Informe a ação e observações antes de concluir.",
+      "action": "Ação",
+      "approve": "Aprovar",
+      "reject": "Rejeitar",
+      "notes": "Observações",
+      "notesPlaceholder": "Descreva o que foi feito ou o motivo...",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar",
+      "processing": "Processando..."
+    },
+    "privacy": {
+      "title": "Privacidade e LGPD",
+      "subtitle": "Gerencie seu consentimento e solicite ações sobre seus dados pessoais.",
+      "consent": {
+        "title": "Consentimento",
+        "help": "Seu consentimento para processamento dos dados pessoais cadastrados nesta plataforma.",
+        "statusLabel": "Status do consentimento",
+        "save": "Salvar",
+        "updatedAt": "Atualizado em",
+        "source": "Origem",
+        "lastExport": "Última exportação"
+      },
+      "request": {
+        "title": "Solicitar ação sobre meus dados",
+        "help": "Solicite acesso ou anonimização dos seus dados. A solicitação será processada pelo administrador.",
+        "type": "Tipo de solicitação",
+        "reason": "Motivo (opcional)",
+        "reasonPlaceholder": "Descreva o motivo da sua solicitação...",
+        "submit": "Enviar solicitação",
+        "types": {
+          "access": "Acesso aos meus dados",
+          "anonymization": "Anonimização dos meus dados"
+        }
+      },
+      "export": {
+        "title": "Exportar meus dados",
+        "help": "Baixe um arquivo JSON com todos os seus dados pessoais cadastrados.",
+        "button": "Exportar meus dados"
+      },
+      "history": {
+        "title": "Histórico de solicitações",
+        "requestedAt": "Solicitado em",
+        "empty": "Nenhuma solicitação encontrada"
+      },
+      "messages": {
+        "consentSaved": "Consentimento salvo com sucesso",
+        "consentError": "Erro ao salvar consentimento",
+        "requestCreated": "Solicitação enviada com sucesso",
+        "requestError": "Erro ao enviar solicitação",
+        "exportDone": "Exportação gerada com sucesso"
       }
     }
   },

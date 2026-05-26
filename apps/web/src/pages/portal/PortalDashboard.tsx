@@ -5,7 +5,7 @@ import { portalApi } from '../../services/api';
 import { usePortalUser } from '../../hooks/usePortalUser';
 
 export function PortalDashboard() {
-  const { t } = useTranslation('portal');
+  const { t, i18n } = useTranslation('portal');
   const user = usePortalUser();
 
   const { data: ticketsResult } = useQuery({
@@ -22,7 +22,7 @@ export function PortalDashboard() {
     <div className="portal-dashboard">
       <div className="portal-page-header">
         <div>
-          <h2>{t('dashboard.greeting', { name: user?.name ?? 'Cliente' })}</h2>
+          <h2>{t('dashboard.greeting', { name: user?.name ?? t('dashboard.customerFallback') })}</h2>
           <p>{t('dashboard.subtitle')}</p>
         </div>
         <Link to="/portal/tickets/new" className="portal-btn-primary portal-btn-inline">
@@ -53,13 +53,25 @@ export function PortalDashboard() {
               <div>
                 <div className="portal-ticket-title">{ticket.title}</div>
                 <div className="portal-ticket-meta">
-                  {ticket.type_icon ?? '🎫'} {ticket.type_name ?? 'Ticket'} · {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
+                  {ticket.type_name ?? t('ticket.typeFallback')} · {new Date(ticket.created_at).toLocaleDateString(i18n.language)}
                 </div>
               </div>
-              <span className={`portal-status portal-status-${ticket.status}`}>{ticket.status}</span>
+              <span className={`portal-status portal-status-${ticket.status}`}>
+                {t(`ticket.status.${ticket.status}`, { defaultValue: ticket.status })}
+              </span>
             </Link>
           ))}
-          {tickets.length === 0 ? <p className="portal-empty">Nenhum ticket encontrado</p> : null}
+          {tickets.length === 0 ? (
+            <div className="portal-empty-state">
+              <div className="portal-empty-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 7h16M6 7l1 12h10l1-12M9 7V5h6v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </div>
+              <p className="portal-empty-title">{t('dashboard.emptyTitle')}</p>
+              <p className="portal-empty-subtitle">{t('dashboard.emptySubtitle')}</p>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

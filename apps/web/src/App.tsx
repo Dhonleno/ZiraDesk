@@ -46,6 +46,7 @@ import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Upgrade } from './pages/settings/Upgrade';
 import { ProfilePage } from './pages/profile/Profile';
+import { Privacy as ProfilePrivacy } from './pages/profile/Privacy';
 import { NotFound } from './pages/NotFound';
 import { PortalGuard } from './components/portal/PortalGuard';
 import { PortalLogin } from './pages/portal/PortalLogin';
@@ -53,6 +54,7 @@ import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { PortalTickets } from './pages/portal/PortalTickets';
 import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
 import { PortalCreateTicket } from './pages/portal/PortalCreateTicket';
+import { PortalLgpd } from './pages/portal/PortalLgpd';
 import { TVDashboard } from './pages/tv/TVDashboard';
 import { ProtectedRoute } from './router/ProtectedRoute';
 
@@ -93,6 +95,7 @@ export function App() {
             <Route path="tickets" element={<PortalGuard><PortalTickets /></PortalGuard>} />
             <Route path="tickets/:id" element={<PortalGuard><PortalTicketDetail /></PortalGuard>} />
             <Route path="tickets/new" element={<PortalGuard><PortalCreateTicket /></PortalGuard>} />
+            <Route path="privacy" element={<PortalGuard><PortalLgpd /></PortalGuard>} />
           </Route>
 
           {/* Rotas públicas de autenticação */}
@@ -187,6 +190,7 @@ export function App() {
             <Route path="tickets/new" element={<CreateTicket />} />
             <Route path="tickets/:id" element={<TicketDetailPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile/privacy" element={<ProfilePrivacy />} />
             <Route
               path="admin"
               element={(

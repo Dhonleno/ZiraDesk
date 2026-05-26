@@ -273,5 +273,10 @@
       "submit": "Vincular",
       "submitting": "Vinculando..."
     }
+  },
+  "pii": {
+    "reveal": "Revelar dados",
+    "hide": "Ocultar dados",
+    "revealing": "Revelando..."
   }
 }

@@ -1,5 +1,11 @@
 {
   "title": "Centro de Soporte",
+  "nav": {
+    "ariaLabel": "Navegación del centro de soporte",
+    "dashboard": "Panel",
+    "tickets": "Tickets",
+    "privacy": "Privacidad"
+  },
   "login": {
     "title": "Centro de Soporte",
     "subtitle": "Accede para seguir tus tickets",
@@ -9,10 +15,13 @@
     "loading": "Entrando..."
   },
   "dashboard": {
-    "greeting": "Hola, {{name}}! 👋",
+    "greeting": "Hola, {{name}}.",
+    "customerFallback": "Cliente",
     "subtitle": "Sigue tus tickets de soporte",
     "newTicket": "+ Nuevo ticket",
-    "recent": "Tickets recientes"
+    "recent": "Tickets recientes",
+    "emptyTitle": "No hay tickets recientes",
+    "emptySubtitle": "Crea un nuevo ticket para iniciar tu solicitud de soporte."
   },
   "stats": {
     "open": "Abiertos",
@@ -20,13 +29,62 @@
     "resolved": "Resueltos"
   },
   "ticket": {
+    "pageTitle": "Mis tickets",
+    "pageSubtitle": "Sigue el avance de tus solicitudes",
+    "tabs": {
+      "all": "Todos",
+      "open": "Abiertos",
+      "in_progress": "En progreso",
+      "resolved": "Resueltos"
+    },
+    "emptyFiltered": "No hay tickets para el filtro seleccionado",
     "new": "Nuevo ticket",
+    "createTitle": "Nuevo ticket",
+    "titlePlaceholder": "Resumen del problema",
     "title": "Título",
+    "typePlaceholder": "Selecciona el tipo",
+    "typeFallback": "Ticket",
     "type": "Tipo",
     "description": "Descripción",
+    "descriptionPlaceholder": "Describe lo que está ocurriendo",
+    "descriptionTitle": "Descripción",
+    "noDescription": "Sin descripción",
+    "commentsTitle": "Comentarios",
+    "commentPlaceholder": "Agregar comentario",
+    "commenterFallback": "Equipo",
+    "backToTickets": "Volver a tickets",
+    "loading": "Cargando ticket...",
+    "details": {
+      "type": "Tipo",
+      "priority": "Prioridad",
+      "assignee": "Responsable",
+      "createdAt": "Apertura",
+      "assigneeFallback": "Sin asignar"
+    },
+    "status": {
+      "open": "Abierto",
+      "in_progress": "En progreso",
+      "waiting": "En espera",
+      "resolved": "Resuelto",
+      "closed": "Cerrado"
+    },
+    "priorityLabel": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "urgent": "Urgente"
+    },
     "submit": "Enviar ticket",
+    "submitLoading": "Enviando...",
     "addComment": "Agregar comentario",
-    "noComments": "Aún no hay comentarios"
+    "addCommentLoading": "Enviando comentario...",
+    "noComments": "Aún no hay comentarios",
+    "messages": {
+      "createSuccess": "Ticket creado con éxito",
+      "createError": "No fue posible crear el ticket",
+      "commentSuccess": "Comentario agregado",
+      "commentError": "No fue posible agregar el comentario"
+    }
   },
   "access": {
     "title": "Acceso al Portal",
@@ -37,5 +95,70 @@
     "created": "¡Acceso creado con éxito!",
     "emailRequired": "El contacto debe tener correo",
     "lastLogin": "Último acceso: {{date}}"
+  },
+  "lgpd": {
+    "title": "Privacidad y LGPD",
+    "subtitle": "Gestiona tu consentimiento y solicitudes de datos",
+    "messages": {
+      "consentSaved": "Consentimiento actualizado con éxito",
+      "consentError": "No fue posible actualizar el consentimiento",
+      "requestCreated": "Solicitud LGPD enviada con éxito",
+      "requestError": "No fue posible enviar la solicitud",
+      "rectificationCreated": "Solicitud de rectificación enviada con éxito",
+      "rectificationError": "No fue posible enviar la solicitud de rectificación",
+      "rectificationNoChanges": "Informa al menos un cambio antes de enviar"
+    },
+    "consent": {
+      "title": "Consentimiento",
+      "help": "Elige cómo se pueden tratar tus datos en nuestros canales de soporte.",
+      "statusLabel": "Estado del consentimiento",
+      "save": "Guardar consentimiento",
+      "updatedAt": "Actualizado en",
+      "source": "Origen",
+      "lastExport": "Última exportación",
+      "status": {
+        "pending": "Pendiente",
+        "granted": "Concedido",
+        "denied": "Denegado",
+        "revoked": "Revocado"
+      }
+    },
+    "request": {
+      "title": "Nueva solicitud",
+      "help": "Puedes solicitar acceso a tus datos o anonimización.",
+      "type": "Tipo de solicitud",
+      "reason": "Motivo (opcional)",
+      "reasonPlaceholder": "Describe detalles importantes para tu solicitud",
+      "includeMessages": "Incluir historial de mensajes",
+      "submit": "Enviar solicitud",
+      "types": {
+        "access": "Acceso a los datos",
+        "anonymization": "Anonimización de datos",
+        "consent_update": "Actualización de consentimiento",
+        "rectification": "Rectificación de datos"
+      }
+    },
+    "rectification": {
+      "title": "Corregir datos",
+      "help": "Solicita la corrección de tus datos registrados.",
+      "submit": "Solicitar corrección",
+      "warning": "La solicitud será analizada por el controlador en hasta 15 días",
+      "fields": {
+        "name": "Nombre",
+        "email": "Correo",
+        "phone": "Teléfono",
+        "document": "Documento"
+      }
+    },
+    "history": {
+      "title": "Historial de solicitudes",
+      "requestedAt": "Solicitado en",
+      "empty": "Aún no hay solicitudes LGPD registradas",
+      "status": {
+        "pending": "Pendiente",
+        "processed": "Procesado",
+        "rejected": "Rechazado"
+      }
+    }
   }
 }

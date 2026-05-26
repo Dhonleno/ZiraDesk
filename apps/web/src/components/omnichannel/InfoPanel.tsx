@@ -10,6 +10,8 @@ import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
 import { CallWidget } from './CallWidget';
 import { avatarClass } from '../../utils/avatar';
+import { PiiReveal } from '../common/PiiReveal';
+import { maskEmail, maskPhone } from '../../utils/pii-mask';
 
 interface Conversation {
   id: string;
@@ -152,6 +154,40 @@ function InfoField({
   );
 }
 
+function PiiInfoField({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 8,
+      padding: '7px 0', borderBottom: '1px solid var(--line)',
+    }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 7,
+        background: 'var(--bg-4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, color: 'var(--txt-3)',
+      }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--txt-3)', marginBottom: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </div>
+        <div style={{ fontSize: 12 }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   conversationId: string;
 }
@@ -287,7 +323,6 @@ export function InfoPanel({ conversationId }: Props) {
       : conv?.channel_type === 'whatsapp'
         ? contactPhone
         : conv?.channel_name;
-
   async function handleRemoveTag(tagId: string) {
     await conversationTags.removeFromConversation(conversationId, tagId);
     await refetchConvTags();
@@ -468,27 +503,27 @@ export function InfoPanel({ conversationId }: Props) {
                   </svg>
                 }
               />
-              <InfoField
+              <PiiInfoField
                 label={t('info.email')}
-                value={contactEmail}
-                empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                     <polyline points="22,6 12,13 2,6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 }
-              />
-              <InfoField
+              >
+                <PiiReveal entityType="contact" entityId={contactId ?? ''} maskedValue={maskEmail(contactEmail)} fullValue={contactEmail} />
+              </PiiInfoField>
+              <PiiInfoField
                 label={t('info.phone')}
-                value={contactPhone}
-                empty={t('info.notProvided')}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                     <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.22 1.18 2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 }
-              />
+              >
+                <PiiReveal entityType="contact" entityId={contactId ?? ''} maskedValue={maskPhone(contactPhone)} fullValue={contactPhone} />
+              </PiiInfoField>
 
               {contactPhone ? (
                 <div style={{ marginTop: 12 }}>
@@ -686,7 +721,7 @@ export function InfoPanel({ conversationId }: Props) {
 
               {conv && chBadge && currentChannelSub && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--txt-3)' }}>
-                  {t('info.currentChannel', { label: chBadge.label, sub: currentChannelSub })}
+                  {t('info.currentChannel', { label: chBadge.label, sub: conv?.channel_type === 'email' ? maskEmail(contactEmail) : conv?.channel_type === 'whatsapp' ? maskPhone(contactPhone) : currentChannelSub })}
                 </div>
               )}
 

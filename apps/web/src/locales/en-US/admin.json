@@ -766,7 +766,9 @@
     "requestTypes": {
       "access": "Access",
       "consent_update": "Consent update",
-      "anonymization": "Anonymization"
+      "anonymization": "Anonymization",
+      "rectification": "Rectification",
+      "external_anonymization": "External anonymization"
     },
     "messages": {
       "consentUpdated": "Consent updated",
@@ -795,14 +797,167 @@
       }
     },
     "requests": {
-      "title": "LGPD requests",
-      "subtitle": "Recent history of processed requests.",
+      "title": "Contact LGPD requests",
+      "subtitle": "Recent history of processed contact requests.",
       "columns": {
         "when": "Date",
         "contact": "Contact",
         "type": "Type",
         "status": "Status",
+        "by": "Requested by",
+        "actions": "Actions"
+      },
+      "showDiff": "Show diff",
+      "hideDiff": "Hide diff",
+      "noDiff": "No differences detected for the informed fields.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rejectReasonPrompt": "Provide the rejection reason",
+      "rejectReasonRequired": "Provide a reason to reject the request"
+    },
+    "rectification": {
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "document": "Document"
+      }
+    },
+    "rejectModal": {
+      "title": "Reject request",
+      "reasonLabel": "Rejection reason",
+      "reasonPlaceholder": "Describe why this request is being rejected...",
+      "minCharsError": "The reason must be at least 10 characters.",
+      "cancelButton": "Cancel",
+      "confirmButton": "Confirm rejection"
+    },
+    "tabs": {
+      "contacts": "Contacts",
+      "users": "Users",
+      "external": "External Requests"
+    },
+    "external": {
+      "formTitle": "Anonymize by external identifier",
+      "formSubtitle": "Use when the data subject was never registered as a contact. The WhatsApp number (external_id) and message content will be anonymized.",
+      "externalIdPlaceholder": "WhatsApp number (e.g. +5511999999999)",
+      "reasonPlaceholder": "Reason for anonymization",
+      "submitBtn": "Anonymize",
+      "processing": "Processing...",
+      "confirmAnonymize": "Anonymize all conversations and messages for {{id}}? This action cannot be undone.",
+      "anonymized": "{{conversations}} conversation(s) and {{messages}} message(s) anonymized successfully.",
+      "listTitle": "External request history",
+      "listSubtitle": "Anonymization requests from data subjects not registered as contacts.",
+      "empty": "No external requests found",
+      "total": "{{count}} request(s)",
+      "filter": {
+        "all": "All",
+        "pending": "Pending",
+        "processed": "Processed",
+        "rejected": "Rejected"
+      },
+      "columns": {
+        "result": "Result"
+      },
+      "resultSummary": "{{conversations}} conv., {{messages}} msg."
+    },
+    "users": {
+      "title": "Users and consent",
+      "subtitle": "Adjust consent status and execute LGPD actions on tenant users.",
+      "searchPlaceholder": "Search user by name or email...",
+      "apply": "Update",
+      "total": "{{count}} user(s)",
+      "columns": {
+        "name": "User",
+        "email": "Email",
+        "role": "Role",
+        "consent": "Consent",
+        "updatedAt": "Updated at",
+        "actions": "Actions"
+      }
+    },
+    "userRequests": {
+      "title": "User LGPD requests",
+      "subtitle": "Recent history of LGPD requests from tenant users.",
+      "columns": {
+        "when": "Date",
+        "user": "User",
+        "type": "Type",
+        "status": "Status",
         "by": "Requested by"
+      }
+    },
+    "messages": {
+      "userConsentUpdated": "User consent updated",
+      "userExportDone": "Export generated successfully",
+      "userAnonymized": "User anonymized successfully",
+      "requestApproved": "Request approved successfully",
+      "requestRejected": "Request rejected"
+    },
+    "confirmAnonymizeUser": "Anonymize user {{name}}? This action cannot be undone.",
+    "anonymizeUserReasonPrompt": "Provide an anonymization reason for this user",
+    "dashboard": {
+      "title": "LGPD Status",
+      "pending": "Pending",
+      "expiring7d": "Expires in 7 days",
+      "expiring24h": "Expires in 24h",
+      "breached": "SLA breached",
+      "oldestPending": "Oldest pending requests",
+      "noOldestPending": "No pending requests",
+      "slaDeadline": "Deadline",
+      "process": "Process"
+    },
+    "processModal": {
+      "title": "Process LGPD request",
+      "subtitle": "Select action and add notes before confirming.",
+      "action": "Action",
+      "approve": "Approve",
+      "reject": "Reject",
+      "notes": "Notes",
+      "notesPlaceholder": "Describe what was done or the reason...",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "processing": "Processing..."
+    },
+    "privacy": {
+      "title": "Privacy and LGPD",
+      "subtitle": "Manage your consent and request actions on your personal data.",
+      "consent": {
+        "title": "Consent",
+        "help": "Your consent for processing personal data registered on this platform.",
+        "statusLabel": "Consent status",
+        "save": "Save",
+        "updatedAt": "Updated at",
+        "source": "Source",
+        "lastExport": "Last export"
+      },
+      "request": {
+        "title": "Request an action on my data",
+        "help": "Request access or anonymization of your data. The request will be processed by the administrator.",
+        "type": "Request type",
+        "reason": "Reason (optional)",
+        "reasonPlaceholder": "Describe the reason for your request...",
+        "submit": "Submit request",
+        "types": {
+          "access": "Access my data",
+          "anonymization": "Anonymize my data"
+        }
+      },
+      "export": {
+        "title": "Export my data",
+        "help": "Download a JSON file with all your registered personal data.",
+        "button": "Export my data"
+      },
+      "history": {
+        "title": "Request history",
+        "requestedAt": "Requested at",
+        "empty": "No requests found"
+      },
+      "messages": {
+        "consentSaved": "Consent saved successfully",
+        "consentError": "Error saving consent",
+        "requestCreated": "Request submitted successfully",
+        "requestError": "Error submitting request",
+        "exportDone": "Export generated successfully"
       }
     }
   },
