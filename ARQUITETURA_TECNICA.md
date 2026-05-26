@@ -426,7 +426,7 @@ async function tenantMiddleware(request, reply) {
 ```sql
 -- Planos disponíveis
 CREATE TABLE plans (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name        VARCHAR(50) NOT NULL,        -- 'Starter', 'Pro', 'Enterprise'
   slug        VARCHAR(50) UNIQUE NOT NULL,
   price_month DECIMAL(10,2),
@@ -440,11 +440,11 @@ CREATE TABLE plans (
 
 -- Empresas/tenants
 CREATE TABLE tenants (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name        VARCHAR(100) NOT NULL,
   slug        VARCHAR(50) UNIQUE NOT NULL, -- subdomínio
   schema_name VARCHAR(63) UNIQUE NOT NULL, -- tenant_{slug}
-  plan_id     UUID REFERENCES plans(id),
+  plan_id     TEXT REFERENCES plans(id),
   status      VARCHAR(20) DEFAULT 'active', -- active | suspended | cancelled
   trial_ends_at TIMESTAMPTZ,
   settings    JSONB DEFAULT '{}',
@@ -453,9 +453,9 @@ CREATE TABLE tenants (
 
 -- Assinaturas e cobrança
 CREATE TABLE subscriptions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id       UUID REFERENCES tenants(id),
-  plan_id         UUID REFERENCES plans(id),
+  id              TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
+  tenant_id       TEXT REFERENCES tenants(id),
+  plan_id         TEXT REFERENCES plans(id),
   status          VARCHAR(20),  -- active | past_due | cancelled
   current_period_start TIMESTAMPTZ,
   current_period_end   TIMESTAMPTZ,
@@ -466,7 +466,7 @@ CREATE TABLE subscriptions (
 
 -- Super admins (acesso total ao sistema)
 CREATE TABLE super_admins (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id           TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name         VARCHAR(100) NOT NULL,
   email        VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -475,6 +475,16 @@ CREATE TABLE super_admins (
 ```
 
 ### Schema TENANT (replicado por empresa)
+
+> **Arquitetura dual de identificadores:** ZiraDesk usa duas estratégias
+> de geração de ID conforme o schema:
+> - Schema `public` (gerenciado por Prisma): cuid (~25 chars, prefix 'c')
+>   gerado via @default(cuid()) do Prisma.
+> - Schemas `tenant_{slug}` (provisionados via SQL raw em
+>   tenants.service.ts): UUID v4 gerado via gen_random_uuid() do Postgres.
+>
+> Esta dualidade é intencional. Validações de payload e schemas devem
+> aceitar o formato apropriado por campo, não forçar uniformidade.
 
 ```sql
 -- Usuários do tenant
@@ -640,6 +650,8 @@ CREATE TABLE audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+Nota: no schema `public`, IDs seguem cuid via Prisma; nos schemas de tenant, IDs seguem UUID v4 via `gen_random_uuid()`.
 
 ---
 
@@ -1287,7 +1299,67 @@ Status geral: ✅ funcional
 
 ---
 
-## 15. DÍVIDA TÉCNICA CONHECIDA
+## 15. AUDITORIA DE PII — OMNICHANNEL E LGPD
+
+### 15.1 Campos com Dados Pessoais (PII)
+
+#### Tabela `conversations`
+| Campo | Tipo | Conteúdo PII | Tratamento LGPD |
+|-------|------|--------------|-----------------|
+| `external_id` | `VARCHAR(255)` | Número WhatsApp do cliente (ex: `+5511999...`) | **Hash SHA-256 irreversível** ao anonimizar |
+| `last_message` | `TEXT` | Trecho da última mensagem (pode conter PII) | Substituído por `[mensagem anonimizada por LGPD]` |
+| `subject` | `VARCHAR(255)` | Assunto livre (pode conter nome, CPF) | Não anonimizado no ciclo atual — risco residual baixo |
+| `metadata` | `JSONB` | Campos livres por canal | Depende do canal; WhatsApp pode incluir nome de perfil |
+
+#### Tabela `messages`
+| Campo | Tipo | Conteúdo PII | Tratamento LGPD |
+|-------|------|--------------|-----------------|
+| `content` | `TEXT` | Corpo da mensagem — PII direto (nome, CPF, endereço) | **Substituído por** `[mensagem anonimizada por LGPD]` |
+| `media_url` | `VARCHAR(500)` | URL de mídia (foto, áudio, documento) | **Anulado** (`NULL`) |
+| `metadata` | `JSONB` | Metadados do canal (caption, filename) | Marcado com `lgpd_redacted: true` |
+
+### 15.2 Fluxo de Anonimização em Cascata
+
+```
+Titular com contact_id                 Titular SEM contact_id
+─────────────────────                  ──────────────────────
+POST /crm/contacts/:id/lgpd/anonymize  POST /admin/omnichannel/conversations/
+                                             anonymize-by-external-id
+        │                                          │
+        ▼                                          ▼
+anonymizeContactForLgpd()              anonymizeByExternalId()
+  • contacts: apaga todos os campos     • Localiza convs WHERE external_id = $input
+  • conversations: hash external_id         AND contact_id IS NULL
+  • messages: redact ALL content        • Hash irreversível: sha256(external_id)
+  • call_records: anula telefones       • messages: redact ALL content
+  • lgpd_requests: audit trail          • lgpd_requests: audit trail (subject_type='external')
+```
+
+### 15.3 Hash SHA-256 — Propriedades Garantidas
+
+- **Função:** `encode(sha256(external_id::bytea), 'hex')` — nativa PostgreSQL 11+, sem extensões.
+- **Determinístico:** mesmo `external_id` → mesmo hash (permite correlacionar múltiplas conversas do mesmo número antes de anonimizar).
+- **Irreversível:** hash de 256 bits não permite reconstruir o número original.
+- **Tamanho:** resultado sempre 64 caracteres hex — cabe na coluna `VARCHAR(255)`.
+
+### 15.4 Job de Retenção Estendido
+
+O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
+
+1. **Contatos elegíveis** — `contacts` com `lgpd_anonymized_at IS NULL`, sem conversas abertas, com inatividade ≥ `retention_days`.
+2. **Conversas órfãs** — `conversations` onde `contact_id IS NULL`, `status = 'closed'`, `external_id` ainda não hasheado, e `last_message_at ≤ NOW() - retention_days`. Agrupa por `external_id` único para gerar um único `lgpd_request` por titular.
+
+### 15.5 Tabela `lgpd_requests` — Tipos Estendidos
+
+| `subject_type` | `request_type` | Uso |
+|----------------|----------------|-----|
+| `contact` | `access`, `consent_update`, `anonymization` | Titular cadastrado como contato |
+| `user` | `access`, `consent_update`, `anonymization` | Usuário do tenant |
+| `external` | `external_anonymization` | Titular identificado só por external_id (sem contact_id) |
+
+---
+
+## 16. DÍVIDA TÉCNICA CONHECIDA
 
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
