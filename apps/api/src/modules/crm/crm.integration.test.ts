@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../../config/database.js';
 import { createTestApp, createTestJWT } from '../../test/setup.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
 import { ensureCrmInfrastructure } from './crm.infrastructure.js';
+import { ensureUsersLgpdInfrastructure } from '../admin/users/users.infrastructure.js';
+import { validateLgpdExportPayload } from '../../lib/lgpd/export-schema.js';
 
 interface TempTenant {
   id: string;
@@ -91,6 +94,11 @@ async function ensureTenantUser(schemaName: string): Promise<void> {
 
 async function resetTenantCrmData(schemaName: string): Promise<void> {
   await ensureCrmInfrastructure(schemaName);
+  await ensureUsersLgpdInfrastructure(schemaName);
+
+  await prisma.$executeRawUnsafe(`
+    DELETE FROM "${schemaName}".users WHERE id != $1::uuid
+  `, TEST_USER_ID);
 
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
@@ -515,6 +523,204 @@ describe('CRM integration', () => {
     expect(response.body.data.whatsapp).toBe(uniquePhone(401));
   });
 
+  it('GET /api/crm/contacts mascara PII para role sem pii:view-full', async () => {
+    await createContact({
+      name: 'Titular Mascara',
+      email: 'joao@gmail.com',
+      phone: '+5562999998888',
+      document: '12345678900',
+    });
+
+    const response = await createTestApp()
+      .get('/api/crm/contacts')
+      .set(authHeader(requireSuiteTenant(), { role: 'viewer' }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      email: 'j***@gmail.com',
+      phone: '+55 (62) 9****-8888',
+      whatsapp: '+55 (62) 9****-8888',
+      document: '***.***.789-00',
+    });
+  });
+
+  it('GET /api/crm/contacts mantém PII completa para owner', async () => {
+    await createContact({
+      name: 'Titular Full',
+      email: 'maria@empresa.com',
+      phone: '+5562999997777',
+      document: '12345678900',
+    });
+
+    const response = await createTestApp()
+      .get('/api/crm/contacts')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      email: 'maria@empresa.com',
+      phone: '+5562999997777',
+      whatsapp: '+5562999997777',
+      document: '12345678900',
+    });
+  });
+
+  it('GET /api/crm/organizations mascara PII para role sem pii:view-full', async () => {
+    await createOrganization({
+      name: 'Org Mascara',
+      email: 'financeiro@acme.com',
+      phone: '+5562999998888',
+      document: '12345678000190',
+    });
+
+    const response = await createTestApp()
+      .get('/api/crm/organizations')
+      .set(authHeader(requireSuiteTenant(), { role: 'viewer' }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      email: 'f***@acme.com',
+      phone: '+55 (62) 9****-8888',
+      document: '**.***.678/0001-**',
+    });
+  });
+
+  it('POST /api/crm/contacts/:id/pii/reveal registra audit log', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Reveal',
+      email: uniqueEmail('pii.reveal'),
+      phone: uniquePhone(777),
+      document: uniqueDocument(777),
+    });
+
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/${contact.id}/pii/reveal`)
+      .set(authHeader())
+      .set('user-agent', 'ZiraDesk-Test/1.0')
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const logs = await prisma.$queryRawUnsafe<Array<{ action: string; new_data: unknown }>>(
+      `SELECT action, new_data
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'contact.pii.revealed'
+         AND entity_id = $1::uuid`,
+      contact.id,
+    );
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.new_data).toMatchObject({
+      contact_id: contact.id,
+      user_id: TEST_USER_ID,
+      ip: expect.anything(),
+      user_agent: expect.anything(),
+    });
+  });
+
+  it('POST /api/crm/contacts/:id/pii/reveal retorna 403 para agent', async () => {
+    const contact = await createContact({
+      name: 'Contato 403 Agent',
+      email: uniqueEmail('pii.403.agent'),
+    });
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/${contact.id}/pii/reveal`)
+      .set(authHeader(requireSuiteTenant(), { role: 'agent' }))
+      .send();
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/crm/contacts/:id/pii/reveal retorna 403 para viewer', async () => {
+    const contact = await createContact({
+      name: 'Contato 403 Viewer',
+      email: uniqueEmail('pii.403.viewer'),
+    });
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/${contact.id}/pii/reveal`)
+      .set(authHeader(requireSuiteTenant(), { role: 'viewer' }))
+      .send();
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/crm/organizations/:id/pii/reveal retorna 403 para agent', async () => {
+    const org = await createOrganization({ name: uniqueText('Org 403 Agent') });
+    const response = await createTestApp()
+      .post(`/api/crm/organizations/${org.id}/pii/reveal`)
+      .set(authHeader(requireSuiteTenant(), { role: 'agent' }))
+      .send();
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/crm/organizations/:id/pii/reveal retorna 200 e grava audit log para admin', async () => {
+    const tenant = requireSuiteTenant();
+    const org = await createOrganization({
+      name: uniqueText('Org Reveal Admin'),
+      email: uniqueEmail('org.reveal'),
+      phone: uniquePhone(888),
+    });
+
+    const response = await createTestApp()
+      .post(`/api/crm/organizations/${org.id}/pii/reveal`)
+      .set(authHeader())
+      .set('user-agent', 'ZiraDesk-Test/1.0')
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const logs = await prisma.$queryRawUnsafe<Array<{ action: string; new_data: unknown }>>(
+      `SELECT action, new_data
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'organization.pii.revealed'
+         AND entity_id = $1::uuid`,
+      org.id,
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.new_data).toMatchObject({
+      organization_id: org.id,
+      user_id: TEST_USER_ID,
+      ip: expect.anything(),
+      user_agent: expect.anything(),
+    });
+  });
+
+  it('GET /api/omnichannel/conversations mascara dados de contato sem pii:view-full', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Omni',
+      email: 'contato@empresa.com',
+      phone: '+5562999998888',
+      document: '12345678900',
+    });
+    const conversationId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".conversations
+         (id, contact_id, channel_type, protocol_number, status, subject, last_message, last_message_at)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', $3, 'waiting', 'Atendimento', 'Olá', NOW())`,
+      conversationId,
+      contact.id,
+      uniqueProtocol(),
+    );
+
+    const response = await createTestApp()
+      .get('/api/omnichannel/conversations?tab=waiting')
+      .set(authHeader(requireSuiteTenant(), { role: 'viewer' }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      contact_email: 'c***@empresa.com',
+      contact_phone: '+55 (62) 9****-8888',
+      contact_whatsapp: '+55 (62) 9****-8888',
+    });
+  });
+
   it('Email, phone e document duplicados no mesmo tenant retornam 409', async () => {
     const duplicateEmail = uniqueEmail('duplicate');
     const duplicatePhone = uniquePhone(501);
@@ -778,12 +984,15 @@ describe('CRM integration', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.data.contact).toMatchObject({ id: contact.id });
+    expect(response.body.data.schema_version).toBe('1.2.0');
+    expect(response.body.data.subject).toMatchObject({ id: contact.id, subject_type: 'contact' });
     expect(response.body.data.generated_at).toEqual(expect.any(String));
     expect(response.body.data.request_id).toEqual(expect.any(String));
     expect(response.body.data.conversations).toHaveLength(1);
-    expect(response.body.data.messages).toHaveLength(1);
+    expect(response.body.data.conversations[0].messages).toHaveLength(1);
     expect(response.body.data.tickets).toHaveLength(1);
+    expect(response.body.data.audit_trail).toBeDefined();
+    expect(validateLgpdExportPayload(response.body.data).valid).toBe(true);
 
     const rows = await prisma.$queryRawUnsafe<Array<{ lgpd_last_export_at: Date | null }>>(
       `SELECT lgpd_last_export_at
@@ -854,7 +1063,7 @@ describe('CRM integration', () => {
     expect(response.body.data.contact.lgpd_anonymized_at).toEqual(expect.any(String));
     expect(response.body.data.summary).toMatchObject({
       conversations_updated: 1,
-      messages_redacted: 1,
+      messages_redacted: 2,
     });
 
     const messageRows = await prisma.$queryRawUnsafe<Array<{ sender_type: string; content: string | null }>>(
@@ -868,7 +1077,7 @@ describe('CRM integration', () => {
     const clientMessage = messageRows.find((row) => row.sender_type === 'client');
 
     expect(clientMessage?.content).toBe('[mensagem anonimizada por LGPD]');
-    expect(agentMessage?.content).toBe('Recebido');
+    expect(agentMessage?.content).toBe('[mensagem anonimizada por LGPD]');
 
     const callRows = await prisma.$queryRawUnsafe<Array<{ to_phone: string | null; from_phone: string | null }>>(
       `SELECT to_phone, from_phone
@@ -877,5 +1086,386 @@ describe('CRM integration', () => {
       callId,
     );
     expect(callRows[0]).toMatchObject({ to_phone: null, from_phone: null });
+  });
+
+  it('POST /api/crm/contacts/lgpd/requests/:id/approve aprova retificação e atualiza contato com auditoria', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Retificação',
+      email: uniqueEmail('lgpd.rectification'),
+      phone: uniquePhone(906),
+      document: uniqueDocument(906),
+    });
+    const requestId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".lgpd_requests
+         (id, contact_id, subject_type, request_type, status, payload, result)
+       VALUES ($1::uuid, $2::uuid, 'contact', 'rectification', 'pending', $3::jsonb, '{}'::jsonb)`,
+      requestId,
+      contact.id,
+      JSON.stringify({
+        channel: 'portal',
+        requested_changes: {
+          name: 'Contato Retificado',
+          email: uniqueEmail('retificado'),
+        },
+      }),
+    );
+
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/lgpd/requests/${requestId}/approve`)
+      .set(authHeader())
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      id: requestId,
+      status: 'processed',
+      contact: {
+        id: contact.id,
+        name: 'Contato Retificado',
+      },
+    });
+    expect(typeof response.body.data.contact.email).toBe('string');
+
+    const updatedContactRows = await prisma.$queryRawUnsafe<Array<{ name: string; email: string | null }>>(
+      `SELECT name, email
+       FROM "${tenant.schemaName}".contacts
+       WHERE id = $1::uuid`,
+      contact.id,
+    );
+    expect(updatedContactRows[0]).toMatchObject({
+      name: 'Contato Retificado',
+      email: response.body.data.contact.email,
+    });
+
+    const requestRows = await prisma.$queryRawUnsafe<Array<{ status: string; processed_at: Date | null; result: unknown }>>(
+      `SELECT status, processed_at, result
+       FROM "${tenant.schemaName}".lgpd_requests
+       WHERE id = $1::uuid`,
+      requestId,
+    );
+    expect(requestRows[0]?.status).toBe('processed');
+    expect(requestRows[0]?.processed_at).toBeInstanceOf(Date);
+    expect(requestRows[0]?.result).toMatchObject({
+      action: 'approved',
+    });
+
+    const auditRows = await prisma.$queryRawUnsafe<Array<{ action: string }>>(
+      `SELECT action
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'contact.lgpd.rectification_approved'
+         AND entity_id = $1::uuid`,
+      requestId,
+    );
+    expect(auditRows.length).toBe(1);
+  });
+
+  it('POST /api/crm/contacts/lgpd/requests/:id/reject rejeita retificação e registra motivo', async () => {
+    const tenant = requireSuiteTenant();
+    const contact = await createContact({
+      name: 'Contato Rejeição',
+      email: uniqueEmail('lgpd.rejection'),
+      phone: uniquePhone(907),
+      document: uniqueDocument(907),
+    });
+    const requestId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".lgpd_requests
+         (id, contact_id, subject_type, request_type, status, payload, result)
+       VALUES ($1::uuid, $2::uuid, 'contact', 'rectification', 'pending', $3::jsonb, '{}'::jsonb)`,
+      requestId,
+      contact.id,
+      JSON.stringify({
+        channel: 'portal',
+        requested_changes: { document: uniqueDocument(999) },
+      }),
+    );
+
+    const reason = 'Documento informado não confere com o cadastro';
+    const response = await createTestApp()
+      .post(`/api/crm/contacts/lgpd/requests/${requestId}/reject`)
+      .set(authHeader())
+      .send({ reason });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      id: requestId,
+      status: 'rejected',
+    });
+
+    const requestRows = await prisma.$queryRawUnsafe<Array<{ status: string; processed_at: Date | null; result: unknown }>>(
+      `SELECT status, processed_at, result
+       FROM "${tenant.schemaName}".lgpd_requests
+       WHERE id = $1::uuid`,
+      requestId,
+    );
+    expect(requestRows[0]?.status).toBe('rejected');
+    expect(requestRows[0]?.processed_at).toBeInstanceOf(Date);
+    expect(requestRows[0]?.result).toMatchObject({
+      action: 'rejected',
+      reason,
+    });
+  });
+
+  // ── User LGPD admin routes ────────────────────────────────────────────────
+
+  async function createAgentUser(schemaName: string): Promise<{ id: string; name: string; email: string }> {
+    const id = randomUUID();
+    const name = uniqueText('Agente');
+    const email = uniqueEmail('lgpd.agent');
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${schemaName}".users (id, name, email, password_hash, role, status, language, settings)
+       VALUES ($1::uuid, $2, $3, 'hash', 'agent', 'active', 'pt-BR', '{}')`,
+      id, name, email,
+    );
+    return { id, name, email };
+  }
+
+  it('PATCH /api/admin/users/:id/lgpd/consent atualiza consentimento do usuário e cria registro LGPD', async () => {
+    const tenant = requireSuiteTenant();
+    const agent = await createAgentUser(tenant.schemaName);
+
+    const response = await createTestApp()
+      .patch(`/api/admin/users/${agent.id}/lgpd/consent`)
+      .set(authHeader())
+      .send({ status: 'granted', source: 'admin_lgpd_panel' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.user).toMatchObject({
+      id: agent.id,
+      lgpd_consent_status: 'granted',
+      lgpd_consent_source: 'admin_lgpd_panel',
+    });
+    expect(response.body.data.user.lgpd_consent_at).toEqual(expect.any(String));
+    expect(response.body.data.request).toMatchObject({
+      request_type: 'consent_update',
+      status: 'processed',
+      subject_type: 'user',
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ total: bigint }>>(
+      `SELECT COUNT(*) AS total
+       FROM "${tenant.schemaName}".lgpd_requests
+       WHERE user_id = $1::uuid AND subject_type = 'user' AND request_type = 'consent_update'`,
+      agent.id,
+    );
+    expect(Number(rows[0]?.total ?? 0)).toBe(1);
+  });
+
+  it('GET /api/admin/users/:id/lgpd/export retorna pacote de dados do usuário', async () => {
+    const tenant = requireSuiteTenant();
+    const agent = await createAgentUser(tenant.schemaName);
+
+    const ticketId = randomUUID();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".tickets (id, title, status, priority, assigned_to)
+       VALUES ($1::uuid, $2, 'open', 'medium', $3::uuid)`,
+      ticketId,
+      uniqueText('Ticket do agente'),
+      agent.id,
+    );
+
+    const response = await createTestApp()
+      .get(`/api/admin/users/${agent.id}/lgpd/export`)
+      .query({ include_audit_logs: true })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.schema_version).toBe('1.2.0');
+    expect(response.body.data.subject).toMatchObject({ id: agent.id, subject_type: 'user' });
+    expect(response.body.data.generated_at).toEqual(expect.any(String));
+    expect(validateLgpdExportPayload(response.body.data).valid).toBe(true);
+    expect(response.body.data.request_id).toEqual(expect.any(String));
+    expect(response.body.data.tickets).toHaveLength(1);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ lgpd_last_export_at: Date | null }>>(
+      `SELECT lgpd_last_export_at FROM "${tenant.schemaName}".users WHERE id = $1::uuid`,
+      agent.id,
+    );
+    expect(rows[0]?.lgpd_last_export_at).toBeInstanceOf(Date);
+  });
+
+  it('POST /api/admin/users/:id/lgpd/anonymize anonimiza usuário agente', async () => {
+    const tenant = requireSuiteTenant();
+    const agent = await createAgentUser(tenant.schemaName);
+
+    const response = await createTestApp()
+      .post(`/api/admin/users/${agent.id}/lgpd/anonymize`)
+      .set(authHeader())
+      .send({ reason: 'Solicitação de exclusão' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.user).toMatchObject({
+      id: agent.id,
+      status: 'inactive',
+      lgpd_consent_status: 'revoked',
+    });
+    expect(response.body.data.user.lgpd_anonymized_at).toEqual(expect.any(String));
+    expect(response.body.data.user.email).toContain('@anonimizado.invalid');
+    expect(response.body.data.request).toMatchObject({
+      request_type: 'anonymization',
+      status: 'processed',
+      subject_type: 'user',
+    });
+  });
+
+  it('POST /api/admin/users/:id/lgpd/anonymize retorna 403 ao tentar anonimizar o owner', async () => {
+    const response = await createTestApp()
+      .post(`/api/admin/users/${TEST_USER_ID}/lgpd/anonymize`)
+      .set(authHeader(requireSuiteTenant(), { role: 'admin' }))
+      .send({ reason: 'teste' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/admin/users/:id/lgpd/anonymize retorna 403 ao tentar anonimizar a si mesmo', async () => {
+    const tenant = requireSuiteTenant();
+    const agent = await createAgentUser(tenant.schemaName);
+
+    const response = await createTestApp()
+      .post(`/api/admin/users/${agent.id}/lgpd/anonymize`)
+      .set(authHeader(tenant, { sub: agent.id, role: 'agent' }))
+      .send({ reason: 'auto-anonimização' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('GET /api/admin/users/lgpd/requests retorna histórico de solicitações de usuários', async () => {
+    const tenant = requireSuiteTenant();
+    const agent = await createAgentUser(tenant.schemaName);
+
+    await createTestApp()
+      .patch(`/api/admin/users/${agent.id}/lgpd/consent`)
+      .set(authHeader())
+      .send({ status: 'granted', source: 'admin_lgpd_panel' });
+
+    const response = await createTestApp()
+      .get('/api/admin/users/lgpd/requests')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    const found = (response.body.data as Array<Record<string, unknown>>).find((r) => r.user_id === agent.id);
+    expect(found).toBeDefined();
+    expect(found?.subject_type).toBe('user');
+  });
+
+  // ── User LGPD self-service routes (/me/lgpd) ─────────────────────────────
+
+  it('GET /api/auth/me/lgpd retorna estado LGPD do próprio usuário', async () => {
+    const response = await createTestApp()
+      .get('/api/auth/me/lgpd')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.consent).toBeDefined();
+    expect(response.body.data.requests).toEqual(expect.any(Array));
+  });
+
+  it('PATCH /api/auth/me/lgpd/consent atualiza consentimento do próprio usuário', async () => {
+    const tenant = requireSuiteTenant();
+
+    const response = await createTestApp()
+      .patch('/api/auth/me/lgpd/consent')
+      .set(authHeader())
+      .send({ status: 'granted' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.user).toMatchObject({ lgpd_consent_status: 'granted', lgpd_consent_source: 'self_service' });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ lgpd_consent_status: string }>>(
+      `SELECT lgpd_consent_status FROM "${tenant.schemaName}".users WHERE id = $1::uuid`,
+      TEST_USER_ID,
+    );
+    expect(rows[0]?.lgpd_consent_status).toBe('granted');
+  });
+
+  it('GET /api/auth/me/lgpd/export exporta dados do próprio usuário', async () => {
+    const response = await createTestApp()
+      .get('/api/auth/me/lgpd/export')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.schema_version).toBe('1.2.0');
+    expect(response.body.data.subject).toMatchObject({ id: TEST_USER_ID, subject_type: 'user' });
+    expect(response.body.data.generated_at).toEqual(expect.any(String));
+    expect(validateLgpdExportPayload(response.body.data).valid).toBe(true);
+  });
+
+  it('GET /api/legal/lgpd-export-schema retorna schema público de exportação', async () => {
+    const response = await createTestApp().get('/api/legal/lgpd-export-schema');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      title: expect.any(String),
+      description: expect.any(String),
+      properties: expect.objectContaining({
+        subject: expect.any(Object),
+        consent: expect.any(Object),
+        contacts: expect.any(Object),
+        conversations: expect.any(Object),
+        tickets: expect.any(Object),
+        audit_trail: expect.any(Object),
+      }),
+    });
+
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    const validate = ajv.compile(response.body);
+    expect(typeof validate).toBe('function');
+  });
+
+  it('POST /api/auth/me/lgpd/anonymize-request cria solicitação pendente de anonimização', async () => {
+    const tenant = requireSuiteTenant();
+
+    const agentId = randomUUID();
+    const agentEmail = uniqueEmail('me.lgpd.agent');
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".users (id, name, email, password_hash, role, status, language, settings)
+       VALUES ($1::uuid, 'Agente LGPD Me', $2, 'hash', 'agent', 'active', 'pt-BR', '{}')`,
+      agentId, agentEmail,
+    );
+
+    const response = await createTestApp()
+      .post('/api/auth/me/lgpd/anonymize-request')
+      .set(authHeader(tenant, { sub: agentId, role: 'agent' }))
+      .send({ reason: 'Quero ser esquecido' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      request_type: 'anonymization',
+      status: 'pending',
+      subject_type: 'user',
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ total: bigint }>>(
+      `SELECT COUNT(*) AS total
+       FROM "${tenant.schemaName}".lgpd_requests
+       WHERE user_id = $1::uuid AND subject_type = 'user' AND status = 'pending'`,
+      agentId,
+    );
+    expect(Number(rows[0]?.total ?? 0)).toBe(1);
+  });
+
+  it('POST /api/auth/me/lgpd/anonymize-request retorna 403 para owner', async () => {
+    const response = await createTestApp()
+      .post('/api/auth/me/lgpd/anonymize-request')
+      .set(authHeader())
+      .send({ reason: 'owner tentando' });
+
+    expect(response.status).toBe(403);
   });
 });

@@ -77,8 +77,16 @@ export const listLgpdRequestsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   per_page: z.coerce.number().int().positive().max(100).default(20),
   contact_id: z.string().uuid().optional(),
-  request_type: z.enum(['access', 'consent_update', 'anonymization']).optional(),
+  request_type: z.enum(['access', 'consent_update', 'anonymization', 'rectification']).optional(),
   status: z.string().max(30).optional(),
+});
+
+export const lgpdRequestActionParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const rejectLgpdRequestSchema = z.object({
+  reason: z.string().trim().min(3).max(1000),
 });
 
 export type CreateContactInput   = z.infer<typeof createContactSchema>;
@@ -89,3 +97,5 @@ export type UpdateContactLgpdConsentInput = z.infer<typeof updateContactLgpdCons
 export type ExportContactLgpdQuery = z.infer<typeof exportContactLgpdQuerySchema>;
 export type AnonymizeContactLgpdInput = z.infer<typeof anonymizeContactLgpdSchema>;
 export type ListLgpdRequestsQuery = z.infer<typeof listLgpdRequestsQuerySchema>;
+export type LgpdRequestActionParams = z.infer<typeof lgpdRequestActionParamsSchema>;
+export type RejectLgpdRequestInput = z.infer<typeof rejectLgpdRequestSchema>;

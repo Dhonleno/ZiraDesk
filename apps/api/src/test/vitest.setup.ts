@@ -1,5 +1,6 @@
 import type { StorageProvider } from '../lib/storage/index.js';
 import { beforeEach, inject, vi } from 'vitest';
+import { redis } from '../config/redis.js';
 
 class InMemoryStorageProvider implements StorageProvider {
   private readonly files = new Map<string, { buffer: Buffer; mimetype: string }>();
@@ -121,8 +122,22 @@ vi.mock('resend', () => ({
   },
 }));
 
-beforeEach(() => {
+async function clearRedisByPatterns(patterns: string[]): Promise<void> {
+  for (const pattern of patterns) {
+    const keys = await redis.keys(pattern);
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+  }
+}
+
+beforeEach(async () => {
   storage.clear();
+  await clearRedisByPatterns([
+    'auth:force_logout_after:*',
+    'rate-limit:*',
+    'fastify-rate-limit-*',
+  ]);
 });
 
 const testBaseUrl = inject('testBaseUrl');

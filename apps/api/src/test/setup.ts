@@ -26,6 +26,7 @@ import { notificationsRoutes } from '../modules/notifications/notifications.rout
 import { searchRoutes } from '../modules/search/search.routes.js';
 import { callsRoutes } from '../modules/calls/calls.routes.js';
 import { portalModuleRoutes } from '../modules/portal/index.js';
+import { legalModuleRoutes } from '../modules/legal/index.js';
 import { redmineWebhookRoutes } from '../modules/integrations/redmine/redmine.routes.js';
 import { provisionTenantSchema } from '../modules/super-admin/tenants/tenants.service.js';
 import { languageMiddleware } from '../middleware/language.js';
@@ -253,12 +254,14 @@ export async function createIsolatedTestServer(): Promise<FastifyInstance> {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
-  await app.register(rateLimit, {
-    max: (requestLike) => rateLimitMax(requestLike.url),
-    timeWindow: '1 minute',
-    keyGenerator: (requestLike) => requestLike.headers.authorization ?? requestLike.ip,
-    allowList: (requestLike) => requestLike.url === '/health',
-  });
+  if (process.env.NODE_ENV !== 'test') {
+    await app.register(rateLimit, {
+      max: (requestLike) => rateLimitMax(requestLike.url),
+      timeWindow: '1 minute',
+      keyGenerator: (requestLike) => requestLike.headers.authorization ?? requestLike.ip,
+      allowList: (requestLike) => requestLike.url === '/health',
+    });
+  }
   await app.register(cookie, { secret: env.JWT_SECRET });
   await app.register(rawBody, {
     field: 'rawBody',
@@ -271,6 +274,7 @@ export async function createIsolatedTestServer(): Promise<FastifyInstance> {
 
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });
+  await app.register(legalModuleRoutes, { prefix: '/api/legal' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
   await app.register(omnichannelModuleRoutes, { prefix: '/api/omnichannel' });
@@ -292,6 +296,8 @@ export async function bootstrapIntegrationSuite(): Promise<{
   baseUrl: string;
   tenant: TestTenant;
 }> {
+  process.env.NODE_ENV = 'test';
+
   if (integrationState) {
     return {
       baseUrl: integrationState.baseUrl,

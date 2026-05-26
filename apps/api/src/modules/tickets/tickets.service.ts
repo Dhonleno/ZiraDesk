@@ -70,6 +70,9 @@ interface TicketRow {
   assignee_name:    string | null;
   assignee_avatar:  string | null;
   contact_name:     string | null;
+  contact_email:    string | null;
+  contact_phone:    string | null;
+  contact_document: string | null;
   organization_name: string | null;
   type_name:        string | null;
   type_icon:        string | null;
@@ -527,6 +530,9 @@ const BASE_SELECT = `
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
     ct.name       AS contact_name,
+    ct.email      AS contact_email,
+    ct.phone      AS contact_phone,
+    ct.document   AS contact_document,
     o.name        AS organization_name,
     tt.name       AS type_name,
     tt.icon       AS type_icon,

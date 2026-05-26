@@ -18,6 +18,8 @@ import { webhooksRoutes } from './webhooks/webhooks.routes.js';
 import { redmineAdminRoutes } from './redmine/redmine.routes.js';
 import { templatesRoutes } from './templates/templates.routes.js';
 import { smtpRoutes } from './smtp/smtp.routes.js';
+import { omnichannelLgpdRoutes } from './omnichannel-lgpd/omnichannel-lgpd.routes.js';
+import { adminLgpdRoutes } from './lgpd/lgpd.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -39,4 +41,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(redmineAdminRoutes, { prefix: '/integrations/redmine' });
   await app.register(templatesRoutes, { prefix: '/templates' });
   await app.register(smtpRoutes, { prefix: '/smtp' });
+  await app.register(omnichannelLgpdRoutes, { prefix: '/omnichannel' });
+  await app.register(adminLgpdRoutes, { prefix: '/lgpd' });
 }

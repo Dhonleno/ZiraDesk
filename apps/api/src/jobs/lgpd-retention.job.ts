@@ -4,6 +4,7 @@ import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { ensureCrmInfrastructure } from '../modules/crm/crm.infrastructure.js';
 import { anonymizeContactForLgpd } from '../modules/crm/contacts/contacts.service.js';
+import { anonymizeOrphanConversations } from '../modules/omnichannel/conversations/conversations.lgpd.service.js';
 
 interface LgpdRetentionJobData {}
 
@@ -104,7 +105,31 @@ async function processTenantRetention(tenant: TenantRow): Promise<number> {
     }
   }
 
-  return processed;
+  let orphanProcessed = 0;
+  try {
+    orphanProcessed = await anonymizeOrphanConversations(
+      tenant.schema_name,
+      retentionDays,
+      LGPD_RETENTION_BATCH_SIZE,
+    );
+    if (orphanProcessed > 0) {
+      logger.info(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, orphanProcessed },
+        '[LGPD Retention] Orphan conversations anonymized',
+      );
+    }
+  } catch (err) {
+    logger.error(
+      {
+        tenantId: tenant.id,
+        schemaName: tenant.schema_name,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      '[LGPD Retention] Failed to anonymize orphan conversations',
+    );
+  }
+
+  return processed + orphanProcessed;
 }
 
 async function runLgpdRetention(): Promise<void> {

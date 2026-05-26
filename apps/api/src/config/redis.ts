@@ -8,7 +8,8 @@ interface RedisClientLike {
   setex(key: string, seconds: number, value: string): Promise<string>;
   expire(key: string, seconds: number): Promise<number>;
   exists(key: string): Promise<number>;
-  del(key: string): Promise<number>;
+  del(...keys: string[]): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
   ping(): Promise<string>;
   disconnect(): void;
 }
@@ -64,10 +65,29 @@ class InMemoryRedisClient implements RedisClientLike {
     return this.store.has(key) ? 1 : 0;
   }
 
-  async del(key: string): Promise<number> {
-    this.purgeIfExpired(key);
-    const deleted = this.store.delete(key);
-    return deleted ? 1 : 0;
+  async del(...keys: string[]): Promise<number> {
+    let deleted = 0;
+    for (const key of keys) {
+      this.purgeIfExpired(key);
+      if (this.store.delete(key)) {
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    const regex = new RegExp(`^${escaped}$`);
+    const allKeys = [...this.store.keys()];
+    const matched: string[] = [];
+    for (const key of allKeys) {
+      this.purgeIfExpired(key);
+      if (this.store.has(key) && regex.test(key)) {
+        matched.push(key);
+      }
+    }
+    return matched;
   }
 
   async ping(): Promise<string> {

@@ -584,6 +584,42 @@ describe('Portal integration', () => {
     });
   });
 
+  it('PATCH /api/portal/lgpd/contact-data cria solicitação pendente de retificação', async () => {
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'PATCH',
+      url: '/api/portal/lgpd/contact-data',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        name: 'Contato Portal Atualizado',
+        phone: '+5511999990000',
+      },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      request_type: 'rectification',
+      status: 'pending',
+    });
+
+    const requests = await listLgpdRequests(requireSuiteTenant().schemaName, requireSuiteContact().id);
+    const request = requests.find((item) => item.id === response.body.data.id);
+    expect(request).toBeDefined();
+    expect(request).toMatchObject({
+      request_type: 'rectification',
+      status: 'pending',
+    });
+    expect(request?.payload).toMatchObject({
+      channel: 'portal',
+      requested_changes: {
+        name: 'Contato Portal Atualizado',
+        phone: '+5511999990000',
+      },
+    });
+  });
+
   it('GET /api/portal/lgpd retorna estado e histórico LGPD do titular', async () => {
     const token = await loginAndGetToken();
 

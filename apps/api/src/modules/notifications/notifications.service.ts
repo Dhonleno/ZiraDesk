@@ -6,7 +6,10 @@ type NotificationType =
   | 'conversation_assigned'
   | 'ticket_comment'
   | 'conversation_message'
-  | 'help_requested';
+  | 'help_requested'
+  | 'lgpd_request_received'
+  | 'lgpd_sla_warning'
+  | 'lgpd_sla_breached';
 
 interface NotificationRow {
   id: string;
@@ -149,6 +152,53 @@ function toNotification(row: NotificationRow): NotificationItem {
     };
   }
 
+  if (row.action === 'lgpd.request.received') {
+    const payload = row.new_data ?? {};
+    const subject = String(payload['subject_label'] ?? 'Titular');
+    const requestType = String(payload['request_type'] ?? 'solicitação');
+    return {
+      id: row.id,
+      type: 'lgpd_request_received',
+      title: 'Nova solicitação LGPD',
+      message: `Solicitação de ${requestType} recebida de ${subject}.`,
+      read: row.read,
+      created_at: row.created_at,
+      href: '/admin/lgpd',
+      data: row.new_data ?? {},
+    };
+  }
+
+  if (row.action === 'lgpd.sla.warning') {
+    const payload = row.new_data ?? {};
+    const daysLeft = Number(payload['days_left'] ?? 0);
+    const subject = String(payload['subject_label'] ?? 'Titular');
+    return {
+      id: row.id,
+      type: 'lgpd_sla_warning',
+      title: `⚠️ Prazo LGPD: ${daysLeft} dia(s)`,
+      message: `Solicitação de ${subject} vence em ${daysLeft} dia(s).`,
+      read: row.read,
+      created_at: row.created_at,
+      href: '/admin/lgpd',
+      data: row.new_data ?? {},
+    };
+  }
+
+  if (row.action === 'lgpd.sla.breached') {
+    const payload = row.new_data ?? {};
+    const subject = String(payload['subject_label'] ?? 'Titular');
+    return {
+      id: row.id,
+      type: 'lgpd_sla_breached',
+      title: '🚨 SLA LGPD estourado',
+      message: `Solicitação de ${subject} com prazo legal expirado.`,
+      read: row.read,
+      created_at: row.created_at,
+      href: '/admin/lgpd',
+      data: row.new_data ?? {},
+    };
+  }
+
   const ticketId = String(row.new_data?.['ticket_id'] ?? '');
   return {
     id: row.id,
@@ -191,6 +241,9 @@ function notificationsWhereClause(): string {
     AND al.new_data->>'assigned_to' = $1
   ) OR (
     al.action = 'help.requested'
+    AND al.new_data->>'assigned_to' = $1
+  ) OR (
+    al.action IN ('lgpd.request.received', 'lgpd.sla.warning', 'lgpd.sla.breached')
     AND al.new_data->>'assigned_to' = $1
   )`;
 }

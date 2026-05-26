@@ -6,6 +6,7 @@ import './jobs/waiting-expiry.job.js'; // fecha conversas waiting expiradas
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import './jobs/process-pending-queue.job.js'; // processa conversas pending periodicamente
 import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
+import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas a cada 6h)
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -27,6 +28,7 @@ import { notificationsRoutes } from './modules/notifications/notifications.route
 import { searchRoutes } from './modules/search/search.routes.js';
 import { callsRoutes } from './modules/calls/calls.routes.js';
 import { portalModuleRoutes } from './modules/portal/index.js';
+import { legalModuleRoutes } from './modules/legal/index.js';
 import { redmineWebhookRoutes } from './modules/integrations/redmine/redmine.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
@@ -87,22 +89,24 @@ async function bootstrap(): Promise<void> {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  await app.register(rateLimit, {
-    max: (request) => rateLimitMax(request.url),
-    timeWindow: '1 minute',
-    keyGenerator: (request) => {
-      if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
-        return request.ip;
-      }
-      return request.headers.authorization ?? request.ip;
-    },
-    allowList: (request) => request.url === '/health',
-    errorResponseBuilder: () => ({
-      statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Muitas requisições. Tente novamente em instantes.',
-    }),
-  });
+  if (process.env.NODE_ENV !== 'test') {
+    await app.register(rateLimit, {
+      max: (request) => rateLimitMax(request.url),
+      timeWindow: '1 minute',
+      keyGenerator: (request) => {
+        if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
+          return request.ip;
+        }
+        return request.headers.authorization ?? request.ip;
+      },
+      allowList: (request) => request.url === '/health',
+      errorResponseBuilder: () => ({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Muitas requisições. Tente novamente em instantes.',
+      }),
+    });
+  }
 
   await app.register(cookie, {
     secret: env.JWT_SECRET,
@@ -121,6 +125,7 @@ async function bootstrap(): Promise<void> {
   // Webhooks sem auth JWT e sem tenant middleware — registrar primeiro
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });
+  await app.register(legalModuleRoutes, { prefix: '/api/legal' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });

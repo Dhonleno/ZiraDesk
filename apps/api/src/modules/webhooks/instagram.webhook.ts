@@ -43,9 +43,18 @@ async function findTenantByPageId(pageId: string) {
   );
 
   for (const tenant of tenants) {
-    const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
-      `SELECT id, credentials FROM "${tenant.schema_name}".channels WHERE type = 'instagram' AND status = 'active'`,
-    );
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM "${tenant.schema_name}".channels WHERE type = 'instagram' AND status = 'active'`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[Instagram] Failed to query channels for tenant schema',
+      );
+      continue;
+    }
 
     for (const channel of channels) {
       let creds: Record<string, string>;

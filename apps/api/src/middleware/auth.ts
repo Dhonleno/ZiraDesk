@@ -24,6 +24,7 @@ interface JwtPayload {
   schemaName?: string;
   isSuperAdmin: boolean;
   iat?: number;
+  iatMs?: number;
 }
 
 export async function authMiddleware(
@@ -42,7 +43,13 @@ export async function authMiddleware(
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
     const forcedLogoutAfterRaw = await redis.get(`auth:force_logout_after:${payload.sub}`);
     const forcedLogoutAfter = forcedLogoutAfterRaw ? Number(forcedLogoutAfterRaw) : Number.NaN;
-    if (Number.isFinite(forcedLogoutAfter) && typeof payload.iat === 'number' && payload.iat <= forcedLogoutAfter) {
+    const tokenIssuedAtMs =
+      typeof payload.iatMs === 'number'
+        ? payload.iatMs
+        : typeof payload.iat === 'number'
+          ? payload.iat * 1000
+          : Number.NaN;
+    if (Number.isFinite(forcedLogoutAfter) && Number.isFinite(tokenIssuedAtMs) && tokenIssuedAtMs < forcedLogoutAfter) {
       return reply.code(401).send({ error: 'Sessão inválida. Faça login novamente' });
     }
 

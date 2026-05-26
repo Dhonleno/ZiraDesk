@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -6,8 +7,12 @@ import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import { createOrganizationSchema, updateOrganizationSchema, listOrganizationsQuerySchema } from './organizations.schema.js';
 import {
   listOrganizations,
+  maskOrganizationContactRecords,
+  maskOrganizationListRecords,
   getOrganization,
   getOrganizationStats,
+  registerOrganizationPiiAccess,
+  registerOrganizationPiiReveal,
   getOrganizationContacts,
   getOrganizationConversations,
   getOrganizationTickets,
@@ -26,6 +31,11 @@ const guard = [
 const organizationsViewGuard = [...guard, requirePermission('organizations:view')];
 const organizationsEditGuard = [...guard, requirePermission('organizations:edit')];
 const organizationsDeleteGuard = [...guard, requirePermission('organizations:delete')];
+const organizationsPiiRevealGuard = [...guard, requirePermission('organizations:view'), requirePermission('pii:view-full')];
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
 
 export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/organizations
@@ -34,7 +44,12 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
     const result = await listOrganizations(parsed.data, request.user.schemaName);
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : maskOrganizationListRecords(result.data),
+    });
   });
 
   // POST /api/crm/organizations
@@ -56,6 +71,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/:id', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const org = await getOrganization(request.params.id, request.user.schemaName);
+      await registerOrganizationPiiAccess(org.id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: org });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -109,7 +125,11 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/:id/contacts', { preHandler: organizationsViewGuard }, async (request, reply) => {
     try {
       const contacts = await getOrganizationContacts(request.params.id, request.user.schemaName);
-      return reply.send({ success: true, data: contacts });
+      const includeFullPii = canViewFullPii(request.user.role);
+      return reply.send({
+        success: true,
+        data: includeFullPii ? contacts : maskOrganizationContactRecords(contacts),
+      });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
@@ -134,6 +154,25 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     try {
       const tickets = await getOrganizationTickets(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: tickets });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/crm/organizations/:id/pii/reveal
+  app.post<{ Params: { id: string } }>('/:id/pii/reveal', { preHandler: organizationsPiiRevealGuard }, async (request, reply) => {
+    try {
+      await registerOrganizationPiiReveal(
+        request.params.id,
+        request.user.id,
+        request.user.schemaName,
+        undefined,
+        { ip: request.ip, userAgent: request.headers['user-agent'] },
+      );
+      const org = await getOrganization(request.params.id, request.user.schemaName);
+      return reply.send({ success: true, data: org });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });

@@ -1,9 +1,11 @@
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
+import { hasPermission } from '@ziradesk/shared';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
+import { maskEmail, maskPhone, maskDocument, maskName } from '../../utils/pii-mask.js';
 import {
   createTicketSchema,
   updateTicketSchema,
@@ -52,6 +54,42 @@ const ticketsViewGuard = [...guard, requirePermission('tickets:view')];
 const ticketsEditGuard = [...guard, requirePermission('tickets:edit')];
 const ticketsDeleteGuard = [...guard, requirePermission('tickets:delete')];
 const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
+
+function maskTicketContactPii<T extends { contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; contact_document?: string | null }>(ticket: T): T {
+  return {
+    ...ticket,
+    contact_name:     maskName(ticket.contact_name ?? null),
+    contact_email:    maskEmail(ticket.contact_email ?? null),
+    contact_phone:    maskPhone(ticket.contact_phone ?? null),
+    contact_document: maskDocument(ticket.contact_document ?? null),
+  };
+}
+
+function ensureSafeSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/i.test(schemaName)) {
+    throw new Error('Schema do tenant inválido');
+  }
+  return schemaName.replace(/"/g, '""');
+}
+
+async function insertTicketPiiAuditLog(schemaName: string, userId: string, ticketId: string): Promise<void> {
+  const safeSchemaName = ensureSafeSchemaName(schemaName);
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${safeSchemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'ticket.pii.accessed', 'ticket', $2::uuid, $3::jsonb)`,
+    userId,
+    ticketId,
+    JSON.stringify({
+      user_id: userId,
+      ticket_id: ticketId,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
 
 function isMultipartTooLargeError(error: unknown): boolean {
   return typeof error === 'object'
@@ -104,7 +142,12 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     }
     const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
     const result = await listTickets(parsed.data, schemaName);
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : result.data.map(maskTicketContactPii),
+    });
   });
 
   // GET /api/tickets/stats  — must be before /:id to avoid conflict
@@ -464,6 +507,9 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const ticket = await getTicket(request.params.id, schemaName);
+      if (schemaName) {
+        await insertTicketPiiAuditLog(schemaName, request.user.id, request.params.id);
+      }
       return reply.send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof NotFoundError)

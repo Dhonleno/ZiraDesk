@@ -8,6 +8,7 @@ import type {
   PortalAddCommentInput,
   PortalCreateTicketInput,
   PortalLgpdConsentInput,
+  PortalLgpdRectificationInput,
   PortalLgpdRequestInput,
   PortalLoginInput,
   PortalTicketsQuery,
@@ -125,6 +126,8 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
     CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+      user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+      subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
       request_type VARCHAR(30) NOT NULL,
       status VARCHAR(30) NOT NULL DEFAULT 'pending',
       requested_by UUID REFERENCES ${schema}.users(id),
@@ -132,8 +135,32 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
       payload JSONB NOT NULL DEFAULT '{}'::jsonb,
       result JSONB NOT NULL DEFAULT '{}'::jsonb,
       requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      processed_at TIMESTAMPTZ
+      processed_at TIMESTAMPTZ,
+      sla_deadline TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '15 days'),
+      notified_at TIMESTAMPTZ,
+      reminder_sent_at TIMESTAMPTZ
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.lgpd_requests
+    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+    ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.lgpd_requests
+    ALTER COLUMN sla_deadline SET DEFAULT (NOW() + INTERVAL '15 days')
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${schema}.lgpd_requests
+    SET sla_deadline = requested_at + INTERVAL '15 days'
+    WHERE status = 'pending'
+      AND sla_deadline IS NULL
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -492,6 +519,61 @@ export async function submitPortalLgpdRequest(
       channel: 'portal',
       reason: payload.reason ?? null,
       include_messages: payload.include_messages ?? true,
+    }),
+  );
+
+  const request = requestRows[0];
+  if (!request) {
+    throw new PortalNotFoundError('Falha ao criar solicitação LGPD');
+  }
+
+  return request;
+}
+
+export async function submitPortalLgpdRectificationRequest(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdRectificationInput,
+): Promise<{ id: string; request_type: string; status: string; requested_at: Date }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  if (!contactRows[0]) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestedChanges = {
+    ...(payload.name?.trim() ? { name: payload.name.trim() } : {}),
+    ...(payload.email?.trim() ? { email: payload.email.trim() } : {}),
+    ...(payload.phone?.trim() ? { phone: payload.phone.trim() } : {}),
+    ...(payload.document?.trim() ? { document: payload.document.trim() } : {}),
+  };
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    requested_at: Date;
+  }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, payload, result
+    )
+    VALUES (
+      $1::uuid, 'rectification', 'pending', NULL, $2::jsonb, '{}'::jsonb
+    )
+    RETURNING id, request_type, status, requested_at`,
+    portalUser.contactId,
+    JSON.stringify({
+      channel: 'portal',
+      requested_changes: requestedChanges,
     }),
   );
 

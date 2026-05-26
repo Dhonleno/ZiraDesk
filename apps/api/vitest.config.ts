@@ -7,6 +7,7 @@ export default defineConfig({
     setupFiles: ['./src/test/vitest.setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
     threads: false,
+    fileParallelism: false,
     testTimeout: 15_000,
     hookTimeout: 15_000,
     passWithNoTests: true,

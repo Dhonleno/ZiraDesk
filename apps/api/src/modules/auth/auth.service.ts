@@ -48,11 +48,13 @@ interface UserPayload {
 }
 
 function signTokens(payload: UserPayload): TokenPair {
+  const issuedAtMs = Date.now();
   const base = {
     sub: payload.id,
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    iatMs: issuedAtMs,
     isSuperAdmin: payload.isSuperAdmin,
     ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     ...(payload.schemaName ? { schemaName: payload.schemaName } : {}),
@@ -159,6 +161,7 @@ export function refreshAccessToken(payload: UserPayload): string {
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    iatMs: Date.now(),
     isSuperAdmin: payload.isSuperAdmin,
     ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     ...(payload.schemaName ? { schemaName: payload.schemaName } : {}),

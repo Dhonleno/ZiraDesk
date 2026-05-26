@@ -1,5 +1,24 @@
 import { z } from 'zod';
 
+function emptyToUndefined(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function optionalTrimmedString() {
+  return z.preprocess(emptyToUndefined, z.string().optional());
+}
+
+function optionalEmail(envName: string) {
+  return z.preprocess(emptyToUndefined, z.string().email(`${envName} deve ser um e-mail válido`).optional());
+}
+
+function optionalUrl(envName: string) {
+  return z.preprocess(emptyToUndefined, z.string().url(`${envName} deve ser uma URL válida`).optional());
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().url('DATABASE_URL deve ser uma URL válida'),
   REDIS_URL: z.string().url('REDIS_URL deve ser uma URL válida'),
@@ -31,6 +50,13 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   R2_PUBLIC_URL: z.string().url().optional(),
+  // LGPD / DPO
+  DPO_NAME: optionalTrimmedString(),
+  DPO_EMAIL: optionalEmail('DPO_EMAIL'),
+  DPO_PHONE: optionalTrimmedString(),
+  PRIVACY_POLICY_URL: optionalUrl('PRIVACY_POLICY_URL'),
+  TERMS_OF_SERVICE_URL: optionalUrl('TERMS_OF_SERVICE_URL'),
+  SUPER_ADMIN_EMAIL: optionalEmail('SUPER_ADMIN_EMAIL'),
 });
 
 const parsed = envSchema.safeParse(process.env);

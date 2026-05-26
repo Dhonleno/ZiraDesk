@@ -112,19 +112,57 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
       CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
-        request_type VARCHAR(30) NOT NULL,
+        user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+        subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+        request_type VARCHAR(40) NOT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'processed',
         requested_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
         processed_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
         payload JSONB NOT NULL DEFAULT '{}',
         result JSONB NOT NULL DEFAULT '{}',
         requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        processed_at TIMESTAMPTZ
+        processed_at TIMESTAMPTZ,
+        sla_deadline TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '15 days'),
+        notified_at TIMESTAMPTZ,
+        reminder_sent_at TIMESTAMPTZ
       )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${schema}.lgpd_requests
+      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+      ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${schema}.lgpd_requests
+      ALTER COLUMN sla_deadline SET DEFAULT (NOW() + INTERVAL '15 days')
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      UPDATE ${schema}.lgpd_requests
+      SET sla_deadline = requested_at + INTERVAL '15 days'
+      WHERE status = 'pending'
+        AND sla_deadline IS NULL
     `);
 
     await prisma.$executeRawUnsafe(
       `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact ON ${schema}.lgpd_requests(contact_id)`,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_user ON ${schema}.lgpd_requests(user_id)`,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_subject_type ON ${schema}.lgpd_requests(subject_type)`,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_sla ON ${schema}.lgpd_requests(sla_deadline) WHERE status = 'pending'`,
     );
 
     if (await tableExists(schemaName, 'conversations')) {
@@ -132,6 +170,12 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
         ALTER TABLE ${schema}.conversations
         ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
         ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES ${schema}.organizations(id) ON DELETE SET NULL
+      `);
+
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS idx_conversations_external_id
+        ON ${schema}.conversations(external_id)
+        WHERE external_id IS NOT NULL
       `);
     }
 

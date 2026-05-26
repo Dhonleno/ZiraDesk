@@ -92,7 +92,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/auth/logout
   app.post('/logout', { preHandler: [authMiddleware] }, async (request, reply) => {
-    const forcedLogoutAt = Math.floor(Date.now() / 1000).toString();
+    const forcedLogoutAt = Date.now().toString();
     await redis.set(`auth:force_logout_after:${request.user.id}`, forcedLogoutAt, 'EX', 60 * 60 * 24 * 30);
 
     if (!request.user.isSuperAdmin && request.user.tenantId) {

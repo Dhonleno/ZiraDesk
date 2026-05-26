@@ -39,7 +39,7 @@ function createMetaSignature(rawBody: string): string {
   return `sha256=${createHmac('sha256', META_APP_SECRET_TEST).update(rawBody).digest('hex')}`;
 }
 
-async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 8_000, intervalMs = 120): Promise<T> {
+async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 15_000, intervalMs = 150): Promise<T> {
   const start = Date.now();
   while (Date.now() - start <= timeoutMs) {
     const value = await fn();

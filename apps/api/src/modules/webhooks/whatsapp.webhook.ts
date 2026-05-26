@@ -366,11 +366,20 @@ async function findChannelByPhoneNumberId(
   const envFallbackMatches: ChannelMatch[] = [];
 
   for (const tenant of tenants) {
-    const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
-      `SELECT id, credentials FROM "${tenant.schema_name}".channels
-       WHERE type = 'whatsapp' AND status = 'active'
-       LIMIT 100`,
-    );
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM "${tenant.schema_name}".channels
+         WHERE type = 'whatsapp' AND status = 'active'
+         LIMIT 100`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[WhatsApp] Failed to query channels for tenant schema',
+      );
+      continue;
+    }
 
     for (const channel of channels) {
       let credentials: Record<string, string>;

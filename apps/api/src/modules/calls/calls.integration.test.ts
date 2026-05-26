@@ -4,6 +4,7 @@ import { createTestApp, createTestJWT } from '../../test/setup.js';
 import { ensureCallRecordsInfrastructure } from './calls.service.js';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+const TEST_AUTH_SUB = '00000000-0000-0000-0000-000000000071';
 
 function requireSchema(): string {
   const s = globalThis.__ZIRADESK_TEST_TENANT_SCHEMA__;
@@ -12,7 +13,14 @@ function requireSchema(): string {
 }
 
 function authHeader(): { Authorization: string } {
-  return { Authorization: `Bearer ${createTestJWT()}` };
+  return {
+    Authorization: `Bearer ${createTestJWT({
+      sub: TEST_AUTH_SUB,
+      email: 'calls.integration@ziradesk.test',
+      name: 'Calls Integration User',
+      role: 'owner',
+    })}`,
+  };
 }
 
 describe('Calls integration', () => {

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -12,8 +13,16 @@ import {
   exportContactLgpdQuerySchema,
   anonymizeContactLgpdSchema,
   listLgpdRequestsQuerySchema,
+  lgpdRequestActionParamsSchema,
+  rejectLgpdRequestSchema,
 } from './contacts.schema.js';
 import {
+  approveLgpdRectificationRequest,
+  maskContactListRecords,
+  maskLgpdRequestRecords,
+  rejectLgpdRectificationRequest,
+  registerContactPiiAccess,
+  registerContactPiiReveal,
   listContacts,
   listLgpdRequests,
   getContact,
@@ -42,6 +51,11 @@ const contactsEditGuard = [...guard, requirePermission('contacts:edit')];
 const contactsDeleteGuard = [...guard, requirePermission('contacts:delete')];
 const contactsLgpdGuard = [...guard, requirePermission('lgpd:manage')];
 const managePortalGuard = [...guard, requirePermission('contacts:edit')];
+const contactsPiiRevealGuard = [...guard, requirePermission('contacts:view'), requirePermission('pii:view-full')];
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts
@@ -50,7 +64,12 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
     const result = await listContacts(parsed.data, request.user.schemaName);
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : maskContactListRecords(result.data),
+    });
   });
 
   // GET /api/crm/contacts/lgpd/requests
@@ -61,7 +80,68 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const result = await listLgpdRequests(parsed.data, request.user.schemaName);
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : maskLgpdRequestRecords(result.data),
+    });
+  });
+
+  // POST /api/crm/contacts/lgpd/requests/:id/approve
+  app.post<{ Params: { id: string } }>('/lgpd/requests/:id/approve', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsedParams = lgpdRequestActionParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Parâmetros inválidos', details: parsedParams.error.flatten() } });
+    }
+
+    try {
+      const data = await approveLgpdRectificationRequest(
+        parsedParams.data.id,
+        request.user.id,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/lgpd/requests/:id/reject
+  app.post<{ Params: { id: string } }>('/lgpd/requests/:id/reject', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsedParams = lgpdRequestActionParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Parâmetros inválidos', details: parsedParams.error.flatten() } });
+    }
+
+    const parsedBody = rejectLgpdRequestSchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsedBody.error.flatten() } });
+    }
+
+    try {
+      const data = await rejectLgpdRectificationRequest(
+        parsedParams.data.id,
+        request.user.id,
+        parsedBody.data.reason,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // POST /api/crm/contacts
@@ -84,6 +164,26 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: contactsViewGuard }, async (request, reply) => {
     try {
+      const contact = await getContact(request.params.id, request.user.schemaName);
+      await registerContactPiiAccess(contact.id, request.user.id, request.user.schemaName);
+      return reply.send({ success: true, data: contact });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/:id/pii/reveal
+  app.post<{ Params: { id: string } }>('/:id/pii/reveal', { preHandler: contactsPiiRevealGuard }, async (request, reply) => {
+    try {
+      await registerContactPiiReveal(
+        request.params.id,
+        request.user.id,
+        request.user.schemaName,
+        undefined,
+        { ip: request.ip, userAgent: request.headers['user-agent'] },
+      );
       const contact = await getContact(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {

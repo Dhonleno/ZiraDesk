@@ -4,6 +4,7 @@ import {
   portalCreateTicketSchema,
   portalForgotPasswordSchema,
   portalLgpdConsentSchema,
+  portalLgpdRectificationSchema,
   portalLgpdRequestSchema,
   portalLoginSchema,
   portalResetPasswordSchema,
@@ -24,6 +25,7 @@ import {
   requestPortalPasswordReset,
   resetPortalPassword,
   submitPortalLgpdRequest,
+  submitPortalLgpdRectificationRequest,
   updatePortalLgpdConsent,
   verifyPortalToken,
 } from './portal.service.js';
@@ -186,6 +188,26 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const data = await submitPortalLgpdRequest(request.portalUser!, parsed.data);
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.patch('/lgpd/contact-data', { preHandler: [portalAuth] }, async (request, reply) => {
+    const parsed = portalLgpdRectificationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const data = await submitPortalLgpdRectificationRequest(request.portalUser!, parsed.data);
       return reply.code(201).send({ success: true, data });
     } catch (err) {
       if (err instanceof PortalNotFoundError) {

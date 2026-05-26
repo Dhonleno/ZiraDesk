@@ -7,6 +7,16 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 import { getStorage } from '../../lib/storage/index.js';
+import {
+  getUserLgpdState,
+  updateUserLgpdConsent,
+  exportUserLgpdData,
+  submitUserAnonymizeRequest,
+  listUserLgpdRequests,
+  ForbiddenError as LgpdForbiddenError,
+} from '../admin/users/users.lgpd.service.js';
+import { ensureUsersLgpdInfrastructure } from '../admin/users/users.infrastructure.js';
+import { updateUserLgpdConsentSchema, submitAnonymizeRequestSchema, exportUserLgpdQuerySchema } from '../admin/users/users.schema.js';
 
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -262,6 +272,69 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return reply.send({ success: true });
+  });
+
+  app.get('/me/lgpd', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const state = await getUserLgpdState(request.user.id, schemaName);
+    const requestsResult = await listUserLgpdRequests(
+      { page: 1, per_page: 20, user_id: request.user.id },
+      schemaName,
+    );
+    return reply.send({ success: true, data: { ...state, requests: requestsResult.data } });
+  });
+
+  app.patch('/me/lgpd/consent', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = updateUserLgpdConsentSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Dados inválidos' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const result = await updateUserLgpdConsent(
+      request.user.id,
+      { ...parsed.data, source: parsed.data.source ?? 'self_service' },
+      request.user.id,
+      schemaName,
+    );
+    return reply.send({ success: true, data: result });
+  });
+
+  app.get('/me/lgpd/export', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = exportUserLgpdQuerySchema.safeParse(request.query);
+    const includeAuditLogs = parsed.success ? parsed.data.include_audit_logs : true;
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const data = await exportUserLgpdData(request.user.id, request.user.id, { includeAuditLogs }, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  app.post('/me/lgpd/anonymize-request', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = submitAnonymizeRequestSchema.safeParse(request.body);
+    const reason = parsed.success ? parsed.data.reason : undefined;
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    try {
+      const request_ = await submitUserAnonymizeRequest(request.user.id, reason, schemaName);
+      return reply.code(201).send({ success: true, data: request_ });
+    } catch (err) {
+      if (err instanceof LgpdForbiddenError) return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
   });
 
   app.post('/me/avatar', { preHandler: guard }, async (request, reply) => {

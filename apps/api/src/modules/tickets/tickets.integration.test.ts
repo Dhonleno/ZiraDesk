@@ -473,4 +473,29 @@ describe('Tickets integration', () => {
 
     expect(response.status).toBe(404);
   });
+
+  it('GET /api/tickets/:id registra audit log de acesso PII no detalhe', async () => {
+    const tenant = requireSuiteTenant();
+    const ticket = await createTicket({ title: uniqueText('Ticket PII Audit') });
+
+    const response = await createTestApp()
+      .get(`/api/tickets/${ticket.id}`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+
+    const logs = await prisma.$queryRawUnsafe<Array<{ action: string; entity_id: string }>>(
+      `SELECT action, entity_id::text
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'ticket.pii.accessed'
+         AND entity_id = $1::uuid`,
+      ticket.id,
+    );
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      action: 'ticket.pii.accessed',
+      entity_id: ticket.id,
+    });
+  });
 });

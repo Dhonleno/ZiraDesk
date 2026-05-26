@@ -1,6 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
 import type { CreateOrganizationInput, UpdateOrganizationInput, ListOrganizationsQuery } from './organizations.schema.js';
+import { maskDocument, maskEmail, maskPhone } from '../../../utils/pii-mask.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -77,6 +78,39 @@ interface OrganizationStatsResult {
   total_tickets: number;
   open_tickets: number;
   last_contact_at: Date | null;
+}
+
+type OrganizationContactListItem = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  role: string | null;
+  is_primary: boolean;
+  created_at: Date;
+};
+
+export function maskOrganizationRecord(org: OrganizationSummary): OrganizationSummary {
+  return {
+    ...org,
+    email: maskEmail(org.email),
+    phone: maskPhone(org.phone),
+    document: maskDocument(org.document),
+  };
+}
+
+export function maskOrganizationListRecords(orgs: OrganizationSummary[]): OrganizationSummary[] {
+  return orgs.map(maskOrganizationRecord);
+}
+
+export function maskOrganizationContactRecords(contacts: OrganizationContactListItem[]): OrganizationContactListItem[] {
+  return contacts.map((contact) => ({
+    ...contact,
+    email: maskEmail(contact.email),
+    phone: maskPhone(contact.phone),
+    whatsapp: maskPhone(contact.whatsapp),
+  }));
 }
 
 function toPgArray(arr: string[]): string {
@@ -237,6 +271,59 @@ export async function getOrganization(id: string, schemaName?: string, db: RawEx
   return { ...r, contacts_count: Number(r.contacts_count), conversations_count: Number(r.conversations_count), tickets_count: Number(r.tickets_count) };
 }
 
+export async function registerOrganizationPiiAccess(
+  organizationId: string,
+  actorUserId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) =>
+      registerOrganizationPiiAccess(organizationId, actorUserId, undefined, tx));
+  }
+
+  await getOrganization(organizationId, undefined, db);
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'organization.pii.accessed', 'organization', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    organizationId,
+    JSON.stringify({
+      user_id: actorUserId,
+      organization_id: organizationId,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+export async function registerOrganizationPiiReveal(
+  organizationId: string,
+  actorUserId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+  meta?: { ip?: string | undefined; userAgent?: string | undefined },
+): Promise<void> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) =>
+      registerOrganizationPiiReveal(organizationId, actorUserId, undefined, tx, meta));
+  }
+
+  await getOrganization(organizationId, undefined, db);
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'organization.pii.revealed', 'organization', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    organizationId,
+    JSON.stringify({
+      user_id: actorUserId,
+      organization_id: organizationId,
+      ip: meta?.ip ?? null,
+      user_agent: meta?.userAgent ?? null,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
 /* ── getOrganizationStats ────────────────────────────────────────────────── */
 export async function getOrganizationStats(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationStatsResult> {
   if (schemaName) {
@@ -273,13 +360,13 @@ export async function getOrganizationStats(id: string, schemaName?: string, db: 
 }
 
 /* ── getOrganizationContacts ─────────────────────────────────────────────── */
-export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>> {
+export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationContactListItem[]> {
   if (schemaName) {
     return withOptionalSchema(schemaName, (tx) => getOrganizationContacts(id, undefined, tx));
   }
 
   await getOrganization(id, undefined, db);
-  return db.$queryRawUnsafe<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>>(
+  return db.$queryRawUnsafe<OrganizationContactListItem[]>(
     `SELECT id, name, email, phone, whatsapp, role, is_primary, created_at
      FROM contacts WHERE organization_id = $1::uuid ORDER BY is_primary DESC, name ASC`,
     id,

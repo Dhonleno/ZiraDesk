@@ -3,6 +3,8 @@ import { prisma } from '../../../config/database.js';
 import { createTestApp, createTestJWT } from '../../../test/setup.js';
 import { syncTemplatesFromMeta } from './templates.service.js';
 
+const TEST_AUTH_SUB = '00000000-0000-0000-0000-000000000073';
+
 function requireSchema(): string {
   const s = globalThis.__ZIRADESK_TEST_TENANT_SCHEMA__;
   if (!s) throw new Error('Schema de teste não inicializado');
@@ -10,7 +12,14 @@ function requireSchema(): string {
 }
 
 function authHeader(): { Authorization: string } {
-  return { Authorization: `Bearer ${createTestJWT()}` };
+  return {
+    Authorization: `Bearer ${createTestJWT({
+      sub: TEST_AUTH_SUB,
+      email: 'templates.integration@ziradesk.test',
+      name: 'Templates Integration User',
+      role: 'owner',
+    })}`,
+  };
 }
 
 describe('Templates (WhatsApp) integration', () => {

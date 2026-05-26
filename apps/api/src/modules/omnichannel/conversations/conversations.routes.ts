@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
+import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -47,6 +48,7 @@ import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
+import { maskEmail, maskPhone } from '../../../utils/pii-mask.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const conversationsViewGuard = [...guard, requirePermission('conversations:view')];
@@ -103,6 +105,28 @@ async function withTenantSchema<T>(
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
     return runner(tx);
   });
+}
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
+
+async function insertPiiAuditLog(schemaName: string, userId: string, entity: string, entityId: string): Promise<void> {
+  await withTenantSchema(schemaName, (tx) =>
+    tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, 'conversation.pii.accessed', $2, $3::uuid, $4::jsonb)`,
+      userId,
+      entity,
+      entityId,
+      JSON.stringify({
+        user_id: userId,
+        entity,
+        entity_id: entityId,
+        timestamp: new Date().toISOString(),
+      }),
+    ),
+  );
 }
 
 async function sendConversationWhatsAppText(
@@ -221,7 +245,16 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       request.user.tenantId,
       request.user.role,
     );
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    const data = includeFullPii
+      ? result.data
+      : result.data.map((conversation) => ({
+        ...conversation,
+        contact_email: maskEmail(conversation.contact_email ?? null),
+        contact_phone: maskPhone(conversation.contact_phone ?? null),
+        contact_whatsapp: maskPhone(conversation.contact_whatsapp ?? null),
+      }));
+    return reply.send({ success: true, ...result, data });
   });
 
   // GET /api/omnichannel/conversations/channels
@@ -300,6 +333,10 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/:id', { preHandler: conversationsViewGuard }, async (request, reply) => {
     try {
       const result = await getConversationWithMessages(request.params.id, request.user.tenantId);
+      const schemaName = request.user.schemaName;
+      if (schemaName) {
+        await insertPiiAuditLog(schemaName, request.user.id, 'conversation', request.params.id);
+      }
       return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError) {
