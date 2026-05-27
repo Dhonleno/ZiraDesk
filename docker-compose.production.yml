@@ -52,7 +52,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-ziradesk}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-ziradesk}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     command: >
-      sh -c "pnpm dlx prisma generate && node dist/server.js"
+      sh -c "pnpm dlx prisma@5.22.0 generate && node dist/server.js"
     depends_on:
       postgres:
         condition: service_healthy
