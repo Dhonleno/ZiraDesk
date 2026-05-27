@@ -34,10 +34,15 @@ export function LegalDpoLink() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['legal', 'dpo'],
     queryFn: legalApi.getDpo,
-    enabled: open,
+    enabled: true,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+  const hasDpoInfo = Boolean(data?.name || data?.email || data?.phone || data?.privacyPolicyUrl || data?.termsUrl);
+
+  if (isError || isLoading || !hasDpoInfo) {
+    return null;
+  }
 
   return (
     <>
