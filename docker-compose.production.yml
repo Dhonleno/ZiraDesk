@@ -51,8 +51,7 @@ services:
       COREPACK_DEFAULT_TO_LATEST: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-ziradesk}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-ziradesk}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-    command: >
-      sh -c "pnpm exec prisma migrate deploy && node dist/server.js"
+    command: ["node", "dist/server.js"]
     depends_on:
       postgres:
         condition: service_healthy
