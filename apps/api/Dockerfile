@@ -1,5 +1,6 @@
 FROM node:20-alpine AS base
 RUN corepack enable
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 FROM base AS builder
