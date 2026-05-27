@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
     "dev:secondary": "tsx watch --env-file=.env --env-file=.env.secondary src/server.ts",
-    "build": "tsc",
+    "build": "pnpm --filter @ziradesk/shared build && prisma generate && tsc",
     "start": "node dist/server.js",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
@@ -16,7 +16,8 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
     "contacts:normalize-phones": "tsx --env-file=.env src/scripts/normalize-contact-phones.ts",
-    "test": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.ts"
+    "test": "node --env-file=.env.test ./node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx --env-file=.env prisma/seed.ts"

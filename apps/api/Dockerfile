@@ -8,8 +8,10 @@ COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY . .
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @ziradesk/api exec prisma generate
 RUN pnpm --filter @ziradesk/shared build
 RUN pnpm --filter @ziradesk/api build
+RUN rm -rf /app/deploy
 RUN pnpm --filter @ziradesk/api --prod deploy /app/deploy
 
 FROM base AS runtime
