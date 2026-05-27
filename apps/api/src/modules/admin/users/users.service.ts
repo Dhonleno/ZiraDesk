@@ -199,7 +199,8 @@ export async function inviteUser(
   const currentUsers = Number(countRows[0]?.count ?? 0);
   const willIncreaseActiveUsers = existing[0]?.status !== 'active';
 
-  if (willIncreaseActiveUsers && currentUsers >= tenant.plan.maxUsers) {
+  const hasUserLimit = tenant.plan.maxUsers >= 0;
+  if (willIncreaseActiveUsers && hasUserLimit && currentUsers >= tenant.plan.maxUsers) {
     throw new PlanLimitError(
       `Limite de ${tenant.plan.maxUsers} usuários atingido para o seu plano`,
     );
