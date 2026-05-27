@@ -48,6 +48,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3333
+      COREPACK_DEFAULT_TO_LATEST: "0"
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-ziradesk}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-ziradesk}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     command: >
