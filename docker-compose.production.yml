@@ -1,0 +1,124 @@
+name: ziradesk-production
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ziradesk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ziradesk}
+      POSTGRES_USER: ${POSTGRES_USER:-ziradesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - ../data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ziradesk} -d ${POSTGRES_DB:-ziradesk}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 2g
+    networks:
+      - ziradesk-internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: ziradesk-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "10000"]
+    volumes:
+      - ../data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - ziradesk-internal
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ziradesk-api:production
+    container_name: ziradesk-api
+    restart: unless-stopped
+    env_file:
+      - ./apps/api/.env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-ziradesk}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-ziradesk}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    command: >
+      sh -c "pnpm exec prisma migrate deploy && node dist/server.js"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../data/uploads:/app/public/uploads
+    expose:
+      - "3333"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3333/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 2g
+    networks:
+      - ziradesk-internal
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api.ziradesk.com.br}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-https://api.ziradesk.com.br}
+        VITE_APP_URL: ${VITE_APP_URL:-https://app.ziradesk.com.br}
+    image: ziradesk-web:production
+    container_name: ziradesk-web
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - ziradesk-internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ziradesk-nginx
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ../certs:/etc/nginx/certs:ro
+      - ../logs/nginx:/var/log/nginx
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    mem_limit: 256m
+    networks:
+      - ziradesk-internal
+
+networks:
+  ziradesk-internal:
+    driver: bridge
