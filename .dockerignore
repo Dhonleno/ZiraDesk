@@ -1,0 +1,56 @@
+# Dependências
+**/node_modules
+**/.pnpm-store
+
+# Builds
+**/dist
+**/build
+**/.next
+**/.vite
+**/.turbo
+
+# Logs
+**/*.log
+**/.tmp
+
+# Ambiente local
+.env
+.env.local
+.env.development
+.env.test
+**/.env
+**/.env.local
+**/.env.development
+**/.env.test
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Editor / IDE
+.vscode
+.idea
+**/.DS_Store
+*.swp
+*.swo
+
+# Testes / cobertura
+**/coverage
+**/test-results
+**/playwright-report
+
+# Documentação (não precisa no build)
+**/*.md
+docs/
+!apps/api/prisma/README.md  
+# (manter README do Prisma se referenciado em build, senão remover)
+
+# CI/CD
+.github
+*.yml
+!docker-compose*.yml
+!apps/web/nginx.default.conf
+
+# Artifacts de desenvolvimento
+**/storybook-static
