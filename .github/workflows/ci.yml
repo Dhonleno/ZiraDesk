@@ -31,7 +31,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ziradesk?schema=public
       REDIS_URL: redis://localhost:6379
-      JWT_SECRET: test-secret-ci
+      JWT_SECRET: ci-jwt-secret-with-minimum-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-with-minimum-32-chars
       NODE_ENV: test
       STORAGE_PROVIDER: local
 
