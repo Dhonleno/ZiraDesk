@@ -23,6 +23,7 @@ import {
   buildTemplateComponentsFromInput,
   findInvalidTemplateMediaUrl,
 } from './whatsapp-template-components.js';
+import { getTemplateValidationMessage } from '../../lib/i18n/template-errors.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -85,7 +86,7 @@ interface WhatsAppTemplateValidationRow {
   body: string | null;
   header: string | null;
   header_format: string | null;
-  buttons: unknown;
+  buttons_json: unknown;
   status: string | null;
   meta_template_id: string | null;
   last_synced_at: Date | null;
@@ -104,6 +105,7 @@ type ActiveOutboundTemplateUnavailableReason = 'not_approved' | 'not_synced';
 interface TemplateValidationResult {
   code: TemplateValidationCode;
   message: string;
+  vars: Record<string, string | number>;
 }
 
 interface TemplateValidationInput {
@@ -120,6 +122,7 @@ interface TemplateVariableCounts {
   total: number;
 }
 
+// Default PT-BR messages used internally by validateTemplateVariablesForOutbound
 const templateValidationMessages: Record<TemplateValidationCode, string> = {
   'template.validation.missingBodyVar': 'Variável {{n}} do corpo não preenchida',
   'template.validation.missingHeaderVar': 'Variável {{n}} do cabeçalho não preenchida',
@@ -221,6 +224,7 @@ function templateValidationError(
   return {
     code,
     message: formatTemplateValidationMessage(code, vars),
+    vars,
   };
 }
 
@@ -624,11 +628,12 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     });
     const invalidTemplateMediaUrl = findInvalidTemplateMediaUrl(normalizedTemplateComponents);
     if (invalidTemplateMediaUrl !== null) {
+      const lang = request.language ?? 'pt-BR';
       return reply.code(422).send({
         success: false,
         error: {
           code: 'template.validation.invalidHeaderMediaUrl',
-          message: formatTemplateValidationMessage('template.validation.invalidHeaderMediaUrl'),
+          message: getTemplateValidationMessage('template.validation.invalidHeaderMediaUrl', {}, lang),
         },
       });
     }
@@ -708,7 +713,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       let renderedTemplateBody: string | null = null;
       if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
         const templateRows = await tx.$queryRawUnsafe<WhatsAppTemplateValidationRow[]>(
-          `SELECT body, header, header_format, buttons, status, meta_template_id, last_synced_at
+          `SELECT body, header, header_format, buttons_json, status, meta_template_id, last_synced_at
            FROM whatsapp_templates
            WHERE channel_id = $1::uuid
              AND name = $2
@@ -780,17 +785,23 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
           body: selectedTemplate.body,
           header: selectedTemplate.header,
           headerFormat: selectedTemplate.header_format,
-          buttons: selectedTemplate.buttons,
+          buttons: selectedTemplate.buttons_json,
           components: normalizedTemplateComponents,
         });
         if (templateValidation) {
+          const lang = request.language ?? 'pt-BR';
+          const localizedMessage = getTemplateValidationMessage(
+            templateValidation.code,
+            templateValidation.vars,
+            lang,
+          );
           return {
             statusCode: 422 as const,
             payload: {
               success: false,
               error: {
                 code: templateValidation.code,
-                message: templateValidation.message,
+                message: localizedMessage,
               },
             },
           };

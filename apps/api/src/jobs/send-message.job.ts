@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { sendEmail } from '../services/email.service.js';
+import { buildTemplateComponentsFromInput } from '../lib/whatsapp/build-template-payload.js';
 
 interface SendMessageJob {
   messageId: string;
@@ -20,6 +21,11 @@ interface SendMessageJob {
   templateName?: string | null;
   templateLanguage?: string | null;
   templateComponents?: Array<Record<string, unknown>> | null;
+  // Structured format: when present, components are built from these fields
+  bodyParameters?: string[] | null;
+  headerText?: string | null;
+  headerMedia?: { type: string; url: string } | null;
+  buttonParameters?: Array<{ index: number; subType: string; parameters: string[] }> | null;
   replyToExternalId?: string | null;
   replyToMessageId?: string | null;
 }
@@ -222,6 +228,27 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExt
   })();
 
   if (templateName) {
+    const hasStructuredInput =
+      job.bodyParameters !== undefined ||
+      job.headerText !== undefined ||
+      job.headerMedia !== undefined ||
+      job.buttonParameters !== undefined;
+
+    const finalComponents = hasStructuredInput
+      ? buildTemplateComponentsFromInput({
+          templateComponents,
+          bodyParameters: job.bodyParameters ?? undefined,
+          headerText: job.headerText ?? undefined,
+          headerMedia: job.headerMedia
+            ? {
+                type: job.headerMedia.type as 'image' | 'video' | 'document',
+                url: job.headerMedia.url,
+              }
+            : undefined,
+          buttonParameters: job.buttonParameters ?? undefined,
+        })
+      : normalizedTemplateComponents;
+
     return {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
@@ -232,7 +259,7 @@ function buildWhatsAppBody(job: SendMessageJob, sanitizedPhone: string, replyExt
         language: {
           code: templateLanguage,
         },
-        components: normalizedTemplateComponents,
+        components: finalComponents,
       },
       ...context,
     };

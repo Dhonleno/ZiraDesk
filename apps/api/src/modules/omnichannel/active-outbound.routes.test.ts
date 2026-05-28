@@ -79,7 +79,7 @@ describe('validateTemplateVariablesForOutbound', () => {
       }],
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       code: 'template.validation.missingBodyVar',
       message: 'Variável {{2}} do corpo não preenchida',
     });
@@ -100,7 +100,7 @@ describe('validateTemplateVariablesForOutbound', () => {
       }],
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       code: 'template.validation.varCountMismatch',
       message: 'Número de variáveis não corresponde ao template',
     });
@@ -115,7 +115,7 @@ describe('validateTemplateVariablesForOutbound', () => {
       components: [],
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       code: 'template.validation.missingHeaderVar',
       message: 'Variável {{1}} do cabeçalho não preenchida',
     });
@@ -130,7 +130,7 @@ describe('validateTemplateVariablesForOutbound', () => {
       components: [],
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       code: 'template.validation.missingHeaderMedia',
       message: 'Template requer mídia no cabeçalho',
     });
@@ -163,7 +163,7 @@ describe('validateTemplateVariablesForOutbound', () => {
       components: [],
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       code: 'template.validation.missingButtonParam',
       message: 'Parâmetro dinâmico do botão {{1}} não preenchido',
     });
