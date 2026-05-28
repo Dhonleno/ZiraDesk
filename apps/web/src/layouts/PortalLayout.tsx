@@ -51,8 +51,7 @@ export function PortalLayout() {
       </main>
       <footer className="portal-footer">
         <span>Powered by ZiraDesk</span>
-        <span aria-hidden>•</span>
-        <LegalDpoLink />
+        <LegalDpoLink showLeadingSeparator />
       </footer>
     </div>
   );

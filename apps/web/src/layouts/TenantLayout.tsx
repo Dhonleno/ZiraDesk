@@ -1073,8 +1073,7 @@ export function TenantLayout() {
           </div>
           <footer className="app-legal-footer">
             <span>Powered by ZiraDesk</span>
-            <span className="app-legal-footer-separator" aria-hidden>•</span>
-            <LegalDpoLink />
+            <LegalDpoLink showLeadingSeparator separatorClassName="app-legal-footer-separator" />
           </footer>
         </main>
       </div>
