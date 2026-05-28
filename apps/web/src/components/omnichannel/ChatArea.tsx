@@ -326,6 +326,8 @@ function requiresWhatsappTemplateMessage(
   withinActiveOutboundWindow: boolean,
 ): boolean {
   if (!conversation || conversation.channel_type !== 'whatsapp') return false;
+  // Server-side flag set by webhook when the 24h re-engagement window expires
+  if (conversation.metadata?.whatsapp_reengagement_required === true) return true;
   return conversation.status === 'waiting'
     && conversation.conversation_type === 'outbound'
     && !withinActiveOutboundWindow;
