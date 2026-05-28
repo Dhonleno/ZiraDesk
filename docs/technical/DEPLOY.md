@@ -1,45 +1,26 @@
 # Deploy — ZiraDesk
 
-## Pré-requisitos
-- Conta no Railway (railway.app)
-- Domínio configurado (ziradesk.com.br)
-- DNS Cloudflare com wildcard *.ziradesk.com.br
+## Status atual (oficial)
+O ambiente de produção oficial está em VPS Contabo com Docker Compose.
 
-## Serviços no Railway
-1. PostgreSQL 16 (plugin oficial)
-2. Redis 7 (plugin oficial)
-3. API (Fastify) — Dockerfile em apps/api/
-4. Web (React) — deploy como Static Site
+Use como referência principal:
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md`
+- `docker-compose.production.yml`
+- `vps-bootstrap.sh`
 
-## Variáveis de ambiente
-Configurar todas as variáveis de apps/api/.env.production.example
-no serviço da API no Railway.
+## Fluxo oficial de deploy
+1. Atualizar código no servidor VPS.
+2. Garantir `.env.production` e `apps/api/.env.production` configurados.
+3. Executar:
+   `docker compose --env-file .env.production -f docker-compose.production.yml up -d --build`
+4. Validar:
+   - `docker compose -f docker-compose.production.yml ps`
+   - `curl -I https://api.ziradesk.com.br/health`
 
-Obrigatórias para webhooks Meta:
-- META_APP_SECRET
-- WHATSAPP_VERIFY_TOKEN
+## CI/CD no GitHub Actions
+O workflow `CI` no GitHub Actions funciona como gate de qualidade (testes).
+O deploy de produção não é disparado pelo GitHub Actions.
 
-Para o Web, configurar:
-VITE_API_URL=https://api.ziradesk.com.br
-VITE_SOCKET_URL=https://api.ziradesk.com.br
-
-## Domínios customizados no Railway
-- API: api.ziradesk.com.br
-- Web: app.ziradesk.com.br
-
-## Subdomínios de tenant
-Configurar DNS wildcard no Cloudflare:
-*.ziradesk.com.br → app.ziradesk.com.br (CNAME)
-
-O middleware de tenant resolve o slug pelo subdomínio.
-
-## Deploy inicial
-1. Fazer push para o GitHub
-2. Conectar repositório no Railway
-3. Configurar variáveis de ambiente
-4. Executar manualmente: railway run pnpm --filter @ziradesk/api db:seed
-5. Verificar health: GET https://api.ziradesk.com.br/health
-
-## Deploy contínuo
-Railway detecta push na branch main e faz deploy automático.
-Migrations rodam automaticamente via scripts/deploy.sh.
+## Nota sobre Railway
+A documentação e arquivos de Railway permanecem apenas como referência histórica/alternativa.
+Não representam o fluxo oficial atual de produção.

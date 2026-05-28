@@ -1,5 +1,7 @@
 # Deploy em VPS (Docker Compose)
 
+Este é o guia oficial de produção do ZiraDesk no ambiente Contabo.
+
 Este guia usa os arquivos:
 - `docker-compose.production.yml`
 - `apps/api/Dockerfile`
