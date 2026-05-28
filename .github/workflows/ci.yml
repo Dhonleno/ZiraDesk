@@ -68,10 +68,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run migrations
-        run: pnpm --filter @ziradesk/api db:migrate
+        working-directory: apps/api
+        run: pnpm db:migrate
 
       - name: Run API tests
-        run: pnpm --filter @ziradesk/api test
+        working-directory: apps/api
+        run: pnpm test
 
   deploy:
     runs-on: ubuntu-latest
