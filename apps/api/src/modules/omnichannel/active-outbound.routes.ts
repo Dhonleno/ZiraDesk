@@ -1,10 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
+import multipart from '@fastify/multipart';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { prisma } from '../../config/database.js';
+import { getStorage } from '../../lib/storage/index.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { getSocketServer } from '../../socket/index.js';
@@ -15,8 +19,26 @@ import {
   ensureTemplatesInfrastructure,
   listTemplates as listAdminTemplates,
 } from '../admin/templates/templates.service.js';
+import {
+  buildTemplateComponentsFromInput,
+  findInvalidTemplateMediaUrl,
+} from './whatsapp-template-components.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
+
+const HEADER_MEDIA_MAX_SIZE_BYTES = 16 * 1024 * 1024;
+const HEADER_MEDIA_MIME_TYPES: Record<'image' | 'video' | 'document', ReadonlySet<string>> = {
+  image: new Set(['image/jpeg', 'image/png', 'image/webp']),
+  video: new Set(['video/mp4', 'video/3gpp']),
+  document: new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain',
+  ]),
+};
 
 type TenantRawDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
 
@@ -73,8 +95,11 @@ type TemplateValidationCode =
   | 'template.validation.missingBodyVar'
   | 'template.validation.missingHeaderVar'
   | 'template.validation.missingHeaderMedia'
+  | 'template.validation.invalidHeaderMediaUrl'
   | 'template.validation.missingButtonParam'
   | 'template.validation.varCountMismatch';
+
+type ActiveOutboundTemplateUnavailableReason = 'not_approved' | 'not_synced';
 
 interface TemplateValidationResult {
   code: TemplateValidationCode;
@@ -93,9 +118,30 @@ const templateValidationMessages: Record<TemplateValidationCode, string> = {
   'template.validation.missingBodyVar': 'Variável {{n}} do corpo não preenchida',
   'template.validation.missingHeaderVar': 'Variável {{n}} do cabeçalho não preenchida',
   'template.validation.missingHeaderMedia': 'Template requer mídia no cabeçalho',
+  'template.validation.invalidHeaderMediaUrl': 'URL pública da mídia do cabeçalho inválida',
   'template.validation.missingButtonParam': 'Parâmetro dinâmico do botão {{n}} não preenchido',
   'template.validation.varCountMismatch': 'Número de variáveis não corresponde ao template',
 };
+
+export function resolveActiveOutboundTemplateAvailability(template: {
+  status?: unknown;
+  meta_template_id?: unknown;
+}): {
+  is_sendable: boolean;
+  unavailable_reason: ActiveOutboundTemplateUnavailableReason | null;
+} {
+  const status = String(template.status ?? '').trim().toLowerCase();
+  if (status !== 'approved') {
+    return { is_sendable: false, unavailable_reason: 'not_approved' };
+  }
+
+  const metaTemplateId = String(template.meta_template_id ?? '').trim();
+  if (!metaTemplateId) {
+    return { is_sendable: false, unavailable_reason: 'not_synced' };
+  }
+
+  return { is_sendable: true, unavailable_reason: null };
+}
 
 const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
@@ -107,6 +153,17 @@ const activeOutboundSchema = z.object({
   templateName: z.string().trim().min(1).max(512).optional(),
   templateLanguage: z.string().trim().min(2).max(20).optional(),
   templateComponents: z.array(z.record(z.unknown())).optional(),
+  bodyParameters: z.array(z.string().max(1024)).max(30).optional(),
+  headerText: z.string().trim().max(1024).optional(),
+  headerMedia: z.object({
+    type: z.enum(['image', 'video', 'document']),
+    url: z.string().trim().url().max(2048),
+  }).optional(),
+  buttonParameters: z.array(z.object({
+    index: z.number().int().min(0).max(9),
+    subType: z.string().trim().min(1).max(30),
+    parameters: z.array(z.string().max(1024)).max(10),
+  })).max(10).optional(),
   subject: z.string().trim().max(255).optional(),
   message: z.string().trim().max(4000).optional(),
   useTemplate: z.boolean().default(true),
@@ -254,6 +311,12 @@ function buttonRequiresDynamicParameter(button: Record<string, unknown>): boolea
   return buttonTextFields(button).some((value) => extractTemplateVariableIndexes(value).length > 0);
 }
 
+function dynamicButtonEntries(buttons: unknown): Array<{ button: Record<string, unknown>; index: number }> {
+  return normalizeButtons(buttons)
+    .map((button, index) => ({ button, index }))
+    .filter((entry) => buttonRequiresDynamicParameter(entry.button));
+}
+
 function findButtonComponent(
   components: Record<string, unknown>[],
   buttonIndex: number,
@@ -311,9 +374,10 @@ export function validateTemplateVariablesForOutbound(
     }
   }
 
-  const dynamicButtons = normalizeButtons(input.buttons).filter(buttonRequiresDynamicParameter);
+  const dynamicButtons = dynamicButtonEntries(input.buttons);
   for (let position = 0; position < dynamicButtons.length; position += 1) {
-    const buttonComponent = findButtonComponent(input.components, position);
+    const buttonIndex = dynamicButtons[position]?.index ?? position;
+    const buttonComponent = findButtonComponent(input.components, buttonIndex);
     const buttonParameters = extractComponentParameters(buttonComponent);
     if (!hasFilledButtonParameter(buttonParameters[0])) {
       return templateValidationError('template.validation.missingButtonParam', {
@@ -338,6 +402,32 @@ function applyBodyParams(body: string, params: string[]): string {
   });
 }
 
+function mediaExtension(filename: string, mimeType: string): string {
+  const fromName = path.extname(filename).toLowerCase();
+  if (/^\.[a-z0-9]{1,12}$/.test(fromName)) return fromName;
+  if (mimeType === 'image/jpeg') return '.jpg';
+  if (mimeType === 'image/png') return '.png';
+  if (mimeType === 'image/webp') return '.webp';
+  if (mimeType === 'video/mp4') return '.mp4';
+  if (mimeType === 'video/3gpp') return '.3gp';
+  if (mimeType === 'application/pdf') return '.pdf';
+  if (mimeType === 'text/plain') return '.txt';
+  return '';
+}
+
+function resolvePublicUploadUrl(rawUrl: string, request: { headers: Record<string, string | string[] | undefined> }): string {
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+  if (!rawUrl.startsWith('/')) return rawUrl;
+
+  const forwardedProto = request.headers['x-forwarded-proto'];
+  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  const hostHeader = request.headers['x-forwarded-host'] ?? request.headers.host;
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  if (!host) return rawUrl;
+
+  return `${proto ?? 'https'}://${host}${rawUrl}`;
+}
+
 function ensureSafeSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/.test(schemaName)) {
     throw new Error('Schema do tenant inválido');
@@ -358,6 +448,13 @@ async function withTenantSchema<T>(
 }
 
 export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    limits: {
+      fileSize: HEADER_MEDIA_MAX_SIZE_BYTES,
+      files: 1,
+    },
+  });
+
   app.get('/templates', { preHandler: guard }, async (request, reply) => {
     const parsed = listTemplatesQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -374,11 +471,86 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const templates = await listAdminTemplates(schemaName, parsed.data);
-    const approvedTemplates = templates.filter((template) => {
-      const status = String(template.status ?? '').toLowerCase();
-      return status === 'approved' && Boolean(template.meta_template_id);
+    const activeOutboundTemplates = templates.map((template) => ({
+      ...template,
+      ...resolveActiveOutboundTemplateAvailability(template),
+    }));
+
+    return reply.send({ success: true, data: activeOutboundTemplates });
+  });
+
+  app.post('/active-outbound/header-media', { preHandler: guard }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Content-Type deve ser multipart/form-data' },
+      });
+    }
+
+    let mediaType: 'image' | 'video' | 'document' | null = null;
+    let fileBuffer: Buffer | null = null;
+    let fileMimeType: string | null = null;
+    let fileName: string | null = null;
+
+    for await (const part of request.parts()) {
+      if (part.type === 'field' && part.fieldname === 'type') {
+        const value = String(part.value ?? '').trim().toLowerCase();
+        if (value === 'image' || value === 'video' || value === 'document') mediaType = value;
+        continue;
+      }
+
+      if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+        fileBuffer = await part.toBuffer();
+        fileMimeType = part.mimetype;
+        fileName = part.filename;
+        continue;
+      }
+
+      if (part.type === 'file') {
+        await part.toBuffer();
+      }
+    }
+
+    if (!mediaType) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Tipo de mídia do cabeçalho é obrigatório' },
+      });
+    }
+
+    if (!fileBuffer || !fileMimeType || !fileName) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Arquivo não enviado' },
+      });
+    }
+
+    if (!HEADER_MEDIA_MIME_TYPES[mediaType].has(fileMimeType)) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: `Tipo ${fileMimeType} não é suportado para cabeçalho ${mediaType}` },
+      });
+    }
+
+    const tenantId = request.user.tenantId;
+    if (!tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Tenant não resolvido' } });
+    }
+
+    const key = `active-outbound/${tenantId}/${randomUUID()}${mediaExtension(fileName, fileMimeType)}`;
+    const uploadedUrl = await getStorage().upload(key, fileBuffer, fileMimeType);
+
+    return reply.send({
+      success: true,
+      data: {
+        url: resolvePublicUploadUrl(uploadedUrl, request),
+        key,
+        type: mediaType,
+        filename: fileName,
+        mime_type: fileMimeType,
+        size: fileBuffer.length,
+      },
     });
-    return reply.send({ success: true, data: approvedTemplates });
   });
 
   app.post('/active-outbound', { preHandler: guard }, async (request, reply) => {
@@ -405,6 +577,10 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       templateName,
       templateLanguage,
       templateComponents,
+      bodyParameters,
+      headerText,
+      headerMedia,
+      buttonParameters,
       subject,
       message,
       useTemplate,
@@ -414,9 +590,23 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const templateLanguageNormalized = templateLanguage?.trim() || 'pt_BR';
     const normalizedMessage = message?.trim() ?? '';
     const normalizedSubject = subject?.trim() || null;
-    const normalizedTemplateComponents = (templateComponents ?? []).filter(
-      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
-    );
+    const normalizedTemplateComponents = buildTemplateComponentsFromInput({
+      templateComponents,
+      bodyParameters,
+      headerText,
+      headerMedia,
+      buttonParameters,
+    });
+    const invalidTemplateMediaUrl = findInvalidTemplateMediaUrl(normalizedTemplateComponents);
+    if (invalidTemplateMediaUrl !== null) {
+      return reply.code(422).send({
+        success: false,
+        error: {
+          code: 'template.validation.invalidHeaderMediaUrl',
+          message: formatTemplateValidationMessage('template.validation.invalidHeaderMediaUrl'),
+        },
+      });
+    }
 
     if (useTemplate && templateNameNormalized) {
       await ensureTemplatesInfrastructure(schemaName);

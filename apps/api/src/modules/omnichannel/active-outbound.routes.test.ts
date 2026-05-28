@@ -1,5 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { validateTemplateVariablesForOutbound } from './active-outbound.routes.js';
+import {
+  resolveActiveOutboundTemplateAvailability,
+  validateTemplateVariablesForOutbound,
+} from './active-outbound.routes.js';
+
+describe('resolveActiveOutboundTemplateAvailability', () => {
+  it('marca template aprovado e sincronizado como enviável', () => {
+    expect(resolveActiveOutboundTemplateAvailability({
+      status: 'approved',
+      meta_template_id: 'meta-template-1',
+    })).toEqual({
+      is_sendable: true,
+      unavailable_reason: null,
+    });
+  });
+
+  it('marca template sem vínculo com a Meta como não sincronizado', () => {
+    expect(resolveActiveOutboundTemplateAvailability({
+      status: 'approved',
+      meta_template_id: null,
+    })).toEqual({
+      is_sendable: false,
+      unavailable_reason: 'not_synced',
+    });
+  });
+
+  it('marca template não aprovado como indisponível', () => {
+    expect(resolveActiveOutboundTemplateAvailability({
+      status: 'pending',
+      meta_template_id: 'meta-template-1',
+    })).toEqual({
+      is_sendable: false,
+      unavailable_reason: 'not_approved',
+    });
+  });
+});
 
 describe('validateTemplateVariablesForOutbound', () => {
   it('retorna erro específico quando variável do corpo não é preenchida', () => {
@@ -111,6 +146,28 @@ describe('validateTemplateVariablesForOutbound', () => {
           type: 'button',
           sub_type: 'url',
           index: '0',
+          parameters: [{ type: 'text', text: '123' }],
+        },
+      ],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('valida botão URL dinâmico usando o índice original do template', () => {
+    const result = validateTemplateVariablesForOutbound({
+      body: 'Mensagem sem variável.',
+      header: null,
+      headerFormat: null,
+      buttons: [
+        { type: 'QUICK_REPLY', text: 'Agora não' },
+        { type: 'URL', text: 'Ver pedido', url: 'https://app.test/pedidos/{{1}}' },
+      ],
+      components: [
+        {
+          type: 'button',
+          sub_type: 'url',
+          index: '1',
           parameters: [{ type: 'text', text: '123' }],
         },
       ],
