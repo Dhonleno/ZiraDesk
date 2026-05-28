@@ -87,4 +87,21 @@ jobs:
       - name: Trigger Railway Deploy Webhook
         env:
           RAILWAY_DEPLOY_WEBHOOK: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
-        run: curl -X POST "$RAILWAY_DEPLOY_WEBHOOK"
+        run: |
+          set -euo pipefail
+          WEBHOOK="$(echo "${RAILWAY_DEPLOY_WEBHOOK:-}" | tr -d '\r' | xargs)"
+
+          if [ -z "$WEBHOOK" ]; then
+            echo "RAILWAY_DEPLOY_WEBHOOK secret is empty or not configured."
+            exit 1
+          fi
+
+          case "$WEBHOOK" in
+            http://*|https://*) ;;
+            *)
+              echo "RAILWAY_DEPLOY_WEBHOOK must be a full URL (http/https)."
+              exit 1
+              ;;
+          esac
+
+          curl --fail --show-error --silent -X POST "$WEBHOOK"
