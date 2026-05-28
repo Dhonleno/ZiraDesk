@@ -56,6 +56,8 @@ const envSchema = z.object({
   DPO_PHONE: optionalTrimmedString(),
   PRIVACY_POLICY_URL: optionalUrl('PRIVACY_POLICY_URL'),
   TERMS_OF_SERVICE_URL: optionalUrl('TERMS_OF_SERVICE_URL'),
+  COMPANY_LEGAL_NAME: optionalTrimmedString(),
+  COMPANY_CNPJ: optionalTrimmedString(),
   SUPER_ADMIN_EMAIL: optionalEmail('SUPER_ADMIN_EMAIL'),
 });
 

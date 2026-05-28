@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createTestApp } from '../../test/setup.js';
 
-const DPO_FIELDS = ['name', 'email', 'phone', 'privacyPolicyUrl', 'termsUrl'] as const;
+const DPO_FIELDS = [
+  'name',
+  'email',
+  'phone',
+  'privacyPolicyUrl',
+  'termsUrl',
+  'companyLegalName',
+  'companyCnpj',
+] as const;
 
 describe('GET /api/legal/dpo', () => {
   it('retorna 200 sem token de autenticação', async () => {

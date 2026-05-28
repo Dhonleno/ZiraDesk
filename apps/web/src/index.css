@@ -1961,6 +1961,131 @@
   color: var(--txt-2);
 }
 
+.login-card {
+  border-color: var(--line) !important;
+  background: var(--bg-2) !important;
+}
+
+.login-theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  color: var(--txt-2);
+}
+
+.login-theme-toggle:hover {
+  background: var(--bg-4);
+  color: var(--txt);
+  border-color: var(--line-2);
+}
+
+.login-password-wrap {
+  position: relative;
+}
+
+.login-password-input {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--bg-3);
+  color: var(--txt);
+  font-size: 14px;
+  padding: 0 40px 0 12px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-password-input::placeholder {
+  color: var(--txt-3);
+}
+
+.login-password-input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-dim);
+}
+
+.login-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--txt-3);
+  border-radius: var(--r);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.login-password-toggle:hover {
+  color: var(--txt-2);
+  background: var(--bg-4);
+}
+
+.login-forgot-link {
+  color: var(--txt-2);
+}
+
+.login-forgot-link:hover {
+  color: var(--txt);
+}
+
+.login-company-cnpj {
+  margin-top: 4px;
+  color: var(--txt-3);
+  font-size: 10px;
+}
+
+.login-legal-links {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.login-legal-link-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.login-legal-separator {
+  color: var(--txt-3);
+  margin: 0 6px;
+  font-size: 11px;
+}
+
+.login-legal-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: var(--txt-3);
+  font-size: 11px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.login-legal-link:hover {
+  color: var(--txt-2);
+  text-decoration: underline;
+}
+
+.login-legal-link:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: var(--r);
+}
+
 .portal-login-page {
   min-height: calc(100vh - 140px);
   display: flex;

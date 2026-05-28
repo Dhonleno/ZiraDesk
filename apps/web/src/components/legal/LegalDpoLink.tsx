@@ -4,6 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { legalApi } from '../../services/api';
 import { Modal } from '../ui/Modal';
 
+interface LegalDpoLinkProps {
+  className?: string;
+  label?: string;
+}
+
 function ExternalLink({ href, children }: { href: string; children: string }) {
   return (
     <a className="legal-dpo-value" href={href} target="_blank" rel="noreferrer">
@@ -28,7 +33,7 @@ function ContactValue({ href, value }: { href: string | undefined; value: string
   );
 }
 
-export function LegalDpoLink() {
+export function LegalDpoLink({ className, label }: LegalDpoLinkProps) {
   const { t } = useTranslation(['legal', 'common']);
   const [open, setOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -46,8 +51,12 @@ export function LegalDpoLink() {
 
   return (
     <>
-      <button type="button" className="legal-footer-link" onClick={() => setOpen(true)}>
-        {t('dpo.title', { ns: 'legal' })}
+      <button
+        type="button"
+        className={className ? `legal-footer-link ${className}` : 'legal-footer-link'}
+        onClick={() => setOpen(true)}
+      >
+        {label ?? t('dpo.title', { ns: 'legal' })}
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={t('dpo.title', { ns: 'legal' })} maxWidth="sm">

@@ -3445,6 +3445,8 @@ export interface LegalDpoInfo {
   phone: string | null;
   privacyPolicyUrl: string | null;
   termsUrl: string | null;
+  companyLegalName: string | null;
+  companyCnpj: string | null;
 }
 
 function resolvePortalTenantSlug(): string {

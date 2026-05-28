@@ -9,6 +9,8 @@ export async function legalRoutes(app: FastifyInstance): Promise<void> {
     phone: env.DPO_PHONE ?? null,
     privacyPolicyUrl: env.PRIVACY_POLICY_URL ?? null,
     termsUrl: env.TERMS_OF_SERVICE_URL ?? null,
+    companyLegalName: env.COMPANY_LEGAL_NAME ?? null,
+    companyCnpj: env.COMPANY_CNPJ ?? null,
   }));
 
   app.get('/lgpd-export-schema', async (_request, reply) => {
