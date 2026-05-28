@@ -8,6 +8,8 @@ Use como referência principal:
 - `docker-compose.production.yml`
 - `vps-bootstrap.sh`
 
+Para deploy remoto via SSH a partir desta máquina (Windows/PowerShell), use a seção `6)` de `DEPLOY_VPS_DOCKER_COMPOSE.md`.
+
 ## Fluxo oficial de deploy
 1. Atualizar código no servidor VPS.
 2. Garantir `.env.production` e `apps/api/.env.production` configurados.
