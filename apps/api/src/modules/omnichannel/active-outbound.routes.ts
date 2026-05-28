@@ -11,7 +11,10 @@ import { getSocketServer } from '../../socket/index.js';
 import { loadConversationSocketPayload } from './conversations/socket-payload.js';
 import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
-import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
+import {
+  ensureTemplatesInfrastructure,
+  listTemplates as listAdminTemplates,
+} from '../admin/templates/templates.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -56,6 +59,44 @@ interface GeneratedProtocolRow {
   protocol: string;
 }
 
+interface WhatsAppTemplateValidationRow {
+  body: string | null;
+  header: string | null;
+  header_format: string | null;
+  buttons: unknown;
+  status: string | null;
+  meta_template_id: string | null;
+  last_synced_at: Date | null;
+}
+
+type TemplateValidationCode =
+  | 'template.validation.missingBodyVar'
+  | 'template.validation.missingHeaderVar'
+  | 'template.validation.missingHeaderMedia'
+  | 'template.validation.missingButtonParam'
+  | 'template.validation.varCountMismatch';
+
+interface TemplateValidationResult {
+  code: TemplateValidationCode;
+  message: string;
+}
+
+interface TemplateValidationInput {
+  body: string | null;
+  header: string | null;
+  headerFormat: string | null;
+  buttons: unknown;
+  components: Record<string, unknown>[];
+}
+
+const templateValidationMessages: Record<TemplateValidationCode, string> = {
+  'template.validation.missingBodyVar': 'Variável {{n}} do corpo não preenchida',
+  'template.validation.missingHeaderVar': 'Variável {{n}} do cabeçalho não preenchida',
+  'template.validation.missingHeaderMedia': 'Template requer mídia no cabeçalho',
+  'template.validation.missingButtonParam': 'Parâmetro dinâmico do botão {{n}} não preenchido',
+  'template.validation.varCountMismatch': 'Número de variáveis não corresponde ao template',
+};
+
 const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
 });
@@ -79,6 +120,213 @@ function extractBodyParamsFromComponents(components: Record<string, unknown>[]):
   return (bodyComp.parameters as Array<Record<string, unknown>>)
     .filter((p) => typeof p.text === 'string')
     .map((p) => p.text as string);
+}
+
+function extractTemplateVariableIndexes(text: string | null | undefined): number[] {
+  if (!text) return [];
+
+  const variableIndexes = new Set<number>();
+  const regex = /\{\{\s*(\d+)\s*\}\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const variableIndex = Number.parseInt(match[1] ?? '', 10);
+    if (Number.isFinite(variableIndex) && variableIndex > 0) {
+      variableIndexes.add(variableIndex);
+    }
+  }
+
+  return [...variableIndexes].sort((left, right) => left - right);
+}
+
+function formatTemplateValidationMessage(
+  code: TemplateValidationCode,
+  vars: Record<string, string | number> = {},
+): string {
+  let message = templateValidationMessages[code];
+  for (const [key, value] of Object.entries(vars)) {
+    const replacement = key === 'n' ? `{{${String(value)}}}` : String(value);
+    message = message.replaceAll(`{{${key}}}`, replacement);
+  }
+  return message;
+}
+
+function templateValidationError(
+  code: TemplateValidationCode,
+  vars: Record<string, string | number> = {},
+): TemplateValidationResult {
+  return {
+    code,
+    message: formatTemplateValidationMessage(code, vars),
+  };
+}
+
+function findTemplateComponent(
+  components: Record<string, unknown>[],
+  type: string,
+  predicate?: (component: Record<string, unknown>) => boolean,
+): Record<string, unknown> | null {
+  const normalizedType = type.toLowerCase();
+  return components.find((component) => {
+    const componentType = typeof component.type === 'string' ? component.type.toLowerCase() : '';
+    return componentType === normalizedType && (!predicate || predicate(component));
+  }) ?? null;
+}
+
+function extractComponentParameters(component: Record<string, unknown> | null): Record<string, unknown>[] {
+  if (!Array.isArray(component?.parameters)) return [];
+  return component.parameters.filter(
+    (parameter): parameter is Record<string, unknown> => Boolean(parameter) && typeof parameter === 'object',
+  );
+}
+
+function hasTextValue(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasFilledTextParameter(parameter: Record<string, unknown> | undefined): boolean {
+  return hasTextValue(parameter?.text);
+}
+
+function hasFilledMediaValue(value: unknown): boolean {
+  if (hasTextValue(value)) return true;
+  if (!value || typeof value !== 'object') return false;
+
+  const record = value as Record<string, unknown>;
+  return hasTextValue(record.id) || hasTextValue(record.link) || hasTextValue(record.url);
+}
+
+function hasFilledMediaParameter(parameter: Record<string, unknown> | undefined, mediaType: string): boolean {
+  if (!parameter) return false;
+
+  const normalizedMediaType = mediaType.toLowerCase();
+  return (
+    hasFilledMediaValue(parameter[normalizedMediaType])
+    || hasFilledMediaValue(parameter.media)
+    || hasFilledMediaValue(parameter.id)
+    || hasFilledMediaValue(parameter.link)
+    || hasFilledMediaValue(parameter.url)
+  );
+}
+
+function hasFilledButtonParameter(parameter: Record<string, unknown> | undefined): boolean {
+  if (!parameter) return false;
+
+  return (
+    hasTextValue(parameter.text)
+    || hasTextValue(parameter.payload)
+    || hasTextValue(parameter.coupon_code)
+    || hasFilledMediaValue(parameter.image)
+    || hasFilledMediaValue(parameter.video)
+    || hasFilledMediaValue(parameter.document)
+  );
+}
+
+function normalizeHeaderFormat(header: string | null, headerFormat: string | null): string | null {
+  const normalizedFormat = headerFormat?.trim().toUpperCase() ?? '';
+  if (['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'].includes(normalizedFormat)) {
+    return normalizedFormat;
+  }
+
+  const headerText = header?.trim() ?? '';
+  if (!headerText) return null;
+  if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerText.toUpperCase())) {
+    return headerText.toUpperCase();
+  }
+
+  return 'TEXT';
+}
+
+function normalizeButtons(buttons: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(buttons)) return [];
+  return buttons.filter(
+    (button): button is Record<string, unknown> => Boolean(button) && typeof button === 'object',
+  );
+}
+
+function buttonTextFields(button: Record<string, unknown>): string[] {
+  return ['text', 'url', 'payload', 'phone_number']
+    .map((field) => button[field])
+    .filter((value): value is string => typeof value === 'string');
+}
+
+function buttonRequiresDynamicParameter(button: Record<string, unknown>): boolean {
+  return buttonTextFields(button).some((value) => extractTemplateVariableIndexes(value).length > 0);
+}
+
+function findButtonComponent(
+  components: Record<string, unknown>[],
+  buttonIndex: number,
+): Record<string, unknown> | null {
+  return findTemplateComponent(components, 'button', (component) => {
+    if (component.index === undefined || component.index === null) return false;
+    return String(component.index) === String(buttonIndex);
+  });
+}
+
+export function validateTemplateVariablesForOutbound(
+  input: TemplateValidationInput,
+): TemplateValidationResult | null {
+  const bodyVariables = extractTemplateVariableIndexes(input.body);
+  const bodyComponent = findTemplateComponent(input.components, 'body');
+  const bodyParameters = extractComponentParameters(bodyComponent);
+
+  for (let position = 0; position < bodyVariables.length; position += 1) {
+    const variableIndex = bodyVariables[position];
+    if (!hasFilledTextParameter(bodyParameters[position])) {
+      return templateValidationError('template.validation.missingBodyVar', {
+        n: variableIndex ?? position + 1,
+      });
+    }
+  }
+
+  if (bodyParameters.length !== bodyVariables.length) {
+    return templateValidationError('template.validation.varCountMismatch');
+  }
+
+  const headerFormat = normalizeHeaderFormat(input.header, input.headerFormat);
+  const headerVariables = extractTemplateVariableIndexes(input.header);
+  const headerComponent = findTemplateComponent(input.components, 'header');
+  const headerParameters = extractComponentParameters(headerComponent);
+
+  if (headerFormat === 'TEXT') {
+    for (let position = 0; position < headerVariables.length; position += 1) {
+      const variableIndex = headerVariables[position];
+      if (!hasFilledTextParameter(headerParameters[position])) {
+        return templateValidationError('template.validation.missingHeaderVar', {
+          n: variableIndex ?? position + 1,
+        });
+      }
+    }
+
+    if (headerParameters.length !== headerVariables.length) {
+      return templateValidationError('template.validation.varCountMismatch');
+    }
+  }
+
+  if (headerFormat && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerFormat)) {
+    const firstHeaderParameter = headerParameters[0];
+    if (!hasFilledMediaParameter(firstHeaderParameter, headerFormat)) {
+      return templateValidationError('template.validation.missingHeaderMedia');
+    }
+  }
+
+  const dynamicButtons = normalizeButtons(input.buttons).filter(buttonRequiresDynamicParameter);
+  for (let position = 0; position < dynamicButtons.length; position += 1) {
+    const buttonComponent = findButtonComponent(input.components, position);
+    const buttonParameters = extractComponentParameters(buttonComponent);
+    if (!hasFilledButtonParameter(buttonParameters[0])) {
+      return templateValidationError('template.validation.missingButtonParam', {
+        n: position + 1,
+      });
+    }
+
+    if (buttonParameters.length !== 1) {
+      return templateValidationError('template.validation.varCountMismatch');
+    }
+  }
+
+  return null;
 }
 
 function applyBodyParams(body: string, params: string[]): string {
@@ -170,6 +418,10 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
     );
 
+    if (useTemplate && templateNameNormalized) {
+      await ensureTemplatesInfrastructure(schemaName);
+    }
+
     const result = await withTenantSchema(schemaName, async (tx) => {
       const contacts = await tx.$queryRawUnsafe<ContactRow[]>(
         `SELECT id, name, phone, whatsapp, email
@@ -238,20 +490,10 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         };
       }
 
-      const protocolRows = await tx.$queryRawUnsafe<GeneratedProtocolRow[]>(
-        'SELECT generate_protocol() AS protocol',
-      );
-      const protocolNumber = protocolRows[0]?.protocol ?? null;
-
       let renderedTemplateBody: string | null = null;
       if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
-        const templateRows = await tx.$queryRawUnsafe<Array<{
-          body: string | null;
-          status: string | null;
-          meta_template_id: string | null;
-          last_synced_at: Date | null;
-        }>>(
-          `SELECT body, status, meta_template_id, last_synced_at
+        const templateRows = await tx.$queryRawUnsafe<WhatsAppTemplateValidationRow[]>(
+          `SELECT body, header, header_format, buttons, status, meta_template_id, last_synced_at
            FROM whatsapp_templates
            WHERE channel_id = $1::uuid
              AND name = $2
@@ -319,6 +561,25 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
             },
           };
         }
+        const templateValidation = validateTemplateVariablesForOutbound({
+          body: selectedTemplate.body,
+          header: selectedTemplate.header,
+          headerFormat: selectedTemplate.header_format,
+          buttons: selectedTemplate.buttons,
+          components: normalizedTemplateComponents,
+        });
+        if (templateValidation) {
+          return {
+            statusCode: 422 as const,
+            payload: {
+              success: false,
+              error: {
+                code: templateValidation.code,
+                message: templateValidation.message,
+              },
+            },
+          };
+        }
         if (selectedTemplate.body) {
           renderedTemplateBody = applyBodyParams(
             selectedTemplate.body,
@@ -326,6 +587,11 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
           );
         }
       }
+
+      const protocolRows = await tx.$queryRawUnsafe<GeneratedProtocolRow[]>(
+        'SELECT generate_protocol() AS protocol',
+      );
+      const protocolNumber = protocolRows[0]?.protocol ?? null;
 
       const metadata = {
         type: 'outbound',
