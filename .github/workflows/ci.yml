@@ -69,7 +69,7 @@ jobs:
 
       - name: Run migrations
         working-directory: apps/api
-        run: pnpm db:migrate
+        run: pnpm exec prisma migrate deploy
 
       - name: Run API tests
         working-directory: apps/api
