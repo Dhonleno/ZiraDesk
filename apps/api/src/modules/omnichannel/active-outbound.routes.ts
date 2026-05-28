@@ -114,6 +114,12 @@ interface TemplateValidationInput {
   components: Record<string, unknown>[];
 }
 
+interface TemplateVariableCounts {
+  bodyVariables: number[];
+  headerVariables: number[];
+  total: number;
+}
+
 const templateValidationMessages: Record<TemplateValidationCode, string> = {
   'template.validation.missingBodyVar': 'Variável {{n}} do corpo não preenchida',
   'template.validation.missingHeaderVar': 'Variável {{n}} do cabeçalho não preenchida',
@@ -294,6 +300,24 @@ function normalizeHeaderFormat(header: string | null, headerFormat: string | nul
   return 'TEXT';
 }
 
+export function countTemplateVariablesForOutbound(input: {
+  body: string | null;
+  header: string | null;
+  headerFormat: string | null;
+}): TemplateVariableCounts {
+  const bodyVariables = extractTemplateVariableIndexes(input.body);
+  const headerFormat = normalizeHeaderFormat(input.header, input.headerFormat);
+  const headerVariables = headerFormat === 'TEXT'
+    ? extractTemplateVariableIndexes(input.header)
+    : [];
+
+  return {
+    bodyVariables,
+    headerVariables,
+    total: bodyVariables.length + headerVariables.length,
+  };
+}
+
 function normalizeButtons(buttons: unknown): Record<string, unknown>[] {
   if (!Array.isArray(buttons)) return [];
   return buttons.filter(
@@ -330,7 +354,8 @@ function findButtonComponent(
 export function validateTemplateVariablesForOutbound(
   input: TemplateValidationInput,
 ): TemplateValidationResult | null {
-  const bodyVariables = extractTemplateVariableIndexes(input.body);
+  const variableCounts = countTemplateVariablesForOutbound(input);
+  const bodyVariables = variableCounts.bodyVariables;
   const bodyComponent = findTemplateComponent(input.components, 'body');
   const bodyParameters = extractComponentParameters(bodyComponent);
 
@@ -348,7 +373,7 @@ export function validateTemplateVariablesForOutbound(
   }
 
   const headerFormat = normalizeHeaderFormat(input.header, input.headerFormat);
-  const headerVariables = extractTemplateVariableIndexes(input.header);
+  const headerVariables = variableCounts.headerVariables;
   const headerComponent = findTemplateComponent(input.components, 'header');
   const headerParameters = extractComponentParameters(headerComponent);
 

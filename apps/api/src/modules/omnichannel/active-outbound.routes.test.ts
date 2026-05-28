@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countTemplateVariablesForOutbound,
   resolveActiveOutboundTemplateAvailability,
   validateTemplateVariablesForOutbound,
 } from './active-outbound.routes.js';
@@ -32,6 +33,32 @@ describe('resolveActiveOutboundTemplateAvailability', () => {
     })).toEqual({
       is_sendable: false,
       unavailable_reason: 'not_approved',
+    });
+  });
+});
+
+describe('countTemplateVariablesForOutbound', () => {
+  it('conta variáveis do body e do header TEXT', () => {
+    expect(countTemplateVariablesForOutbound({
+      body: 'Olá {{1}}, protocolo {{2}}.',
+      header: 'Pedido {{1}}',
+      headerFormat: 'TEXT',
+    })).toEqual({
+      bodyVariables: [1, 2],
+      headerVariables: [1],
+      total: 3,
+    });
+  });
+
+  it('ignora variáveis no header quando o formato é mídia', () => {
+    expect(countTemplateVariablesForOutbound({
+      body: 'Olá {{1}}.',
+      header: null,
+      headerFormat: 'IMAGE',
+    })).toEqual({
+      bodyVariables: [1],
+      headerVariables: [],
+      total: 1,
     });
   });
 });
@@ -107,6 +134,24 @@ describe('validateTemplateVariablesForOutbound', () => {
       code: 'template.validation.missingHeaderMedia',
       message: 'Template requer mídia no cabeçalho',
     });
+  });
+
+  it('aceita mídia preenchida quando cabeçalho exige arquivo', () => {
+    const result = validateTemplateVariablesForOutbound({
+      body: 'Mensagem sem variável.',
+      header: null,
+      headerFormat: 'DOCUMENT',
+      buttons: [],
+      components: [{
+        type: 'header',
+        parameters: [{
+          type: 'document',
+          document: { link: 'https://cdn.test/contrato.pdf' },
+        }],
+      }],
+    });
+
+    expect(result).toBeNull();
   });
 
   it('exige parâmetro para botão dinâmico', () => {
