@@ -96,36 +96,7 @@
     "sent": "Envio ativo criado com sucesso",
     "replied": "{{name}} respondeu ao seu envio ativo!",
     "lastContact": "Último contato",
-    "noHistory": "Sem histórico anterior",
-    "preview": "Prévia",
-    "previewEmpty": "Selecione um template para visualizar a mensagem.",
-    "headerVariable": "Variável do cabeçalho {{variable}}",
-    "bodyVariable": "Variável do corpo {{variable}}",
-    "headerMedia": "Mídia do cabeçalho ({{type}})",
-    "uploadHeaderMedia": "Enviar arquivo",
-    "headerMediaUrlPlaceholder": "Ou cole uma URL pública",
-    "headerMediaFileHint": "Use upload ou URL pública. O arquivo será publicado no storage antes do envio.",
-    "dynamicUrlParameter": "Parâmetro do botão: {{button}}",
-    "mediaTypes": {
-      "image": "imagem",
-      "video": "vídeo",
-      "document": "documento"
-    },
-    "validation": {
-      "bodyVariableRequired": "Preencha {{variable}}.",
-      "headerVariableRequired": "Preencha {{variable}}.",
-      "headerMediaRequired": "Informe a mídia do cabeçalho.",
-      "headerMediaUrlInvalid": "Informe uma URL pública válida.",
-      "headerMediaTypeInvalid": "Tipo de arquivo incompatível com o header.",
-      "buttonParameterRequired": "Preencha o parâmetro dinâmico de {{button}}."
-    },
-    "templateUnavailable": {
-      "notSynced": "não sincronizado com a Meta",
-      "notApproved": "não aprovado",
-      "hint": "Templates bloqueados precisam estar aprovados e sincronizados com a Meta.",
-      "noneSendable": "Nenhum template está pronto para envio. Sincronize com a Meta e confira o status de aprovação.",
-      "empty": "Nenhum template encontrado para este canal."
-    }
+    "noHistory": "Sem histórico anterior"
   },
   "tabs": {
     "open": "Aberto",

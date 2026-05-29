@@ -1078,16 +1078,10 @@ export interface WhatsAppTemplate {
   category: WhatsAppTemplateCategory;
   body: string;
   header: string | null;
-  header_format?: string | null;
   footer: string | null;
   variables: WhatsAppTemplateVariable[];
-  buttons?: Array<Record<string, unknown>>;
-  components_json?: Array<Record<string, unknown>> | null;
-  components?: Array<Record<string, unknown>> | null;
   status: WhatsAppTemplateStatus;
   meta_template_id: string | null;
-  is_sendable?: boolean;
-  unavailable_reason?: 'not_approved' | 'not_synced' | null;
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
@@ -2271,29 +2265,9 @@ export interface CreateActiveOutboundPayload {
   templateName?: string;
   templateLanguage?: string;
   templateComponents?: Array<Record<string, unknown>>;
-  bodyParameters?: string[];
-  headerText?: string;
-  headerMedia?: {
-    type: 'image' | 'video' | 'document';
-    url: string;
-  };
-  buttonParameters?: Array<{
-    index: number;
-    subType: string;
-    parameters: string[];
-  }>;
   subject?: string;
   message?: string;
   useTemplate?: boolean;
-}
-
-export interface ActiveOutboundHeaderMediaUploadResponse {
-  url: string;
-  key: string;
-  type: 'image' | 'video' | 'document';
-  filename: string;
-  mime_type: string;
-  size: number;
 }
 
 export interface SendMessagePayload {
@@ -2809,21 +2783,6 @@ export const omnichannelApi = {
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       '/omnichannel/active-outbound',
       payload,
-    );
-    return res.data.data;
-  },
-
-  uploadActiveOutboundHeaderMedia: async (
-    file: File,
-    type: 'image' | 'video' | 'document',
-  ): Promise<ActiveOutboundHeaderMediaUploadResponse> => {
-    const form = new FormData();
-    form.append('type', type);
-    form.append('file', file);
-
-    const res = await api.post<{ success: boolean; data: ActiveOutboundHeaderMediaUploadResponse }>(
-      '/omnichannel/active-outbound/header-media',
-      form,
     );
     return res.data.data;
   },

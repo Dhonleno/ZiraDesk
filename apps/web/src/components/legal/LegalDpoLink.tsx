@@ -7,8 +7,6 @@ import { Modal } from '../ui/Modal';
 interface LegalDpoLinkProps {
   className?: string;
   label?: string;
-  showLeadingSeparator?: boolean;
-  separatorClassName?: string;
 }
 
 function ExternalLink({ href, children }: { href: string; children: string }) {
@@ -35,7 +33,7 @@ function ContactValue({ href, value }: { href: string | undefined; value: string
   );
 }
 
-export function LegalDpoLink({ className, label, showLeadingSeparator = false, separatorClassName }: LegalDpoLinkProps) {
+export function LegalDpoLink({ className, label }: LegalDpoLinkProps) {
   const { t } = useTranslation(['legal', 'common']);
   const [open, setOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -53,11 +51,6 @@ export function LegalDpoLink({ className, label, showLeadingSeparator = false, s
 
   return (
     <>
-      {showLeadingSeparator ? (
-        <span className={separatorClassName} aria-hidden>
-          •
-        </span>
-      ) : null}
       <button
         type="button"
         className={className ? `legal-footer-link ${className}` : 'legal-footer-link'}

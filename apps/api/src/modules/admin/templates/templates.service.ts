@@ -30,12 +30,8 @@ interface TemplateRow {
   category: string;
   body: string;
   header: string | null;
-  header_format: string | null;
   footer: string | null;
   variables: unknown;
-  buttons_json: unknown;
-  components_json: unknown;
-  header_variables: unknown;
   status: string;
   meta_template_id: string | null;
   last_synced_at: Date | null;
@@ -53,8 +49,6 @@ interface ChannelRow {
 interface MetaTemplateComponent {
   type?: string;
   text?: string;
-  format?: string;
-  buttons?: Array<Record<string, unknown>>;
 }
 
 interface MetaTemplate {
@@ -77,7 +71,7 @@ interface MetaTemplatesResponse {
 
 interface SyncResult {
   count: number;
-  templates: ReturnType<typeof mapTemplateRow>[];
+  templates: TemplateRow[];
 }
 
 const META_GRAPH_VERSION = 'v19.0';
@@ -151,14 +145,11 @@ function mapTemplateRow(row: TemplateRow) {
   return {
     ...row,
     variables: normalizeVariables(row.variables),
-    header_variables: normalizeVariables(row.header_variables),
   };
 }
 
 export async function ensureTemplatesInfrastructure(schemaName: string): Promise<void> {
   const schema = quoteIdent(schemaName);
-  // Used inside DO $$ blocks where identifiers need single-quote escaping
-  const schemaSql = schemaName.replace(/'/g, "''");
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${schema}.whatsapp_templates (
@@ -170,12 +161,8 @@ export async function ensureTemplatesInfrastructure(schemaName: string): Promise
       category VARCHAR(32) NOT NULL,
       body TEXT NOT NULL,
       header TEXT,
-      header_format VARCHAR(20),
       footer TEXT,
       variables JSONB NOT NULL DEFAULT '[]'::jsonb,
-      buttons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-      components_json JSONB,
-      header_variables JSONB NOT NULL DEFAULT '[]'::jsonb,
       status VARCHAR(20) NOT NULL DEFAULT 'approved',
       meta_template_id VARCHAR(80),
       last_synced_at TIMESTAMPTZ,
@@ -183,34 +170,6 @@ export async function ensureTemplatesInfrastructure(schemaName: string): Promise
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT whatsapp_templates_unique_channel_name_language UNIQUE (channel_id, name, language)
     )
-  `);
-
-  // Migration: rename legacy 'buttons' column to 'buttons_json' on existing installations
-  await prisma.$executeRawUnsafe(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = '${schemaSql}'
-          AND table_name  = 'whatsapp_templates'
-          AND column_name = 'buttons'
-      ) AND NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = '${schemaSql}'
-          AND table_name  = 'whatsapp_templates'
-          AND column_name = 'buttons_json'
-      ) THEN
-        ALTER TABLE ${schema}.whatsapp_templates RENAME COLUMN buttons TO buttons_json;
-      END IF;
-    END $$
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE ${schema}.whatsapp_templates
-      ADD COLUMN IF NOT EXISTS header_format    VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS buttons_json     JSONB NOT NULL DEFAULT '[]'::jsonb,
-      ADD COLUMN IF NOT EXISTS components_json  JSONB,
-      ADD COLUMN IF NOT EXISTS header_variables JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -233,26 +192,22 @@ async function getChannel(schemaName: string, channelId: string): Promise<Channe
   return rows[0];
 }
 
-const TEMPLATE_SELECT_COLS = `
-  id, channel_id, name, display_name, language, category, body, header, header_format, footer,
-  variables, buttons_json, components_json, header_variables,
-  status, meta_template_id, last_synced_at, created_at, updated_at
-`;
-
 export async function listTemplates(schemaName: string, query: ListTemplatesQuery = {}) {
   await ensureTemplatesInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
 
   const rows = query.channel_id
     ? await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT ${TEMPLATE_SELECT_COLS}
+      `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
+              variables, status, meta_template_id, last_synced_at, created_at, updated_at
        FROM ${schema}.whatsapp_templates
        WHERE channel_id = $1::uuid
        ORDER BY display_name ASC, language ASC`,
       query.channel_id,
     )
     : await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT ${TEMPLATE_SELECT_COLS}
+      `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
+              variables, status, meta_template_id, last_synced_at, created_at, updated_at
        FROM ${schema}.whatsapp_templates
        ORDER BY display_name ASC, language ASC`,
     );
@@ -273,11 +228,11 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
 
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
     `INSERT INTO ${schema}.whatsapp_templates
-      (channel_id, name, display_name, language, category, body, header, header_format, footer,
-       variables, buttons_json, status)
+      (channel_id, name, display_name, language, category, body, header, footer, variables, status)
      VALUES
-      ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12)
-     RETURNING ${TEMPLATE_SELECT_COLS}`,
+      ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
+               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
     data.channelId,
     data.technicalName,
     data.displayName,
@@ -285,10 +240,8 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
     data.category,
     data.body,
     data.header?.trim() || null,
-    data.header?.trim() ? 'TEXT' : null,
     data.footer?.trim() || null,
     JSON.stringify(variables),
-    JSON.stringify([]),
     data.status ?? 'approved',
   );
 
@@ -300,7 +253,8 @@ export async function getTemplate(schemaName: string, id: string) {
   const schema = quoteIdent(schemaName);
 
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
-    `SELECT ${TEMPLATE_SELECT_COLS}
+    `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
+            variables, status, meta_template_id, last_synced_at, created_at, updated_at
      FROM ${schema}.whatsapp_templates
      WHERE id = $1::uuid
      LIMIT 1`,
@@ -341,20 +295,20 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
 
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
     `UPDATE ${schema}.whatsapp_templates
-     SET channel_id   = $1::uuid,
-         name         = $2,
+     SET channel_id = $1::uuid,
+         name = $2,
          display_name = $3,
-         language     = $4,
-         category     = $5,
-         body         = $6,
-         header       = $7,
-         header_format = $8,
-         footer       = $9,
-         variables    = $10::jsonb,
-         status       = $11,
-         updated_at   = NOW()
-     WHERE id = $12::uuid
-     RETURNING ${TEMPLATE_SELECT_COLS}`,
+         language = $4,
+         category = $5,
+         body = $6,
+         header = $7,
+         footer = $8,
+         variables = $9::jsonb,
+         status = $10,
+         updated_at = NOW()
+     WHERE id = $11::uuid
+     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
+               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
     channelId,
     technicalName,
     displayName,
@@ -362,7 +316,6 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
     category,
     body,
     header,
-    header ? 'TEXT' : current.header_format,
     footer,
     JSON.stringify(variables),
     status,
@@ -380,7 +333,8 @@ export async function deleteTemplate(schemaName: string, id: string) {
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
     `DELETE FROM ${schema}.whatsapp_templates
      WHERE id = $1::uuid
-     RETURNING ${TEMPLATE_SELECT_COLS}`,
+     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
+               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
     id,
   );
 
@@ -438,25 +392,6 @@ function parseComponentText(components: MetaTemplateComponent[] | undefined, typ
   return text ? text : null;
 }
 
-function parseHeaderFormat(components: MetaTemplateComponent[] | undefined): string | null {
-  const component = (components ?? []).find((item) => item.type?.toUpperCase() === 'HEADER');
-  if (!component) return null;
-
-  const format = component.format?.trim().toUpperCase();
-  if (format) return format;
-
-  return typeof component.text === 'string' ? 'TEXT' : null;
-}
-
-function parseButtons(components: MetaTemplateComponent[] | undefined): Array<Record<string, unknown>> {
-  const component = (components ?? []).find((item) => item.type?.toUpperCase() === 'BUTTONS');
-  if (!Array.isArray(component?.buttons)) return [];
-
-  return component.buttons.filter(
-    (button): button is Record<string, unknown> => Boolean(button) && typeof button === 'object',
-  );
-}
-
 export async function syncTemplatesFromMeta(schemaName: string, channelId: string): Promise<SyncResult> {
   await ensureTemplatesInfrastructure(schemaName);
 
@@ -493,43 +428,27 @@ export async function syncTemplatesFromMeta(schemaName: string, channelId: strin
     const status = normalizeMetaStatus(metaTemplate.status);
     const body = parseComponentText(metaTemplate.components, 'BODY') ?? '';
     const header = parseComponentText(metaTemplate.components, 'HEADER');
-    const headerFormat = parseHeaderFormat(metaTemplate.components);
     const footer = parseComponentText(metaTemplate.components, 'FOOTER');
-    const buttons = parseButtons(metaTemplate.components);
     const variables = extractVariablesFromBody(body);
     const displayName = normalizeDisplayName(name);
 
-    // Full components array as received from Meta
-    const componentsJson = Array.isArray(metaTemplate.components) ? metaTemplate.components : [];
-
-    // Header variables: extract {{n}} from header text when format is TEXT
-    const headerVariables = (headerFormat === 'TEXT' && header)
-      ? extractVariablesFromBody(header)
-      : [];
-
     await prisma.$executeRawUnsafe(
       `INSERT INTO ${schema}.whatsapp_templates
-        (channel_id, name, display_name, language, category, body, header, header_format, footer,
-         variables, buttons_json, components_json, header_variables,
-         status, meta_template_id, last_synced_at, updated_at)
+        (channel_id, name, display_name, language, category, body, header, footer, variables, status, meta_template_id, last_synced_at, updated_at)
        VALUES
-        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, NOW(), NOW())
+        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, NOW(), NOW())
        ON CONFLICT (channel_id, name, language)
        DO UPDATE SET
-         display_name     = EXCLUDED.display_name,
-         category         = EXCLUDED.category,
-         body             = EXCLUDED.body,
-         header           = EXCLUDED.header,
-         header_format    = EXCLUDED.header_format,
-         footer           = EXCLUDED.footer,
-         variables        = EXCLUDED.variables,
-         buttons_json     = EXCLUDED.buttons_json,
-         components_json  = EXCLUDED.components_json,
-         header_variables = EXCLUDED.header_variables,
-         status           = EXCLUDED.status,
+         display_name = EXCLUDED.display_name,
+         category = EXCLUDED.category,
+         body = EXCLUDED.body,
+         header = EXCLUDED.header,
+         footer = EXCLUDED.footer,
+         variables = EXCLUDED.variables,
+         status = EXCLUDED.status,
          meta_template_id = EXCLUDED.meta_template_id,
-         last_synced_at   = NOW(),
-         updated_at       = NOW()`,
+         last_synced_at = NOW(),
+         updated_at = NOW()`,
       channelId,
       technicalName,
       displayName || technicalName,
@@ -537,12 +456,8 @@ export async function syncTemplatesFromMeta(schemaName: string, channelId: strin
       category,
       body,
       header,
-      headerFormat,
       footer,
       JSON.stringify(variables),
-      JSON.stringify(buttons),
-      JSON.stringify(componentsJson),
-      JSON.stringify(headerVariables),
       status,
       metaTemplate.id?.trim() || null,
     );

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -31,8 +31,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ziradesk?schema=public
       REDIS_URL: redis://localhost:6379
-      JWT_SECRET: ci-jwt-secret-with-minimum-32-characters
-      JWT_REFRESH_SECRET: ci-refresh-secret-with-minimum-32-chars
+      JWT_SECRET: test-secret-ci
       NODE_ENV: test
       STORAGE_PROVIDER: local
 
@@ -43,13 +42,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
       - name: Enable Corepack
         run: corepack enable
 
       - name: Prepare pnpm
-        run: corepack prepare pnpm@9.0.0 --activate
+        run: corepack prepare pnpm@latest --activate
 
       - name: Get pnpm store path
         id: pnpm-store
@@ -67,16 +66,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared package
-        run: pnpm --filter @ziradesk/shared build
-
       - name: Run migrations
-        working-directory: apps/api
-        run: pnpm exec prisma migrate deploy
+        run: pnpm --filter @ziradesk/api db:migrate
 
       - name: Run API tests
-        working-directory: apps/api
-        run: pnpm test
+        run: pnpm --filter @ziradesk/api test
 
-  # Deploy de produção ocorre na infraestrutura Contabo (VPS + Docker Compose),
-  # fora do GitHub Actions. Este workflow mantém apenas o gate de qualidade (testes).
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Trigger Railway Deploy Webhook
+        env:
+          RAILWAY_DEPLOY_WEBHOOK: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
+        run: curl -X POST "$RAILWAY_DEPLOY_WEBHOOK"

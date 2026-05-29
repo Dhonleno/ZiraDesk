@@ -96,36 +96,7 @@
     "sent": "Active outbound created successfully",
     "replied": "{{name}} replied to your active outbound!",
     "lastContact": "Last contact",
-    "noHistory": "No previous history",
-    "preview": "Preview",
-    "previewEmpty": "Select a template to preview the message.",
-    "headerVariable": "Header variable {{variable}}",
-    "bodyVariable": "Body variable {{variable}}",
-    "headerMedia": "Header media ({{type}})",
-    "uploadHeaderMedia": "Upload file",
-    "headerMediaUrlPlaceholder": "Or paste a public URL",
-    "headerMediaFileHint": "Use upload or a public URL. The file will be published to storage before sending.",
-    "dynamicUrlParameter": "Button parameter: {{button}}",
-    "mediaTypes": {
-      "image": "image",
-      "video": "video",
-      "document": "document"
-    },
-    "validation": {
-      "bodyVariableRequired": "Fill {{variable}}.",
-      "headerVariableRequired": "Fill {{variable}}.",
-      "headerMediaRequired": "Provide the header media.",
-      "headerMediaUrlInvalid": "Provide a valid public URL.",
-      "headerMediaTypeInvalid": "File type is incompatible with this header.",
-      "buttonParameterRequired": "Fill the dynamic parameter for {{button}}."
-    },
-    "templateUnavailable": {
-      "notSynced": "not synced with Meta",
-      "notApproved": "not approved",
-      "hint": "Blocked templates must be approved and synced with Meta.",
-      "noneSendable": "No template is ready to send. Sync with Meta and check the approval status.",
-      "empty": "No template found for this channel."
-    }
+    "noHistory": "No previous history"
   },
   "tabs": {
     "open": "Open",

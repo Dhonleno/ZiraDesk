@@ -1,7 +1,5 @@
 # Deploy em VPS (Docker Compose)
 
-Este é o guia oficial de produção do ZiraDesk no ambiente Contabo.
-
 Este guia usa os arquivos:
 - `docker-compose.production.yml`
 - `apps/api/Dockerfile`
@@ -50,20 +48,6 @@ docker compose -f docker-compose.production.yml ps
 docker compose -f docker-compose.production.yml logs -f nginx
 docker compose -f docker-compose.production.yml logs -f api
 curl -I https://api.ziradesk.com.br/health
-```
-
-## 6) Deploy remoto a partir desta máquina (Windows/PowerShell)
-
-Comando de acesso SSH desta máquina:
-
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519" deploy@85.239.245.8
-```
-
-Deploy completo em um único comando:
-
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519" deploy@85.239.245.8 "set -euo pipefail; cd ~/ziradesk/app; git fetch --all --prune; git checkout main; git pull --ff-only origin main; docker compose --env-file .env.production -f docker-compose.production.yml up -d --build; docker compose -f docker-compose.production.yml ps"
 ```
 
 ## Observações de segurança aplicadas

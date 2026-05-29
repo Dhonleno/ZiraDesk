@@ -1,45 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
-import multipart from '@fastify/multipart';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { prisma } from '../../config/database.js';
-import { getStorage } from '../../lib/storage/index.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { getSocketServer } from '../../socket/index.js';
 import { loadConversationSocketPayload } from './conversations/socket-payload.js';
 import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
-import {
-  ensureTemplatesInfrastructure,
-  listTemplates as listAdminTemplates,
-} from '../admin/templates/templates.service.js';
-import {
-  buildTemplateComponentsFromInput,
-  findInvalidTemplateMediaUrl,
-} from './whatsapp-template-components.js';
-import { getTemplateValidationMessage } from '../../lib/i18n/template-errors.js';
+import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
-
-const HEADER_MEDIA_MAX_SIZE_BYTES = 16 * 1024 * 1024;
-const HEADER_MEDIA_MIME_TYPES: Record<'image' | 'video' | 'document', ReadonlySet<string>> = {
-  image: new Set(['image/jpeg', 'image/png', 'image/webp']),
-  video: new Set(['video/mp4', 'video/3gpp']),
-  document: new Set([
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain',
-  ]),
-};
 
 type TenantRawDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
 
@@ -82,76 +56,6 @@ interface GeneratedProtocolRow {
   protocol: string;
 }
 
-interface WhatsAppTemplateValidationRow {
-  body: string | null;
-  header: string | null;
-  header_format: string | null;
-  buttons_json: unknown;
-  status: string | null;
-  meta_template_id: string | null;
-  last_synced_at: Date | null;
-}
-
-type TemplateValidationCode =
-  | 'template.validation.missingBodyVar'
-  | 'template.validation.missingHeaderVar'
-  | 'template.validation.missingHeaderMedia'
-  | 'template.validation.invalidHeaderMediaUrl'
-  | 'template.validation.missingButtonParam'
-  | 'template.validation.varCountMismatch';
-
-type ActiveOutboundTemplateUnavailableReason = 'not_approved' | 'not_synced';
-
-interface TemplateValidationResult {
-  code: TemplateValidationCode;
-  message: string;
-  vars: Record<string, string | number>;
-}
-
-interface TemplateValidationInput {
-  body: string | null;
-  header: string | null;
-  headerFormat: string | null;
-  buttons: unknown;
-  components: Record<string, unknown>[];
-}
-
-interface TemplateVariableCounts {
-  bodyVariables: number[];
-  headerVariables: number[];
-  total: number;
-}
-
-// Default PT-BR messages used internally by validateTemplateVariablesForOutbound
-const templateValidationMessages: Record<TemplateValidationCode, string> = {
-  'template.validation.missingBodyVar': 'Variável {{n}} do corpo não preenchida',
-  'template.validation.missingHeaderVar': 'Variável {{n}} do cabeçalho não preenchida',
-  'template.validation.missingHeaderMedia': 'Template requer mídia no cabeçalho',
-  'template.validation.invalidHeaderMediaUrl': 'URL pública da mídia do cabeçalho inválida',
-  'template.validation.missingButtonParam': 'Parâmetro dinâmico do botão {{n}} não preenchido',
-  'template.validation.varCountMismatch': 'Número de variáveis não corresponde ao template',
-};
-
-export function resolveActiveOutboundTemplateAvailability(template: {
-  status?: unknown;
-  meta_template_id?: unknown;
-}): {
-  is_sendable: boolean;
-  unavailable_reason: ActiveOutboundTemplateUnavailableReason | null;
-} {
-  const status = String(template.status ?? '').trim().toLowerCase();
-  if (status !== 'approved') {
-    return { is_sendable: false, unavailable_reason: 'not_approved' };
-  }
-
-  const metaTemplateId = String(template.meta_template_id ?? '').trim();
-  if (!metaTemplateId) {
-    return { is_sendable: false, unavailable_reason: 'not_synced' };
-  }
-
-  return { is_sendable: true, unavailable_reason: null };
-}
-
 const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
 });
@@ -162,17 +66,6 @@ const activeOutboundSchema = z.object({
   templateName: z.string().trim().min(1).max(512).optional(),
   templateLanguage: z.string().trim().min(2).max(20).optional(),
   templateComponents: z.array(z.record(z.unknown())).optional(),
-  bodyParameters: z.array(z.string().max(1024)).max(30).optional(),
-  headerText: z.string().trim().max(1024).optional(),
-  headerMedia: z.object({
-    type: z.enum(['image', 'video', 'document']),
-    url: z.string().trim().url().max(2048),
-  }).optional(),
-  buttonParameters: z.array(z.object({
-    index: z.number().int().min(0).max(9),
-    subType: z.string().trim().min(1).max(30),
-    parameters: z.array(z.string().max(1024)).max(10),
-  })).max(10).optional(),
   subject: z.string().trim().max(255).optional(),
   message: z.string().trim().max(4000).optional(),
   useTemplate: z.boolean().default(true),
@@ -188,240 +81,6 @@ function extractBodyParamsFromComponents(components: Record<string, unknown>[]):
     .map((p) => p.text as string);
 }
 
-function extractTemplateVariableIndexes(text: string | null | undefined): number[] {
-  if (!text) return [];
-
-  const variableIndexes = new Set<number>();
-  const regex = /\{\{\s*(\d+)\s*\}\}/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    const variableIndex = Number.parseInt(match[1] ?? '', 10);
-    if (Number.isFinite(variableIndex) && variableIndex > 0) {
-      variableIndexes.add(variableIndex);
-    }
-  }
-
-  return [...variableIndexes].sort((left, right) => left - right);
-}
-
-function formatTemplateValidationMessage(
-  code: TemplateValidationCode,
-  vars: Record<string, string | number> = {},
-): string {
-  let message = templateValidationMessages[code];
-  for (const [key, value] of Object.entries(vars)) {
-    const replacement = key === 'n' ? `{{${String(value)}}}` : String(value);
-    message = message.replaceAll(`{{${key}}}`, replacement);
-  }
-  return message;
-}
-
-function templateValidationError(
-  code: TemplateValidationCode,
-  vars: Record<string, string | number> = {},
-): TemplateValidationResult {
-  return {
-    code,
-    message: formatTemplateValidationMessage(code, vars),
-    vars,
-  };
-}
-
-function findTemplateComponent(
-  components: Record<string, unknown>[],
-  type: string,
-  predicate?: (component: Record<string, unknown>) => boolean,
-): Record<string, unknown> | null {
-  const normalizedType = type.toLowerCase();
-  return components.find((component) => {
-    const componentType = typeof component.type === 'string' ? component.type.toLowerCase() : '';
-    return componentType === normalizedType && (!predicate || predicate(component));
-  }) ?? null;
-}
-
-function extractComponentParameters(component: Record<string, unknown> | null): Record<string, unknown>[] {
-  if (!Array.isArray(component?.parameters)) return [];
-  return component.parameters.filter(
-    (parameter): parameter is Record<string, unknown> => Boolean(parameter) && typeof parameter === 'object',
-  );
-}
-
-function hasTextValue(value: unknown): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function hasFilledTextParameter(parameter: Record<string, unknown> | undefined): boolean {
-  return hasTextValue(parameter?.text);
-}
-
-function hasFilledMediaValue(value: unknown): boolean {
-  if (hasTextValue(value)) return true;
-  if (!value || typeof value !== 'object') return false;
-
-  const record = value as Record<string, unknown>;
-  return hasTextValue(record.id) || hasTextValue(record.link) || hasTextValue(record.url);
-}
-
-function hasFilledMediaParameter(parameter: Record<string, unknown> | undefined, mediaType: string): boolean {
-  if (!parameter) return false;
-
-  const normalizedMediaType = mediaType.toLowerCase();
-  return (
-    hasFilledMediaValue(parameter[normalizedMediaType])
-    || hasFilledMediaValue(parameter.media)
-    || hasFilledMediaValue(parameter.id)
-    || hasFilledMediaValue(parameter.link)
-    || hasFilledMediaValue(parameter.url)
-  );
-}
-
-function hasFilledButtonParameter(parameter: Record<string, unknown> | undefined): boolean {
-  if (!parameter) return false;
-
-  return (
-    hasTextValue(parameter.text)
-    || hasTextValue(parameter.payload)
-    || hasTextValue(parameter.coupon_code)
-    || hasFilledMediaValue(parameter.image)
-    || hasFilledMediaValue(parameter.video)
-    || hasFilledMediaValue(parameter.document)
-  );
-}
-
-function normalizeHeaderFormat(header: string | null, headerFormat: string | null): string | null {
-  const normalizedFormat = headerFormat?.trim().toUpperCase() ?? '';
-  if (['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'].includes(normalizedFormat)) {
-    return normalizedFormat;
-  }
-
-  const headerText = header?.trim() ?? '';
-  if (!headerText) return null;
-  if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerText.toUpperCase())) {
-    return headerText.toUpperCase();
-  }
-
-  return 'TEXT';
-}
-
-export function countTemplateVariablesForOutbound(input: {
-  body: string | null;
-  header: string | null;
-  headerFormat: string | null;
-}): TemplateVariableCounts {
-  const bodyVariables = extractTemplateVariableIndexes(input.body);
-  const headerFormat = normalizeHeaderFormat(input.header, input.headerFormat);
-  const headerVariables = headerFormat === 'TEXT'
-    ? extractTemplateVariableIndexes(input.header)
-    : [];
-
-  return {
-    bodyVariables,
-    headerVariables,
-    total: bodyVariables.length + headerVariables.length,
-  };
-}
-
-function normalizeButtons(buttons: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(buttons)) return [];
-  return buttons.filter(
-    (button): button is Record<string, unknown> => Boolean(button) && typeof button === 'object',
-  );
-}
-
-function buttonTextFields(button: Record<string, unknown>): string[] {
-  return ['text', 'url', 'payload', 'phone_number']
-    .map((field) => button[field])
-    .filter((value): value is string => typeof value === 'string');
-}
-
-function buttonRequiresDynamicParameter(button: Record<string, unknown>): boolean {
-  return buttonTextFields(button).some((value) => extractTemplateVariableIndexes(value).length > 0);
-}
-
-function dynamicButtonEntries(buttons: unknown): Array<{ button: Record<string, unknown>; index: number }> {
-  return normalizeButtons(buttons)
-    .map((button, index) => ({ button, index }))
-    .filter((entry) => buttonRequiresDynamicParameter(entry.button));
-}
-
-function findButtonComponent(
-  components: Record<string, unknown>[],
-  buttonIndex: number,
-): Record<string, unknown> | null {
-  return findTemplateComponent(components, 'button', (component) => {
-    if (component.index === undefined || component.index === null) return false;
-    return String(component.index) === String(buttonIndex);
-  });
-}
-
-export function validateTemplateVariablesForOutbound(
-  input: TemplateValidationInput,
-): TemplateValidationResult | null {
-  const variableCounts = countTemplateVariablesForOutbound(input);
-  const bodyVariables = variableCounts.bodyVariables;
-  const bodyComponent = findTemplateComponent(input.components, 'body');
-  const bodyParameters = extractComponentParameters(bodyComponent);
-
-  for (let position = 0; position < bodyVariables.length; position += 1) {
-    const variableIndex = bodyVariables[position];
-    if (!hasFilledTextParameter(bodyParameters[position])) {
-      return templateValidationError('template.validation.missingBodyVar', {
-        n: variableIndex ?? position + 1,
-      });
-    }
-  }
-
-  if (bodyParameters.length !== bodyVariables.length) {
-    return templateValidationError('template.validation.varCountMismatch');
-  }
-
-  const headerFormat = normalizeHeaderFormat(input.header, input.headerFormat);
-  const headerVariables = variableCounts.headerVariables;
-  const headerComponent = findTemplateComponent(input.components, 'header');
-  const headerParameters = extractComponentParameters(headerComponent);
-
-  if (headerFormat === 'TEXT') {
-    for (let position = 0; position < headerVariables.length; position += 1) {
-      const variableIndex = headerVariables[position];
-      if (!hasFilledTextParameter(headerParameters[position])) {
-        return templateValidationError('template.validation.missingHeaderVar', {
-          n: variableIndex ?? position + 1,
-        });
-      }
-    }
-
-    if (headerParameters.length !== headerVariables.length) {
-      return templateValidationError('template.validation.varCountMismatch');
-    }
-  }
-
-  if (headerFormat && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerFormat)) {
-    const firstHeaderParameter = headerParameters[0];
-    if (!hasFilledMediaParameter(firstHeaderParameter, headerFormat)) {
-      return templateValidationError('template.validation.missingHeaderMedia');
-    }
-  }
-
-  const dynamicButtons = dynamicButtonEntries(input.buttons);
-  for (let position = 0; position < dynamicButtons.length; position += 1) {
-    const buttonIndex = dynamicButtons[position]?.index ?? position;
-    const buttonComponent = findButtonComponent(input.components, buttonIndex);
-    const buttonParameters = extractComponentParameters(buttonComponent);
-    if (!hasFilledButtonParameter(buttonParameters[0])) {
-      return templateValidationError('template.validation.missingButtonParam', {
-        n: position + 1,
-      });
-    }
-
-    if (buttonParameters.length !== 1) {
-      return templateValidationError('template.validation.varCountMismatch');
-    }
-  }
-
-  return null;
-}
-
 function applyBodyParams(body: string, params: string[]): string {
   if (!params.length) return body;
   return body.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (_full, key: string) => {
@@ -429,32 +88,6 @@ function applyBodyParams(body: string, params: string[]): string {
     if (Number.isFinite(n) && n > 0) return params[n - 1] ?? `{{${key}}}`;
     return `{{${key}}}`;
   });
-}
-
-function mediaExtension(filename: string, mimeType: string): string {
-  const fromName = path.extname(filename).toLowerCase();
-  if (/^\.[a-z0-9]{1,12}$/.test(fromName)) return fromName;
-  if (mimeType === 'image/jpeg') return '.jpg';
-  if (mimeType === 'image/png') return '.png';
-  if (mimeType === 'image/webp') return '.webp';
-  if (mimeType === 'video/mp4') return '.mp4';
-  if (mimeType === 'video/3gpp') return '.3gp';
-  if (mimeType === 'application/pdf') return '.pdf';
-  if (mimeType === 'text/plain') return '.txt';
-  return '';
-}
-
-function resolvePublicUploadUrl(rawUrl: string, request: { headers: Record<string, string | string[] | undefined> }): string {
-  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
-  if (!rawUrl.startsWith('/')) return rawUrl;
-
-  const forwardedProto = request.headers['x-forwarded-proto'];
-  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
-  const hostHeader = request.headers['x-forwarded-host'] ?? request.headers.host;
-  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-  if (!host) return rawUrl;
-
-  return `${proto ?? 'https'}://${host}${rawUrl}`;
 }
 
 function ensureSafeSchemaName(schemaName: string): string {
@@ -477,13 +110,6 @@ async function withTenantSchema<T>(
 }
 
 export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> {
-  await app.register(multipart, {
-    limits: {
-      fileSize: HEADER_MEDIA_MAX_SIZE_BYTES,
-      files: 1,
-    },
-  });
-
   app.get('/templates', { preHandler: guard }, async (request, reply) => {
     const parsed = listTemplatesQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -500,86 +126,11 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const templates = await listAdminTemplates(schemaName, parsed.data);
-    const activeOutboundTemplates = templates.map((template) => ({
-      ...template,
-      ...resolveActiveOutboundTemplateAvailability(template),
-    }));
-
-    return reply.send({ success: true, data: activeOutboundTemplates });
-  });
-
-  app.post('/active-outbound/header-media', { preHandler: guard }, async (request, reply) => {
-    if (!request.isMultipart()) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Content-Type deve ser multipart/form-data' },
-      });
-    }
-
-    let mediaType: 'image' | 'video' | 'document' | null = null;
-    let fileBuffer: Buffer | null = null;
-    let fileMimeType: string | null = null;
-    let fileName: string | null = null;
-
-    for await (const part of request.parts()) {
-      if (part.type === 'field' && part.fieldname === 'type') {
-        const value = String(part.value ?? '').trim().toLowerCase();
-        if (value === 'image' || value === 'video' || value === 'document') mediaType = value;
-        continue;
-      }
-
-      if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
-        fileBuffer = await part.toBuffer();
-        fileMimeType = part.mimetype;
-        fileName = part.filename;
-        continue;
-      }
-
-      if (part.type === 'file') {
-        await part.toBuffer();
-      }
-    }
-
-    if (!mediaType) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Tipo de mídia do cabeçalho é obrigatório' },
-      });
-    }
-
-    if (!fileBuffer || !fileMimeType || !fileName) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Arquivo não enviado' },
-      });
-    }
-
-    if (!HEADER_MEDIA_MIME_TYPES[mediaType].has(fileMimeType)) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: `Tipo ${fileMimeType} não é suportado para cabeçalho ${mediaType}` },
-      });
-    }
-
-    const tenantId = request.user.tenantId;
-    if (!tenantId) {
-      return reply.code(500).send({ success: false, error: { message: 'Tenant não resolvido' } });
-    }
-
-    const key = `active-outbound/${tenantId}/${randomUUID()}${mediaExtension(fileName, fileMimeType)}`;
-    const uploadedUrl = await getStorage().upload(key, fileBuffer, fileMimeType);
-
-    return reply.send({
-      success: true,
-      data: {
-        url: resolvePublicUploadUrl(uploadedUrl, request),
-        key,
-        type: mediaType,
-        filename: fileName,
-        mime_type: fileMimeType,
-        size: fileBuffer.length,
-      },
+    const approvedTemplates = templates.filter((template) => {
+      const status = String(template.status ?? '').toLowerCase();
+      return status === 'approved' && Boolean(template.meta_template_id);
     });
+    return reply.send({ success: true, data: approvedTemplates });
   });
 
   app.post('/active-outbound', { preHandler: guard }, async (request, reply) => {
@@ -606,10 +157,6 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       templateName,
       templateLanguage,
       templateComponents,
-      bodyParameters,
-      headerText,
-      headerMedia,
-      buttonParameters,
       subject,
       message,
       useTemplate,
@@ -619,28 +166,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const templateLanguageNormalized = templateLanguage?.trim() || 'pt_BR';
     const normalizedMessage = message?.trim() ?? '';
     const normalizedSubject = subject?.trim() || null;
-    const normalizedTemplateComponents = buildTemplateComponentsFromInput({
-      templateComponents,
-      bodyParameters,
-      headerText,
-      headerMedia,
-      buttonParameters,
-    });
-    const invalidTemplateMediaUrl = findInvalidTemplateMediaUrl(normalizedTemplateComponents);
-    if (invalidTemplateMediaUrl !== null) {
-      const lang = request.language ?? 'pt-BR';
-      return reply.code(422).send({
-        success: false,
-        error: {
-          code: 'template.validation.invalidHeaderMediaUrl',
-          message: getTemplateValidationMessage('template.validation.invalidHeaderMediaUrl', {}, lang),
-        },
-      });
-    }
-
-    if (useTemplate && templateNameNormalized) {
-      await ensureTemplatesInfrastructure(schemaName);
-    }
+    const normalizedTemplateComponents = (templateComponents ?? []).filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
+    );
 
     const result = await withTenantSchema(schemaName, async (tx) => {
       const contacts = await tx.$queryRawUnsafe<ContactRow[]>(
@@ -710,10 +238,20 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         };
       }
 
+      const protocolRows = await tx.$queryRawUnsafe<GeneratedProtocolRow[]>(
+        'SELECT generate_protocol() AS protocol',
+      );
+      const protocolNumber = protocolRows[0]?.protocol ?? null;
+
       let renderedTemplateBody: string | null = null;
       if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
-        const templateRows = await tx.$queryRawUnsafe<WhatsAppTemplateValidationRow[]>(
-          `SELECT body, header, header_format, buttons_json, status, meta_template_id, last_synced_at
+        const templateRows = await tx.$queryRawUnsafe<Array<{
+          body: string | null;
+          status: string | null;
+          meta_template_id: string | null;
+          last_synced_at: Date | null;
+        }>>(
+          `SELECT body, status, meta_template_id, last_synced_at
            FROM whatsapp_templates
            WHERE channel_id = $1::uuid
              AND name = $2
@@ -781,31 +319,6 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
             },
           };
         }
-        const templateValidation = validateTemplateVariablesForOutbound({
-          body: selectedTemplate.body,
-          header: selectedTemplate.header,
-          headerFormat: selectedTemplate.header_format,
-          buttons: selectedTemplate.buttons_json,
-          components: normalizedTemplateComponents,
-        });
-        if (templateValidation) {
-          const lang = request.language ?? 'pt-BR';
-          const localizedMessage = getTemplateValidationMessage(
-            templateValidation.code,
-            templateValidation.vars,
-            lang,
-          );
-          return {
-            statusCode: 422 as const,
-            payload: {
-              success: false,
-              error: {
-                code: templateValidation.code,
-                message: localizedMessage,
-              },
-            },
-          };
-        }
         if (selectedTemplate.body) {
           renderedTemplateBody = applyBodyParams(
             selectedTemplate.body,
@@ -813,11 +326,6 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
           );
         }
       }
-
-      const protocolRows = await tx.$queryRawUnsafe<GeneratedProtocolRow[]>(
-        'SELECT generate_protocol() AS protocol',
-      );
-      const protocolNumber = protocolRows[0]?.protocol ?? null;
 
       const metadata = {
         type: 'outbound',

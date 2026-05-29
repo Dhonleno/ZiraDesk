@@ -7,7 +7,7 @@
 - `LocalStorageProvider` mantém comportamento de dev
 - 78 testes de integração cobrindo: auth, middleware tenant, omnichannel webhooks, tickets, CRM, notifications, portal, super-admin, admin, calls, search, redmine, templates
 - Portal: `POST /auth/forgot-password` e `POST /auth/reset-password`
-- CI gate no GitHub Actions: testes obrigatórios antes do deploy em produção (VPS Contabo)
+- CI gate no GitHub Actions: testes obrigatórios antes do deploy Railway
 
 ### Alterado
 - `settings.service.ts`, `profile.routes.ts`, `tickets.service.ts`: uploads migrados de disco local para `StorageProvider`
