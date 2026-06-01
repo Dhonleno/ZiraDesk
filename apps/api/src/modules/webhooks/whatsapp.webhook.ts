@@ -148,6 +148,7 @@ interface ContactRow {
 
 interface ConversationRow {
   id: string;
+  queue_entered_at?: Date | null;
   assigned_to?: string | null;
   outbound_origin_agent_id?: string | null;
   outbound_expires_at?: Date | null;
@@ -960,6 +961,7 @@ async function processIncomingMessage(
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id, status, csat_stage, csat_score, csat_expires_at
+              , queue_entered_at
               , assigned_to
               , outbound_origin_agent_id
               , waiting_expires_at AS outbound_expires_at
@@ -1334,14 +1336,21 @@ async function processIncomingMessage(
 
     const currentAssignedTo = currentConversation?.assigned_to ?? null;
     const currentBotStage = currentConversation?.bot_stage ?? null;
+    const currentQueueEnteredAt = currentConversation?.queue_entered_at ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
     let activeOutboundReplyAgentId: string | null = null;
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
+    const isLegacyQueueWithoutBotStage = !isNewConversation
+      && !hasAssignedAgent
+      && !isWaitingReturnFlow
+      && !isAIAgentActive
+      && currentBotStage === null
+      && currentQueueEnteredAt !== null;
     const isWaitingForHumanQueue = !isNewConversation
       && !hasAssignedAgent
       && !isWaitingReturnFlow
       && !isAIAgentActive
-      && (currentBotStage === null || currentBotStage === 'choice');
+      && (currentBotStage === 'choice' || isLegacyQueueWithoutBotStage);
 
     if (isWaitingReturnFlow) {
       const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
@@ -1414,7 +1423,9 @@ async function processIncomingMessage(
 
     let botResponse: Awaited<ReturnType<typeof processBotMessage>> | null = null;
     if (!hasAssignedAgent && !isWaitingReturnFlow && !isAIAgentActive) {
-      const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
+      const canProcessBot = isNewConversation
+        || currentBotStage === 'waiting_choice'
+        || (!isWaitingForHumanQueue && currentBotStage === null);
       const skipBot = currentBotStage === 'done';
       if (!skipBot && canProcessBot) {
         botResponse = await processBotMessage(
