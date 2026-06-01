@@ -89,13 +89,13 @@ export function ConversationsPage() {
   }, [qc]);
 
   return (
-    <PageShell padding={0} contentStyle={{ overflowX: 'visible', overflowY: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflowX: 'hidden', overflowY: 'hidden' }}>
       <div
         className="h-full w-full"
         style={{
           display: 'grid',
           gridTemplateColumns: '320px minmax(0, 1fr) 360px',
-          overflowX: 'visible',
+          overflowX: 'hidden',
           overflowY: 'hidden',
         }}
       >

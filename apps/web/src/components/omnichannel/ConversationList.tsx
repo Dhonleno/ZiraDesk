@@ -964,7 +964,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       flexDirection: 'column',
       background: 'var(--bg-2)',
       borderRight: '1px solid var(--line)',
-      overflow: 'visible',
+      overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
