@@ -1,0 +1,71 @@
+name: Deploy Contabo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CONTABO_HOST: ${{ secrets.CONTABO_HOST || '85.239.245.8' }}
+      CONTABO_USER: ${{ secrets.CONTABO_USER || 'deploy' }}
+      CONTABO_PORT: ${{ secrets.CONTABO_PORT || '22' }}
+      CONTABO_DEPLOY_PATH: ${{ secrets.CONTABO_DEPLOY_PATH || '/home/deploy/ziradesk/app' }}
+      CONTABO_SSH_PRIVATE_KEY: ${{ secrets.CONTABO_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Configure SSH for Contabo VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CONTABO_SSH_PRIVATE_KEY}" ]; then
+            echo "::error::Configure o secret CONTABO_SSH_PRIVATE_KEY com a chave privada SSH do usuario deploy."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${CONTABO_SSH_PRIVATE_KEY}" > ~/.ssh/ziradesk_contabo
+          chmod 600 ~/.ssh/ziradesk_contabo
+          ssh-keyscan -p "${CONTABO_PORT}" -H "${CONTABO_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to Contabo VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          remote_path="$(printf '%q' "${CONTABO_DEPLOY_PATH}")"
+
+          cat <<'REMOTE' | tr -d '\r' | ssh \
+            -i ~/.ssh/ziradesk_contabo \
+            -p "${CONTABO_PORT}" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "${CONTABO_USER}@${CONTABO_HOST}" \
+            "DEPLOY_PATH=${remote_path} bash -se"
+          set -euo pipefail
+
+          cd "${DEPLOY_PATH}"
+
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+          if docker compose --env-file .env.production -f docker-compose.production.yml ps -q nginx >/dev/null 2>&1; then
+            docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
+          fi
+
+          docker compose --env-file .env.production -f docker-compose.production.yml build
+          docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
+          docker compose --env-file .env.production -f docker-compose.production.yml run --rm api sh -lc "pnpm dlx prisma@5.22.0 migrate deploy --schema prisma/schema.prisma" </dev/null
+          docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans
+
+          docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
+          docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -s reload </dev/null
+          docker compose --env-file .env.production -f docker-compose.production.yml exec -T api wget -q -O - http://127.0.0.1:3333/health </dev/null
+          docker compose --env-file .env.production -f docker-compose.production.yml ps
+          REMOTE
