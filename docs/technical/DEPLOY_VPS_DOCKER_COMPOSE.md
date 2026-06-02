@@ -33,7 +33,8 @@ Os certificados devem existir em:
 - `~/ziradesk/certs/fullchain.pem`
 - `~/ziradesk/certs/privkey.pem`
 
-O Nginx usa esses arquivos para `app.ziradesk.com.br` e `api.ziradesk.com.br`.
+O Nginx usa esses arquivos para `app.ziradesk.com`, `api.ziradesk.com` e
+`*.ziradesk.com`.
 
 ## 4) Subir stack
 
@@ -47,8 +48,32 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 docker compose -f docker-compose.production.yml ps
 docker compose -f docker-compose.production.yml logs -f nginx
 docker compose -f docker-compose.production.yml logs -f api
-curl -I https://api.ziradesk.com.br/health
+curl -I https://api.ziradesk.com/health
 ```
+
+## 6) CI/CD para Contabo
+
+O workflow `.github/workflows/ci.yml` faz deploy na VPS Contabo depois que o
+job de testes passa em pushes para `main`.
+
+Secret obrigatorio no GitHub:
+- `CONTABO_SSH_PRIVATE_KEY`: chave privada SSH autorizada para o usuario
+  `deploy` na VPS.
+
+Secrets opcionais, com defaults atuais:
+- `CONTABO_HOST` (default: `85.239.245.8`)
+- `CONTABO_USER` (default: `deploy`)
+- `CONTABO_PORT` (default: `22`)
+- `CONTABO_DEPLOY_PATH` (default: `/home/deploy/ziradesk/app`)
+
+Fluxo executado no servidor:
+1. `git pull --ff-only origin main`
+2. `nginx -t` antes do deploy, quando o container ja existe
+3. `docker compose --env-file .env.production -f docker-compose.production.yml build`
+4. `docker compose ... up -d postgres redis`
+5. `prisma migrate deploy`
+6. `docker compose ... up -d --remove-orphans`
+7. `nginx -t`, reload do Nginx e smoke test interno da API
 
 ## Observações de segurança aplicadas
 
