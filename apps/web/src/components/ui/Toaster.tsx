@@ -24,7 +24,7 @@ export function Toaster() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+      className="fixed bottom-4 right-4 z-[1100] flex flex-col gap-2"
       style={{ width: 'min(92vw, 420px)' }}
     >
       {toasts.map((toast) => {
