@@ -38,6 +38,7 @@ interface ConversationUpdatedPayload {
   status?: string;
   assigned_to?: string | null;
   assigned_name?: string | null;
+  queue_entered_at?: string | null;
   conversation?: Partial<OmnichannelConversation> & { id?: string };
 }
 
@@ -114,7 +115,7 @@ function formatDateLabel(date: Date, locale: string): string {
 }
 
 function deriveConversationCounts(cards: TvConversationCard[]): { queued: number; inService: number } {
-  const queued = cards.filter((card) => !card.agentName && card.status !== 'resolved' && card.status !== 'closed').length;
+  const queued = cards.filter((card) => !card.agentName && Boolean(card.queueEnteredAt) && card.status !== 'resolved' && card.status !== 'closed').length;
   const inService = cards.filter((card) => Boolean(card.agentName) && card.status !== 'resolved' && card.status !== 'closed').length;
   return { queued, inService };
 }
@@ -155,6 +156,7 @@ function toCardFromConversation(payload: Partial<OmnichannelConversation> & { id
     createdAt,
     status: payload.status ?? 'open',
     waitTime: null,
+    queueEnteredAt: payload.queue_entered_at ?? null,
   };
 }
 
@@ -369,6 +371,7 @@ export function TVDashboard() {
             createdAt: new Date().toISOString(),
             status: 'open',
             waitTime: null,
+            queueEnteredAt: null,
           };
           const cards = existing
             ? current.conversationCards.map((item) => (item.id === id ? { ...item, ...card } : item))
@@ -387,7 +390,7 @@ export function TVDashboard() {
           if (!current) return current;
           const cards = current.conversationCards.map((card) => (
             card.id === payload.conversationId
-              ? { ...card, assignedAt: card.assignedAt ?? new Date().toISOString(), status: 'open' }
+              ? { ...card, assignedAt: card.assignedAt ?? new Date().toISOString(), queueEnteredAt: null, status: 'open' }
               : card
           ));
           const counts = deriveConversationCounts(cards);
@@ -454,6 +457,9 @@ export function TVDashboard() {
               ...(patch ?? {}),
               assignedAt,
               agentName: payload.assigned_name ?? patch?.agentName ?? card.agentName,
+              queueEnteredAt: payload.assigned_to
+                ? null
+                : (payload.queue_entered_at ?? patch?.queueEnteredAt ?? card.queueEnteredAt),
               status: status ?? card.status,
             };
           });
@@ -519,7 +525,7 @@ export function TVDashboard() {
     (card) => Boolean(card.agentName) && card.status !== 'resolved' && card.status !== 'closed',
   );
   const queuedConvs = conversationCards.filter(
-    (card) => !card.agentName && card.status !== 'resolved' && card.status !== 'closed',
+    (card) => !card.agentName && Boolean(card.queueEnteredAt) && card.status !== 'resolved' && card.status !== 'closed',
   );
 
   const queuedCount = queuedConvs.length;
@@ -679,7 +685,7 @@ export function TVDashboard() {
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{card.contactName}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.contactPhone || '-'}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)', marginBottom: 2 }}>{t('tv.waiting')}</div>
-                <ConversationChronometer baseTime={card.createdAt} color="#EF4444" />
+                <ConversationChronometer baseTime={card.queueEnteredAt ?? card.createdAt} color="#EF4444" />
               </div>
             ))}
           </div>

@@ -72,6 +72,7 @@ interface TvConversationCard {
   createdAt: string;
   status: string;
   waitTime: number | null;
+  queueEnteredAt: string | null;
 }
 
 interface TvQueryRow {
@@ -98,8 +99,9 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
         c.assigned_at,
         c.created_at,
         c.status,
+        c.queue_entered_at,
         CASE
-          WHEN c.assigned_to IS NULL THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 60)::integer
+          WHEN c.assigned_to IS NULL THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(c.queue_entered_at, c.created_at))) / 60)::integer
           ELSE FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(c.assigned_at, c.created_at))) / 60)::integer
         END AS wait_time
       FROM conversations c
@@ -108,6 +110,7 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
       WHERE (
         c.assigned_to IS NULL
         AND c.status = 'open'
+        AND c.queue_entered_at IS NOT NULL
       ) OR (
         c.assigned_to IS NOT NULL
         AND c.status = 'open'
@@ -129,6 +132,7 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
       COUNT(*) FILTER (
         WHERE c.assigned_to IS NULL
           AND c.status = 'open'
+          AND c.queue_entered_at IS NOT NULL
       )::integer AS queued,
       COUNT(*) FILTER (
         WHERE c.assigned_to IS NOT NULL
@@ -183,7 +187,8 @@ async function queryTvRow(tx: TxClient): Promise<TvQueryRow | undefined> {
               'assignedAt', cc.assigned_at,
               'createdAt', cc.created_at,
               'status', cc.status,
-              'waitTime', cc.wait_time
+              'waitTime', cc.wait_time,
+              'queueEnteredAt', cc.queue_entered_at
             )
             ORDER BY
               CASE WHEN cc.assigned_at IS NULL THEN 0 ELSE 1 END ASC,
@@ -268,6 +273,7 @@ export async function getTvSnapshot(
     ...item,
     assignedAt: item.assignedAt ? new Date(item.assignedAt).toISOString() : null,
     createdAt: new Date(item.createdAt).toISOString(),
+    queueEnteredAt: item.queueEnteredAt ? new Date(item.queueEnteredAt).toISOString() : null,
   }));
 
   return {

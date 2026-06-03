@@ -487,6 +487,7 @@ export interface TvConversationCard {
   createdAt: string;
   status: string;
   waitTime: number | null;
+  queueEnteredAt: string | null;
 }
 
 export interface TvDashboardData {

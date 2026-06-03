@@ -132,7 +132,8 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
        FROM ${conversationsRef}
        WHERE assigned_to IS NULL
          AND status = 'open'
-       GROUP BY tag`,
+         AND queue_entered_at IS NOT NULL
+        GROUP BY tag`,
     ),
     prisma.$queryRawUnsafe<Array<{ agent_id: string; total: bigint }>>(
       `SELECT assigned_to::text AS agent_id, COUNT(*) AS total
