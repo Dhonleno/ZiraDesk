@@ -14,6 +14,12 @@ RUN pnpm --filter @ziradesk/shared build
 RUN pnpm --filter @ziradesk/api build
 RUN rm -rf /app/deploy
 RUN pnpm --filter @ziradesk/api --prod deploy /app/deploy
+RUN prisma_build_dir="$(find /app/node_modules/.pnpm -maxdepth 1 -type d -name '@prisma+client@*' | head -n 1)" \
+  && prisma_deploy_dir="$(find /app/deploy/node_modules/.pnpm -maxdepth 1 -type d -name '@prisma+client@*' | head -n 1)" \
+  && test -n "$prisma_build_dir" \
+  && test -n "$prisma_deploy_dir" \
+  && mkdir -p "$prisma_deploy_dir/node_modules/.prisma" \
+  && cp -R "$prisma_build_dir/node_modules/.prisma/." "$prisma_deploy_dir/node_modules/.prisma/"
 
 FROM base AS runtime
 WORKDIR /app

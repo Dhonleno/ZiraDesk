@@ -62,7 +62,7 @@ jobs:
           docker compose --env-file .env.production -f docker-compose.production.yml build
           docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
           docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate </dev/null
-          docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans
+          docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web nginx
 
           docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
           docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -s reload </dev/null
