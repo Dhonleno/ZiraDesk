@@ -768,6 +768,32 @@ describe('CRM integration', () => {
     expect(documentResponse.status).toBe(409);
   });
 
+  it('PATCH /api/crm/contacts/:id preserva organização quando organization_id é omitido', async () => {
+    const organization = await createOrganization({ name: uniqueText('Org Preserve') });
+    const contact = await createContact({
+      name: 'Contato Vinculado',
+      organization_id: organization.id,
+      email: uniqueEmail('preserve.org'),
+      phone: uniquePhone(602),
+      document: uniqueDocument(602),
+    });
+
+    const response = await createTestApp()
+      .patch(`/api/crm/contacts/${contact.id}`)
+      .set(authHeader())
+      .send({
+        name: 'Contato Vinculado Editado',
+        phone: uniquePhone(603),
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: contact.id,
+      name: 'Contato Vinculado Editado',
+      organization_id: organization.id,
+    });
+  });
+
   it('POST /api/crm/contacts/:id/link-organization vincula organização', async () => {
     const organization = await createOrganization({ name: uniqueText('Linked org') });
     const contact = await createContact({
