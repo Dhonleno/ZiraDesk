@@ -500,6 +500,7 @@ export interface TvDashboardData {
 
 export interface MonitorBotConversation {
   id: string;
+  contact_id: string | null;
   protocol_number: string | null;
   created_at: string;
   metadata: Record<string, unknown> | null;

@@ -46,6 +46,7 @@ interface MonitorResponse {
 
 export interface MonitorBotConversation {
   id: string;
+  contact_id: string | null;
   protocol_number: string | null;
   created_at: string;
   metadata: Record<string, unknown>;
@@ -272,6 +273,7 @@ export async function listMonitorBotConversations(schemaName: string): Promise<M
 
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string;
+    contact_id: string | null;
     protocol_number: string | null;
     created_at: Date;
     metadata: unknown;
@@ -286,6 +288,7 @@ export async function listMonitorBotConversations(schemaName: string): Promise<M
   }>>(
     `SELECT
        c.id::text AS id,
+       c.contact_id::text AS contact_id,
        c.protocol_number,
        c.created_at,
        c.metadata,
@@ -306,6 +309,7 @@ export async function listMonitorBotConversations(schemaName: string): Promise<M
 
   const conversations = rows.map((row) => ({
     id: row.id,
+    contact_id: row.contact_id,
     protocol_number: row.protocol_number,
     created_at: row.created_at.toISOString(),
     metadata: normalizeMetadata(row.metadata),

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import {
   omnichannelApi,
   type MonitorBotConversation,
@@ -14,6 +14,7 @@ import { subscribeToEvent } from '../../services/socket';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { usePermission } from '../../hooks/usePermission';
+import { BotConversationDrawer } from '../../components/omnichannel/BotConversationDrawer';
 
 const BOT_STUCK_THRESHOLD_MINUTES = 10;
 
@@ -293,6 +294,7 @@ function ConversationChronometer({
 export function TVDashboard() {
   const { t, i18n } = useTranslation('omnichannel');
   const toast = useToast();
+  const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { role } = usePermission();
   const canAccessTv = ['owner', 'admin', 'supervisor'].includes(role ?? '');
@@ -301,6 +303,7 @@ export function TVDashboard() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<'realtime' | 'bot'>('realtime');
   const [botAction, setBotAction] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<MonitorBotConversation | null>(null);
   const [closingBotConversation, setClosingBotConversation] = useState<MonitorBotConversation | null>(null);
   const [closeMessage, setCloseMessage] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -343,6 +346,16 @@ export function TVDashboard() {
   }, []);
 
   useEffect(() => {
+    setSelectedConversation(null);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!selectedConversation || !botData) return;
+    const stillInBot = botData.conversations.some((conversation) => conversation.id === selectedConversation.id);
+    if (!stillInBot) setSelectedConversation(null);
+  }, [botData, selectedConversation]);
+
+  useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -365,21 +378,23 @@ export function TVDashboard() {
     }
   };
 
-  const pullBotConversation = async (conversationId: string) => {
+  const pullBotConversation = async (conversationId: string): Promise<boolean> => {
     setBotAction(`pull:${conversationId}`);
     try {
       await omnichannelApi.pullMonitorBotConversation(conversationId);
       toast.success(t('monitor.bot.pullSuccess'));
       await refetchBot();
+      return true;
     } catch {
       toast.error(t('monitor.bot.actionError'));
+      return false;
     } finally {
       setBotAction(null);
     }
   };
 
-  const closeBotConversation = async () => {
-    if (!closingBotConversation) return;
+  const closeBotConversation = async (): Promise<boolean> => {
+    if (!closingBotConversation) return false;
     const conversationId = closingBotConversation.id;
     setBotAction(`close:${conversationId}`);
     try {
@@ -388,8 +403,10 @@ export function TVDashboard() {
       setClosingBotConversation(null);
       setCloseMessage('');
       await refetchBot();
+      return true;
     } catch {
       toast.error(t('monitor.bot.actionError'));
+      return false;
     } finally {
       setBotAction(null);
     }
@@ -1066,6 +1083,28 @@ export function TVDashboard() {
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                             <button
                               type="button"
+                              className="tb-icon-btn"
+                              onClick={() => setSelectedConversation(conversation)}
+                              title={t('monitor.bot.viewConversation')}
+                              aria-label={t('monitor.bot.viewConversation')}
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden
+                              >
+                                <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+                                <circle cx="8" cy="8" r="2.5" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => { void pullBotConversation(conversation.id); }}
                               disabled={Boolean(botAction)}
                               style={{
@@ -1112,6 +1151,26 @@ export function TVDashboard() {
           </div>
         </section>
       )}
+
+      <BotConversationDrawer
+        conversation={selectedConversation}
+        onClose={() => setSelectedConversation(null)}
+        onPull={async (conversationId) => {
+          const success = await pullBotConversation(conversationId);
+          if (success) setSelectedConversation(null);
+          return success;
+        }}
+        onClose_={(conversationId) => {
+          const conversation = selectedConversation?.id === conversationId
+            ? selectedConversation
+            : botConversations.find((item) => item.id === conversationId) ?? null;
+          if (!conversation) return false;
+          setSelectedConversation(null);
+          setClosingBotConversation(conversation);
+          setCloseMessage('');
+          return false;
+        }}
+      />
 
       {closingBotConversation ? (
         <div
