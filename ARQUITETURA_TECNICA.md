@@ -51,12 +51,17 @@ Testes:       Vitest + Testing Library
 
 ### Infraestrutura (MVP)
 ```
-Deploy:       Railway.app (backend + banco + redis)
+Deploy:       VPS Contabo + Docker Compose + Nginx
 CDN/Storage:  Cloudflare R2
-DNS:          Cloudflare (subdomínios wildcard *.ziradesk.com.br)
+DNS:          Cloudflare (app.ziradesk.com, api.ziradesk.com, *.ziradesk.com)
 CI/CD:        GitHub Actions
 Monitoramento: Sentry (erros) + Umami (analytics)
 ```
+
+Observacao de escopo atual:
+- O portal `suporte.{tenant}.ziradesk.com` nao esta ativo na producao atual.
+- O Origin Certificate atual cobre `ziradesk.com` e `*.ziradesk.com`, mas nao
+  cobre `*.*.ziradesk.com`.
 
 ---
 
@@ -390,7 +395,7 @@ tenant_{slug}/          ← criado automaticamente no cadastro
 
 ### Resolução do tenant por subdomínio
 ```
-empresa.ziradesk.com.br
+empresa.ziradesk.com
     ↓
 Middleware extrai "empresa"
     ↓
@@ -404,7 +409,7 @@ Todas as queries operam no schema correto
 ### Middleware de tenant (pseudocódigo)
 ```typescript
 async function tenantMiddleware(request, reply) {
-  const host = request.headers.host // empresa.ziradesk.com.br
+  const host = request.headers.host // empresa.ziradesk.com
   const slug = host.split('.')[0]
 
   const tenant = await db.public.tenant.findUnique({ where: { slug } })
@@ -1110,7 +1115,7 @@ ziradesk/
 - [ ] Middleware de tenant por subdomínio
 - [ ] RBAC básico (super_admin, owner, admin, agent)
 - [ ] CI/CD no GitHub Actions
-- [ ] Deploy inicial no Railway
+- [ ] Deploy inicial na VPS Contabo
 
 ### Sprint 1 — Super Admin (2-3 dias) ⚠️ ~70% (Super Admin funcional, pendências pontuais)
 - [ ] CRUD de planos
@@ -1158,6 +1163,7 @@ ziradesk/
 - [x] Storage abstraction com suporte a R2
 - [x] Testes de integração (78 testes em 9 módulos)
 - [x] CI gate com testes obrigatórios antes de deploy
+- [x] Workflow dedicado de deploy para VPS Contabo
 
 **Total estimado: 25-35 dias de desenvolvimento focado**
 
@@ -1256,7 +1262,7 @@ R2_PUBLIC_URL=
 | BullMQ | Agenda/node-cron | Filas robustas, retry automático, dashboard visual |
 | Prisma | Knex/TypeORM | DX superior, migrations automáticas, type-safety completo |
 | pnpm workspaces | npm/yarn | Mais rápido, menos disco, melhor para monorepo |
-| Railway | Heroku/Vercel | Postgres + Redis + deploy tudo junto, mais barato no MVP |
+| VPS Contabo + Docker Compose | Railway/Render/Fly.io | Controle total de Nginx, certificados, wildcard de tenants e custos previsiveis |
 | Evolution API | Twilio | Open source, sem custo por mensagem no MVP |
 
 ---
