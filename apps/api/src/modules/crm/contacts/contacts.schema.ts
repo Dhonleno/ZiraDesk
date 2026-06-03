@@ -42,10 +42,18 @@ const updateContactSchemaBase = z.object({
   notes:           z.string().nullable().optional(),
 });
 
-export const updateContactSchema = updateContactSchemaBase.transform(({ organizationId, organization_id, ...rest }) => ({
-  ...rest,
-  organization_id: organizationId ?? organization_id,
-}));
+export const updateContactSchema = updateContactSchemaBase.transform((input) => {
+  const { organizationId, organization_id, ...rest } = input;
+  const output: typeof rest & { organization_id?: string | null } = { ...rest };
+
+  if (Object.prototype.hasOwnProperty.call(input, 'organizationId') && organizationId !== undefined) {
+    output.organization_id = organizationId;
+  } else if (Object.prototype.hasOwnProperty.call(input, 'organization_id') && organization_id !== undefined) {
+    output.organization_id = organization_id;
+  }
+
+  return output;
+});
 
 export const listContactsQuerySchema = z.object({
   page:            z.coerce.number().int().positive().default(1),

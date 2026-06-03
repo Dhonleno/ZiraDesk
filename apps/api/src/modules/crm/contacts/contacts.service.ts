@@ -967,7 +967,6 @@ export async function approveLgpdRectificationRequest(
   const request = await loadRectificationRequestForAction(requestId, db);
   const requestedChanges = extractRectificationChangesFromPayload(request.payload);
   const updatePayload: UpdateContactInput = {
-    organization_id: undefined,
     ...requestedChanges,
   };
 
