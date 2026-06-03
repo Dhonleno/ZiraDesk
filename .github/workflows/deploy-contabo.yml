@@ -61,7 +61,7 @@ jobs:
 
           docker compose --env-file .env.production -f docker-compose.production.yml build
           docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
-          docker compose --env-file .env.production -f docker-compose.production.yml run --rm api sh -lc "pnpm dlx prisma@5.22.0 migrate deploy --schema prisma/schema.prisma" </dev/null
+          docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate </dev/null
           docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans
 
           docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
