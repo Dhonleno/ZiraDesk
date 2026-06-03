@@ -36,7 +36,7 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "${CONTABO_SSH_PRIVATE_KEY}" > ~/.ssh/ziradesk_contabo
           chmod 600 ~/.ssh/ziradesk_contabo
-          ssh-keyscan -p "${CONTABO_PORT}" -H "${CONTABO_HOST}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -p "${CONTABO_PORT}" -H "${CONTABO_HOST}" >> ~/.ssh/known_hosts || true
 
       - name: Deploy to Contabo VPS
         shell: bash
