@@ -26,7 +26,7 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
-async function ensureWebhooksTable(schemaName: string): Promise<void> {
+export async function ensureWebhooksInfrastructure(schemaName: string): Promise<void> {
   const schema = quoteIdent(schemaName);
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${schema}.outbound_webhooks (
@@ -54,7 +54,9 @@ async function ensureWebhooksTable(schemaName: string): Promise<void> {
       is_active       BOOLEAN DEFAULT true,
       sync_comments   BOOLEAN DEFAULT true,
       sync_status     BOOLEAN DEFAULT true,
+      sync_company    BOOLEAN DEFAULT true,
       status_map      JSONB DEFAULT '{}'::jsonb,
+      priority_map    JSONB DEFAULT '{}'::jsonb,
       last_sync_at    TIMESTAMPTZ,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -66,15 +68,31 @@ async function ensureWebhooksTable(schemaName: string): Promise<void> {
       id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id        UUID NOT NULL,
       redmine_issue_id INTEGER NOT NULL,
+      redmine_company_id INTEGER,
       integration_id   UUID REFERENCES ${schema}.redmine_integrations(id),
       last_synced_at   TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(ticket_id, integration_id)
     )
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_integrations
+    ADD COLUMN IF NOT EXISTS sync_company BOOLEAN DEFAULT true
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_integrations
+    ADD COLUMN IF NOT EXISTS priority_map JSONB DEFAULT '{}'::jsonb
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.redmine_ticket_map
+    ADD COLUMN IF NOT EXISTS redmine_company_id INTEGER
+  `);
 }
 
 export async function listWebhooks(schemaName: string): Promise<WebhookRow[]> {
-  await ensureWebhooksTable(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
   return prisma.$queryRawUnsafe<WebhookRow[]>(`
     SELECT id, name, url, secret, events, headers, is_active,
@@ -85,7 +103,7 @@ export async function listWebhooks(schemaName: string): Promise<WebhookRow[]> {
 }
 
 export async function getWebhook(schemaName: string, id: string): Promise<WebhookRow> {
-  await ensureWebhooksTable(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
   const rows = await prisma.$queryRawUnsafe<WebhookRow[]>(
     `SELECT id, name, url, secret, events, headers, is_active,
@@ -100,7 +118,7 @@ export async function getWebhook(schemaName: string, id: string): Promise<Webhoo
 }
 
 export async function createWebhook(schemaName: string, data: CreateWebhookInput): Promise<WebhookRow> {
-  await ensureWebhooksTable(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
   const eventsLiteral = `{${data.events.map((e) => `"${e}"`).join(',')}}`;
   const headersJson = JSON.stringify(data.headers ?? {});
@@ -126,7 +144,7 @@ export async function updateWebhook(
   id: string,
   data: UpdateWebhookInput,
 ): Promise<WebhookRow> {
-  await ensureWebhooksTable(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
 
   const existing = await getWebhook(schemaName, id);
@@ -161,7 +179,7 @@ export async function updateWebhook(
 }
 
 export async function deleteWebhook(schemaName: string, id: string): Promise<WebhookRow> {
-  await ensureWebhooksTable(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
   const schema = quoteIdent(schemaName);
 
   const rows = await prisma.$queryRawUnsafe<WebhookRow[]>(
