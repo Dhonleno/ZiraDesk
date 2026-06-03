@@ -3,6 +3,7 @@ import { messageQueue } from '../../../jobs/queue.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 import { logger } from '../../../config/logger.js';
 import { quoteIdent } from '../conversations/protocols.js';
+import { ensureQueueNotificationsInfrastructure } from './queue-notifications.infrastructure.js';
 
 interface QueueSettings {
   queue_notifications_enabled: boolean;
@@ -69,25 +70,6 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 
 function escapeWhatsAppMarkdown(text: string): string {
   return text.replace(/([*_~`])/g, '\\$1');
-}
-
-async function ensureQueueNotificationsTable(schemaName: string): Promise<void> {
-  const convRef = `${quoteIdent(schemaName)}.conversations`;
-  const notifRef = `${quoteIdent(schemaName)}.queue_notifications`;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS ${notifRef} (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      conversation_id UUID REFERENCES ${convRef}(id) ON DELETE CASCADE,
-      last_position INT NOT NULL,
-      last_notified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      message_id VARCHAR(255),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_queue_notif_conv
-    ON ${notifRef}(conversation_id)
-  `);
 }
 
 async function getTenantQueueSettings(tenantId: string): Promise<QueueSettings> {
@@ -223,7 +205,7 @@ export async function notifyQueuePosition(
   );
   const position = Number(posRows[0]?.position ?? 1);
 
-  await ensureQueueNotificationsTable(schemaName);
+  await ensureQueueNotificationsInfrastructure(schemaName);
 
   // Check throttle
   const existingRows = await prisma.$queryRawUnsafe<QueueNotifRow[]>(

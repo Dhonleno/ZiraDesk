@@ -65,7 +65,7 @@ async function createTempTenant(): Promise<TempTenant> {
     select: { id: true, schemaName: true },
   });
 
-  await provisionTenantSchema(t.id);
+  await provisionTenantSchema(t.schemaName);
   return { id: t.id, schemaName: t.schemaName };
 }
 
@@ -97,7 +97,7 @@ async function createQueueConversation(
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO "${schemaName}".conversations
        (id, channel_id, channel_type, conversation_type, status, contact_id, assigned_to, queue_entered_at)
-     VALUES (gen_random_uuid(), $1::uuid, 'whatsapp', 'inbound', 'open', $2::uuid, NULL, $3)
+     VALUES (gen_random_uuid(), $1::uuid, 'whatsapp', 'inbound', 'open', $2::uuid, NULL, $3::timestamptz)
      RETURNING id`,
     chId,
     contactId,

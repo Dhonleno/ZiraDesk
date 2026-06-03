@@ -7,6 +7,7 @@ import { prisma } from '../../../config/database.js';
 import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
 import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
+import { ensureQueueNotificationsInfrastructure } from '../../omnichannel/queue/queue-notifications.infrastructure.js';
 import {
   listUsers,
   inviteUser,
@@ -812,6 +813,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
 export async function provisionTenantSchema(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
   await createTenantTables(schemaName);
+  await ensureQueueNotificationsInfrastructure(schemaName);
   await seedCloseConfig(prisma, schemaName);
   await seedQuickReplies(prisma, schemaName);
 }
