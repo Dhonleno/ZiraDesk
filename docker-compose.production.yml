@@ -66,6 +66,9 @@ services:
       retries: 10
       start_period: 20s
     mem_limit: 2g
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
       - ziradesk-internal
 
@@ -87,6 +90,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
       - ziradesk-internal
 
