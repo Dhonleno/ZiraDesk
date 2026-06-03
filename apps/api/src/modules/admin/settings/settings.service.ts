@@ -26,6 +26,13 @@ const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   'Em breve entraremos em contato. 😊',
 ].join('\n');
 
+const DEFAULT_QUEUE_MESSAGE_TEMPLATE =
+  'Você é o nº {{position}} na fila. Aguarde, em breve um agente irá atendê-lo.';
+const DEFAULT_AGENT_ASSUME_TEMPLATE =
+  'Olá! Meu nome é {{agent_name}}, vou continuar seu atendimento. Em que posso ajudar?';
+const DEFAULT_EXPIRE_24H_MESSAGE =
+  'Olá, infelizmente não conseguimos atender no momento. Por favor, entre em contato novamente quando puder.';
+
 function logoKey(tenantId: string, mimeType: string): string {
   const ext = LOGO_EXT_BY_MIME[mimeType] ?? 'png';
   return `logos/${tenantId}.${ext}`;
@@ -121,6 +128,12 @@ export async function getSettings(tenantId: string) {
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
     lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
     lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
+    queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
+    queue_message_template: (s.queue_message_template as string | undefined) ?? DEFAULT_QUEUE_MESSAGE_TEMPLATE,
+    queue_throttle_seconds: typeof s.queue_throttle_seconds === 'number' ? Math.trunc(s.queue_throttle_seconds) : 60,
+    agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
+    expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
+    expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -179,6 +192,24 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.lgpd_retention_days !== undefined
       ? { lgpd_retention_days: data.lgpd_retention_days }
       : {}),
+    ...(data.queue_notifications_enabled !== undefined
+      ? { queue_notifications_enabled: data.queue_notifications_enabled }
+      : {}),
+    ...(data.queue_message_template !== undefined
+      ? { queue_message_template: data.queue_message_template }
+      : {}),
+    ...(data.queue_throttle_seconds !== undefined
+      ? { queue_throttle_seconds: data.queue_throttle_seconds }
+      : {}),
+    ...(data.agent_assume_template !== undefined
+      ? { agent_assume_template: data.agent_assume_template }
+      : {}),
+    ...(data.expire_24h_action !== undefined
+      ? { expire_24h_action: data.expire_24h_action }
+      : {}),
+    ...(data.expire_24h_message !== undefined
+      ? { expire_24h_message: data.expire_24h_message }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -222,6 +253,12 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
     lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
     lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
+    queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
+    queue_message_template: (s.queue_message_template as string | undefined) ?? DEFAULT_QUEUE_MESSAGE_TEMPLATE,
+    queue_throttle_seconds: typeof s.queue_throttle_seconds === 'number' ? Math.trunc(s.queue_throttle_seconds) : 60,
+    agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
+    expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
+    expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
   };
 }
 
