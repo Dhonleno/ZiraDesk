@@ -1113,6 +1113,15 @@ export interface UpdateWhatsAppTemplatePayload {
   status?: WhatsAppTemplateStatus;
 }
 
+interface QueueConfigSettings {
+  queue_notifications_enabled: boolean;
+  queue_message_template: string;
+  queue_throttle_seconds: number;
+  agent_assume_template: string;
+  expire_24h_action: 'close' | 'keep_open';
+  expire_24h_message: string;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<{ success: boolean; data: AdminStats }>('/admin/stats/overview');
@@ -1136,6 +1145,16 @@ export const adminApi = {
       '/admin/settings/logo',
       form,
     );
+    return res.data.data;
+  },
+
+  getQueueConfig: async () => {
+    const res = await api.get<{ success: boolean; data: QueueConfigSettings }>('/admin/queue-config');
+    return res.data.data;
+  },
+
+  updateQueueConfig: async (data: Partial<QueueConfigSettings>) => {
+    const res = await api.patch<{ success: boolean; data: QueueConfigSettings }>('/admin/queue-config', data);
     return res.data.data;
   },
 

@@ -671,6 +671,7 @@
     "integrations": "Integrações",
     "webhooks": "Webhooks",
     "attendanceRules": "Regras de Atendimento",
+    "queueConfig": "Notificações de Fila",
     "settings": "Configurações",
     "lgpd": "LGPD",
     "history": "Histórico",
@@ -685,6 +686,25 @@
       "settings": "Configurações",
       "history": "Histórico",
       "performance": "Performance"
+    }
+  },
+  "queueConfig": {
+    "title": "Notificações de Fila",
+    "subtitle": "Configure mensagens automáticas enviadas ao cliente enquanto aguarda na fila",
+    "enabled": "Notificar clientes na fila",
+    "enabledHint": "Envia mensagens automáticas de posição e confirmação de atendimento via WhatsApp",
+    "positionMessage": "Mensagem de posição na fila",
+    "positionMessageHint": "Use {{position}} para inserir a posição do cliente",
+    "throttle": "Intervalo mínimo entre notificações (segundos)",
+    "throttleHint": "Mínimo de 30s, máximo de 600s. Evita spam ao cliente",
+    "agentAssumeMessage": "Saudação ao assumir o atendimento",
+    "agentAssumeMessageHint": "Use {{agent_name}} para inserir o nome do agente",
+    "expire24hAction": "Após 24h sem atendimento",
+    "expire24hClose": "Encerrar atendimento",
+    "expire24hKeepOpen": "Manter aberto",
+    "expire24hMessage": "Mensagem ao encerrar por 24h",
+    "messages": {
+      "saved": "Configurações de fila salvas com sucesso"
     }
   },
   "attendanceRules": {

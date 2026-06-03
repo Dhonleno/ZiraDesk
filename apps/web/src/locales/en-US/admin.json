@@ -660,6 +660,7 @@
     "integrations": "Integrations",
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
+    "queueConfig": "Queue Notifications",
     "settings": "Settings",
     "lgpd": "LGPD",
     "history": "History",
@@ -674,6 +675,25 @@
       "settings": "Settings",
       "history": "History",
       "performance": "Performance"
+    }
+  },
+  "queueConfig": {
+    "title": "Queue Notifications",
+    "subtitle": "Configure automatic messages sent to customers while waiting in queue",
+    "enabled": "Notify customers in queue",
+    "enabledHint": "Sends automatic position and agent-assumed notifications via WhatsApp",
+    "positionMessage": "Queue position message",
+    "positionMessageHint": "Use {{position}} to include the customer's position",
+    "throttle": "Minimum interval between notifications (seconds)",
+    "throttleHint": "Min 30s, max 600s. Prevents spam to the customer",
+    "agentAssumeMessage": "Greeting when agent assumes",
+    "agentAssumeMessageHint": "Use {{agent_name}} to include the agent's name",
+    "expire24hAction": "After 24h without service",
+    "expire24hClose": "Close conversation",
+    "expire24hKeepOpen": "Keep open",
+    "expire24hMessage": "Message when closing after 24h",
+    "messages": {
+      "saved": "Queue settings saved successfully"
     }
   },
   "attendanceRules": {

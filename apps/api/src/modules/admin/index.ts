@@ -20,6 +20,7 @@ import { templatesRoutes } from './templates/templates.routes.js';
 import { smtpRoutes } from './smtp/smtp.routes.js';
 import { omnichannelLgpdRoutes } from './omnichannel-lgpd/omnichannel-lgpd.routes.js';
 import { adminLgpdRoutes } from './lgpd/lgpd.routes.js';
+import { queueConfigRoutes } from './queue-config/queue-config.routes.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -43,4 +44,5 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(smtpRoutes, { prefix: '/smtp' });
   await app.register(omnichannelLgpdRoutes, { prefix: '/omnichannel' });
   await app.register(adminLgpdRoutes, { prefix: '/lgpd' });
+  await app.register(queueConfigRoutes, { prefix: '/queue-config' });
 }

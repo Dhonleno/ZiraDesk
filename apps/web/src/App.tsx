@@ -41,6 +41,7 @@ import { Webhooks as AdminWebhooks } from './pages/admin/Webhooks';
 import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
 import { Templates as AdminTemplates } from './pages/admin/Templates';
 import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
+import { QueueConfig as AdminQueueConfig } from './pages/admin/QueueConfig';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -76,6 +77,13 @@ function RequireSuperAdmin({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'super_admin') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function RequireTenantUser({ children }: { children: ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'super_admin') return <Navigate to="/super-admin" replace />;
   return <>{children}</>;
 }
 
@@ -131,9 +139,11 @@ export function App() {
             path="/*"
             element={
               <RequireAuth>
-                <ErrorBoundary>
-                  <TenantLayout />
-                </ErrorBoundary>
+                <RequireTenantUser>
+                  <ErrorBoundary>
+                    <TenantLayout />
+                  </ErrorBoundary>
+                </RequireTenantUser>
               </RequireAuth>
             }
           >
@@ -239,6 +249,7 @@ export function App() {
                   </ProtectedRoute>
                 )}
               />
+              <Route path="queue-config" element={<AdminQueueConfig />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />

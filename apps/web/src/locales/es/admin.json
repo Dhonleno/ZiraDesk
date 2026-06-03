@@ -660,6 +660,7 @@
     "integrations": "Integraciones",
     "webhooks": "Webhooks",
     "attendanceRules": "Reglas de Atención",
+    "queueConfig": "Notificaciones de Cola",
     "settings": "Configuración",
     "lgpd": "LGPD",
     "history": "Historial",
@@ -674,6 +675,25 @@
       "settings": "Configuración",
       "history": "Historial",
       "performance": "Performance"
+    }
+  },
+  "queueConfig": {
+    "title": "Notificaciones de Cola",
+    "subtitle": "Configure mensajes automáticos enviados al cliente mientras espera en cola",
+    "enabled": "Notificar clientes en cola",
+    "enabledHint": "Envía mensajes automáticos de posición y confirmación de atención vía WhatsApp",
+    "positionMessage": "Mensaje de posición en cola",
+    "positionMessageHint": "Use {{position}} para insertar la posición del cliente",
+    "throttle": "Intervalo mínimo entre notificaciones (segundos)",
+    "throttleHint": "Mínimo 30s, máximo 600s. Evita spam al cliente",
+    "agentAssumeMessage": "Saludo al asumir la atención",
+    "agentAssumeMessageHint": "Use {{agent_name}} para insertar el nombre del agente",
+    "expire24hAction": "Después de 24h sin atención",
+    "expire24hClose": "Cerrar conversación",
+    "expire24hKeepOpen": "Mantener abierta",
+    "expire24hMessage": "Mensaje al cerrar por 24h",
+    "messages": {
+      "saved": "Configuración de cola guardada con éxito"
     }
   },
   "attendanceRules": {

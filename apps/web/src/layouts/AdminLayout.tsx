@@ -138,6 +138,18 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.queueConfig',
+        path: '/admin/queue-config',
+        permission: 'settings:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M2.5 4h11M2.5 8h7M2.5 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <circle cx="12" cy="11" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M12 9v.5M12 12.5V13M10.5 11h.5M13 11h.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.tags',
         path: '/admin/conversation-tags',
         icon: (
