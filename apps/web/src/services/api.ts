@@ -498,6 +498,27 @@ export interface TvDashboardData {
   conversationCards: TvConversationCard[];
 }
 
+export interface MonitorBotConversation {
+  id: string;
+  protocol_number: string | null;
+  created_at: string;
+  metadata: Record<string, unknown> | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_whatsapp: string | null;
+  channel_name: string | null;
+  channel_type: string;
+  minutes_in_bot: number;
+}
+
+export interface MonitorBotData {
+  conversations: MonitorBotConversation[];
+  total: number;
+  stuck: number;
+}
+
 export interface ConversationHelper {
   id: string;
   conversation_id: string;
@@ -2646,6 +2667,18 @@ export const omnichannelApi = {
   tv: async (): Promise<TvDashboardData> => {
     const res = await api.get<{ success: boolean; data: TvDashboardData }>('/omnichannel/tv');
     return res.data.data;
+  },
+  monitorBot: async (): Promise<MonitorBotData> => {
+    const res = await api.get<{ success: boolean; data: MonitorBotData }>('/omnichannel/monitor/bot');
+    return res.data.data;
+  },
+  pullMonitorBotConversation: async (conversationId: string): Promise<void> => {
+    await api.post(`/omnichannel/monitor/bot/${conversationId}/pull`);
+  },
+  closeMonitorBotConversation: async (conversationId: string, message?: string): Promise<void> => {
+    await api.post(`/omnichannel/monitor/bot/${conversationId}/close`, {
+      message: message?.trim() || undefined,
+    });
   },
 
   metrics: {
