@@ -1,45 +1,35 @@
 # Deploy — ZiraDesk
 
-## Pré-requisitos
-- Conta no Railway (railway.app)
-- Domínio configurado (ziradesk.com.br)
-- DNS Cloudflare com wildcard *.ziradesk.com.br
+## Estado atual
 
-## Serviços no Railway
-1. PostgreSQL 16 (plugin oficial)
-2. Redis 7 (plugin oficial)
-3. API (Fastify) — Dockerfile em apps/api/
-4. Web (React) — deploy como Static Site
+Este projeto nao usa mais Railway para producao.
 
-## Variáveis de ambiente
-Configurar todas as variáveis de apps/api/.env.production.example
-no serviço da API no Railway.
+O ambiente atual de producao roda em:
+- VPS Contabo
+- Docker Compose
+- Nginx
+- Cloudflare (DNS e proxy)
 
-Obrigatórias para webhooks Meta:
-- META_APP_SECRET
-- WHATSAPP_VERIFY_TOKEN
+Dominios atuais:
+- `https://app.ziradesk.com`
+- `https://api.ziradesk.com`
+- `https://{tenant}.ziradesk.com`
 
-Para o Web, configurar:
-VITE_API_URL=https://api.ziradesk.com.br
-VITE_SOCKET_URL=https://api.ziradesk.com.br
+## Guia oficial
 
-## Domínios customizados no Railway
-- API: api.ziradesk.com.br
-- Web: app.ziradesk.com.br
+O guia operacional atual de deploy esta em:
 
-## Subdomínios de tenant
-Configurar DNS wildcard no Cloudflare:
-*.ziradesk.com.br → app.ziradesk.com.br (CNAME)
+- [DEPLOY_VPS_DOCKER_COMPOSE.md](./DEPLOY_VPS_DOCKER_COMPOSE.md)
 
-O middleware de tenant resolve o slug pelo subdomínio.
+Esse documento cobre:
+- preparacao da VPS
+- variaveis de ambiente
+- certificados TLS
+- fluxo manual de deploy
+- CI/CD via GitHub Actions para a Contabo
 
-## Deploy inicial
-1. Fazer push para o GitHub
-2. Conectar repositório no Railway
-3. Configurar variáveis de ambiente
-4. Executar manualmente: railway run pnpm --filter @ziradesk/api db:seed
-5. Verificar health: GET https://api.ziradesk.com.br/health
+## Notas de escopo
 
-## Deploy contínuo
-Railway detecta push na branch main e faz deploy automático.
-Migrations rodam automaticamente via scripts/deploy.sh.
+- O portal `suporte.{tenant}.ziradesk.com` esta desativado no Nginx por
+  decisao de escopo e por falta de cobertura TLS no certificado atual.
+- O wildcard de tenant ativo em producao hoje eh `*.ziradesk.com`.
