@@ -36,10 +36,19 @@ Os certificados devem existir em:
 O Nginx usa esses arquivos para `app.ziradesk.com`, `api.ziradesk.com` e
 `*.ziradesk.com`.
 
+Observacao operacional:
+- O portal `suporte.{tenant}.ziradesk.com` esta intencionalmente desativado.
+- O Origin Certificate atual nao cobre `*.*.ziradesk.com`.
+- Para reativar o portal, e necessario emitir novo certificado com cobertura
+  para esse padrao e restaurar o vhost removido do Nginx.
+
 ## 4) Subir stack
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml build
+docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
+docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web nginx
 ```
 
 ## 5) Verificações rápidas
@@ -53,8 +62,10 @@ curl -I https://api.ziradesk.com/health
 
 ## 6) CI/CD para Contabo
 
-O workflow `.github/workflows/ci.yml` faz deploy na VPS Contabo depois que o
-job de testes passa em pushes para `main`.
+O deploy automatico da VPS Contabo roda no workflow dedicado
+`.github/workflows/deploy-contabo.yml`.
+
+O workflow `.github/workflows/ci.yml` continua responsavel apenas pelos testes.
 
 Secret obrigatorio no GitHub:
 - `CONTABO_SSH_PRIVATE_KEY`: chave privada SSH autorizada para o usuario
@@ -71,9 +82,14 @@ Fluxo executado no servidor:
 2. `nginx -t` antes do deploy, quando o container ja existe
 3. `docker compose --env-file .env.production -f docker-compose.production.yml build`
 4. `docker compose ... up -d postgres redis`
-5. `prisma migrate deploy`
-6. `docker compose ... up -d --remove-orphans`
+5. `docker compose ... run --rm api-migrate`
+6. `docker compose ... up -d --remove-orphans postgres redis api web nginx`
 7. `nginx -t`, reload do Nginx e smoke test interno da API
+
+Detalhes importantes do fluxo atual:
+- `api-migrate` usa o stage `builder` do `apps/api/Dockerfile`
+- a migration nao depende de `pnpm dlx` nem de download em runtime
+- a imagem final da API ja carrega o Prisma Client gerado no build
 
 ## Observações de segurança aplicadas
 
