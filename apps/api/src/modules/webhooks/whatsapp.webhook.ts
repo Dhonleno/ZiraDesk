@@ -43,6 +43,8 @@ import {
   generateAIResponse,
   getConversationHistoryText,
 } from '../ai/ai.service.js';
+import { notifyQueuePosition } from '../omnichannel/queue/queue-notifications.service.js';
+import { recalculateQueuePositionsQueue } from '../../jobs/recalculate-queue-positions.job.js';
 
 interface MetaMessage {
   from: string;
@@ -1784,6 +1786,12 @@ async function processIncomingMessage(
     // the AI greeting below takes its place.
   }
 
+  // Bot reached a leaf → conversation in queue, no auto-assign attempted
+  if (result.isBotLeafTransfer && !result.shouldAutoAssign && !aiActivatesOnLeaf) {
+    void notifyQueuePosition(schemaName, tenantId, result.conversationId)
+      .catch((err) => logger.error({ err }, '[Webhook] Failed to send queue position notification'));
+  }
+
   if (result.shouldAutoAssign) {
     if (aiActivatesOnLeaf && aiConfigForLeaf) {
       // Bot reached a leaf node and AI Agent is enabled → activate AI instead of assigning to agent
@@ -1822,7 +1830,7 @@ async function processIncomingMessage(
         });
       }
     } else {
-      await autoAssignConversation(
+      const assignedAgentId = await autoAssignConversation(
         result.conversationId,
         tenantId,
         schemaName,
@@ -1831,6 +1839,16 @@ async function processIncomingMessage(
         undefined,
         result.botOptionId,
       );
+      if (!assignedAgentId) {
+        // No agent available — conversation stays in queue
+        void notifyQueuePosition(schemaName, tenantId, result.conversationId)
+          .catch((err) => logger.error({ err }, '[Webhook] Failed to send queue position notification'));
+      } else {
+        // Agent was auto-assigned — recalculate positions for remaining queue
+        void recalculateQueuePositionsQueue
+          .add('recalculate', { schemaName, tenantId }, { jobId: `recalc-${tenantId}-${Date.now()}` })
+          .catch((err) => logger.error({ err }, '[Webhook] Failed to enqueue recalculate job'));
+      }
     }
   }
 

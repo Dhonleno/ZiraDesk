@@ -5,6 +5,7 @@ import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { getSocketServer } from '../../socket/index.js';
 import { prisma } from '../../config/database.js';
+import { logger } from '../../config/logger.js';
 import { syncAgentAvailability } from './conversations/auto-assign.service.js';
 import {
   assignQueuedConversationToMe,
@@ -12,6 +13,8 @@ import {
   listQueueConversations,
 } from './conversations/conversations.service.js';
 import { listQueueQuerySchema } from './conversations/conversations.schema.js';
+import { notifyAgentAssumed } from './queue/queue-notifications.service.js';
+import { recalculateQueuePositionsQueue } from '../../jobs/recalculate-queue-positions.job.js';
 
 const queueGuard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -55,6 +58,15 @@ export async function omnichannelQueueRoutes(app: FastifyInstance): Promise<void
         assigned_to: request.user.id,
         status: 'open',
       });
+
+      if (schemaName && tenantId) {
+        void notifyAgentAssumed(schemaName, tenantId, request.params.id, request.user.id)
+          .catch((err) => logger.error({ err }, '[QueueRoutes] Failed to send agent-assumed notification'));
+
+        void recalculateQueuePositionsQueue
+          .add('recalculate', { schemaName, tenantId }, { jobId: `recalc-${tenantId}-${Date.now()}` })
+          .catch((err) => logger.error({ err }, '[QueueRoutes] Failed to enqueue recalculate job'));
+      }
 
       return reply.send({ success: true, data: result.conversation });
     } catch (err) {
