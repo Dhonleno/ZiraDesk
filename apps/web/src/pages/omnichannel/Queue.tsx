@@ -458,12 +458,32 @@ export function QueuePage() {
 
               {/* Assign button */}
               <button
-                className="tb-btn-primary"
+                type="button"
+                className="tb-btn tb-btn-primary"
                 style={{ justifySelf: 'end', flexShrink: 0 }}
+                aria-label={`${t('queue.assignMe')} de ${contactName}`}
                 onClick={(e) => { e.stopPropagation(); void handleAssignMe(conv.id); }}
                 disabled={assigningId === conv.id}
-            >
-                {assigningId === conv.id ? t('queue.assigning') : t('queue.assignMe')}
+              >
+                {assigningId === conv.id ? (
+                  <>
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" />
+                      <path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    {t('queue.assigning')}
+                  </>
+                ) : (
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <circle cx="4" cy="3" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+                      <path d="M1 9.5c0-1.66 1.343-3 3-3h1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      <path d="M8.5 7.5 11 9.5l-2.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M11 9.5H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                    {t('queue.assignMe')}
+                  </>
+                )}
               </button>
             </div>
           );

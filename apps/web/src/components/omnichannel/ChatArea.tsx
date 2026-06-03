@@ -611,11 +611,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const templatesQueryEnabled = hasValidSession && isActiveConversationWhatsapp && Boolean(activeChannelId);
   const {
     data: templatesData,
-    isLoading: isTemplatesLoading,
-    isFetching: isTemplatesFetching,
-    isError: isTemplatesError,
-    error: templatesError,
-    status: templatesStatus,
   } = useQuery({
     queryKey: ['templates', activeChannelId],
     queryFn: () => omnichannelApi.listTemplates(activeChannelId!),
@@ -634,46 +629,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     }
     return map;
   }, [templates]);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const conversation = activeConversation as
-      | (Conversation & { channelId?: string | null; channel?: unknown })
-      | undefined;
-    if (!conversation?.id) return;
-
-    console.debug('[Templates Debug]', {
-      conversationId: conversation?.id,
-      channelId: conversation?.channel_id ?? conversation?.channelId,
-      channel_id: conversation?.channel_id,
-      channel: conversation?.channel,
-      templatesQueryEnabled,
-      templatesStatus,
-      isTemplatesLoading,
-      isTemplatesFetching,
-      isTemplatesError,
-      templatesError,
-      templatesData,
-      rawConversation: conversation,
-    });
-    console.debug('[ChatArea templates query]', {
-      queryEnabled: templatesQueryEnabled,
-      resolvedChannelId: activeChannelId,
-      templatesCount: templates.length,
-      templatesData,
-    });
-  }, [
-    activeChannelId,
-    activeConversation,
-    templatesQueryEnabled,
-    templatesStatus,
-    isTemplatesLoading,
-    isTemplatesFetching,
-    isTemplatesError,
-    templatesError,
-    templatesData,
-    templates.length,
-  ]);
 
   const notifyMessagesLoadError = useCallback(() => {
     const now = Date.now();
