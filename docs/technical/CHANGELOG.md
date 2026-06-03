@@ -1,5 +1,21 @@
 # Changelog — ZiraDesk
 
+## [0.9.1] — Ajustes de Deploy Contabo
+### Alterado
+- Deploy de producao movido para workflow dedicado `.github/workflows/deploy-contabo.yml`
+- Fluxo de deploy da VPS passou a usar `api-migrate` para `prisma migrate deploy`
+- `docker-compose.production.yml` sobe apenas `postgres`, `redis`, `api`, `web` e `nginx` como servicos persistentes
+
+### Corrigido
+- Removida dependencia de `pnpm dlx` em runtime durante o deploy da Contabo
+- Imagem final da API passou a embarcar o Prisma Client gerado no build
+- Falha de restart da API em producao por `@prisma/client did not initialize yet`
+
+### Documentacao
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md` sincronizado com o workflow real da Contabo
+- `docs/technical/DEPLOY.md` convertido para refletir a infra atual
+- `ARQUITETURA_TECNICA.md` ajustado para VPS Contabo, dominios `.com` e portal desativado no Nginx
+
 ## [0.9.0] — Sprint de Estabilização
 ### Adicionado
 - Abstração de storage com interface `StorageProvider`
