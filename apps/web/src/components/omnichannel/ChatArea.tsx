@@ -47,6 +47,12 @@ interface MessageStatusSocketEvent {
   status: Exclude<MessageDeliveryStatus, 'pending'>;
 }
 
+interface MessageFailedSocketEvent {
+  conversationId: string;
+  messageId: string;
+  reason?: string;
+}
+
 interface ConversationClosedSocketEvent {
   conversationId: string;
   reason?: string;
@@ -948,6 +954,33 @@ export function ChatArea({ conversationId, onClosed }: Props) {
       );
     });
 
+    const unsubMessageFailed = subscribeToEvent<MessageFailedSocketEvent>('conversation:message_failed', (event) => {
+      if (event.conversationId !== conversationId) return;
+      const reason = event.reason ?? 'Falha desconhecida';
+      const patchMessage = (msg: Message): Message => {
+        if (msg.id !== event.messageId) return msg;
+        return {
+          ...msg,
+          status: 'failed',
+          metadata: {
+            ...(msg.metadata ?? {}),
+            failure_reason: reason,
+          },
+        };
+      };
+      setMessages((prev) => prev.map(patchMessage));
+      qc.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation; messages: Message[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map(patchMessage),
+          };
+        },
+      );
+    });
+
     const unsubSocketConnect = subscribeToEvent('connect', () => {
       emitSocketEvent('conversation:join', joinPayload);
       void loadLatestMessages(true);
@@ -967,6 +1000,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
       unsubHelpDeclined();
       unsubCallStatus();
       unsubMessageStatus();
+      unsubMessageFailed();
       unsubSocketConnect();
       emitSocketEvent('conversation:leave', joinPayload);
     };
@@ -1592,6 +1626,12 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             : 'var(--txt-3)';
     const mention = msg.metadata?.mention ?? null;
     const canMentionThisMessage = canSendMessage && !msg.is_internal;
+    const failureReason = typeof msg.metadata?.failure_reason === 'string'
+      ? msg.metadata.failure_reason
+      : typeof (msg.metadata as Record<string, unknown> | undefined)?.whatsapp_send_error_message === 'string'
+        ? String((msg.metadata as Record<string, unknown>).whatsapp_send_error_message)
+        : null;
+    const isFailedMessage = resolveMessageDeliveryStatus(msg) === 'failed';
 
     if (isSystem && !isCallRecording && !msg.is_internal) {
       return (
@@ -1731,7 +1771,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
               wordBreak: 'break-word',
               background: msg.is_internal
                 ? 'var(--amber-dim)'
-                : isAgent
+                : isFailedMessage
+                  ? 'var(--red-dim)'
+                  : isAgent
                   ? 'var(--teal-dim)'
                   : isAIMessage
                     ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
@@ -1741,7 +1783,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
               color: msg.is_internal ? 'var(--amber)' : 'var(--txt)',
               border: msg.is_internal
                 ? '1px solid rgba(245,158,11,.3)'
-                : isAgent
+                : isFailedMessage
+                  ? '1px solid rgba(248,113,113,.34)'
+                  : isAgent
                   ? '1px solid rgba(0,201,167,.22)'
                   : isBot
                     ? '1px solid var(--line)'
@@ -1832,6 +1876,22 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             }}
           >
             <span>{formatTime(msg.created_at, i18n.language)}</span>
+            {isFailedMessage && (
+              <span
+                title={`Falha no envio: ${failureReason ?? 'Falha desconhecida'}`}
+                aria-label={`Falha no envio: ${failureReason ?? 'Falha desconhecida'}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: 'var(--red)',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M7 2l5.2 9H1.8L7 2z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 5.2v2.8M7 10.3h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+              </span>
+            )}
             {isAgent && (
               <MessageStatus status={resolveMessageDeliveryStatus(msg)} />
             )}

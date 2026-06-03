@@ -30,6 +30,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   const [contactSearch, setContactSearch] = useState('');
   const [contactLabel, setContactLabel] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
   const debouncedSearch = useDebounce(contactSearch, 300);
 
   const {
@@ -68,19 +69,29 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         ...(data.initial_message?.trim() ? { initial_message: data.initial_message.trim() } : {}),
       }),
     onSuccess: (conv) => {
+      setDuplicateExistingId(null);
       toast.success(t('form.created'));
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
       onCreated(conv.id);
       onClose();
     },
-    onError: () => toast.error(t('form.errorCreate')),
+    onError: (error: unknown) => {
+      const response = (error as { response?: { status?: number; data?: { error?: unknown; existingId?: string } } })?.response;
+      if (response?.status === 409 && response.data?.error === 'DUPLICATE_OPEN_CONVERSATION' && response.data.existingId) {
+        setDuplicateExistingId(response.data.existingId);
+        return;
+      }
+      setDuplicateExistingId(null);
+      toast.error(t('form.errorCreate'));
+    },
   });
 
   const onSubmit = handleSubmit((data) => createMutation.mutate(data));
 
   const handleSelectContact = useCallback(
     (id: string, name: string) => {
+      setDuplicateExistingId(null);
       setValue('contact_id', id, { shouldValidate: true });
       setContactLabel(name);
       setShowContactDropdown(false);
@@ -374,6 +385,44 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.channelRequired')}</p>
             )}
           </div>
+
+          {duplicateExistingId && (
+            <div
+              style={{
+                display: 'grid',
+                gap: 8,
+                border: '1px solid rgba(245,158,11,.28)',
+                borderRadius: 'var(--r)',
+                background: 'var(--amber-dim)',
+                color: 'var(--amber)',
+                padding: '10px 12px',
+                fontSize: 12,
+                lineHeight: 1.45,
+              }}
+            >
+              <span>Já existe uma conversa aberta com este contato neste canal.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onCreated(duplicateExistingId);
+                  onClose();
+                }}
+                style={{
+                  width: 'fit-content',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--teal)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: 'var(--font)',
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                Abrir conversa existente
+              </button>
+            </div>
+          )}
 
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>

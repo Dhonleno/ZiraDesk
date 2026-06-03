@@ -2598,7 +2598,7 @@ export interface ConversationWindowStatus {
 
 export interface NotificationItem {
   id: string;
-  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment' | 'conversation_message' | 'help_requested';
+  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment' | 'conversation_message' | 'message_failed' | 'help_requested';
   title: string;
   message: string;
   read: boolean;

@@ -6,6 +6,7 @@ type NotificationType =
   | 'conversation_assigned'
   | 'ticket_comment'
   | 'conversation_message'
+  | 'message_failed'
   | 'help_requested'
   | 'lgpd_request_received'
   | 'lgpd_sla_warning'
@@ -134,6 +135,25 @@ function toNotification(row: NotificationRow): NotificationItem {
     };
   }
 
+  if (row.action === 'message.failed') {
+    const payload = row.new_data ?? {};
+    const reason = String(payload['reason'] ?? 'Falha desconhecida');
+    const body = String(payload['body'] ?? `Falha no envio: ${reason}`);
+    return {
+      id: row.id,
+      type: 'message_failed',
+      title: 'Mensagem não entregue',
+      message: body,
+      read: row.read,
+      created_at: row.created_at,
+      href: `/omnichannel/conversations?conversation=${row.entity_id ?? ''}`,
+      data: {
+        ...(row.new_data ?? {}),
+        reason,
+      },
+    };
+  }
+
   if (row.action === 'help.requested') {
     const payload = row.new_data ?? {};
     const requesterName = String(payload['agent_name'] ?? 'Agente');
@@ -240,6 +260,9 @@ function notificationsWhereClause(): string {
     al.action = 'conversation.message'
     AND al.new_data->>'assigned_to' = $1
   ) OR (
+    al.action = 'message.failed'
+    AND al.new_data->>'assigned_to' = $1
+  ) OR (
     al.action = 'help.requested'
     AND al.new_data->>'assigned_to' = $1
   ) OR (
@@ -288,7 +311,7 @@ export async function listNotifications(
        END
      LEFT JOIN ${conversationsRef} c
        ON c.id = CASE
-         WHEN al.action IN ('conversation.assigned', 'conversation.message', 'help.requested') THEN al.entity_id
+         WHEN al.action IN ('conversation.assigned', 'conversation.message', 'message.failed', 'help.requested') THEN al.entity_id
          ELSE NULL
        END
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id

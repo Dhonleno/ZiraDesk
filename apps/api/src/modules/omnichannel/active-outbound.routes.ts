@@ -12,6 +12,7 @@ import { loadConversationSocketPayload } from './conversations/socket-payload.js
 import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
+import { calculateWaitingExpiresAt } from '../../lib/omnichannel/calculate-waiting-expires.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -54,6 +55,10 @@ interface ConversationInsertRow {
 
 interface GeneratedProtocolRow {
   protocol: string;
+}
+
+interface DuplicateConversationRow {
+  id: string;
 }
 
 const listTemplatesQuerySchema = z.object({
@@ -169,6 +174,14 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const normalizedTemplateComponents = (templateComponents ?? []).filter(
       (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
     );
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const tenantSettings = typeof tenant?.settings === 'object' && tenant.settings !== null
+      ? tenant.settings as Record<string, unknown>
+      : {};
+    const waitingExpiresAt = calculateWaitingExpiresAt(tenantSettings);
 
     const result = await withTenantSchema(schemaName, async (tx) => {
       const contacts = await tx.$queryRawUnsafe<ContactRow[]>(
@@ -197,6 +210,24 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
 
       if (channel.type !== 'whatsapp' && channel.type !== 'email') {
         return { statusCode: 400 as const, payload: { success: false, error: { message: 'Canal não suporta envio ativo' } } };
+      }
+
+      const duplicateRows = await tx.$queryRawUnsafe<DuplicateConversationRow[]>(
+        `SELECT id
+         FROM conversations
+         WHERE contact_id = $1::uuid
+           AND channel_id = $2::uuid
+           AND status = 'open'
+         LIMIT 1`,
+        contactId,
+        channelId,
+      );
+      const duplicate = duplicateRows[0];
+      if (duplicate) {
+        return {
+          statusCode: 409 as const,
+          payload: { error: 'DUPLICATE_OPEN_CONVERSATION', existingId: duplicate.id },
+        };
       }
 
       if (channel.type === 'whatsapp' && useTemplate && !templateNameNormalized) {
@@ -299,7 +330,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         const normalizedStatus = selectedTemplate.status?.trim().toLowerCase() ?? '';
         if (normalizedStatus && normalizedStatus !== 'approved') {
           return {
-            statusCode: 409 as const,
+            statusCode: 422 as const,
             payload: {
               success: false,
               error: {
@@ -355,7 +386,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            'waiting',
            $4::uuid,
            NOW(),
-           NOW() + INTERVAL '24 hours',
+           $8::timestamptz,
            $5,
            $6,
            $7::jsonb
@@ -368,6 +399,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         protocolNumber,
         normalizedSubject,
         JSON.stringify(metadata),
+        waitingExpiresAt,
       );
 
       const conversation = inserted[0];
@@ -426,6 +458,22 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
          WHERE id = $2::uuid`,
         initialContent.slice(0, 255),
         conversation.id,
+      );
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
+         VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
+        userId,
+        conversation.id,
+        JSON.stringify({
+          contact_id: contactId,
+          channel_id: channelId,
+          channel_type: channel.type,
+          conversation_type: 'outbound',
+          initial_message: initialContent.slice(0, 100),
+          created_by: userId,
+        }),
+        request.ip ?? null,
       );
 
       return {

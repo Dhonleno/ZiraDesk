@@ -58,6 +58,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
+  const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
 
   const [selectedChannelId, setSelectedChannelId] = useState('');
   const [useTemplate, setUseTemplate] = useState(true);
@@ -224,6 +225,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       });
     },
     onSuccess: (conversation) => {
+      setDuplicateExistingId(null);
       toast.success(t('activeOutbound.sent'));
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
@@ -231,6 +233,22 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       onClose();
     },
     onError: (error: unknown) => {
+      const response = (
+        error as {
+          response?: {
+            status?: number;
+            data?: {
+              error?: unknown;
+              existingId?: string;
+            };
+          };
+        }
+      )?.response;
+      if (response?.status === 409 && response.data?.error === 'DUPLICATE_OPEN_CONVERSATION' && response.data.existingId) {
+        setDuplicateExistingId(response.data.existingId);
+        return;
+      }
+      setDuplicateExistingId(null);
       const apiMessage = (
         error as {
           response?: {
@@ -245,6 +263,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   });
 
   const handleSelectContact = useCallback((contact: ContactOption) => {
+    setDuplicateExistingId(null);
     setSelectedContact(contact);
     setShowContactDropdown(false);
     setContactSearch('');
@@ -520,8 +539,32 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
         </div>
 
         <div style={{ borderTop: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ minHeight: 18, fontSize: 11, color: 'var(--amber)' }}>
-            {selectedChannel?.type === 'whatsapp' && useTemplate ? (
+          <div style={{ minHeight: 18, fontSize: 11, color: duplicateExistingId ? 'var(--amber)' : 'var(--amber)', display: 'grid', gap: 4 }}>
+            {duplicateExistingId ? (
+              <>
+                <span>Já existe uma conversa aberta com este contato neste canal.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCreated(duplicateExistingId);
+                    onClose();
+                  }}
+                  style={{
+                    width: 'fit-content',
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--teal)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: 'var(--font)',
+                    padding: 0,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Abrir conversa existente
+                </button>
+              </>
+            ) : selectedChannel?.type === 'whatsapp' && useTemplate ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

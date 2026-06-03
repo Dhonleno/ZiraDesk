@@ -33,6 +33,7 @@ import {
   getConversationHelpers,
   NotFoundError,
   ConflictError,
+  DuplicateOpenConversationError,
   ForbiddenError,
   TransferError,
 } from './conversations.service.js';
@@ -288,7 +289,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/omnichannel/conversations
-  app.post('/', { preHandler: conversationsManageGuard }, async (request, reply) => {
+  app.post('/', { preHandler: conversationsReplyGuard }, async (request, reply) => {
     const parsed = createConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -297,7 +298,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const result = await createConversation(parsed.data, request.user.id, request.user.tenantId);
+      const result = await createConversation(parsed.data, request.user.id, request.user.tenantId, request.ip);
       const tenantUser = request.user as AuthUser;
 
       const io = getSocketServer();
@@ -324,6 +325,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof DuplicateOpenConversationError) {
+        return reply.code(409).send({
+          error: 'DUPLICATE_OPEN_CONVERSATION',
+          existingId: err.existingId,
+        });
       }
       throw err;
     }

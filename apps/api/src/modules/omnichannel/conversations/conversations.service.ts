@@ -21,6 +21,7 @@ import {
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
 import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
+import { calculateWaitingExpiresAt } from '../../../lib/omnichannel/calculate-waiting-expires.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -33,6 +34,13 @@ export class ConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ConflictError';
+  }
+}
+
+export class DuplicateOpenConversationError extends ConflictError {
+  constructor(public readonly existingId: string) {
+    super('Já existe uma conversa aberta com este contato neste canal');
+    this.name = 'DuplicateOpenConversationError';
   }
 }
 
@@ -179,20 +187,6 @@ interface ConversationTagChip {
   id: string;
   name: string;
   color: string;
-}
-
-type ActiveOutboundValidityMode = 'end_of_day' | 'hours';
-
-function resolveActiveOutboundValidity(
-  settings: Record<string, unknown>,
-): { mode: ActiveOutboundValidityMode; hours: number } {
-  const modeRaw = settings.outbound_validity_mode;
-  const hoursRaw = settings.outbound_validity_hours;
-  const mode: ActiveOutboundValidityMode = modeRaw === 'hours' ? 'hours' : 'end_of_day';
-  const parsedHours = typeof hoursRaw === 'number' ? Math.trunc(hoursRaw) : Number.NaN;
-  const hours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 168 ? parsedHours : 24;
-
-  return { mode, hours };
 }
 
 function normalizeProtocolNumber(value: string | null | undefined): string | null {
@@ -1215,8 +1209,10 @@ export async function createConversation(
   data: CreateConversationBody,
   userId: string,
   tenantId?: string,
+  actorIp?: string,
 ): Promise<CreateConversationResult> {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+  const schemaName = await getSchemaName(tenantId);
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
 
   const contactCheck = await prisma.$queryRawUnsafe<
     [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
@@ -1233,6 +1229,20 @@ export async function createConversation(
     data.channel_id,
   );
   if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
+
+  const duplicateRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM conversations
+     WHERE contact_id = $1::uuid
+       AND channel_id = $2::uuid
+       AND status = 'open'
+     LIMIT 1`,
+    data.contact_id,
+    data.channel_id,
+  );
+  if (duplicateRows[0]) {
+    throw new DuplicateOpenConversationError(duplicateRows[0].id);
+  }
 
   const conversationType = data.type ?? 'inbound';
   const initialMessage = data.initial_message?.trim() ?? '';
@@ -1255,7 +1265,9 @@ export async function createConversation(
   const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
     ? tenantSettings.timezone.trim()
     : 'America/Sao_Paulo';
-  const activeOutboundValidity = resolveActiveOutboundValidity(tenantSettings);
+  const waitingExpiresAt = conversationType === 'outbound'
+    ? calculateWaitingExpiresAt(tenantSettings)
+    : null;
 
   const metadata: Record<string, unknown> = {
     type: conversationType,
@@ -1265,11 +1277,9 @@ export async function createConversation(
     metadata.outbound_started_at = new Date().toISOString();
     metadata.outbound_origin_agent_id = userId;
     metadata.outbound_timezone = tenantTimezone;
-    metadata.outbound_validity_mode = activeOutboundValidity.mode;
-    metadata.outbound_validity_hours = activeOutboundValidity.hours;
   }
 
-  const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
+  const protocolNumber = await generateConversationProtocol(prisma, schemaName);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `INSERT INTO conversations (
        contact_id,
@@ -1296,7 +1306,7 @@ export async function createConversation(
        $8::uuid,
        $9,
        $10::jsonb,
-       CASE WHEN $5 = 'outbound' THEN NOW() + INTERVAL '24 hours' ELSE NULL END,
+       $11::timestamptz,
        CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
      )
      RETURNING *`,
@@ -1310,6 +1320,7 @@ export async function createConversation(
     userId,
     data.subject ?? null,
     JSON.stringify(metadata),
+    waitingExpiresAt,
   );
   const conversation = convRows[0]!;
   const protocolMessage = buildProtocolMessage(protocolNumber, {
@@ -1357,6 +1368,22 @@ export async function createConversation(
     `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
     lastMessagePreview,
     conversation.id,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
+     VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
+    userId,
+    conversation.id,
+    JSON.stringify({
+      contact_id: data.contact_id,
+      channel_id: data.channel_id,
+      channel_type: channelCheck[0].type,
+      conversation_type: conversationType,
+      initial_message: initialAgentContent.slice(0, 100),
+      created_by: userId,
+    }),
+    actorIp ?? null,
   );
 
   const protocolDispatches: MessageDispatchPayload[] = [];

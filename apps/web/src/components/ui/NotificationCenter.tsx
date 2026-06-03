@@ -35,6 +35,9 @@ function BackendNotificationIcon({ type }: { type: NotificationItem['type'] }) {
   if (type === 'conversation_message') {
     return <path d="M4 14V5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4zM8 8h8M8 11h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
+  if (type === 'message_failed') {
+    return <path d="M12 3l9 16H3L12 3zM12 9v4M12 16h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
+  }
   if (type === 'ticket_assigned') {
     return <path d="M3 5.5V3h2.5L18 15.5 15.5 18 3 5.5zM5 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
@@ -218,6 +221,14 @@ export function NotificationCenter() {
           title: 'Atendimento atribuído a você',
           preview: readDataString(notification.data, 'contact_name') || notification.message || '',
           iconType: 'conversation_assigned',
+        };
+      case 'message_failed':
+        return {
+          title: 'Mensagem não entregue',
+          preview: readDataString(notification.data, 'reason')
+            ? `Falha no envio: ${readDataString(notification.data, 'reason')}`
+            : notification.message || '',
+          iconType: 'message_failed',
         };
       case 'ticket_assigned':
         return {
