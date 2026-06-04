@@ -111,8 +111,8 @@ function DetailInfoItem({
   mono?: boolean;
 }) {
   return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ color: 'var(--txt-3)', fontSize: 11, marginBottom: 3 }}>{label}</div>
+    <div style={{ minWidth: 0, display: 'grid', gridTemplateColumns: '112px minmax(0, 1fr)', alignItems: 'baseline', gap: 10 }}>
+      <div style={{ color: 'var(--txt-3)', fontSize: 11 }}>{label}</div>
       <div style={{
         color: 'var(--txt)',
         fontSize: 13,
@@ -290,7 +290,7 @@ export function CampaignDetail() {
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {tOmni('campaigns.detail.info')}
             </div>
-            <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 18px', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 22px' }}>
               <DetailInfoItem label={tOmni('campaigns.detail.channel')} value={campaign.channel_name ?? '—'} />
               <DetailInfoItem label={tOmni('campaigns.detail.template')} value={campaign.template_name ?? '—'} />
               <DetailInfoItem
@@ -301,12 +301,7 @@ export function CampaignDetail() {
               <DetailInfoItem label={tOmni('campaigns.detail.startedAt')} value={formatCampaignDate(campaign.started_at)} mono />
               <DetailInfoItem label={tOmni('campaigns.detail.completedAt')} value={formatCampaignDate(campaign.completed_at)} mono />
               <DetailInfoItem label={tOmni('campaigns.detail.dailyLimit')} value={tOmni('campaigns.detail.dailyLimitValue', { count: campaign.daily_limit })} />
-              <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
-                <div style={{ color: 'var(--txt-3)', fontSize: 11, marginBottom: 3 }}>{tOmni('campaigns.detail.notes')}</div>
-                <div style={{ color: 'var(--txt)', fontSize: 13, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                  {campaign.notes?.trim() || '—'}
-                </div>
-              </div>
+              <DetailInfoItem label={tOmni('campaigns.detail.notes')} value={campaign.notes?.trim() || '—'} />
             </div>
           </div>
 
