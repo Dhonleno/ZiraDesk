@@ -89,12 +89,12 @@ const CONTACT_FILTERS: { value: ContactFilter; labelKey: string }[] = [
 function FunnelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const w = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 80, fontSize: 11, color: 'var(--txt-3)', textAlign: 'right', flexShrink: 0 }}>{label}</div>
-      <div style={{ flex: 1, height: 14, background: 'var(--bg-4)', borderRadius: 3, overflow: 'hidden' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr) 64px', alignItems: 'center', gap: 10, minHeight: 18 }}>
+      <div style={{ fontSize: 11, color: 'var(--txt-3)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+      <div style={{ height: 10, background: 'var(--bg-4)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${w}%`, height: '100%', background: color, borderRadius: 3, transition: 'width .4s ease' }} />
       </div>
-      <div style={{ width: 52, fontSize: 11, fontWeight: 600, color, fontFamily: 'var(--mono)', textAlign: 'right', flexShrink: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color, fontFamily: 'var(--mono)', textAlign: 'right', whiteSpace: 'nowrap' }}>
         {value} <span style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 400 }}>({pct(value, max)}%)</span>
       </div>
     </div>
@@ -235,6 +235,7 @@ export function CampaignDetail() {
   const progress = campaign.total_contacts > 0 ? pct(sent, campaign.total_contacts) : 0;
 
   const dataCell: React.CSSProperties = { fontSize: 11, color: 'var(--txt-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 6px' };
+  const contactTableGrid = 'minmax(220px, 2fr) 140px 90px 110px 110px 110px 110px minmax(160px, 1fr)';
 
   return (
     <PageShell padding={0}>
@@ -283,7 +284,7 @@ export function CampaignDetail() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* ── Campaign details ── */}
           <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
@@ -338,7 +339,7 @@ export function CampaignDetail() {
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.funnel.title')}
             </div>
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ padding: '12px 20px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <FunnelBar label={t('detail.metrics.sent')} value={sent} max={campaign.total_contacts} color="var(--txt-2)" />
               <FunnelBar label={t('detail.metrics.delivered')} value={delivered} max={campaign.total_contacts} color="var(--green)" />
               <FunnelBar label={t('detail.metrics.read')} value={read} max={campaign.total_contacts} color="var(--blue)" />
@@ -411,40 +412,44 @@ export function CampaignDetail() {
               ))}
             </div>
 
-            {/* Table headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 130px 80px 90px 90px 90px 90px minmax(0,1fr)', gap: 0, padding: '0 16px', background: 'var(--bg-3)', borderBottom: '1px solid var(--line)' }}>
-              {[t('detail.contacts.colContact'), t('detail.contacts.colPhone'), t('detail.contacts.colStatus'), t('detail.contacts.colSentAt'), t('detail.contacts.colDeliveredAt'), t('detail.contacts.colReadAt'), t('detail.contacts.colRepliedAt'), t('detail.contacts.colError')].map((col) => (
-                <div key={col} style={{ fontSize: 9, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '7px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col}</div>
-              ))}
+            <div style={{ overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
+              <div style={{ minWidth: 1050 }}>
+                {/* Table headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: contactTableGrid, gap: 0, padding: '0 16px', background: 'var(--bg-3)', borderBottom: '1px solid var(--line)' }}>
+                  {[t('detail.contacts.colContact'), t('detail.contacts.colPhone'), t('detail.contacts.colStatus'), t('detail.contacts.colSentAt'), t('detail.contacts.colDeliveredAt'), t('detail.contacts.colReadAt'), t('detail.contacts.colRepliedAt'), t('detail.contacts.colError')].map((col) => (
+                    <div key={col} style={{ fontSize: 9, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '7px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col}</div>
+                  ))}
+                </div>
+
+                {filteredContacts.length === 0 && (
+                  <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--txt-3)' }}>
+                    {t('detail.contacts.noResults')}
+                  </div>
+                )}
+
+                {filteredContacts.map((cc) => (
+                  <div
+                    key={cc.id}
+                    style={{ display: 'grid', gridTemplateColumns: contactTableGrid, gap: 0, padding: '0 16px', borderBottom: '1px solid var(--line)', minHeight: 36, alignItems: 'center' }}
+                  >
+                    <div style={{ ...dataCell, color: 'var(--txt)', fontWeight: 500 }}>{cc.contact_name ?? '—'}</div>
+                    <div style={dataCell}>{cc.contact_phone ?? '—'}</div>
+                    <div style={{ padding: '0 6px' }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: CONTACT_STATUS_COLORS[cc.status] }}>
+                        {cc.status}
+                      </span>
+                    </div>
+                    <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.sent_at)}</div>
+                    <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.delivered_at)}</div>
+                    <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.read_at)}</div>
+                    <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.replied_at)}</div>
+                    <div style={{ ...dataCell, fontSize: 10, color: cc.error_message ? 'var(--red)' : 'var(--txt-3)' }}>
+                      {cc.error_message ?? '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-
-            {filteredContacts.length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--txt-3)' }}>
-                {t('detail.contacts.noResults')}
-              </div>
-            )}
-
-            {filteredContacts.map((cc) => (
-              <div
-                key={cc.id}
-                style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 130px 80px 90px 90px 90px 90px minmax(0,1fr)', gap: 0, padding: '0 16px', borderBottom: '1px solid var(--line)', minHeight: 36, alignItems: 'center' }}
-              >
-                <div style={{ ...dataCell, color: 'var(--txt)', fontWeight: 500 }}>{cc.contact_name ?? '—'}</div>
-                <div style={dataCell}>{cc.contact_phone ?? '—'}</div>
-                <div style={{ padding: '0 6px' }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: CONTACT_STATUS_COLORS[cc.status] }}>
-                    {cc.status}
-                  </span>
-                </div>
-                <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.sent_at)}</div>
-                <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.delivered_at)}</div>
-                <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.read_at)}</div>
-                <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.replied_at)}</div>
-                <div style={{ ...dataCell, fontSize: 10, color: cc.error_message ? 'var(--red)' : 'var(--txt-3)' }}>
-                  {cc.error_message ?? '—'}
-                </div>
-              </div>
-            ))}
 
             {/* Pagination */}
             {contactsMeta && contactsMeta.total > 30 && (
