@@ -291,7 +291,7 @@ export function CampaignDetail() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* ── Campaign details ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {tOmni('campaigns.detail.info')}
             </div>
@@ -311,11 +311,11 @@ export function CampaignDetail() {
           </div>
 
           {/* ── Real-time metrics ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.metrics.title')}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 0, minHeight: 92 }}>
               {[
                 { label: t('detail.metrics.sent'), value: sent, sub: `/ ${campaign.total_contacts}`, color: 'var(--txt)', barW: progress },
                 { label: t('detail.metrics.delivered'), value: delivered, sub: `${pct(delivered, sent)}%`, color: 'var(--green)', barW: pct(delivered, sent) },
@@ -323,10 +323,10 @@ export function CampaignDetail() {
                 { label: t('detail.metrics.replied'), value: replied, sub: `${pct(replied, read)}%`, color: 'var(--teal)', barW: pct(replied, read) },
                 { label: t('detail.metrics.failed'), value: campaign.failed_count, sub: `${pct(campaign.failed_count, sent)}%`, color: 'var(--red)', barW: pct(campaign.failed_count, sent) },
               ].map(({ label, value, sub, color, barW }, i) => (
-                <div key={label} style={{ padding: '14px 16px', borderRight: i < 4 ? '1px solid var(--line)' : 'none' }}>
+                <div key={label} style={{ padding: '14px 16px', borderRight: i < 4 ? '1px solid var(--line)' : 'none', minHeight: 92 }}>
                   <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
-                    <span style={{ fontSize: 22, fontWeight: 700, color, fontFamily: 'var(--mono)' }}>{value}</span>
+                    <span style={{ fontSize: 22, fontWeight: 600, color, fontFamily: 'var(--mono)', lineHeight: 1 }}>{value}</span>
                     <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>{sub}</span>
                   </div>
                   {/* Progress bar */}
@@ -339,11 +339,11 @@ export function CampaignDetail() {
           </div>
 
           {/* ── Delivery funnel ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.funnel.title')}
             </div>
-            <div style={{ padding: '12px 20px 14px', display: 'flex', flexDirection: 'column', gap: 8, height: 'auto', overflow: 'visible' }}>
+            <div style={{ padding: '12px 20px 14px', display: 'flex', flexDirection: 'column', gap: 8, height: 'auto', overflow: 'visible', minHeight: 108 }}>
               <FunnelBar label={t('detail.metrics.sent')} value={sent} max={campaign.total_contacts} color="var(--txt-2)" />
               <FunnelBar label={t('detail.metrics.delivered')} value={delivered} max={campaign.total_contacts} color="var(--green)" />
               <FunnelBar label={t('detail.metrics.read')} value={read} max={campaign.total_contacts} color="var(--blue)" />
@@ -353,7 +353,7 @@ export function CampaignDetail() {
 
           {/* Breakdown by day (if report exists) */}
           {reportData?.breakdown && reportData.breakdown.length > 1 && (
-            <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+            <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
               <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Breakdown por dia
               </div>
@@ -382,7 +382,7 @@ export function CampaignDetail() {
           )}
 
           {/* ── Contacts table ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('detail.contacts.title')}</span>
               {campaign.status === 'draft' && (
@@ -393,7 +393,7 @@ export function CampaignDetail() {
             </div>
 
             {/* Contact filter */}
-            <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 4, overflowX: 'auto' }}>
+            <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none' }}>
               {CONTACT_FILTERS.map(({ value, labelKey }) => (
                 <button
                   key={value}
