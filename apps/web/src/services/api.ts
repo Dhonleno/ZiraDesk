@@ -3015,6 +3015,168 @@ export const omnichannelApi = {
   },
 };
 
+// ── Campaign types ────────────────────────────────────────────────────────────
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
+export type CampaignContactStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed' | 'opted_out';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  channel_id: string | null;
+  template_id: string | null;
+  template_variables: Record<string, string>;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  total_contacts: number;
+  sent_count: number;
+  delivered_count: number;
+  read_count: number;
+  replied_count: number;
+  failed_count: number;
+  daily_limit: number;
+  created_by: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_name?: string | null;
+  template_name?: string | null;
+  channel_name?: string | null;
+}
+
+export interface CampaignContact {
+  id: string;
+  campaign_id: string;
+  contact_id: string;
+  status: CampaignContactStatus;
+  message_id: string | null;
+  conversation_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  replied_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+}
+
+export interface CampaignReport {
+  campaign: Campaign;
+  breakdown: Array<{
+    date: string;
+    sent: number;
+    delivered: number;
+    read: number;
+    replied: number;
+    failed: number;
+  }>;
+}
+
+export const campaignsApi = {
+  list: async (params?: { page?: number; limit?: number; status?: string }): Promise<{
+    data: Campaign[];
+    meta: { total: number; page: number; limit: number; total_pages: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: Campaign[];
+      meta: { total: number; page: number; limit: number; total_pages: number };
+    }>('/omnichannel/campaigns', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  get: async (id: string): Promise<Campaign> => {
+    const res = await api.get<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}`);
+    return res.data.data;
+  },
+
+  create: async (data: {
+    name: string;
+    channel_id: string;
+    template_id: string;
+    template_variables?: Record<string, string>;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>('/omnichannel/campaigns', data);
+    return res.data.data;
+  },
+
+  update: async (id: string, data: {
+    name?: string;
+    template_id?: string;
+    template_variables?: Record<string, string>;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.patch<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}`, data);
+    return res.data.data;
+  },
+
+  addContacts: async (id: string, contact_ids: string[]): Promise<{ added: number; total_contacts: number }> => {
+    const res = await api.post<{ success: boolean; data: { added: number; total_contacts: number } }>(
+      `/omnichannel/campaigns/${id}/contacts`,
+      { contact_ids },
+    );
+    return res.data.data;
+  },
+
+  removeContact: async (id: string, contactId: string): Promise<void> => {
+    await api.delete(`/omnichannel/campaigns/${id}/contacts/${contactId}`);
+  },
+
+  listContacts: async (id: string, params?: { page?: number; limit?: number }): Promise<{
+    data: CampaignContact[];
+    meta: { total: number; page: number; limit: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: CampaignContact[];
+      meta: { total: number; page: number; limit: number };
+    }>(`/omnichannel/campaigns/${id}/contacts`, { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  launch: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/launch`);
+    return res.data.data;
+  },
+
+  pause: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/pause`);
+    return res.data.data;
+  },
+
+  resume: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/resume`);
+    return res.data.data;
+  },
+
+  cancel: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/cancel`);
+    return res.data.data;
+  },
+
+  duplicate: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/duplicate`);
+    return res.data.data;
+  },
+
+  report: async (id: string): Promise<CampaignReport> => {
+    const res = await api.get<{ success: boolean; data: CampaignReport }>(`/omnichannel/campaigns/${id}/report`);
+    return res.data.data;
+  },
+};
+
+// ── Agent status API ──────────────────────────────────────────────────────────
+
 export const agentStatusApi = {
   getStatus: async (): Promise<AgentPauseStatus> => {
     const res = await api.get<{ success: boolean; data: AgentPauseStatus }>('/omnichannel/pause/status');

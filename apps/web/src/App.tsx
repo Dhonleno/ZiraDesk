@@ -57,6 +57,8 @@ import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
 import { PortalCreateTicket } from './pages/portal/PortalCreateTicket';
 import { PortalLgpd } from './pages/portal/PortalLgpd';
 import { TVDashboard } from './pages/tv/TVDashboard';
+import { CampaignsPage } from './pages/omnichannel/Campaigns';
+import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
 import { ProtectedRoute } from './router/ProtectedRoute';
 
 const queryClient = new QueryClient({
@@ -152,6 +154,8 @@ export function App() {
             <Route path="omnichannel" element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
             <Route path="omnichannel/queue" element={<QueuePage />} />
+            <Route path="omnichannel/campaigns" element={<CampaignsPage />} />
+            <Route path="omnichannel/campaigns/:id" element={<CampaignDetail />} />
             <Route path="omnichannel/monitor" element={<Navigate to="/monitor" replace />} />
             <Route
               path="omnichannel/metrics"

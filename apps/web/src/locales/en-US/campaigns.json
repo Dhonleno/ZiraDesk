@@ -1,0 +1,149 @@
+{
+  "title": "Campaigns",
+  "new": "+ New campaign",
+  "badge": "{{count}} campaign",
+  "badge_plural": "{{count}} campaigns",
+  "empty": {
+    "title": "No campaigns yet",
+    "description": "Create your first campaign to send bulk messages via WhatsApp.",
+    "action": "+ New campaign"
+  },
+  "status": {
+    "draft": "Draft",
+    "scheduled": "Scheduled",
+    "running": "Running",
+    "paused": "Paused",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+    "all": "All"
+  },
+  "kpi": {
+    "total": "Total campaigns",
+    "running": "Running",
+    "completed": "Completed",
+    "deliveryRate": "Delivery rate"
+  },
+  "table": {
+    "name": "Name",
+    "status": "Status",
+    "contacts": "Contacts",
+    "sent": "Sent",
+    "delivered": "Delivered",
+    "read": "Read",
+    "replied": "Replied",
+    "scheduled": "Scheduled/Started",
+    "actions": "Actions"
+  },
+  "actions": {
+    "view": "View details",
+    "duplicate": "Duplicate",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "launch": "Launch",
+    "addContacts": "Add contacts",
+    "confirmCancel": "Confirm cancel"
+  },
+  "create": {
+    "title": "New campaign",
+    "step1": {
+      "title": "Settings",
+      "name": "Campaign name",
+      "namePlaceholder": "e.g. October promotion",
+      "channel": "WhatsApp channel",
+      "channelPlaceholder": "Select a channel",
+      "template": "Approved template",
+      "templatePlaceholder": "Select a template",
+      "preview": "Template preview",
+      "variables": "Template variables",
+      "variable": "Variable {{n}}",
+      "varType": "Type",
+      "varContactField": "Contact field",
+      "varFixed": "Fixed value",
+      "varContactName": "Contact name",
+      "varContactPhone": "Contact phone",
+      "varFixedPlaceholder": "Enter fixed value",
+      "dailyLimit": "Daily send limit",
+      "notes": "Notes (optional)",
+      "notesPlaceholder": "Internal notes about this campaign"
+    },
+    "step2": {
+      "title": "Scheduling",
+      "scheduleToggle": "Schedule for later",
+      "scheduleDate": "Date and time",
+      "immediateHint": "Campaign will start immediately when launched.",
+      "scheduledHint": "Campaign will start on {{date}}."
+    },
+    "step3": {
+      "title": "Review",
+      "summary": "Campaign summary",
+      "channel": "Channel",
+      "template": "Template",
+      "scheduling": "Scheduling",
+      "immediate": "Immediate (on launch)",
+      "dailyLimit": "Daily limit",
+      "notes": "Notes",
+      "noNotes": "No notes",
+      "confirm": "Create draft"
+    },
+    "next": "Next",
+    "back": "Back",
+    "saving": "Saving..."
+  },
+  "contacts": {
+    "title": "Add contacts",
+    "search": "Search by name or phone...",
+    "selected": "{{count}} selected",
+    "selected_plural": "{{count}} selected",
+    "noPhone": "No phone — cannot be added",
+    "alreadyAdded": "Already in campaign",
+    "add": "Add selected",
+    "adding": "Adding...",
+    "noResults": "No contacts found",
+    "loadMore": "Load more"
+  },
+  "launch": {
+    "title": "Launch campaign",
+    "warningImmediate": "You are about to send to {{count}} contact.",
+    "warningImmediate_plural": "You are about to send to {{count}} contacts.",
+    "scheduledInfo": "Campaign will start on {{date}}.",
+    "immediateInfo": "Campaign will start now.",
+    "typeToConfirm": "Type CONFIRM to enable the button",
+    "confirmWord": "CONFIRM",
+    "confirm": "Launch campaign",
+    "launching": "Launching..."
+  },
+  "detail": {
+    "breadcrumb": "Campaigns",
+    "metrics": {
+      "title": "Real-time metrics",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "replied": "Replied",
+      "failed": "Failed"
+    },
+    "funnel": {
+      "title": "Delivery funnel"
+    },
+    "contacts": {
+      "title": "Campaign contacts",
+      "filterAll": "All",
+      "filterPending": "Pending",
+      "filterSent": "Sent",
+      "filterDelivered": "Delivered",
+      "filterRead": "Read",
+      "filterReplied": "Replied",
+      "filterFailed": "Failed",
+      "colContact": "Contact",
+      "colPhone": "Phone",
+      "colStatus": "Status",
+      "colSentAt": "Sent",
+      "colDeliveredAt": "Delivered",
+      "colReadAt": "Read",
+      "colRepliedAt": "Replied",
+      "colError": "Error",
+      "noResults": "No contacts in this filter"
+    }
+  }
+}

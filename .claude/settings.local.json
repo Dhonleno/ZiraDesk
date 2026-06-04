@@ -50,7 +50,11 @@
       "Bash(Get-ChildItem -Path \"d:\\\\Projetos\\\\ZiraDesk\\\\apps\\\\api\\\\prisma\" -Recurse -Depth 3)",
       "Bash(Select-Object FullName, PSIsContainer)",
       "Bash(xargs ls -la)",
-      "Bash(Get-ChildItem -Recurse -Filter \"*.json\" d:/Projetos/ZiraDesk/apps/web/src/i18n)"
+      "Bash(Get-ChildItem -Recurse -Filter \"*.json\" d:/Projetos/ZiraDesk/apps/web/src/i18n)",
+      "Bash(dir d:\\\\Projetos\\\\ZiraDesk)",
+      "Bash(pnpm --filter api type-check)",
+      "Bash(pnpm --filter api test)",
+      "Bash(pnpm --filter api test --reporter=verbose)"
     ]
   }
 }

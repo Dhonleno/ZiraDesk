@@ -1,0 +1,149 @@
+{
+  "title": "Campañas",
+  "new": "+ Nueva campaña",
+  "badge": "{{count}} campaña",
+  "badge_plural": "{{count}} campañas",
+  "empty": {
+    "title": "Sin campañas creadas",
+    "description": "Crea tu primera campaña para enviar mensajes masivos por WhatsApp.",
+    "action": "+ Nueva campaña"
+  },
+  "status": {
+    "draft": "Borrador",
+    "scheduled": "Programada",
+    "running": "En curso",
+    "paused": "Pausada",
+    "completed": "Completada",
+    "cancelled": "Cancelada",
+    "all": "Todas"
+  },
+  "kpi": {
+    "total": "Total de campañas",
+    "running": "En curso",
+    "completed": "Completadas",
+    "deliveryRate": "Tasa de entrega"
+  },
+  "table": {
+    "name": "Nombre",
+    "status": "Estado",
+    "contacts": "Contactos",
+    "sent": "Enviados",
+    "delivered": "Entregados",
+    "read": "Leídos",
+    "replied": "Respondieron",
+    "scheduled": "Programado/Iniciado",
+    "actions": "Acciones"
+  },
+  "actions": {
+    "view": "Ver detalles",
+    "duplicate": "Duplicar",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "cancel": "Cancelar",
+    "launch": "Lanzar",
+    "addContacts": "Agregar contactos",
+    "confirmCancel": "Confirmar cancelación"
+  },
+  "create": {
+    "title": "Nueva campaña",
+    "step1": {
+      "title": "Configuración",
+      "name": "Nombre de la campaña",
+      "namePlaceholder": "Ej: Promoción de octubre",
+      "channel": "Canal WhatsApp",
+      "channelPlaceholder": "Seleccione un canal",
+      "template": "Plantilla aprobada",
+      "templatePlaceholder": "Seleccione una plantilla",
+      "preview": "Vista previa",
+      "variables": "Variables de plantilla",
+      "variable": "Variable {{n}}",
+      "varType": "Tipo",
+      "varContactField": "Campo del contacto",
+      "varFixed": "Valor fijo",
+      "varContactName": "Nombre del contacto",
+      "varContactPhone": "Teléfono del contacto",
+      "varFixedPlaceholder": "Ingrese valor fijo",
+      "dailyLimit": "Límite diario de envíos",
+      "notes": "Notas (opcional)",
+      "notesPlaceholder": "Notas internas sobre esta campaña"
+    },
+    "step2": {
+      "title": "Programación",
+      "scheduleToggle": "Programar para después",
+      "scheduleDate": "Fecha y hora",
+      "immediateHint": "La campaña se iniciará inmediatamente al lanzarse.",
+      "scheduledHint": "La campaña se iniciará el {{date}}."
+    },
+    "step3": {
+      "title": "Revisión",
+      "summary": "Resumen de la campaña",
+      "channel": "Canal",
+      "template": "Plantilla",
+      "scheduling": "Programación",
+      "immediate": "Inmediato (al lanzar)",
+      "dailyLimit": "Límite diario",
+      "notes": "Notas",
+      "noNotes": "Sin notas",
+      "confirm": "Crear borrador"
+    },
+    "next": "Siguiente",
+    "back": "Atrás",
+    "saving": "Guardando..."
+  },
+  "contacts": {
+    "title": "Agregar contactos",
+    "search": "Buscar por nombre o teléfono...",
+    "selected": "{{count}} seleccionado",
+    "selected_plural": "{{count}} seleccionados",
+    "noPhone": "Sin teléfono — no se puede agregar",
+    "alreadyAdded": "Ya en la campaña",
+    "add": "Agregar seleccionados",
+    "adding": "Agregando...",
+    "noResults": "No se encontraron contactos",
+    "loadMore": "Cargar más"
+  },
+  "launch": {
+    "title": "Lanzar campaña",
+    "warningImmediate": "Está a punto de enviar a {{count}} contacto.",
+    "warningImmediate_plural": "Está a punto de enviar a {{count}} contactos.",
+    "scheduledInfo": "La campaña se iniciará el {{date}}.",
+    "immediateInfo": "La campaña se iniciará ahora.",
+    "typeToConfirm": "Escribe CONFIRMAR para habilitar el botón",
+    "confirmWord": "CONFIRMAR",
+    "confirm": "Lanzar campaña",
+    "launching": "Lanzando..."
+  },
+  "detail": {
+    "breadcrumb": "Campañas",
+    "metrics": {
+      "title": "Métricas en tiempo real",
+      "sent": "Enviados",
+      "delivered": "Entregados",
+      "read": "Leídos",
+      "replied": "Respondieron",
+      "failed": "Fallidos"
+    },
+    "funnel": {
+      "title": "Embudo de entrega"
+    },
+    "contacts": {
+      "title": "Contactos de la campaña",
+      "filterAll": "Todos",
+      "filterPending": "Pendientes",
+      "filterSent": "Enviados",
+      "filterDelivered": "Entregados",
+      "filterRead": "Leídos",
+      "filterReplied": "Respondieron",
+      "filterFailed": "Fallidos",
+      "colContact": "Contacto",
+      "colPhone": "Teléfono",
+      "colStatus": "Estado",
+      "colSentAt": "Enviado",
+      "colDeliveredAt": "Entregado",
+      "colReadAt": "Leído",
+      "colRepliedAt": "Respondió",
+      "colError": "Error",
+      "noResults": "Sin contactos en este filtro"
+    }
+  }
+}

@@ -78,6 +78,7 @@ function Breadcrumb() {
   const routeLabels: Record<string, string> = {
     '/monitor': 'Monitor',
     '/omnichannel/monitor': 'Monitor',
+    '/omnichannel/campaigns': 'Campanhas',
     '/omnichannel/metrics': 'Métricas',
     '/omnichannel/history': t('nav.history'),
     '/omnichannel/performance': t('nav.performance'),
@@ -995,6 +996,14 @@ export function TenantLayout() {
                 strokeLinejoin="round"
               />
               <path d="M7 7.5h4M7 10.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </NavItem>
+
+          {/* Campanhas */}
+          <NavItem to="/omnichannel/campaigns" title="Campanhas">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M2 6.5c0-1.1.9-2 2-2h2l2-2.5 2 2.5h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M9 4v2.5M6.5 10h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </NavItem>
 
