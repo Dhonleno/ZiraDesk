@@ -66,6 +66,7 @@ async function ensureUserProfileColumns(schemaName: string): Promise<void> {
     ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'pt-BR',
     ADD COLUMN IF NOT EXISTS notification_sound BOOLEAN DEFAULT true,
     ADD COLUMN IF NOT EXISTS notification_desktop BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
 }
@@ -118,12 +119,13 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      must_change_password: boolean;
       status: string;
       created_at: Date;
     }>>(
       `SELECT
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, status, created_at
+         notification_sound, notification_desktop, must_change_password, status, created_at
        FROM ${quoteIdent(schemaName)}.users
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -170,6 +172,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      must_change_password: boolean;
       status: string;
       created_at: Date;
     }>>(
@@ -185,7 +188,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
        WHERE id = $7::uuid
        RETURNING
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, status, created_at`,
+         notification_sound, notification_desktop, must_change_password, status, created_at`,
       payload.name ?? null,
       payload.bio ?? null,
       payload.phone ?? null,
@@ -221,13 +224,6 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { current_password, new_password } = parsed.data;
-    if (!current_password) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Informe a senha atual' },
-      });
-    }
-
     if (new_password.length < 8) {
       return reply.code(400).send({
         success: false,
@@ -244,8 +240,8 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
     await ensureUserProfileColumns(schemaName);
 
-    const userRows = await prisma.$queryRawUnsafe<Array<{ password_hash: string }>>(
-      `SELECT password_hash
+    const userRows = await prisma.$queryRawUnsafe<Array<{ password_hash: string; must_change_password: boolean }>>(
+      `SELECT password_hash, must_change_password
        FROM ${quoteIdent(schemaName)}.users
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -256,9 +252,19 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ success: false, error: { message: 'Usuário não encontrado' } });
     }
 
-    const valid = await bcrypt.compare(current_password, userRows[0].password_hash);
-    if (!valid) {
-      return reply.code(400).send({ success: false, error: { message: 'Senha atual incorreta' } });
+    const requiresCurrentPassword = !userRows[0].must_change_password;
+    if (requiresCurrentPassword && !current_password) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Informe a senha atual' },
+      });
+    }
+
+    if (current_password) {
+      const valid = await bcrypt.compare(current_password, userRows[0].password_hash);
+      if (!valid) {
+        return reply.code(400).send({ success: false, error: { message: 'Senha atual incorreta' } });
+      }
     }
 
     const hash = await bcrypt.hash(new_password, 12);
@@ -268,6 +274,13 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
        SET password_hash = $1, updated_at = NOW()
        WHERE id = $2::uuid`,
       hash,
+      request.user.id,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.users
+       SET must_change_password = false, updated_at = NOW()
+       WHERE id = $1::uuid`,
       request.user.id,
     );
 

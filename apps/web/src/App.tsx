@@ -1,9 +1,11 @@
-import { type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect, type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useAuthStore } from './stores/auth.store';
+import { profileApi } from './services/api';
 import { Login } from './pages/auth/Login';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ChangePassword } from './pages/auth/ChangePassword';
 import { TenantLayout } from './layouts/TenantLayout';
 import { SuperAdminLayout } from './layouts/SuperAdminLayout';
 import { AuthLayout } from './layouts/AuthLayout';
@@ -84,8 +86,38 @@ function RequireSuperAdmin({ children }: { children: ReactNode }) {
 
 function RequireTenantUser({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const hasLoadedProfile = useAuthStore((s) => s.hasLoadedProfile);
+  const location = useLocation();
+  const shouldLoadProfile = Boolean(user && user.role !== 'super_admin' && !hasLoadedProfile);
+  const profileQuery = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: profileApi.get,
+    enabled: shouldLoadProfile,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!profileQuery.data) return;
+    setUser({
+      name: profileQuery.data.name,
+      email: profileQuery.data.email,
+      role: profileQuery.data.role,
+      avatar_url: profileQuery.data.avatar_url,
+      mustChangePassword: profileQuery.data.must_change_password,
+    });
+  }, [profileQuery.data, setUser]);
+
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'super_admin') return <Navigate to="/super-admin" replace />;
+  if (!hasLoadedProfile && profileQuery.isLoading && location.pathname !== '/change-password') return null;
+
+  const mustChangePassword = profileQuery.data?.must_change_password ?? user.mustChangePassword;
+  if (mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -115,6 +147,17 @@ export function App() {
           </Route>
 
           <Route path="/tv" element={<Navigate to="/monitor" replace />} />
+
+          <Route
+            path="/change-password"
+            element={(
+              <RequireAuth>
+                <RequireTenantUser>
+                  <ChangePassword />
+                </RequireTenantUser>
+              </RequireAuth>
+            )}
+          />
 
           {/* Área do super admin */}
           <Route

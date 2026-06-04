@@ -82,6 +82,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       bio         TEXT,
       phone       VARCHAR(30),
       status      VARCHAR(20)   NOT NULL DEFAULT 'active',
+      must_change_password BOOLEAN NOT NULL DEFAULT false,
       last_seen_at TIMESTAMPTZ,
       language    VARCHAR(10)   NOT NULL DEFAULT 'pt-BR',
       notification_sound BOOLEAN NOT NULL DEFAULT true,

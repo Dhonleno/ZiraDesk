@@ -49,6 +49,7 @@ export interface MyProfile {
   language: 'pt-BR' | 'en-US' | 'es' | string;
   notification_sound: boolean;
   notification_desktop: boolean;
+  must_change_password: boolean;
   status: string;
   created_at: string;
 }
@@ -3257,7 +3258,12 @@ export const profileApi = {
     return res.data.data;
   },
 
-  updatePassword: async (payload: { current_password: string; new_password: string }): Promise<void> => {
+  updatePassword: async (payload: {
+    current_password?: string | undefined;
+    new_password?: string | undefined;
+    currentPassword?: string | undefined;
+    newPassword?: string | undefined;
+  }): Promise<void> => {
     await api.patch('/auth/me/password', payload);
   },
 

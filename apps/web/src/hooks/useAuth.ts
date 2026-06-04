@@ -13,6 +13,7 @@ interface LoginResponseData {
     name: string;
     email: string;
     role: string;
+    mustChangePassword?: boolean;
     tenantId?: string;
     avatar_url?: string | null;
   };
@@ -28,7 +29,13 @@ export function useAuth() {
       return data;
     },
     onSuccess: (data) => {
-      setAuth({ user: data.user, token: data.accessToken });
+      setAuth({
+        user: {
+          ...data.user,
+          mustChangePassword: data.user.mustChangePassword ?? false,
+        },
+        token: data.accessToken,
+      });
       void requestBrowserNotificationPermission();
       navigate(data.user.role === 'super_admin' ? '/super-admin' : '/');
     },

@@ -78,6 +78,7 @@ interface ExistingUserRow {
   role: string;
   status: string;
   password_hash: string;
+  must_change_password: boolean;
 }
 
 interface InviteUserResult {
@@ -177,7 +178,7 @@ export async function inviteUser(
 
   const usersRef = usersTable(schemaName);
   const existing = await prisma.$queryRawUnsafe<ExistingUserRow[]>(
-    `SELECT id, name, role, status, password_hash
+    `SELECT id, name, role, status, password_hash, must_change_password
        FROM ${usersRef}
       WHERE LOWER(email) = LOWER($1)
       LIMIT 1`,
@@ -213,8 +214,8 @@ export async function inviteUser(
 
   if (!previousUser) {
     const created = await prisma.$queryRawUnsafe<UserRow[]>(
-      `INSERT INTO ${usersRef} (name, email, password_hash, role, status)
-       VALUES ($1, $2, $3, $4, 'active')
+      `INSERT INTO ${usersRef} (name, email, password_hash, role, status, must_change_password)
+       VALUES ($1, $2, $3, $4, 'active', true)
        RETURNING id, name, email, role, status, last_seen_at, created_at`,
       data.name,
       data.email,
@@ -228,7 +229,8 @@ export async function inviteUser(
        SET name = $1,
            role = $2,
            status = 'active',
-           password_hash = $3
+           password_hash = $3,
+           must_change_password = true
        WHERE id = $4::uuid
        RETURNING id, name, email, role, status, last_seen_at, created_at`,
       data.name,
@@ -290,12 +292,14 @@ export async function inviteUser(
          SET name = $1,
              role = $2,
              status = $3,
-             password_hash = $4
-         WHERE id = $5::uuid`,
+             password_hash = $4,
+             must_change_password = $5
+         WHERE id = $6::uuid`,
         previousUser.name,
         previousUser.role,
         previousUser.status,
         previousUser.password_hash,
+        previousUser.must_change_password,
         previousUser.id,
       );
     }

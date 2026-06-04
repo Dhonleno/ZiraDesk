@@ -6,18 +6,22 @@ export interface AuthUser {
   name: string;
   email: string;
   role: string;
+  mustChangePassword: boolean;
   tenantId?: string;
   avatar_url?: string | null;
 }
+
+type AuthPayloadUser = Omit<AuthUser, 'mustChangePassword'> & { mustChangePassword?: boolean };
 
 interface AuthState {
   user: AuthUser | null;
   token: string | null;
   isAuthenticated: boolean;
+  hasLoadedProfile: boolean;
 }
 
 interface AuthActions {
-  setAuth: (payload: { user?: AuthUser; token: string }) => void;
+  setAuth: (payload: { user?: AuthPayloadUser; token: string }) => void;
   setUser: (userData: Partial<AuthUser>) => void;
   logout: () => void;
 }
@@ -30,17 +34,22 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      hasLoadedProfile: false,
 
       setAuth: ({ user, token }) =>
         set((state) => ({
-          user: user ?? state.user,
+          user: user
+            ? { ...user, mustChangePassword: user.mustChangePassword ?? false }
+            : state.user,
           token,
           isAuthenticated: true,
+          hasLoadedProfile: user ? false : state.hasLoadedProfile,
         })),
 
       setUser: (userData) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...userData } : null,
+          hasLoadedProfile: state.hasLoadedProfile || Object.prototype.hasOwnProperty.call(userData, 'mustChangePassword'),
         })),
 
       logout: () =>
@@ -48,13 +57,19 @@ export const useAuthStore = create<AuthStore>()(
           user: null,
           token: null,
           isAuthenticated: false,
+          hasLoadedProfile: false,
         }),
     }),
     {
       name: 'ziradesk-auth',
       storage: createJSONStorage(() => sessionStorage),
       // Não persiste o token em localStorage por segurança; sessionStorage é limpa ao fechar a aba
-      partialize: (state) => ({ user: state.user, token: state.token, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+        hasLoadedProfile: state.hasLoadedProfile,
+      }),
     },
   ),
 );

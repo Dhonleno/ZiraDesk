@@ -101,6 +101,7 @@ function decodeAuthUserFromToken(token: string): AuthUser | null {
       name: payload.name,
       email: payload.email,
       role: payload.role,
+      mustChangePassword: false,
       ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     };
   } catch {
