@@ -105,21 +105,25 @@ function DetailInfoItem({
   label,
   value,
   mono = false,
+  multiline = false,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  multiline?: boolean;
 }) {
   return (
-    <div style={{ minWidth: 0, display: 'grid', gridTemplateColumns: '112px minmax(0, 1fr)', alignItems: 'baseline', gap: 10 }}>
+    <div style={{ minWidth: 0, display: 'grid', gridTemplateColumns: '112px minmax(0, 1fr)', alignItems: multiline ? 'start' : 'baseline', gap: 10 }}>
       <div style={{ color: 'var(--txt-3)', fontSize: 11 }}>{label}</div>
       <div style={{
         color: 'var(--txt)',
         fontSize: 13,
         fontFamily: mono ? 'var(--mono)' : 'var(--font)',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
+        overflow: multiline ? 'visible' : 'hidden',
+        textOverflow: multiline ? 'clip' : 'ellipsis',
+        whiteSpace: multiline ? 'normal' : 'nowrap',
+        wordBreak: multiline ? 'break-word' : 'normal',
+        lineHeight: multiline ? 1.45 : undefined,
       }}>
         {value}
       </div>
@@ -238,8 +242,8 @@ export function CampaignDetail() {
   const contactTableGrid = 'minmax(220px, 2fr) 140px 90px 110px 110px 110px 110px minmax(160px, 1fr)';
 
   return (
-    <PageShell padding={0}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
 
         {/* ── Header ── */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -284,14 +288,14 @@ export function CampaignDetail() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* ── Campaign details ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {tOmni('campaigns.detail.info')}
             </div>
-            <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 22px' }}>
+            <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 22px', height: 'auto', overflow: 'visible' }}>
               <DetailInfoItem label={tOmni('campaigns.detail.channel')} value={campaign.channel_name ?? '—'} />
               <DetailInfoItem label={tOmni('campaigns.detail.template')} value={campaign.template_name ?? '—'} />
               <DetailInfoItem
@@ -302,7 +306,7 @@ export function CampaignDetail() {
               <DetailInfoItem label={tOmni('campaigns.detail.startedAt')} value={formatCampaignDate(campaign.started_at)} mono />
               <DetailInfoItem label={tOmni('campaigns.detail.completedAt')} value={formatCampaignDate(campaign.completed_at)} mono />
               <DetailInfoItem label={tOmni('campaigns.detail.dailyLimit')} value={tOmni('campaigns.detail.dailyLimitValue', { count: campaign.daily_limit })} />
-              <DetailInfoItem label={tOmni('campaigns.detail.notes')} value={campaign.notes?.trim() || '—'} />
+              <DetailInfoItem label={tOmni('campaigns.detail.notes')} value={campaign.notes?.trim() || '—'} multiline />
             </div>
           </div>
 
@@ -335,11 +339,11 @@ export function CampaignDetail() {
           </div>
 
           {/* ── Delivery funnel ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.funnel.title')}
             </div>
-            <div style={{ padding: '12px 20px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '12px 20px 14px', display: 'flex', flexDirection: 'column', gap: 8, height: 'auto', overflow: 'visible' }}>
               <FunnelBar label={t('detail.metrics.sent')} value={sent} max={campaign.total_contacts} color="var(--txt-2)" />
               <FunnelBar label={t('detail.metrics.delivered')} value={delivered} max={campaign.total_contacts} color="var(--green)" />
               <FunnelBar label={t('detail.metrics.read')} value={read} max={campaign.total_contacts} color="var(--blue)" />
@@ -378,7 +382,7 @@ export function CampaignDetail() {
           )}
 
           {/* ── Contacts table ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('detail.contacts.title')}</span>
               {campaign.status === 'draft' && (
@@ -412,7 +416,7 @@ export function CampaignDetail() {
               ))}
             </div>
 
-            <div style={{ overflowX: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
+            <div style={{ overflow: 'auto', maxHeight: 'min(420px, 48vh)', minHeight: 180, scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
               <div style={{ minWidth: 1050 }}>
                 {/* Table headers */}
                 <div style={{ display: 'grid', gridTemplateColumns: contactTableGrid, gap: 0, padding: '0 16px', background: 'var(--bg-3)', borderBottom: '1px solid var(--line)' }}>
