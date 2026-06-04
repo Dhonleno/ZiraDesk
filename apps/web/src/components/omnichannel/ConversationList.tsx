@@ -636,7 +636,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
             perPage: 50,
             tab: activeTab,
             assigned_to_me:
-              (activeTab === 'open' || activeTab === 'waiting') && !filterAgentId
+              activeTab === 'open' && !filterAgentId
                 ? assignedToMe
                 : undefined,
             agent_id: filterAgentId || undefined,
