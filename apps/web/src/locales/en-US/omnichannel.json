@@ -98,6 +98,21 @@
     "lastContact": "Last contact",
     "noHistory": "No previous history"
   },
+  "campaigns": {
+    "detail": {
+      "info": "CAMPAIGN DETAILS",
+      "detailsSection": "CAMPAIGN DETAILS",
+      "channel": "Channel",
+      "template": "Template",
+      "scheduling": "Scheduling",
+      "startedAt": "Started at",
+      "completedAt": "Completed at",
+      "dailyLimit": "Daily limit",
+      "dailyLimitValue": "{{count}} sends",
+      "notes": "Notes",
+      "immediate": "Immediate"
+    }
+  },
   "tabs": {
     "open": "Open",
     "waiting": "Waiting",

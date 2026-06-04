@@ -53,6 +53,22 @@ function fmt(str: string | null | undefined): string {
   return new Date(str).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatCampaignDate(str: string | null | undefined): string {
+  if (!str) return '—';
+  const date = new Date(str);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const day = new Intl.DateTimeFormat('pt-BR', { day: '2-digit' }).format(date);
+  const month = new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace(/^de\s+/i, '');
+  const time = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+
+  return `${day} ${month}, ${time}`;
+}
+
 function pct(n: number, d: number): number {
   return d > 0 ? Math.round((n / d) * 100) : 0;
 }
@@ -85,9 +101,36 @@ function FunnelBar({ label, value, max, color }: { label: string; value: number;
   );
 }
 
+function DetailInfoItem({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ color: 'var(--txt-3)', fontSize: 11, marginBottom: 3 }}>{label}</div>
+      <div style={{
+        color: 'var(--txt)',
+        fontSize: 13,
+        fontFamily: mono ? 'var(--mono)' : 'var(--font)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation('campaigns');
+  const { t: tOmni } = useTranslation('omnichannel');
   const toast = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -241,6 +284,31 @@ export function CampaignDetail() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* ── Campaign details ── */}
+          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {tOmni('campaigns.detail.info')}
+            </div>
+            <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px 18px', borderBottom: '1px solid var(--line)' }}>
+              <DetailInfoItem label={tOmni('campaigns.detail.channel')} value={campaign.channel_name ?? '—'} />
+              <DetailInfoItem label={tOmni('campaigns.detail.template')} value={campaign.template_name ?? '—'} />
+              <DetailInfoItem
+                label={tOmni('campaigns.detail.scheduling')}
+                value={campaign.scheduled_at ? formatCampaignDate(campaign.scheduled_at) : tOmni('campaigns.detail.immediate')}
+                mono={Boolean(campaign.scheduled_at)}
+              />
+              <DetailInfoItem label={tOmni('campaigns.detail.startedAt')} value={formatCampaignDate(campaign.started_at)} mono />
+              <DetailInfoItem label={tOmni('campaigns.detail.completedAt')} value={formatCampaignDate(campaign.completed_at)} mono />
+              <DetailInfoItem label={tOmni('campaigns.detail.dailyLimit')} value={tOmni('campaigns.detail.dailyLimitValue', { count: campaign.daily_limit })} />
+              <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <div style={{ color: 'var(--txt-3)', fontSize: 11, marginBottom: 3 }}>{tOmni('campaigns.detail.notes')}</div>
+                <div style={{ color: 'var(--txt)', fontSize: 13, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {campaign.notes?.trim() || '—'}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* ── Real-time metrics ── */}
           <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
