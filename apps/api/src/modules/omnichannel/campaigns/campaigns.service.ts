@@ -36,6 +36,8 @@ interface CampaignRow {
   channel_id: string | null;
   template_id: string | null;
   template_variables: unknown;
+  template_header_media_url: string | null;
+  template_header_media_filename: string | null;
   scheduled_at: Date | null;
   started_at: Date | null;
   completed_at: Date | null;
@@ -88,6 +90,42 @@ interface TemplateRow {
   status: string;
   meta_template_id: string | null;
   body: string | null;
+  header_type: string | null;
+}
+
+const MEDIA_HEADER_TYPES = new Set(['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+function normalizeHeaderType(value: string | null | undefined): string {
+  return (value ?? 'NONE').trim().toUpperCase() || 'NONE';
+}
+
+function normalizeMediaUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed || null;
+}
+
+function normalizeMediaFilename(value: string | null | undefined, headerType: string): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed) return trimmed;
+  return headerType === 'DOCUMENT' ? 'documento.pdf' : null;
+}
+
+function validateCampaignHeaderMedia(template: TemplateRow, data: CreateCampaignBody | UpdateCampaignBody): {
+  mediaUrl: string | null;
+  mediaFilename: string | null;
+} {
+  const headerType = normalizeHeaderType(template.header_type);
+  const mediaUrl = normalizeMediaUrl(data.template_header_media_url);
+  const mediaFilename = normalizeMediaFilename(data.template_header_media_filename, headerType);
+
+  if (MEDIA_HEADER_TYPES.has(headerType) && !mediaUrl) {
+    throw new ValidationError(`Template com header ${headerType} exige URL da mídia`);
+  }
+
+  return {
+    mediaUrl: MEDIA_HEADER_TYPES.has(headerType) ? mediaUrl : null,
+    mediaFilename: headerType === 'DOCUMENT' ? mediaFilename : null,
+  };
 }
 
 export async function listCampaigns(
@@ -114,7 +152,8 @@ export async function listCampaigns(
     `SELECT
        c.id::text, c.name, c.status,
        c.channel_id::text, c.template_id::text,
-       c.template_variables, c.scheduled_at, c.started_at, c.completed_at,
+       c.template_variables, c.template_header_media_url, c.template_header_media_filename,
+       c.scheduled_at, c.started_at, c.completed_at,
        c.total_contacts, c.sent_count, c.delivered_count, c.read_count,
        c.replied_count, c.failed_count, c.created_by::text, c.created_at,
        u.name AS created_by_name,
@@ -183,7 +222,7 @@ export async function createCampaign(
   let templateRows: TemplateRow[] = [];
   try {
     templateRows = await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT id::text, name, language, status, meta_template_id, body
+      `SELECT id::text, name, language, status, meta_template_id, body, header_type
        FROM ${schema}.whatsapp_templates
        WHERE id = $1::uuid LIMIT 1`,
       data.template_id,
@@ -199,15 +238,17 @@ export async function createCampaign(
       `Template com status "${template.status}". Envie apenas templates aprovados.`,
     );
   }
+  const headerMedia = validateCampaignHeaderMedia(template, data);
 
   const scheduledAt = data.scheduled_at ? new Date(data.scheduled_at) : null;
 
   const inserted = await prisma.$queryRawUnsafe<CampaignRow[]>(
     `INSERT INTO ${schema}.campaigns
        (name, status, channel_id, template_id, template_variables,
+        template_header_media_url, template_header_media_filename,
         scheduled_at, daily_limit, created_by, notes)
      VALUES ($1, 'draft', $2::uuid, $3::uuid, $4::jsonb,
-             $5::timestamptz, $6::integer, $7::uuid, $8)
+             $5, $6, $7::timestamptz, $8::integer, $9::uuid, $10)
      RETURNING *,
        id::text AS id, channel_id::text AS channel_id,
        template_id::text AS template_id, created_by::text AS created_by`,
@@ -215,6 +256,8 @@ export async function createCampaign(
     data.channel_id,
     data.template_id,
     JSON.stringify(data.template_variables),
+    headerMedia.mediaUrl,
+    headerMedia.mediaFilename,
     scheduledAt,
     data.daily_limit,
     userId,
@@ -241,7 +284,7 @@ export async function updateCampaign(
     let templateRows: TemplateRow[] = [];
     try {
       templateRows = await prisma.$queryRawUnsafe<TemplateRow[]>(
-        `SELECT id::text, name, language, status, meta_template_id, body
+        `SELECT id::text, name, language, status, meta_template_id, body, header_type
          FROM ${schema}.whatsapp_templates
          WHERE id = $1::uuid LIMIT 1`,
         data.template_id,
@@ -257,6 +300,38 @@ export async function updateCampaign(
     }
   }
 
+  const templateForHeaderMedia = data.template_id
+    ? await prisma.$queryRawUnsafe<TemplateRow[]>(
+      `SELECT id::text, name, language, status, meta_template_id, body, header_type
+       FROM ${schema}.whatsapp_templates
+       WHERE id = $1::uuid LIMIT 1`,
+      data.template_id,
+    ).then((rows) => rows[0] ?? null)
+    : existing.template_id
+      ? await prisma.$queryRawUnsafe<TemplateRow[]>(
+        `SELECT id::text, name, language, status, meta_template_id, body, header_type
+         FROM ${schema}.whatsapp_templates
+         WHERE id = $1::uuid LIMIT 1`,
+        existing.template_id,
+      ).then((rows) => rows[0] ?? null).catch(() => null)
+      : null;
+
+  const hasHeaderMediaPatch =
+    'template_header_media_url' in data ||
+    'template_header_media_filename' in data ||
+    data.template_id !== undefined;
+
+  const headerMedia = templateForHeaderMedia && hasHeaderMediaPatch
+    ? validateCampaignHeaderMedia(templateForHeaderMedia, {
+      template_header_media_url: 'template_header_media_url' in data
+        ? data.template_header_media_url
+        : existing.template_header_media_url,
+      template_header_media_filename: 'template_header_media_filename' in data
+        ? data.template_header_media_filename
+        : existing.template_header_media_filename,
+    } as UpdateCampaignBody)
+    : null;
+
   const setClauses: string[] = ['updated_at = NOW()'];
   const params: unknown[] = [id];
   const pushParam = (value: unknown) => { params.push(value); return `$${params.length}`; };
@@ -264,6 +339,13 @@ export async function updateCampaign(
   if (data.name !== undefined) setClauses.push(`name = ${pushParam(data.name)}`);
   if (data.template_id !== undefined) setClauses.push(`template_id = ${pushParam(data.template_id)}::uuid`);
   if (data.template_variables !== undefined) setClauses.push(`template_variables = ${pushParam(JSON.stringify(data.template_variables))}::jsonb`);
+  if (headerMedia) {
+    setClauses.push(`template_header_media_url = ${pushParam(headerMedia.mediaUrl)}`);
+    setClauses.push(`template_header_media_filename = ${pushParam(headerMedia.mediaFilename)}`);
+  } else {
+    if ('template_header_media_url' in data) setClauses.push(`template_header_media_url = ${pushParam(data.template_header_media_url ?? null)}`);
+    if ('template_header_media_filename' in data) setClauses.push(`template_header_media_filename = ${pushParam(data.template_header_media_filename ?? null)}`);
+  }
   if ('scheduled_at' in data) {
     const val = data.scheduled_at ? new Date(data.scheduled_at) : null;
     setClauses.push(`scheduled_at = ${pushParam(val)}::timestamptz`);
@@ -556,15 +638,18 @@ export async function duplicateCampaign(
 
   const inserted = await prisma.$queryRawUnsafe<CampaignRow[]>(
     `INSERT INTO ${schema}.campaigns
-       (name, status, channel_id, template_id, template_variables,
+     (name, status, channel_id, template_id, template_variables,
+        template_header_media_url, template_header_media_filename,
         daily_limit, created_by, notes)
-     VALUES ($1, 'draft', $2::uuid, $3::uuid, $4::jsonb, $5::integer, $6::uuid, $7)
+     VALUES ($1, 'draft', $2::uuid, $3::uuid, $4::jsonb, $5, $6, $7::integer, $8::uuid, $9)
      RETURNING *, id::text AS id, channel_id::text AS channel_id,
        template_id::text AS template_id, created_by::text AS created_by`,
     `${original.name} (cópia)`,
     original.channel_id,
     original.template_id,
     JSON.stringify(original.template_variables ?? {}),
+    original.template_header_media_url,
+    original.template_header_media_filename,
     original.daily_limit,
     userId,
     original.notes ?? null,

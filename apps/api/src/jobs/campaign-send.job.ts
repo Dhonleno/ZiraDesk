@@ -4,6 +4,7 @@ import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { messageQueue } from './queue.js';
+import { buildTemplateComponentsForCampaign } from './campaign-template-components.js';
 
 interface CampaignSendJobData {
   campaignId: string;
@@ -17,6 +18,8 @@ interface CampaignRow {
   channel_id: string | null;
   template_id: string | null;
   template_variables: unknown;
+  template_header_media_url: string | null;
+  template_header_media_filename: string | null;
   daily_limit: number;
   sent_count: number;
 }
@@ -35,12 +38,14 @@ interface TemplateRow {
   status: string;
   meta_template_id: string | null;
   body: string | null;
+  header_type: string | null;
 }
 
 interface PendingContactRow {
   cc_id: string;
   contact_id: string;
   contact_name: string;
+  contact_email: string | null;
   contact_phone: string | null;
   contact_whatsapp: string | null;
 }
@@ -53,31 +58,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function resolveContactVariable(value: string, contact: { name: string; phone: string }): string {
-  return value
-    .replace(/\{\{\s*contact\.name\s*\}\}/gi, contact.name)
-    .replace(/\{\{\s*contact\.phone\s*\}\}/gi, contact.phone);
-}
-
-function buildTemplateComponents(
-  templateVariables: Record<string, string>,
-  contact: { name: string; phone: string },
-): Array<Record<string, unknown>> {
-  const entries = Object.entries(templateVariables)
-    .map(([key, value]) => ({ index: parseInt(key, 10), value }))
-    .filter((item) => Number.isFinite(item.index) && item.index > 0)
-    .sort((a, b) => a.index - b.index);
-
-  if (entries.length === 0) return [];
-
-  const parameters = entries.map((item) => ({
-    type: 'text',
-    text: resolveContactVariable(item.value, contact),
-  }));
-
-  return [{ type: 'body', parameters }];
-}
-
 const campaignSendWorker = new Worker<CampaignSendJobData>(
   'ziradesk-campaign-send',
   async (job) => {
@@ -88,7 +68,8 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
     // Fetch campaign
     const campaignRows = await prisma.$queryRawUnsafe<CampaignRow[]>(
       `SELECT id::text, status, channel_id::text, template_id::text,
-              template_variables, daily_limit, sent_count
+              template_variables, template_header_media_url, template_header_media_filename,
+              daily_limit, sent_count
        FROM ${schema}.campaigns
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -130,7 +111,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
 
     // Fetch template
     const templateRows = await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT id::text, name, language, status, meta_template_id, body
+      `SELECT id::text, name, language, status, meta_template_id, body, header_type
        FROM ${schema}.whatsapp_templates
        WHERE id = $1::uuid LIMIT 1`,
       campaign.template_id,
@@ -144,10 +125,6 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
       );
       return;
     }
-
-    const templateVariables = (typeof campaign.template_variables === 'object' && campaign.template_variables !== null)
-      ? campaign.template_variables as Record<string, string>
-      : {};
 
     const BATCH_SIZE = 10;
 
@@ -189,6 +166,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
            cc.id::text AS cc_id,
            cc.contact_id::text AS contact_id,
            ct.name AS contact_name,
+           ct.email AS contact_email,
            ct.phone AS contact_phone,
            ct.whatsapp AS contact_whatsapp
          FROM ${schema}.campaign_contacts cc
@@ -235,8 +213,9 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
           const contactData = {
             name: cc.contact_name,
             phone: cc.contact_whatsapp ?? cc.contact_phone ?? '',
+            email: cc.contact_email,
           };
-          const templateComponents = buildTemplateComponents(templateVariables, contactData);
+          const templateComponents = buildTemplateComponentsForCampaign(template, campaign, contactData);
 
           // Create conversation for this contact
           const convRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(

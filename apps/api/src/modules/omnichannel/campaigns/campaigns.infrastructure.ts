@@ -27,6 +27,8 @@ export async function ensureCampaignsInfrastructure(schemaName: string): Promise
         channel_id          UUID REFERENCES ${schema}.channels(id) ON DELETE SET NULL,
         template_id         UUID,
         template_variables  JSONB        NOT NULL DEFAULT '{}',
+        template_header_media_url TEXT,
+        template_header_media_filename TEXT,
         scheduled_at        TIMESTAMPTZ,
         started_at          TIMESTAMPTZ,
         completed_at        TIMESTAMPTZ,
@@ -43,6 +45,12 @@ export async function ensureCampaignsInfrastructure(schemaName: string): Promise
         created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
         updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       )
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${schema}.campaigns
+        ADD COLUMN IF NOT EXISTS template_header_media_url TEXT,
+        ADD COLUMN IF NOT EXISTS template_header_media_filename TEXT
     `);
 
     await prisma.$executeRawUnsafe(

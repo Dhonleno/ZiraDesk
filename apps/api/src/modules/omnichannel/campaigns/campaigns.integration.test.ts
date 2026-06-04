@@ -119,6 +119,19 @@ async function createTemplate(schemaName: string, channelId: string, status = 'a
   return rows[0]!.id;
 }
 
+async function createMediaHeaderTemplate(schemaName: string, channelId: string): Promise<string> {
+  const name = `camp_media_tmpl_${uniqueSuffix()}`;
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".whatsapp_templates
+       (channel_id, name, display_name, language, category, body, variables, status, meta_template_id, header_type)
+     VALUES ($1::uuid, $2, 'Campaign Media Template', 'pt_BR', 'MARKETING', 'Oferta especial!', '[]'::jsonb, 'approved', 'meta-media-id', 'IMAGE')
+     RETURNING id`,
+    channelId,
+    name,
+  );
+  return rows[0]!.id;
+}
+
 async function createContact(schemaName: string, withPhone = true): Promise<string> {
   const phone = withPhone ? '5511999990000' : null;
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
@@ -185,6 +198,30 @@ describe('Campanhas integration', () => {
       .send({ name: 'Campanha Email', channel_id: emailChannelId, template_id: templateId });
 
     expect(res.status).toBe(422);
+  });
+
+  it('POST /campaigns com header IMAGE exige URL da mídia e persiste quando informada', async () => {
+    const mediaTemplateId = await createMediaHeaderTemplate(tenant.schemaName, channelId);
+
+    const missingUrlRes = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({ name: 'Campanha Media Sem URL', channel_id: channelId, template_id: mediaTemplateId });
+
+    expect(missingUrlRes.status).toBe(422);
+
+    const createRes = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({
+        name: 'Campanha Media',
+        channel_id: channelId,
+        template_id: mediaTemplateId,
+        template_header_media_url: 'https://cdn.example.com/header.jpg',
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.data.template_header_media_url).toBe('https://cdn.example.com/header.jpg');
   });
 
   // ─── CONTACTS ──────────────────────────────────────────────────────────────
