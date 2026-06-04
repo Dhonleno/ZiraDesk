@@ -1086,6 +1086,7 @@ export interface UpdateRedmineIntegrationPayload {
 export type WhatsAppTemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 export type WhatsAppTemplateLanguage = 'pt_BR' | 'en_US' | 'es';
 export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected';
+export type WhatsAppTemplateHeaderType = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
 
 export interface WhatsAppTemplateVariable {
   index: string;
@@ -1101,8 +1102,12 @@ export interface WhatsAppTemplate {
   category: WhatsAppTemplateCategory;
   body: string;
   header: string | null;
+  header_type: WhatsAppTemplateHeaderType;
+  header_example_url: string | null;
   footer: string | null;
   variables: WhatsAppTemplateVariable[];
+  components: Array<Record<string, unknown>>;
+  buttons: Array<Record<string, unknown>>;
   status: WhatsAppTemplateStatus;
   meta_template_id: string | null;
   last_synced_at: string | null;
@@ -3027,6 +3032,8 @@ export interface Campaign {
   channel_id: string | null;
   template_id: string | null;
   template_variables: Record<string, string>;
+  template_header_media_url: string | null;
+  template_header_media_filename: string | null;
   scheduled_at: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -3100,6 +3107,8 @@ export const campaignsApi = {
     channel_id: string;
     template_id: string;
     template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
     scheduled_at?: string | null;
     daily_limit?: number;
     notes?: string | null;
@@ -3112,6 +3121,8 @@ export const campaignsApi = {
     name?: string;
     template_id?: string;
     template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
     scheduled_at?: string | null;
     daily_limit?: number;
     notes?: string | null;

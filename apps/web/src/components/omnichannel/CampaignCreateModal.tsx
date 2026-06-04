@@ -10,6 +10,20 @@ interface Props {
 }
 
 type VarMode = 'contact_name' | 'contact_phone' | 'fixed';
+type MediaHeaderType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+
+function isMediaHeaderType(value: string | null | undefined): value is MediaHeaderType {
+  return value === 'IMAGE' || value === 'VIDEO' || value === 'DOCUMENT';
+}
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 function extractVariableIds(body: string): string[] {
   const ids = new Set<string>();
@@ -44,6 +58,8 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
   const [templateId, setTemplateId] = useState('');
   const [varModes, setVarModes] = useState<Record<string, VarMode>>({});
   const [fixedValues, setFixedValues] = useState<Record<string, string>>({});
+  const [headerMediaUrl, setHeaderMediaUrl] = useState('');
+  const [headerMediaFilename, setHeaderMediaFilename] = useState('documento.pdf');
   const [dailyLimit, setDailyLimit] = useState(500);
   const [notes, setNotes] = useState('');
   const [schedule, setSchedule] = useState(false);
@@ -87,15 +103,23 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
     [selectedTemplate],
   );
 
+  const selectedHeaderType = selectedTemplate?.header_type ?? 'NONE';
+  const requiresHeaderMedia = isMediaHeaderType(selectedHeaderType);
+  const headerMediaUrlValid = !requiresHeaderMedia || isValidHttpUrl(headerMediaUrl.trim());
+
   useEffect(() => {
     setTemplateId('');
     setVarModes({});
     setFixedValues({});
+    setHeaderMediaUrl('');
+    setHeaderMediaFilename('documento.pdf');
   }, [channelId]);
 
   useEffect(() => {
     setVarModes({});
     setFixedValues({});
+    setHeaderMediaUrl('');
+    setHeaderMediaFilename('documento.pdf');
   }, [templateId]);
 
   const templateVariables = useMemo<Record<string, string>>(() => {
@@ -120,6 +144,10 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
       channel_id: channelId,
       template_id: templateId,
       template_variables: templateVariables,
+      template_header_media_url: requiresHeaderMedia ? headerMediaUrl.trim() : null,
+      template_header_media_filename: selectedHeaderType === 'DOCUMENT'
+        ? (headerMediaFilename.trim() || 'documento.pdf')
+        : null,
       scheduled_at: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : null,
       daily_limit: dailyLimit,
       notes: notes.trim() || null,
@@ -134,7 +162,7 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
     },
   });
 
-  const step1Valid = name.trim() && channelId && templateId;
+  const step1Valid = Boolean(name.trim() && channelId && templateId && headerMediaUrlValid);
   const step2Valid = !schedule || Boolean(scheduledAt);
 
   const inputStyle: React.CSSProperties = {
@@ -164,6 +192,13 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
   };
 
   const fieldStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 0 };
+  const headerTypeLabel = selectedHeaderType === 'NONE' ? 'Sem header' : `Header ${selectedHeaderType}`;
+  const mediaUrlPlaceholder = selectedTemplate?.header_example_url
+    || (selectedHeaderType === 'VIDEO'
+      ? 'https://example.com/video.mp4'
+      : selectedHeaderType === 'DOCUMENT'
+        ? 'https://example.com/documento.pdf'
+        : 'https://example.com/imagem.jpg');
 
   return (
     <div
@@ -269,6 +304,59 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
 
               {selectedTemplate && (
                 <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={labelStyle}>Header do template</span>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      minHeight: 22,
+                      padding: '0 8px',
+                      borderRadius: 'var(--r)',
+                      border: '1px solid var(--line-2)',
+                      background: requiresHeaderMedia ? 'rgba(0,201,167,.10)' : 'var(--bg-3)',
+                      color: requiresHeaderMedia ? 'var(--teal)' : 'var(--txt-2)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}>
+                      {headerTypeLabel}
+                    </span>
+                  </div>
+
+                  {requiresHeaderMedia && (
+                    <div style={{ display: 'grid', gridTemplateColumns: selectedHeaderType === 'DOCUMENT' ? '1fr 160px' : '1fr', gap: 12 }}>
+                      <div style={fieldStyle}>
+                        <label style={labelStyle}>URL da mídia</label>
+                        <input
+                          style={{
+                            ...inputStyle,
+                            borderColor: headerMediaUrl.trim() && !headerMediaUrlValid ? 'var(--red)' : 'var(--line-2)',
+                          }}
+                          value={headerMediaUrl}
+                          onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                          placeholder={mediaUrlPlaceholder}
+                          inputMode="url"
+                        />
+                        {headerMediaUrl.trim() && !headerMediaUrlValid && (
+                          <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 6 }}>
+                            Informe uma URL http ou https válida.
+                          </div>
+                        )}
+                      </div>
+                      {selectedHeaderType === 'DOCUMENT' && (
+                        <div style={fieldStyle}>
+                          <label style={labelStyle}>Arquivo</label>
+                          <input
+                            style={inputStyle}
+                            value={headerMediaFilename}
+                            onChange={(e) => setHeaderMediaFilename(e.target.value)}
+                            placeholder="documento.pdf"
+                            maxLength={255}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Template preview */}
                   {preview && (
                     <div style={fieldStyle}>
@@ -431,6 +519,7 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
                 { label: t('create.step1.name'), value: name },
                 { label: t('create.step3.channel'), value: whatsappChannels.find((c) => c.id === channelId)?.name ?? '—' },
                 { label: t('create.step3.template'), value: selectedTemplate ? (selectedTemplate.display_name || selectedTemplate.name) : '—' },
+                { label: 'Header', value: requiresHeaderMedia ? `${selectedHeaderType} · ${headerMediaUrl.trim()}` : headerTypeLabel },
                 { label: t('create.step3.scheduling'), value: schedule && scheduledAt ? new Date(scheduledAt).toLocaleString('pt-BR') : t('create.step3.immediate') },
                 { label: t('create.step1.dailyLimit'), value: String(dailyLimit) },
                 { label: t('create.step3.notes'), value: notes.trim() || t('create.step3.noNotes') },
