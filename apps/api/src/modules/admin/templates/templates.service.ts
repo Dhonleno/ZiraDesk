@@ -30,8 +30,12 @@ interface TemplateRow {
   category: string;
   body: string;
   header: string | null;
+  header_type: string;
+  header_example_url: string | null;
   footer: string | null;
   variables: unknown;
+  components: unknown;
+  buttons: unknown;
   status: string;
   meta_template_id: string | null;
   last_synced_at: Date | null;
@@ -49,6 +53,11 @@ interface ChannelRow {
 interface MetaTemplateComponent {
   type?: string;
   text?: string;
+  format?: string;
+  example?: {
+    header_handle?: unknown;
+  };
+  buttons?: unknown;
 }
 
 interface MetaTemplate {
@@ -93,6 +102,10 @@ function normalizeVariables(raw: unknown): TemplateVariableInput[] {
     .filter((item) => item.index.length > 0);
 }
 
+function normalizeJsonArray(raw: unknown): unknown[] {
+  return Array.isArray(raw) ? raw : [];
+}
+
 function extractVariablesFromBody(body: string): TemplateVariableInput[] {
   const regex = /\{\{\s*([^{}\s]+)\s*\}\}/g;
   const unique = new Set<string>();
@@ -134,6 +147,37 @@ function normalizeMetaCategory(category: string | undefined): 'MARKETING' | 'UTI
   return 'MARKETING';
 }
 
+function normalizeHeaderType(format: string | undefined): 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' {
+  const value = (format ?? '').trim().toUpperCase();
+  if (value === 'TEXT') return 'TEXT';
+  if (value === 'IMAGE') return 'IMAGE';
+  if (value === 'VIDEO') return 'VIDEO';
+  if (value === 'DOCUMENT') return 'DOCUMENT';
+  return 'NONE';
+}
+
+function findMetaComponent(components: MetaTemplateComponent[] | undefined, type: string): MetaTemplateComponent | null {
+  return (components ?? []).find((item) => item.type?.toUpperCase() === type) ?? null;
+}
+
+function extractHeaderExampleUrl(component: MetaTemplateComponent | null): string | null {
+  const headerHandle = component?.example?.header_handle;
+  if (Array.isArray(headerHandle)) {
+    const firstHandle = typeof headerHandle[0] === 'string' ? headerHandle[0].trim() : '';
+    return firstHandle || null;
+  }
+  if (typeof headerHandle === 'string') {
+    const value = headerHandle.trim();
+    return value || null;
+  }
+  return null;
+}
+
+function extractButtons(components: MetaTemplateComponent[] | undefined): unknown[] {
+  const buttonsComponent = findMetaComponent(components, 'BUTTONS');
+  return Array.isArray(buttonsComponent?.buttons) ? buttonsComponent.buttons : [];
+}
+
 function normalizeDisplayName(name: string): string {
   return name
     .replace(/_/g, ' ')
@@ -145,6 +189,8 @@ function mapTemplateRow(row: TemplateRow) {
   return {
     ...row,
     variables: normalizeVariables(row.variables),
+    components: normalizeJsonArray(row.components),
+    buttons: normalizeJsonArray(row.buttons),
   };
 }
 
@@ -161,8 +207,12 @@ export async function ensureTemplatesInfrastructure(schemaName: string): Promise
       category VARCHAR(32) NOT NULL,
       body TEXT NOT NULL,
       header TEXT,
+      header_type VARCHAR(20) NOT NULL DEFAULT 'NONE',
+      header_example_url TEXT,
       footer TEXT,
       variables JSONB NOT NULL DEFAULT '[]'::jsonb,
+      components JSONB NOT NULL DEFAULT '[]'::jsonb,
+      buttons JSONB NOT NULL DEFAULT '[]'::jsonb,
       status VARCHAR(20) NOT NULL DEFAULT 'approved',
       meta_template_id VARCHAR(80),
       last_synced_at TIMESTAMPTZ,
@@ -170,6 +220,14 @@ export async function ensureTemplatesInfrastructure(schemaName: string): Promise
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT whatsapp_templates_unique_channel_name_language UNIQUE (channel_id, name, language)
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.whatsapp_templates
+      ADD COLUMN IF NOT EXISTS header_type VARCHAR(20) NOT NULL DEFAULT 'NONE',
+      ADD COLUMN IF NOT EXISTS header_example_url TEXT,
+      ADD COLUMN IF NOT EXISTS components JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS buttons JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -198,16 +256,18 @@ export async function listTemplates(schemaName: string, query: ListTemplatesQuer
 
   const rows = query.channel_id
     ? await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
-              variables, status, meta_template_id, last_synced_at, created_at, updated_at
+      `SELECT id, channel_id, name, display_name, language, category, body, header,
+              header_type, header_example_url, footer, variables, components, buttons,
+              status, meta_template_id, last_synced_at, created_at, updated_at
        FROM ${schema}.whatsapp_templates
        WHERE channel_id = $1::uuid
        ORDER BY display_name ASC, language ASC`,
       query.channel_id,
     )
     : await prisma.$queryRawUnsafe<TemplateRow[]>(
-      `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
-              variables, status, meta_template_id, last_synced_at, created_at, updated_at
+      `SELECT id, channel_id, name, display_name, language, category, body, header,
+              header_type, header_example_url, footer, variables, components, buttons,
+              status, meta_template_id, last_synced_at, created_at, updated_at
        FROM ${schema}.whatsapp_templates
        ORDER BY display_name ASC, language ASC`,
     );
@@ -231,8 +291,9 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
       (channel_id, name, display_name, language, category, body, header, footer, variables, status)
      VALUES
       ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
-     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
-               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
+     RETURNING id, channel_id, name, display_name, language, category, body, header,
+               header_type, header_example_url, footer, variables, components, buttons,
+               status, meta_template_id, last_synced_at, created_at, updated_at`,
     data.channelId,
     data.technicalName,
     data.displayName,
@@ -253,8 +314,9 @@ export async function getTemplate(schemaName: string, id: string) {
   const schema = quoteIdent(schemaName);
 
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
-    `SELECT id, channel_id, name, display_name, language, category, body, header, footer,
-            variables, status, meta_template_id, last_synced_at, created_at, updated_at
+    `SELECT id, channel_id, name, display_name, language, category, body, header,
+            header_type, header_example_url, footer, variables, components, buttons,
+            status, meta_template_id, last_synced_at, created_at, updated_at
      FROM ${schema}.whatsapp_templates
      WHERE id = $1::uuid
      LIMIT 1`,
@@ -307,8 +369,9 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
          status = $10,
          updated_at = NOW()
      WHERE id = $11::uuid
-     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
-               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
+     RETURNING id, channel_id, name, display_name, language, category, body, header,
+               header_type, header_example_url, footer, variables, components, buttons,
+               status, meta_template_id, last_synced_at, created_at, updated_at`,
     channelId,
     technicalName,
     displayName,
@@ -333,8 +396,9 @@ export async function deleteTemplate(schemaName: string, id: string) {
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
     `DELETE FROM ${schema}.whatsapp_templates
      WHERE id = $1::uuid
-     RETURNING id, channel_id, name, display_name, language, category, body, header, footer,
-               variables, status, meta_template_id, last_synced_at, created_at, updated_at`,
+     RETURNING id, channel_id, name, display_name, language, category, body, header,
+               header_type, header_example_url, footer, variables, components, buttons,
+               status, meta_template_id, last_synced_at, created_at, updated_at`,
     id,
   );
 
@@ -387,7 +451,7 @@ async function fetchMetaTemplates(wabaId: string, accessToken: string): Promise<
 }
 
 function parseComponentText(components: MetaTemplateComponent[] | undefined, type: string): string | null {
-  const component = (components ?? []).find((item) => item.type?.toUpperCase() === type);
+  const component = findMetaComponent(components, type);
   const text = component?.text?.trim();
   return text ? text : null;
 }
@@ -426,25 +490,36 @@ export async function syncTemplatesFromMeta(schemaName: string, channelId: strin
     const language = normalizeMetaLanguage(metaTemplate.language);
     const category = normalizeMetaCategory(metaTemplate.category);
     const status = normalizeMetaStatus(metaTemplate.status);
+    const headerComponent = findMetaComponent(metaTemplate.components, 'HEADER');
+    const headerType = headerComponent ? normalizeHeaderType(headerComponent.format) : 'NONE';
+    const headerExampleUrl = extractHeaderExampleUrl(headerComponent);
     const body = parseComponentText(metaTemplate.components, 'BODY') ?? '';
     const header = parseComponentText(metaTemplate.components, 'HEADER');
     const footer = parseComponentText(metaTemplate.components, 'FOOTER');
     const variables = extractVariablesFromBody(body);
+    const components = Array.isArray(metaTemplate.components) ? metaTemplate.components : [];
+    const buttons = extractButtons(metaTemplate.components);
     const displayName = normalizeDisplayName(name);
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO ${schema}.whatsapp_templates
-        (channel_id, name, display_name, language, category, body, header, footer, variables, status, meta_template_id, last_synced_at, updated_at)
+        (channel_id, name, display_name, language, category, body, header, header_type,
+         header_example_url, footer, variables, components, buttons, status, meta_template_id,
+         last_synced_at, updated_at)
        VALUES
-        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, NOW(), NOW())
+        ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, NOW(), NOW())
        ON CONFLICT (channel_id, name, language)
        DO UPDATE SET
          display_name = EXCLUDED.display_name,
          category = EXCLUDED.category,
          body = EXCLUDED.body,
          header = EXCLUDED.header,
+         header_type = EXCLUDED.header_type,
+         header_example_url = EXCLUDED.header_example_url,
          footer = EXCLUDED.footer,
          variables = EXCLUDED.variables,
+         components = EXCLUDED.components,
+         buttons = EXCLUDED.buttons,
          status = EXCLUDED.status,
          meta_template_id = EXCLUDED.meta_template_id,
          last_synced_at = NOW(),
@@ -456,8 +531,12 @@ export async function syncTemplatesFromMeta(schemaName: string, channelId: strin
       category,
       body,
       header,
+      headerType,
+      headerExampleUrl,
       footer,
       JSON.stringify(variables),
+      JSON.stringify(components),
+      JSON.stringify(buttons),
       status,
       metaTemplate.id?.trim() || null,
     );

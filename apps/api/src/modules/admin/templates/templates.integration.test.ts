@@ -86,7 +86,7 @@ describe('Templates (WhatsApp) integration', () => {
     expect(Array.isArray(response.body.data.variables)).toBe(true);
   });
 
-  it('syncTemplatesFromMeta sincroniza templates da Meta e salva no banco', async () => {
+  it('syncTemplatesFromMeta sincroniza headers IMAGE, TEXT e NONE da Meta', async () => {
     // O servidor HTTP roda em processo separado (global-setup), então vi.stubGlobal não o afeta.
     // Chamamos o serviço diretamente do worker de teste — aqui o fetch já está mockado pelo vitest.setup.ts
     // e podemos substituí-lo por uma implementação que retorna payload válido da Meta.
@@ -100,6 +100,36 @@ describe('Templates (WhatsApp) integration', () => {
           category: 'UTILITY',
           components: [
             { type: 'BODY', text: 'Seu chamado {{1}} foi registrado. Aguarde.' },
+          ],
+        },
+        {
+          id: 'meta_tmpl_002',
+          name: 'campanha_imagem',
+          language: 'pt_BR',
+          status: 'APPROVED',
+          category: 'MARKETING',
+          components: [
+            {
+              type: 'HEADER',
+              format: 'IMAGE',
+              example: { header_handle: ['https://cdn.example.com/header.jpg'] },
+            },
+            { type: 'BODY', text: 'Oferta para {{1}}.' },
+            {
+              type: 'BUTTONS',
+              buttons: [{ type: 'URL', text: 'Comprar', url: 'https://example.com' }],
+            },
+          ],
+        },
+        {
+          id: 'meta_tmpl_003',
+          name: 'aviso_texto',
+          language: 'pt_BR',
+          status: 'APPROVED',
+          category: 'UTILITY',
+          components: [
+            { type: 'HEADER', format: 'TEXT', text: 'Aviso importante' },
+            { type: 'BODY', text: 'Olá {{1}}.' },
           ],
         },
       ],
@@ -119,13 +149,30 @@ describe('Templates (WhatsApp) integration', () => {
       const schema = requireSchema();
       const result = await syncTemplatesFromMeta(schema, channelId);
 
-      expect(result.count).toBe(1);
+      expect(result.count).toBe(3);
       expect(result.templates).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             name: 'suporte_abertura',
             language: 'pt_BR',
             status: 'approved',
+            header_type: 'NONE',
+          }),
+          expect.objectContaining({
+            name: 'campanha_imagem',
+            header_type: 'IMAGE',
+            header_example_url: 'https://cdn.example.com/header.jpg',
+            components: expect.arrayContaining([
+              expect.objectContaining({ type: 'HEADER', format: 'IMAGE' }),
+            ]),
+            buttons: expect.arrayContaining([
+              expect.objectContaining({ type: 'URL', text: 'Comprar' }),
+            ]),
+          }),
+          expect.objectContaining({
+            name: 'aviso_texto',
+            header: 'Aviso importante',
+            header_type: 'TEXT',
           }),
         ]),
       );
