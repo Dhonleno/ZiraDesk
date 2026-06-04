@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { FastifyRequest } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -29,17 +30,17 @@ import { ensureCampaignsInfrastructure } from './campaigns.infrastructure.js';
 import { campaignSendQueue } from '../../../jobs/queue.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
-const replyGuard = [...guard, requirePermission('conversations:reply')];
-const manageGuard = [...guard, requirePermission('conversations:manage')];
+async function ensureCampaignsInfrastructureMiddleware(request: FastifyRequest): Promise<void> {
+  const schemaName = request.user?.schemaName;
+  if (schemaName) {
+    await ensureCampaignsInfrastructure(schemaName);
+  }
+}
+
+const replyGuard = [...guard, ensureCampaignsInfrastructureMiddleware, requirePermission('conversations:reply')];
+const manageGuard = [...guard, ensureCampaignsInfrastructureMiddleware, requirePermission('conversations:manage')];
 
 export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<void> {
-  // Ensure campaigns tables exist for every request
-  app.addHook('preHandler', async (request) => {
-    const schemaName = request.user?.schemaName;
-    if (schemaName) {
-      await ensureCampaignsInfrastructure(schemaName).catch(() => undefined);
-    }
-  });
 
   // GET /api/omnichannel/campaigns
   app.get('/', { preHandler: replyGuard }, async (request, reply) => {
