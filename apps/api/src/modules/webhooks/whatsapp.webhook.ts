@@ -2199,6 +2199,72 @@ async function processIncomingMessage(
     }
   }
 
+  // Campaign reply and opt-out tracking
+  try {
+    const campaignConvRows = await prisma.$queryRawUnsafe<Array<{
+      campaign_id: string;
+      contact_id: string;
+    }>>(
+      `SELECT
+         c.metadata->>'campaign_id' AS campaign_id,
+         c.contact_id::text AS contact_id
+       FROM "${schemaName}".conversations c
+       WHERE c.id = $1::uuid
+         AND c.metadata->>'campaign_id' IS NOT NULL
+       LIMIT 1`,
+      result.conversationId,
+    );
+    const campaignConv = campaignConvRows[0];
+    if (campaignConv?.campaign_id && campaignConv?.contact_id) {
+      const OPT_OUT_KEYWORDS = /^(sair|stop|parar|cancelar|0)$/i;
+      const incomingText = (result.message as { content?: string }).content?.trim() ?? '';
+      const isOptOut = OPT_OUT_KEYWORDS.test(incomingText);
+
+      if (isOptOut) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "${schemaName}".campaign_contacts
+           SET status = 'opted_out'
+           WHERE campaign_id = $1::uuid AND contact_id = $2::uuid AND status != 'opted_out'`,
+          campaignConv.campaign_id,
+          campaignConv.contact_id,
+        );
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "${schemaName}".campaign_optouts (contact_id, phone, campaign_id)
+           VALUES ($1::uuid, $2, $3::uuid)
+           ON CONFLICT (contact_id) DO UPDATE SET opted_out_at = NOW(), campaign_id = EXCLUDED.campaign_id`,
+          campaignConv.contact_id,
+          formattedPhone,
+          campaignConv.campaign_id,
+        );
+        logger.info(
+          { campaignId: campaignConv.campaign_id, contactId: campaignConv.contact_id },
+          '[WhatsApp] Campaign opt-out registered',
+        );
+      } else {
+        const repliedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+          `UPDATE "${schemaName}".campaign_contacts
+           SET status = 'replied', replied_at = NOW()
+           WHERE campaign_id = $1::uuid
+             AND contact_id = $2::uuid
+             AND status NOT IN ('replied', 'opted_out', 'failed')
+           RETURNING id`,
+          campaignConv.campaign_id,
+          campaignConv.contact_id,
+        );
+        if (repliedRows[0]) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".campaigns
+             SET replied_count = replied_count + 1, updated_at = NOW()
+             WHERE id = $1::uuid`,
+            campaignConv.campaign_id,
+          );
+        }
+      }
+    }
+  } catch (campaignErr) {
+    logger.warn({ err: campaignErr, conversationId: result.conversationId }, '[WhatsApp] Campaign reply tracking failed');
+  }
+
   // Notify assigned agent if conversation has one
   const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; contact_name: string | null }]>(
     `SELECT c.assigned_to, ct.name AS contact_name
@@ -2391,6 +2457,78 @@ async function processStatusUpdate(
           conversationId: result[0].conversation_id,
         });
       }
+
+      // Campaign tracking: update campaign_contacts and counters for delivered/read/failed
+      if (status.status === 'delivered' || status.status === 'read' || status.status === 'failed') {
+        try {
+          const campaignMetaRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string }>>(
+            `SELECT metadata->>'campaign_id' AS campaign_id
+             FROM "${tenant.schema_name}".conversations
+             WHERE id = $1::uuid
+               AND metadata->>'campaign_id' IS NOT NULL
+             LIMIT 1`,
+            result[0].conversation_id,
+          );
+          const campaignId = campaignMetaRows[0]?.campaign_id;
+          if (campaignId) {
+            if (status.status === 'delivered') {
+              const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+                `UPDATE "${tenant.schema_name}".campaign_contacts
+                 SET status = 'delivered',
+                     delivered_at = NOW(),
+                     message_id = COALESCE(message_id, $1)
+                 WHERE conversation_id = $2::uuid
+                   AND status = 'sent'
+                 RETURNING id`,
+                status.id,
+                result[0].conversation_id,
+              );
+              if (updated[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET delivered_count = delivered_count + 1, updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                );
+              }
+            } else if (status.status === 'read') {
+              const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+                `UPDATE "${tenant.schema_name}".campaign_contacts
+                 SET status = 'read',
+                     read_at = NOW(),
+                     message_id = COALESCE(message_id, $1)
+                 WHERE conversation_id = $2::uuid
+                   AND status IN ('sent', 'delivered')
+                 RETURNING id`,
+                status.id,
+                result[0].conversation_id,
+              );
+              if (updated[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET read_count = read_count + 1, updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                );
+              }
+            } else if (status.status === 'failed') {
+              await prisma.$executeRawUnsafe(
+                `UPDATE "${tenant.schema_name}".campaign_contacts
+                 SET status = 'failed',
+                     failed_at = NOW(),
+                     message_id = COALESCE(message_id, $1)
+                 WHERE conversation_id = $2::uuid
+                   AND status = 'sent'`,
+                status.id,
+                result[0].conversation_id,
+              );
+            }
+          }
+        } catch (campaignErr) {
+          logger.warn({ err: campaignErr, conversationId: result[0].conversation_id }, '[WhatsApp] Campaign status tracking failed');
+        }
+      }
+
       break;
     }
   }
