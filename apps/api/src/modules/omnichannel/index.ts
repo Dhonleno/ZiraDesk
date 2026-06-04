@@ -13,6 +13,7 @@ import { omnichannelCloseConfigRoutes } from './close-config.routes.js';
 import { omnichannelTransferRoutes } from './transfer.routes.js';
 import { activeOutboundRoutes } from './active-outbound.routes.js';
 import { omnichannelQueueRoutes } from './queue.routes.js';
+import { omnichannelCampaignsRoutes } from './campaigns/campaigns.routes.js';
 
 export async function omnichannelModuleRoutes(app: FastifyInstance): Promise<void> {
   await app.register(omnichannelAvailabilityRoutes);
@@ -29,4 +30,5 @@ export async function omnichannelModuleRoutes(app: FastifyInstance): Promise<voi
   await app.register(conversationTagsOmnichannelRoutes, { prefix: '/conversations' });
   await app.register(mediaModule);
   await app.register(omnichannelTransferRoutes, { prefix: '/transfer' });
+  await app.register(omnichannelCampaignsRoutes, { prefix: '/campaigns' });
 }

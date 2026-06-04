@@ -9,6 +9,7 @@ import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
 import { ensureWebhooksInfrastructure } from '../../admin/webhooks/webhooks.service.js';
 import { ensureQueueNotificationsInfrastructure } from '../../omnichannel/queue/queue-notifications.infrastructure.js';
+import { ensureCampaignsInfrastructure } from '../../omnichannel/campaigns/campaigns.infrastructure.js';
 import {
   listUsers,
   inviteUser,
@@ -816,6 +817,7 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   await createTenantTables(schemaName);
   await ensureQueueNotificationsInfrastructure(schemaName);
   await ensureWebhooksInfrastructure(schemaName);
+  await ensureCampaignsInfrastructure(schemaName);
   await seedCloseConfig(prisma, schemaName);
   await seedQuickReplies(prisma, schemaName);
 }
