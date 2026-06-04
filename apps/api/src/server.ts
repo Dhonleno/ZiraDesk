@@ -10,6 +10,8 @@ import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas 
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import './jobs/recalculate-queue-positions.job.js'; // recalcula posições na fila e notifica clientes
 import './jobs/queue-expire-24h.job.js'; // encerra conversas sem atendimento após 24h na fila
+import './jobs/campaign-send.job.js'; // processa disparos de campanhas
+import './jobs/campaign-scheduler.job.js'; // agenda campanhas programadas
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';

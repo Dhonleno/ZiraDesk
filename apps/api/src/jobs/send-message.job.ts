@@ -123,6 +123,8 @@ async function persistExternalId(job: SendMessageJob, externalId: string): Promi
     externalId,
     job.messageId,
   );
+
+  await syncCampaignMessageSent(job, externalId, schemaName);
 }
 
 async function persistSentStatus(job: SendMessageJob): Promise<void> {
@@ -155,6 +157,83 @@ async function persistFailedStatus(
     job.messageId,
     JSON.stringify(metadataPatch),
   );
+
+  await syncCampaignMessageFailed(job, metadataPatch, schemaName);
+}
+
+async function syncCampaignMessageSent(
+  job: SendMessageJob,
+  externalId: string,
+  schemaName: string,
+): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.campaign_contacts cc
+       SET message_id = COALESCE(cc.message_id, $1)
+       WHERE cc.conversation_id = $2::uuid`,
+      externalId,
+      job.conversationId,
+    );
+  } catch (error) {
+    logger.warn(
+      { error, messageId: job.messageId, conversationId: job.conversationId },
+      '[CampaignSend] Failed to sync sent message id',
+    );
+  }
+}
+
+async function syncCampaignMessageFailed(
+  job: SendMessageJob,
+  metadataPatch: Record<string, unknown>,
+  schemaName: string,
+): Promise<void> {
+  const reason =
+    String(metadataPatch['whatsapp_send_error_details'] ?? '')
+      || String(metadataPatch['whatsapp_send_error_message'] ?? '')
+      || String(metadataPatch['whatsapp_send_error'] ?? '')
+      || 'Falha ao enviar mensagem';
+
+  try {
+    const updatedRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string; previous_status: string }>>(
+      `WITH target AS (
+         SELECT id, campaign_id, status AS previous_status
+         FROM ${quoteIdent(schemaName)}.campaign_contacts
+         WHERE conversation_id = $2::uuid
+           AND status NOT IN ('failed', 'delivered', 'read', 'replied', 'opted_out')
+       ),
+       updated AS (
+         UPDATE ${quoteIdent(schemaName)}.campaign_contacts cc
+         SET status = 'failed',
+             error_message = $1,
+             failed_at = NOW()
+         FROM target
+         WHERE cc.id = target.id
+         RETURNING target.campaign_id::text, target.previous_status
+       )
+       SELECT campaign_id, previous_status FROM updated`,
+      reason.slice(0, 500),
+      job.conversationId,
+    );
+
+    const campaignId = updatedRows[0]?.campaign_id;
+    if (!campaignId) return;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.campaigns
+       SET failed_count = failed_count + $2::integer,
+           sent_count = GREATEST(0, sent_count - $3::integer),
+           updated_at = NOW()
+       WHERE id = $1::uuid`,
+      campaignId,
+      updatedRows.length,
+      updatedRows.filter((row) => row.previous_status === 'sent').length,
+    );
+  } catch (error) {
+    logger.warn(
+      { error, messageId: job.messageId, conversationId: job.conversationId },
+      '[CampaignSend] Failed to sync message failure',
+    );
+  }
 }
 
 async function notifyPermanentMessageFailure(job: SendMessageJob, reason: string): Promise<void> {
