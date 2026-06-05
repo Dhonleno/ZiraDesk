@@ -503,6 +503,35 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
     } else if (entry.action === 'conversation.pii.accessed') {
       title = 'Dados do contato acessados';
       description = entry.user_name ? `Por ${entry.user_name}` : null;
+    } else if (entry.action === 'conversation.created') {
+      title = 'Atendimento criado';
+    } else if (entry.action === 'conversation.message') {
+      title = 'Mensagem recebida';
+      description = typeof entry.new_data?.preview === 'string' && entry.new_data.preview.trim()
+        ? entry.new_data.preview.trim()
+        : description;
+    } else if (entry.action === 'conversation.queue.agent_assumed') {
+      title = 'Agente assumiu atendimento';
+      description = typeof entry.new_data?.agent_name === 'string' && entry.new_data.agent_name.trim()
+        ? `Responsável: ${entry.new_data.agent_name.trim()}`
+        : description;
+    } else if (entry.action === 'conversation.queue.expired_24h') {
+      title = 'Fila expirada por 24h';
+      description = entry.new_data?.action === 'close'
+        ? 'Atendimento encerrado automaticamente'
+        : description;
+    } else if (entry.action === 'conversation.bot.pulled') {
+      title = 'Atendimento puxado do bot';
+    } else if (entry.action === 'conversation.bot.closed') {
+      title = 'Atendimento encerrado pelo bot';
+      const closureReason = entry.new_data?.closure_reason;
+      description = closureReason
+        && typeof closureReason === 'object'
+        && 'notes' in closureReason
+        && typeof closureReason.notes === 'string'
+        && closureReason.notes.trim()
+        ? closureReason.notes.trim()
+        : description;
     }
 
     timeline.push({
