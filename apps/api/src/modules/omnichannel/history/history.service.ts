@@ -494,6 +494,15 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
       title = 'Atendimento resolvido';
     } else if (entry.action === 'conversation.closed') {
       title = 'Atendimento fechado';
+    } else if (entry.action === 'conversation.queue.notified') {
+      title = 'Notificação de fila enviada';
+      const position = entry.new_data?.position;
+      description = position != null
+        ? `Posição na fila: ${position}`
+        : (entry.user_name ? `Por ${entry.user_name}` : null);
+    } else if (entry.action === 'conversation.pii.accessed') {
+      title = 'Dados do contato acessados';
+      description = entry.user_name ? `Por ${entry.user_name}` : null;
     }
 
     timeline.push({
