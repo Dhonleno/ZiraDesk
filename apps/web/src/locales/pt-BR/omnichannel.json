@@ -388,6 +388,20 @@
       "csat": "CSAT mínimo (1-5)",
       "volume": "Volume mínimo"
     },
+    "validation": {
+      "nameRequired": "Informe o nome da meta.",
+      "nameMax": "Use no máximo {{max}} caracteres.",
+      "nameHint": "Até {{max}} caracteres.",
+      "agentRequired": "Selecione um agente para esta meta.",
+      "integer": "Use apenas números inteiros.",
+      "number": "Informe um número válido.",
+      "range": "Informe um valor entre {{min}} e {{max}}.",
+      "minutesHint": "Opcional. Use {{min}} a {{max}} minutos.",
+      "percentHint": "Opcional. Use {{min}} a {{max}}%.",
+      "csatHint": "Opcional. Use {{min}} a {{max}}.",
+      "volumeHint": "Opcional. Use {{min}} a {{max}} atendimentos.",
+      "fixBeforeSave": "Corrija os campos destacados antes de salvar."
+    },
     "saveSuccess": "Meta salva com sucesso",
     "deleteSuccess": "Meta removida"
   },

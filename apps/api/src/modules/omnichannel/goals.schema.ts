@@ -17,7 +17,8 @@ function toNullableNumber(value: unknown): unknown {
 }
 
 const nullableUuid = z.preprocess(toNullableString, z.union([z.string().uuid(), z.null()]));
-const nullablePositiveInt = z.preprocess(toNullableNumber, z.union([z.number().int().min(1), z.null()]));
+const nullableGoalMinutes = z.preprocess(toNullableNumber, z.union([z.number().int().min(1).max(1440), z.null()]));
+const nullableGoalVolume = z.preprocess(toNullableNumber, z.union([z.number().int().min(1).max(100000), z.null()]));
 const nullablePercentInt = z.preprocess(toNullableNumber, z.union([z.number().int().min(0).max(100), z.null()]));
 const nullableCsat = z.preprocess(toNullableNumber, z.union([z.number().min(1).max(5), z.null()]));
 
@@ -26,11 +27,11 @@ const goalBaseSchema = z.object({
   scope: z.enum(['global', 'agent']),
   agentId: nullableUuid.optional(),
   period: z.enum(['daily', 'weekly', 'monthly']),
-  goalTmaMinutes: nullablePositiveInt.optional(),
-  goalTmeMinutes: nullablePositiveInt.optional(),
+  goalTmaMinutes: nullableGoalMinutes.optional(),
+  goalTmeMinutes: nullableGoalMinutes.optional(),
   goalSlaPercent: nullablePercentInt.optional(),
   goalCsatMin: nullableCsat.optional(),
-  goalVolumeMin: nullablePositiveInt.optional(),
+  goalVolumeMin: nullableGoalVolume.optional(),
   isActive: z.boolean().default(true),
 });
 

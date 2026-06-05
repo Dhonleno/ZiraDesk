@@ -388,6 +388,20 @@
       "csat": "Min CSAT (1-5)",
       "volume": "Min volume"
     },
+    "validation": {
+      "nameRequired": "Enter the goal name.",
+      "nameMax": "Use at most {{max}} characters.",
+      "nameHint": "Up to {{max}} characters.",
+      "agentRequired": "Select an agent for this goal.",
+      "integer": "Use whole numbers only.",
+      "number": "Enter a valid number.",
+      "range": "Enter a value between {{min}} and {{max}}.",
+      "minutesHint": "Optional. Use {{min}} to {{max}} minutes.",
+      "percentHint": "Optional. Use {{min}} to {{max}}%.",
+      "csatHint": "Optional. Use {{min}} to {{max}}.",
+      "volumeHint": "Optional. Use {{min}} to {{max}} conversations.",
+      "fixBeforeSave": "Fix the highlighted fields before saving."
+    },
     "saveSuccess": "Goal saved successfully",
     "deleteSuccess": "Goal removed"
   },

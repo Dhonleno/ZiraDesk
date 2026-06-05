@@ -718,6 +718,35 @@
   box-shadow: 0 0 0 3px var(--teal-dim);
 }
 
+.zd-input.is-invalid,
+.zd-textarea.is-invalid,
+.filter-select.is-invalid {
+  border-color: var(--red);
+}
+
+.zd-input.is-invalid:focus,
+.zd-textarea.is-invalid:focus,
+.filter-select.is-invalid:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-dim);
+}
+
+.history-goal-field-hint,
+.history-goal-field-error {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.history-goal-field-hint {
+  color: var(--txt-3);
+}
+
+.history-goal-field-error {
+  color: var(--red);
+}
+
 .zd-empty-state {
   height: 100%;
   display: flex;
