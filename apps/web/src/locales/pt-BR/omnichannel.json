@@ -351,7 +351,14 @@
       "title": "Detalhes do atendimento",
       "transcript": "Transcrição",
       "timeline": "Linha do tempo",
-      "csat": "Avaliação"
+      "csat": "Avaliação",
+      "close": "Fechar detalhes do atendimento",
+      "emptyTimelineTitle": "Sem eventos registrados",
+      "emptyTimelineHint": "Os eventos do atendimento aparecerão aqui quando forem registrados.",
+      "emptyTranscriptTitle": "Sem mensagens registradas",
+      "emptyTranscriptHint": "A transcrição aparecerá quando houver mensagens no atendimento.",
+      "emptyCsatTitle": "Sem avaliação registrada",
+      "emptyCsatHint": "A avaliação do cliente aparecerá aqui após a resposta."
     },
     "loadMore": "Carregar mensagens anteriores",
     "loading": "Carregando...",

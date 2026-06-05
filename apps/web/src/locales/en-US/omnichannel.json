@@ -351,7 +351,14 @@
       "title": "Conversation details",
       "transcript": "Transcript",
       "timeline": "Timeline",
-      "csat": "Rating"
+      "csat": "Rating",
+      "close": "Close conversation details",
+      "emptyTimelineTitle": "No events recorded",
+      "emptyTimelineHint": "Conversation events will appear here when they are recorded.",
+      "emptyTranscriptTitle": "No messages recorded",
+      "emptyTranscriptHint": "The transcript will appear when the conversation has messages.",
+      "emptyCsatTitle": "No rating recorded",
+      "emptyCsatHint": "The customer rating will appear here after the response."
     },
     "loadMore": "Load previous messages",
     "loading": "Loading...",

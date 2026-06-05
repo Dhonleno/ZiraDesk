@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -159,12 +159,30 @@ function CSATCell({ score }: { score: number | null }) {
   );
 }
 
+function HistoryDetailEmpty({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="history-detail-empty">
+      <div className="history-detail-empty-icon" aria-hidden>
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M5 5.5h12M5 10.5h8M5 15.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div className="history-detail-empty-copy">
+        <strong>{title}</strong>
+        <p>{hint}</p>
+      </div>
+    </div>
+  );
+}
+
 export function HistoryPage() {
   const { t, i18n } = useTranslation('omnichannel');
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'history' | 'goals'>('history');
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
 
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const [searchDraft, setSearchDraft] = useState(filters.search ?? '');
@@ -189,6 +207,24 @@ export function HistoryPage() {
     queryFn: omnichannelApi.monitor,
     staleTime: 30_000,
   });
+
+  const closeDetail = useCallback(() => {
+    setSelectedConversationId(null);
+    window.requestAnimationFrame(() => returnFocusRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!selectedConversationId) return undefined;
+
+    detailPanelRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeDetail();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closeDetail, selectedConversationId]);
 
   const groupOptions = useMemo(() => {
     const values = new Map<string, string>();
@@ -422,7 +458,10 @@ export function HistoryPage() {
                         <button
                           type="button"
                           className="history-protocol-btn"
-                          onClick={() => setSelectedConversationId(conversation.id)}
+                          onClick={(event) => {
+                            returnFocusRef.current = event.currentTarget;
+                            setSelectedConversationId(conversation.id);
+                          }}
                         >
                           {conversation.protocol_number ?? '—'}
                         </button>
@@ -486,14 +525,19 @@ export function HistoryPage() {
             </div>
 
             {selectedConversationId ? (
-              <div className="history-detail-overlay" role="dialog" aria-modal="true">
-                <div className="history-detail-panel">
+              <div className="history-detail-overlay" role="dialog" aria-modal="true" aria-labelledby="history-detail-title">
+                <div className="history-detail-panel" ref={detailPanelRef} tabIndex={-1}>
                   <div className="history-detail-header">
                     <div>
-                      <h2>{t('history.detail.title')}</h2>
+                      <h2 id="history-detail-title">{t('history.detail.title')}</h2>
                       <p>{detailData?.conversation.protocol_number ?? '—'}</p>
                     </div>
-                    <button className="zd-btn" type="button" onClick={() => setSelectedConversationId(null)}>
+                    <button
+                      className="zd-btn"
+                      type="button"
+                      onClick={closeDetail}
+                      aria-label={t('history.detail.close')}
+                    >
                       {t('tenantAdmin.common.close', { ns: 'admin' })}
                     </button>
                   </div>
@@ -526,41 +570,55 @@ export function HistoryPage() {
 
                       <section className="history-detail-section">
                         <h3>{t('history.detail.timeline')}</h3>
-                        <div className="history-timeline-list">
-                          {detailData.timeline.map((event) => (
-                            <div key={event.id} className="history-timeline-item">
-                              <div className="history-timeline-dot" aria-hidden />
-                              <div>
-                                <strong>{event.title}</strong>
-                                {event.description ? <p>{event.description}</p> : null}
-                                <span>{new Date(event.created_at).toLocaleString(i18n.language)}</span>
+                        {detailData.timeline.length > 0 ? (
+                          <div className="history-timeline-list">
+                            {detailData.timeline.map((event) => (
+                              <div key={event.id} className="history-timeline-item">
+                                <div className="history-timeline-dot" aria-hidden />
+                                <div className="history-timeline-content">
+                                  <div className="history-timeline-head">
+                                    <strong>{event.title}</strong>
+                                    <span>{new Date(event.created_at).toLocaleString(i18n.language)}</span>
+                                  </div>
+                                  {event.description ? <p>{event.description}</p> : null}
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <HistoryDetailEmpty title={t('history.detail.emptyTimelineTitle')} hint={t('history.detail.emptyTimelineHint')} />
+                        )}
                       </section>
 
                       <section className="history-detail-section">
                         <h3>{t('history.detail.transcript')}</h3>
-                        <div className="history-transcript-list">
-                          {detailData.transcript.map((message) => (
-                            <article key={message.id} className="history-transcript-item">
-                              <header>
-                                <strong>{message.sender_name || message.sender_type}</strong>
-                                <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>
-                              </header>
-                              <p>{message.content || `(${message.content_type})`}</p>
-                            </article>
-                          ))}
-                        </div>
+                        {detailData.transcript.length > 0 ? (
+                          <div className="history-transcript-list">
+                            {detailData.transcript.map((message) => (
+                              <article key={message.id} className="history-transcript-item">
+                                <header>
+                                  <strong>{message.sender_name || message.sender_type}</strong>
+                                  <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>
+                                </header>
+                                <p>{message.content || `(${message.content_type})`}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : (
+                          <HistoryDetailEmpty title={t('history.detail.emptyTranscriptTitle')} hint={t('history.detail.emptyTranscriptHint')} />
+                        )}
                       </section>
 
                       <section className="history-detail-section">
                         <h3>{t('history.detail.csat')}</h3>
-                        <div className="history-csat-block">
-                          <CSATCell score={detailData.conversation.csat_score} />
-                          <p>{detailData.conversation.csat_comment || '—'}</p>
-                        </div>
+                        {detailData.conversation.csat_score || detailData.conversation.csat_comment ? (
+                          <div className="history-csat-block">
+                            <CSATCell score={detailData.conversation.csat_score} />
+                            <p>{detailData.conversation.csat_comment || '—'}</p>
+                          </div>
+                        ) : (
+                          <HistoryDetailEmpty title={t('history.detail.emptyCsatTitle')} hint={t('history.detail.emptyCsatHint')} />
+                        )}
                       </section>
                     </div>
                   ) : null}
