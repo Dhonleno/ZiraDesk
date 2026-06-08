@@ -20,6 +20,30 @@
       "errorLoad": "Erro ao carregar dados",
       "close": "Fechar"
     },
+    "queueConfig": {
+      "title": "Notificações de Fila",
+      "subtitle": "Configure as mensagens enviadas automaticamente durante o atendimento na fila",
+      "enabled": "Notificações de fila ativas",
+      "enabledHint": "Quando ativado, o cliente recebe uma mensagem com sua posição ao entrar na fila",
+      "positionMessage": "Mensagem de posição na fila",
+      "positionMessageHint": "Use {{position}} para exibir a posição do cliente na fila",
+      "throttle": "Intervalo mínimo entre notificações (segundos)",
+      "throttleHint": "Evita notificações repetidas em curto intervalo de tempo",
+      "agentAssumeMessage": "Mensagem ao assumir atendimento",
+      "agentAssumeMessageHint": "Use {{agent_name}} para exibir o nome do agente. Enviada quando um agente assume a conversa",
+      "expire24hAction": "Ação ao expirar janela de 24h",
+      "expire24hClose": "Encerrar conversa",
+      "expire24hKeepOpen": "Manter aberta",
+      "expire24hMessage": "Mensagem de encerramento por inatividade",
+      "expireActions": {
+        "close": "Encerrar conversa",
+        "notify": "Enviar mensagem e encerrar"
+      },
+      "saved": "Configurações salvas com sucesso",
+      "messages": {
+        "saved": "Configurações salvas com sucesso"
+      }
+    },
     "nav": {
       "conversations": "Conversas",
       "dashboard": "Dashboard",

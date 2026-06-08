@@ -20,6 +20,30 @@
       "errorLoad": "Error loading data",
       "close": "Close"
     },
+    "queueConfig": {
+      "title": "Queue Notifications",
+      "subtitle": "Configure messages sent automatically during queue attendance",
+      "enabled": "Queue notifications active",
+      "enabledHint": "When enabled, the customer receives a message with their position upon joining the queue",
+      "positionMessage": "Queue position message",
+      "positionMessageHint": "Use {{position}} to display the customer's position in the queue",
+      "throttle": "Minimum interval between notifications (seconds)",
+      "throttleHint": "Prevents repeated notifications in a short time interval",
+      "agentAssumeMessage": "Message when assuming attendance",
+      "agentAssumeMessageHint": "Use {{agent_name}} to display the agent's name. Sent when an agent takes over the conversation",
+      "expire24hAction": "Action when 24h window expires",
+      "expire24hClose": "Close conversation",
+      "expire24hKeepOpen": "Keep open",
+      "expire24hMessage": "Inactivity closure message",
+      "expireActions": {
+        "close": "Close conversation",
+        "notify": "Send message and close"
+      },
+      "saved": "Settings saved successfully",
+      "messages": {
+        "saved": "Settings saved successfully"
+      }
+    },
     "nav": {
       "conversations": "Conversations",
       "dashboard": "Dashboard",

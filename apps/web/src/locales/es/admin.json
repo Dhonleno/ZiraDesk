@@ -20,6 +20,30 @@
       "errorLoad": "Error al cargar datos",
       "close": "Cerrar"
     },
+    "queueConfig": {
+      "title": "Notificaciones de Cola",
+      "subtitle": "Configure los mensajes enviados automáticamente durante la atención en cola",
+      "enabled": "Notificaciones de cola activas",
+      "enabledHint": "Cuando está activado, el cliente recibe un mensaje con su posición al entrar en la cola",
+      "positionMessage": "Mensaje de posición en cola",
+      "positionMessageHint": "Use {{position}} para mostrar la posición del cliente en la cola",
+      "throttle": "Intervalo mínimo entre notificaciones (segundos)",
+      "throttleHint": "Evita notificaciones repetidas en un corto intervalo de tiempo",
+      "agentAssumeMessage": "Mensaje al asumir la atención",
+      "agentAssumeMessageHint": "Use {{agent_name}} para mostrar el nombre del agente. Enviado cuando un agente toma la conversación",
+      "expire24hAction": "Acción al expirar ventana de 24h",
+      "expire24hClose": "Cerrar conversación",
+      "expire24hKeepOpen": "Mantener abierta",
+      "expire24hMessage": "Mensaje de cierre por inactividad",
+      "expireActions": {
+        "close": "Cerrar conversación",
+        "notify": "Enviar mensaje y cerrar"
+      },
+      "saved": "Configuración guardada con éxito",
+      "messages": {
+        "saved": "Configuración guardada con éxito"
+      }
+    },
     "nav": {
       "conversations": "Conversaciones",
       "dashboard": "Panel",
