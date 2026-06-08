@@ -101,9 +101,9 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://api.ziradesk.com.br}
-        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-https://api.ziradesk.com.br}
-        VITE_APP_URL: ${VITE_APP_URL:-https://app.ziradesk.com.br}
+        VITE_API_URL: ${VITE_API_URL:-https://api.ziradesk.com}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-https://api.ziradesk.com}
+        VITE_APP_URL: ${VITE_APP_URL:-https://app.ziradesk.com}
     image: ziradesk-web:production
     container_name: ziradesk-web
     restart: unless-stopped
