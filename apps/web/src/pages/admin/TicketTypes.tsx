@@ -68,7 +68,7 @@ export function TicketTypes() {
   const createMutation = useMutation({
     mutationFn: (payload: TypeFormState) => adminApi.ticketTypes.create(payload),
     onSuccess: async () => {
-      toast.success('Tipo de ticket criado');
+      toast.success(t('tenantAdmin.ticketTypes.saved'));
       setShowModal(false);
       setEditingTypeId(null);
       setForm(EMPTY_FORM);
@@ -81,7 +81,7 @@ export function TicketTypes() {
     mutationFn: ({ id, payload }: { id: string; payload: Partial<TypeFormState & { is_active: boolean }> }) =>
       adminApi.ticketTypes.update(id, payload),
     onSuccess: async () => {
-      toast.success('Tipo de ticket atualizado');
+      toast.success(t('tenantAdmin.ticketTypes.saved'));
       setShowModal(false);
       setEditingTypeId(null);
       setForm(EMPTY_FORM);
@@ -93,10 +93,10 @@ export function TicketTypes() {
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => adminApi.ticketTypes.delete(id),
     onSuccess: async () => {
-      toast.success('Tipo de ticket desativado');
+      toast.success(t('tenantAdmin.ticketTypes.deleted'));
       await invalidate();
     },
-    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+    onError: () => toast.error(t('tenantAdmin.ticketTypes.deleteError')),
   });
 
   function openCreateModal() {
@@ -129,7 +129,12 @@ export function TicketTypes() {
     };
 
     if (!payload.name) {
-      toast.error(t('tenantAdmin.common.errorSave'));
+      toast.error(t('tenantAdmin.ticketTypes.fields.nameRequired'));
+      return;
+    }
+
+    if (payload.name.length > 60) {
+      toast.error(t('tenantAdmin.ticketTypes.fields.nameTooLong'));
       return;
     }
 
@@ -147,10 +152,10 @@ export function TicketTypes() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--txt)' }}>
-            Tipos de Ticket
+            {t('tenantAdmin.ticketTypes.title')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--txt-2)' }}>
-            Configure os tipos usados na criação de tickets.
+            {t('tenantAdmin.ticketTypes.subtitle')}
           </p>
         </div>
 
@@ -158,7 +163,7 @@ export function TicketTypes() {
           <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          + Novo tipo
+          + {t('tenantAdmin.ticketTypes.new')}
         </Button>
       </div>
 
@@ -206,7 +211,7 @@ export function TicketTypes() {
                   </span>
                   {!type.is_active ? (
                     <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-                      Inativo
+                      {t('tenantAdmin.ticketTypes.list.inactive')}
                     </span>
                   ) : null}
                   <span
@@ -218,7 +223,9 @@ export function TicketTypes() {
                       padding: '2px 6px',
                     }}
                   >
-                    Urgente exige prazo: {type.require_due_date_for_urgent ? 'Sim' : 'Não'}
+                    {t('tenantAdmin.ticketTypes.list.urgentRequiresDueDate', {
+                      value: t(`tenantAdmin.ticketTypes.list.${type.require_due_date_for_urgent ? 'yes' : 'no'}`),
+                    })}
                   </span>
                   <span
                     style={{
@@ -229,7 +236,9 @@ export function TicketTypes() {
                       padding: '2px 6px',
                     }}
                   >
-                    Aguardando exige categoria: {type.require_category_for_waiting ? 'Sim' : 'Não'}
+                    {t('tenantAdmin.ticketTypes.list.waitingRequiresCategory', {
+                      value: t(`tenantAdmin.ticketTypes.list.${type.require_category_for_waiting ? 'yes' : 'no'}`),
+                    })}
                   </span>
                 </div>
 
@@ -270,20 +279,21 @@ export function TicketTypes() {
         <div style={overlayStyle} onClick={() => setShowModal(false)}>
           <div style={modalStyle} onClick={(event) => event.stopPropagation()}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)', marginBottom: 12 }}>
-              {editingType ? 'Editar tipo de ticket' : 'Novo tipo de ticket'}
+              {t(`tenantAdmin.ticketTypes.modalTitle.${editingType ? 'edit' : 'new'}`)}
             </h2>
 
             <div style={{ display: 'grid', gap: 12 }}>
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Nome</span>
+                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.ticketTypes.fields.name')}</span>
                 <Input
                   value={form.name}
                   onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                  maxLength={60}
                 />
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Ícone</span>
+                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.ticketTypes.fields.icon')}</span>
                 <Input
                   value={form.icon}
                   onChange={(event) => setForm((prev) => ({ ...prev, icon: event.target.value.slice(0, 20) }))}
@@ -314,7 +324,7 @@ export function TicketTypes() {
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Cor</span>
+                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.ticketTypes.fields.color')}</span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0,1fr))', gap: 8 }}>
                   {COLOR_PRESETS.map((color) => (
                     <button
@@ -337,7 +347,7 @@ export function TicketTypes() {
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Ordem</span>
+                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.ticketTypes.list.order')}</span>
                 <Input
                   type="number"
                   value={String(form.sort_order)}
@@ -351,7 +361,7 @@ export function TicketTypes() {
                   checked={form.require_due_date_for_urgent}
                   onChange={(event) => setForm((prev) => ({ ...prev, require_due_date_for_urgent: event.target.checked }))}
                 />
-                Exigir prazo quando prioridade for urgente
+                {t('tenantAdmin.ticketTypes.fields.requireDueDateForUrgent')}
               </label>
 
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-2)' }}>
@@ -360,16 +370,18 @@ export function TicketTypes() {
                   checked={form.require_category_for_waiting}
                   onChange={(event) => setForm((prev) => ({ ...prev, require_category_for_waiting: event.target.checked }))}
                 />
-                Exigir categoria quando status for aguardando
+                {t('tenantAdmin.ticketTypes.fields.requireCategoryForWaiting')}
               </label>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <Button variant="secondary" onClick={() => setShowModal(false)}>
-                {t('tenantAdmin.common.cancel')}
+                {t('tenantAdmin.ticketTypes.modal.cancel')}
               </Button>
               <Button onClick={handleSubmit} loading={createMutation.isPending || updateMutation.isPending}>
-                {t('tenantAdmin.common.save')}
+                {createMutation.isPending || updateMutation.isPending
+                  ? t('tenantAdmin.ticketTypes.modal.saving')
+                  : t('tenantAdmin.ticketTypes.modal.save')}
               </Button>
             </div>
           </div>

@@ -18,7 +18,15 @@
       "noResults": "Sin resultados",
       "errorSave": "Error al guardar",
       "errorLoad": "Error al cargar datos",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "timeAgo": {
+        "justNow": "ahora",
+        "minutesAgo": "hace {{count}} min",
+        "hoursAgo": "hace {{count}}h",
+        "daysAgo": "hace {{count}} días"
+      }
     },
     "queueConfig": {
       "title": "Notificaciones de Cola",
@@ -35,6 +43,11 @@
       "expire24hClose": "Cerrar conversación",
       "expire24hKeepOpen": "Mantener abierta",
       "expire24hMessage": "Mensaje de cierre por inactividad",
+      "defaultPositionMessage": "Usted es el número {{position}} en la cola. Por favor espere, un agente lo atenderá pronto.",
+      "defaultAgentAssumeMessage": "¡Hola! Mi nombre es {{agent_name}}, continuaré su atención. ¿En qué puedo ayudarle?",
+      "defaultExpireMessage": "Hola, lamentablemente no pudimos atender en este momento. Por favor, contáctenos nuevamente cuando pueda.",
+      "positionPlaceholder": "Use {{position}} para mostrar la posición",
+      "agentNamePlaceholder": "Use {{agent_name}} para mostrar el nombre del agente",
       "expireActions": {
         "close": "Cerrar conversación",
         "notify": "Enviar mensaje y cerrar"
@@ -43,6 +56,22 @@
       "messages": {
         "saved": "Configuración guardada con éxito"
       }
+    },
+    "lgpd": {
+      "messages": {
+        "consentUpdated": "Consentimiento actualizado con éxito",
+        "exportDone": "Exportación completada",
+        "anonymized": "Datos anonimizados con éxito",
+        "retentionSaved": "Configuración de retención guardada"
+      },
+      "users": {
+        "empty": "No se encontraron usuarios",
+        "anonymizedBadge": "Anonimizado"
+      },
+      "userRequests": {
+        "empty": "No se encontraron solicitudes"
+      },
+      "system": "Sistema"
     },
     "nav": {
       "conversations": "Conversaciones",
@@ -213,7 +242,36 @@
         "closesAt": "Cierra a las {{time}}"
       },
       "save": "Guardar configuración",
-      "saved": "Horario de atención guardado"
+      "saved": "Horarios guardados con éxito",
+      "saveError": "Error al guardar horarios",
+      "shift": {
+        "morning": "Mañana",
+        "afternoon": "Tarde",
+        "fullDay": "Día completo",
+        "add": "Agregar turno",
+        "remove": "Eliminar"
+      },
+      "holiday": {
+        "noHolidays": "Sin feriados registrados",
+        "date": "Fecha",
+        "name": "Nombre",
+        "actions": "Acciones",
+        "closed": "Cerrado",
+        "special": "Horario especial",
+        "specialHours": "Horario especial: {{open}} a {{close}}",
+        "national": "Nacional ({{country}})",
+        "custom": "Personalizado",
+        "required": "Ingrese la fecha y el nombre del feriado.",
+        "specialHoursRequired": "Ingrese el horario de apertura y cierre para el horario especial.",
+        "importNational": "Importar feriados nacionales ({{country}})",
+        "imported": "Feriados importados: {{count}}"
+      },
+      "defaultAbsence": "¡Hola! Actualmente estamos fuera del horario de atención. Volveremos pronto.",
+      "always247": "Atención 24 horas, 7 días a la semana",
+      "holidays": "Feriados",
+      "addHoliday": "Agregar feriado",
+      "holidayDate": "Fecha del feriado",
+      "holidayName": "Nombre del feriado"
     },
     "bot": {
       "title": "Bot de Atención",
@@ -254,6 +312,32 @@
         "optionDeleted": "Opción eliminada"
       }
     },
+    "botMenu": {
+      "emptyOptions": "Agregue opciones para iniciar el flujo del bot."
+    },
+    "skills": {
+      "title": "Habilidades",
+      "subtitle": "Define qué opciones del bot puede atender cada agente",
+      "noBotOptions": "No hay opciones de bot registradas",
+      "noBotOptionsHint": "Configure el bot primero para definir las habilidades",
+      "goToBot": "Configurar Bot",
+      "agentNoSkills": "Sin habilidades definidas",
+      "assign": "Asignar habilidades",
+      "assignTitle": "Habilidades — {{name}}",
+      "assignHint": "Seleccione qué opciones del bot puede atender este agente",
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermedio",
+        "senior": "Sénior"
+      },
+      "agentsCount": "{{count}} agente(s)",
+      "saved": "Skill guardada con éxito",
+      "deleted": "Skill eliminada con éxito",
+      "agents": "Agentes",
+      "close": "Cerrar",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    },
     "users": {
       "title": "Usuarios",
       "subtitle": "Gestiona los miembros de tu equipo",
@@ -292,6 +376,12 @@
         "lastSeen": "Último acceso",
         "createdAt": "Miembro desde",
         "actions": "Acciones"
+      },
+      "pagination": {
+        "of": "de",
+        "page": "Página",
+        "previous": "Anterior",
+        "next": "Siguiente"
       },
       "messages": {
         "invited": "Usuario invitado con éxito",
@@ -343,6 +433,14 @@
       "clickToAdd": "Clic para agregar",
       "testSuccess": "Canal conectado",
       "testFail": "Error de conexión",
+      "deactivated": "Canal desactivado",
+      "activated": "Canal activado",
+      "columnChannel": "Canal",
+      "configure": "Configurar",
+      "deactivate": "Desactivar",
+      "activate": "Activar",
+      "smtpLabel": "SMTP - Correo corporativo",
+      "edit": "Editar",
       "types": {
         "whatsapp": "WhatsApp",
         "instagram": "Instagram DM",
@@ -379,6 +477,7 @@
       "content": "Contenido",
       "contentPlaceholder": "Texto que se insertará en el chat...",
       "category": "Categoría",
+      "availableVariables": "Variables disponibles:",
       "categories": {
         "greeting": "Saludo",
         "service": "Atención",
@@ -408,6 +507,7 @@
       "newTitle": "Nuevo template",
       "editTitle": "Editar template",
       "sync": "Sincronizar con Meta",
+      "syncNever": "Nunca sincronizado",
       "syncSuccess": "{{count}} template(s) sincronizado(s) con éxito",
       "syncError": "Error al sincronizar con Meta",
       "savedSuccess": "Template guardado con éxito",
@@ -487,11 +587,54 @@
         "category": "Categoría",
         "status": "Estado",
         "lastSync": "Última sync",
-        "actions": "Acciones"
+        "actions": "Acciones",
+        "showing": "Mostrando",
+        "of": "de",
+        "page": "Página"
       },
       "empty": {
         "title": "Sin plantillas",
         "subtitle": "Crea una plantilla o sincroniza con Meta"
+      }
+    },
+    "ticketTypes": {
+      "title": "Tipos de Ticket",
+      "subtitle": "Gestiona los tipos de ticket de tu workspace",
+      "new": "Nuevo tipo",
+      "saved": "Tipo guardado con éxito",
+      "deleted": "Tipo eliminado con éxito",
+      "deleteError": "Error al eliminar tipo",
+      "modalTitle": {
+        "new": "Nuevo tipo de ticket",
+        "edit": "Editar tipo de ticket"
+      },
+      "fields": {
+        "name": "Nombre",
+        "nameRequired": "Ingrese el nombre",
+        "nameTooLong": "Máximo 60 caracteres",
+        "description": "Descripción",
+        "color": "Color",
+        "icon": "Ícono",
+        "active": "Activo",
+        "requireDueDateForUrgent": "Exigir plazo cuando la prioridad sea urgente",
+        "requireCategoryForWaiting": "Exigir categoría cuando el estado sea en espera"
+      },
+      "list": {
+        "order": "Orden",
+        "name": "Nombre",
+        "status": "Estado",
+        "actions": "Acciones",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "yes": "Sí",
+        "no": "No",
+        "urgentRequiresDueDate": "Urgente exige plazo: {{value}}",
+        "waitingRequiresCategory": "En espera exige categoría: {{value}}"
+      },
+      "modal": {
+        "save": "Guardar",
+        "saving": "Guardando...",
+        "cancel": "Cancelar"
       }
     },
     "tags": {
@@ -514,6 +657,9 @@
         "added": "Etiqueta aplicada",
         "removed": "Etiqueta eliminada de la conversación"
       }
+    },
+    "conversationTags": {
+      "columnOrder": "Orden"
     },
     "closeConfig": {
       "title": "Cierre de Atención",
@@ -564,6 +710,14 @@
       "statusIndexed": "Indexado",
       "statusError": "Error",
       "sourceType": "Origen",
+      "sourceManual": "Manual",
+      "sourceUrl": "URL",
+      "sourceFile": "Archivo",
+      "assistantLabel": "Asistente",
+      "recommendationText": "Recomendamos usar un modelo con buena capacidad de razonamiento y contexto largo.",
+      "fileSizeLimit": "Máximo 10MB. Formatos aceptados: PDF, TXT, DOCX",
+      "columnStatus": "Estado",
+      "columnChunks": "Chunks",
       "noArticles": "No hay artículos en la base de conocimiento",
       "deleteConfirm": "¿Eliminar este artículo de la base de conocimiento?",
       "disabledNotice": "El Agente de IA está desactivado.",
@@ -584,6 +738,7 @@
       "editTitle": "Editar webhook",
       "empty": "No hay webhooks configurados",
       "name": "Nombre",
+      "namePlaceholder": "Mi webhook",
       "url": "URL de destino",
       "secret": "Secret (opcional)",
       "secretHint": "Utilizado para firmar el payload con HMAC-SHA256",
@@ -628,6 +783,8 @@
     "integrations": {
       "title": "Integraciones",
       "subtitle": "Conecta ZiraDesk con herramientas externas",
+      "hide": "Ocultar",
+      "show": "Mostrar",
       "redmine": {
         "title": "Redmine",
         "description": "Sincroniza tickets y comentarios con Redmine",
@@ -864,12 +1021,6 @@
       "rectification": "Rectificación",
       "external_anonymization": "Anonimización externa"
     },
-    "messages": {
-      "consentUpdated": "Consentimiento actualizado",
-      "retentionSaved": "Política de retención guardada",
-      "exportDone": "Exportación generada con éxito",
-      "anonymized": "Contacto anonimizado con éxito"
-    },
     "retention": {
       "title": "Política de retención",
       "subtitle": "Cuando está activa, la rutina diaria anonimiza contactos elegibles sin conversaciones abiertas.",
@@ -981,6 +1132,10 @@
       }
     },
     "messages": {
+      "consentUpdated": "Consentimiento actualizado",
+      "retentionSaved": "Política de retención guardada",
+      "exportDone": "Exportación generada con éxito",
+      "anonymized": "Contacto anonimizado con éxito",
       "userConsentUpdated": "Consentimiento del usuario actualizado",
       "userExportDone": "Exportación generada con éxito",
       "userAnonymized": "Usuario anonimizado con éxito",

@@ -619,7 +619,9 @@ export function BotMenu() {
                       </svg>
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.bot.noOptions')}</div>
-                    <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Adicione opções para iniciar o fluxo do bot.</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                      {t('tenantAdmin.botMenu.emptyOptions')}
+                    </div>
                   </div>
                 </div>
               ) : (

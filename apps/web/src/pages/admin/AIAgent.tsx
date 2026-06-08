@@ -33,9 +33,15 @@ function StatusBadge({ status, error }: { status: string; error?: string | null 
 }
 
 function SourceBadge({ type }: { type: string }) {
+  const { t } = useTranslation('admin');
+
   return (
     <span className="ai-source-badge">
-      {type === 'manual' ? 'Manual' : type === 'url' ? 'URL' : 'Arquivo'}
+      {type === 'manual'
+        ? t('tenantAdmin.aiAgent.sourceManual')
+        : type === 'url'
+          ? t('tenantAdmin.aiAgent.sourceUrl')
+          : t('tenantAdmin.aiAgent.sourceFile')}
     </span>
   );
 }
@@ -228,7 +234,7 @@ export function AIAgentPage() {
                   value={configForm.agent_name ?? ''}
                   onChange={(e) => handleConfigChange('agent_name', e.target.value)}
                   className="ai-input"
-                  placeholder="Assistente"
+                  placeholder={t('tenantAdmin.aiAgent.assistantLabel')}
                 />
               </div>
 
@@ -280,8 +286,7 @@ export function AIAgentPage() {
                   placeholder="0.5"
                 />
                 <small className="ai-field-help">
-                  Valores entre 0.4 e 0.6 são recomendados. Valores muito altos ({'>'}0.7) podem fazer a IA transferir
-                  mesmo quando tem conhecimento relevante.
+                  {t('tenantAdmin.aiAgent.recommendationText')}
                 </small>
               </div>
             </div>
@@ -395,7 +400,7 @@ export function AIAgentPage() {
                       <path d="M20 16.7A4 4 0 0 0 18 9h-1A5 5 0 1 0 5 13.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     <span>{selectedFile ? selectedFile.name : t('tenantAdmin.aiAgent.dropzone')}</span>
-                    <small>PDF, DOCX, TXT — max 10 MB</small>
+                    <small>{t('tenantAdmin.aiAgent.fileSizeLimit')}</small>
                   </div>
                   <input
                     ref={fileInputRef}
@@ -434,8 +439,8 @@ export function AIAgentPage() {
                 <div className="ai-articles-header">
                   <span>{t('tenantAdmin.aiAgent.title')}</span>
                   <span>{t('tenantAdmin.aiAgent.sourceType')}</span>
-                  <span>Status</span>
-                  <span>Chunks</span>
+                  <span>{t('tenantAdmin.aiAgent.columnStatus')}</span>
+                  <span>{t('tenantAdmin.aiAgent.columnChunks')}</span>
                   <span />
                 </div>
                 {articles.map((article) => (

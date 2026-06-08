@@ -599,7 +599,8 @@ export function Users() {
       {meta && meta.total_pages > 1 && (
         <div className="flex items-center justify-between text-sm" style={{ color: 'var(--txt-2)' }}>
           <span>
-            {((page - 1) * 20) + 1}–{Math.min(page * 20, meta.total)} de {meta.total}
+            {((page - 1) * 20) + 1}–{Math.min(page * 20, meta.total)}{' '}
+            {t('tenantAdmin.users.pagination.of')} {meta.total}
           </span>
           <div className="flex gap-2">
             <button
@@ -614,10 +615,11 @@ export function Users() {
                 cursor: page === 1 ? 'not-allowed' : 'pointer',
               }}
             >
-              ← Anterior
+              ← {t('tenantAdmin.users.pagination.previous')}
             </button>
             <span className="flex items-center px-2 text-xs">
-              Página {page} de {meta.total_pages}
+              {t('tenantAdmin.users.pagination.page')} {page}{' '}
+              {t('tenantAdmin.users.pagination.of')} {meta.total_pages}
             </span>
             <button
               type="button"
@@ -631,7 +633,7 @@ export function Users() {
                 cursor: page === meta.total_pages ? 'not-allowed' : 'pointer',
               }}
             >
-              Próxima →
+              {t('tenantAdmin.users.pagination.next')} →
             </button>
           </div>
         </div>

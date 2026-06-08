@@ -14,19 +14,18 @@ interface QueueConfigData {
   expire_24h_message: string;
 }
 
-const DEFAULT_CONFIG: QueueConfigData = {
-  queue_notifications_enabled: true,
-  queue_message_template: 'Você é o nº {{position}} na fila. Aguarde, em breve um agente irá atendê-lo.',
-  queue_throttle_seconds: 60,
-  agent_assume_template: 'Olá! Meu nome é {{agent_name}}, vou continuar seu atendimento. Em que posso ajudar?',
-  expire_24h_action: 'close',
-  expire_24h_message: 'Olá, infelizmente não conseguimos atender no momento. Por favor, entre em contato novamente quando puder.',
-};
-
 export function QueueConfig() {
   const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const defaultConfig: QueueConfigData = {
+    queue_notifications_enabled: true,
+    queue_message_template: t('tenantAdmin.queueConfig.defaultPositionMessage'),
+    queue_throttle_seconds: 60,
+    agent_assume_template: t('tenantAdmin.queueConfig.defaultAgentAssumeMessage'),
+    expire_24h_action: 'close',
+    expire_24h_message: t('tenantAdmin.queueConfig.defaultExpireMessage'),
+  };
 
   const { data, isLoading } = useQuery<QueueConfigData>({
     queryKey: ['queue-config'],
@@ -34,7 +33,7 @@ export function QueueConfig() {
   });
 
   const [form, setForm] = useState<QueueConfigData | null>(null);
-  const current = form ?? data ?? DEFAULT_CONFIG;
+  const current = form ?? data ?? defaultConfig;
 
   const mutation = useMutation({
     mutationFn: (payload: Partial<QueueConfigData>) => adminApi.updateQueueConfig(payload),
@@ -156,7 +155,7 @@ export function QueueConfig() {
                 style={textareaStyle}
                 value={current.queue_message_template}
                 onChange={(e) => handleChange('queue_message_template', e.target.value)}
-                placeholder="Você é o nº {{position}} na fila..."
+                placeholder={t('tenantAdmin.queueConfig.positionPlaceholder')}
               />
               <div style={hintStyle}>{t('tenantAdmin.queueConfig.positionMessageHint')}</div>
             </div>
@@ -182,7 +181,7 @@ export function QueueConfig() {
                 style={textareaStyle}
                 value={current.agent_assume_template}
                 onChange={(e) => handleChange('agent_assume_template', e.target.value)}
-                placeholder="Olá! Meu nome é {{agent_name}}..."
+                placeholder={t('tenantAdmin.queueConfig.agentNamePlaceholder')}
               />
               <div style={hintStyle}>{t('tenantAdmin.queueConfig.agentAssumeMessageHint')}</div>
             </div>

@@ -311,7 +311,9 @@ export function Integrations() {
                 }}
               />
               <Button variant="ghost" size="sm" type="button" onClick={() => setShowApiKey((v) => !v)}>
-                {showApiKey ? 'Ocultar' : 'Mostrar'}
+                {showApiKey
+                  ? t('tenantAdmin.integrations.hide')
+                  : t('tenantAdmin.integrations.show')}
               </Button>
             </div>
           </div>

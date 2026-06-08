@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   adminApi,
   type CreateWhatsAppTemplatePayload,
@@ -203,28 +204,29 @@ const MEDIA_RULES: Record<
   },
 };
 
-function formatRelativeSync(value: string | null, language: string, neverLabel: string): string {
+function formatRelativeSync(value: string | null, t: TFunction<'admin'>): string {
+  const neverLabel = t('tenantAdmin.templates.syncNever');
   if (!value) return neverLabel;
 
   const timestamp = new Date(value).getTime();
   if (!Number.isFinite(timestamp)) return neverLabel;
 
   const diffMs = Date.now() - timestamp;
-  const absMinutes = Math.max(1, Math.round(Math.abs(diffMs) / 60_000));
-  const prefix = language.startsWith('en') ? '' : language.startsWith('es') ? 'hace ' : 'há ';
-  const suffix = language.startsWith('en') ? ' ago' : '';
+  const elapsedMinutes = Math.abs(diffMs) / 60_000;
+  if (elapsedMinutes < 1) return t('tenantAdmin.common.timeAgo.justNow');
 
-  if (absMinutes < 60) return `${prefix}${absMinutes}min${suffix}`;
+  const absMinutes = Math.max(1, Math.round(elapsedMinutes));
+  if (absMinutes < 60) return t('tenantAdmin.common.timeAgo.minutesAgo', { count: absMinutes });
 
   const absHours = Math.round(absMinutes / 60);
-  if (absHours < 24) return `${prefix}${absHours}h${suffix}`;
+  if (absHours < 24) return t('tenantAdmin.common.timeAgo.hoursAgo', { count: absHours });
 
   const absDays = Math.round(absHours / 24);
-  return `${prefix}${absDays}d${suffix}`;
+  return t('tenantAdmin.common.timeAgo.daysAgo', { count: absDays });
 }
 
 export function Templates() {
-  const { t, i18n } = useTranslation('admin');
+  const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -1074,11 +1076,7 @@ export function Templates() {
                             </td>
                             <td className="templates-col-sync">
                               <span className="templates-sync-time">
-                                {formatRelativeSync(
-                                  template.last_synced_at,
-                                  i18n.language,
-                                  t('tenantAdmin.templates.syncNever', { defaultValue: 'nunca' }),
-                                )}
+                                {formatRelativeSync(template.last_synced_at, t)}
                               </span>
                             </td>
                             <td className="templates-col-actions">
@@ -1116,12 +1114,10 @@ export function Templates() {
 
                 <div className="templates-tbl-foot">
                   <span>
-                    {t('tenantAdmin.templates.table.showing', {
-                      defaultValue: 'Mostrando',
-                    })}{' '}
+                    {t('tenantAdmin.templates.table.showing')}{' '}
                     <strong>{(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, activeChannelTemplates.length)}</strong>
                     {' '}
-                    {t('tenantAdmin.templates.table.of', { defaultValue: 'de' })}
+                    {t('tenantAdmin.templates.table.of')}
                     {' '}
                     <strong>{activeChannelTemplates.length}</strong>
                   </span>
@@ -1132,7 +1128,7 @@ export function Templates() {
                         className="templates-pagi-btn"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                        aria-label={t('tenantAdmin.common.previous', { defaultValue: 'Anterior' })}
+                        aria-label={t('tenantAdmin.common.previous')}
                       >
                         ‹
                       </button>
@@ -1142,7 +1138,7 @@ export function Templates() {
                           type="button"
                           className={`templates-pagi-btn${page === currentPage ? ' active' : ''}`}
                           onClick={() => setCurrentPage(page)}
-                          aria-label={`${t('tenantAdmin.templates.table.page', { defaultValue: 'Página' })} ${page}`}
+                          aria-label={`${t('tenantAdmin.templates.table.page')} ${page}`}
                         >
                           {page}
                         </button>
@@ -1152,7 +1148,7 @@ export function Templates() {
                         className="templates-pagi-btn"
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                        aria-label={t('tenantAdmin.common.next', { defaultValue: 'Próxima' })}
+                        aria-label={t('tenantAdmin.common.next')}
                       >
                         ›
                       </button>

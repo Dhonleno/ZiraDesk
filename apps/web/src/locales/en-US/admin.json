@@ -18,7 +18,15 @@
       "noResults": "No results found",
       "errorSave": "Error saving",
       "errorLoad": "Error loading data",
-      "close": "Close"
+      "close": "Close",
+      "previous": "Previous",
+      "next": "Next",
+      "timeAgo": {
+        "justNow": "just now",
+        "minutesAgo": "{{count}} min ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}} days ago"
+      }
     },
     "queueConfig": {
       "title": "Queue Notifications",
@@ -35,6 +43,11 @@
       "expire24hClose": "Close conversation",
       "expire24hKeepOpen": "Keep open",
       "expire24hMessage": "Inactivity closure message",
+      "defaultPositionMessage": "You are number {{position}} in the queue. Please wait, an agent will assist you shortly.",
+      "defaultAgentAssumeMessage": "Hello! My name is {{agent_name}}, I will continue your service. How can I help you?",
+      "defaultExpireMessage": "Hello, unfortunately we were unable to assist at this time. Please contact us again when you can.",
+      "positionPlaceholder": "Use {{position}} to display position",
+      "agentNamePlaceholder": "Use {{agent_name}} to display agent name",
       "expireActions": {
         "close": "Close conversation",
         "notify": "Send message and close"
@@ -43,6 +56,22 @@
       "messages": {
         "saved": "Settings saved successfully"
       }
+    },
+    "lgpd": {
+      "messages": {
+        "consentUpdated": "Consent updated successfully",
+        "exportDone": "Export completed",
+        "anonymized": "Data anonymized successfully",
+        "retentionSaved": "Retention settings saved"
+      },
+      "users": {
+        "empty": "No users found",
+        "anonymizedBadge": "Anonymized"
+      },
+      "userRequests": {
+        "empty": "No requests found"
+      },
+      "system": "System"
     },
     "nav": {
       "conversations": "Conversations",
@@ -213,7 +242,36 @@
         "closesAt": "Closes at {{time}}"
       },
       "save": "Save settings",
-      "saved": "Business hours saved"
+      "saved": "Business hours saved",
+      "saveError": "Error saving hours",
+      "shift": {
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "fullDay": "Full day",
+        "add": "Add shift",
+        "remove": "Remove"
+      },
+      "holiday": {
+        "noHolidays": "No holidays registered",
+        "date": "Date",
+        "name": "Name",
+        "actions": "Actions",
+        "closed": "Closed",
+        "special": "Special hours",
+        "specialHours": "Special hours: {{open}} to {{close}}",
+        "national": "National ({{country}})",
+        "custom": "Custom",
+        "required": "Enter the holiday date and name.",
+        "specialHoursRequired": "Enter opening and closing times for special hours.",
+        "importNational": "Import national holidays ({{country}})",
+        "imported": "Holidays imported: {{count}}"
+      },
+      "defaultAbsence": "Hello! We are currently outside business hours. We will be back soon.",
+      "always247": "24/7 attendance",
+      "holidays": "Holidays",
+      "addHoliday": "Add holiday",
+      "holidayDate": "Holiday date",
+      "holidayName": "Holiday name"
     },
     "bot": {
       "title": "Support Bot",
@@ -254,6 +312,32 @@
         "optionDeleted": "Option removed"
       }
     },
+    "botMenu": {
+      "emptyOptions": "Add options to start the bot flow."
+    },
+    "skills": {
+      "title": "Skills",
+      "subtitle": "Define which bot options each agent can handle",
+      "noBotOptions": "No bot options registered",
+      "noBotOptionsHint": "Configure the bot first to define skills",
+      "goToBot": "Configure Bot",
+      "agentNoSkills": "No skills defined",
+      "assign": "Assign skills",
+      "assignTitle": "Skills — {{name}}",
+      "assignHint": "Select which bot options this agent can handle",
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermediate",
+        "senior": "Senior"
+      },
+      "agentsCount": "{{count}} agent(s)",
+      "saved": "Skill saved successfully",
+      "deleted": "Skill removed successfully",
+      "agents": "Agents",
+      "close": "Close",
+      "save": "Save",
+      "saving": "Saving..."
+    },
     "users": {
       "title": "Users",
       "subtitle": "Manage your team members",
@@ -292,6 +376,12 @@
         "lastSeen": "Last seen",
         "createdAt": "Member since",
         "actions": "Actions"
+      },
+      "pagination": {
+        "of": "of",
+        "page": "Page",
+        "previous": "Previous",
+        "next": "Next"
       },
       "messages": {
         "invited": "User invited successfully",
@@ -343,6 +433,14 @@
       "clickToAdd": "Click to add",
       "testSuccess": "Channel connected",
       "testFail": "Connection failed",
+      "deactivated": "Channel deactivated",
+      "activated": "Channel activated",
+      "columnChannel": "Channel",
+      "configure": "Configure",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "smtpLabel": "SMTP - Corporate email",
+      "edit": "Edit",
       "types": {
         "whatsapp": "WhatsApp",
         "instagram": "Instagram DM",
@@ -379,6 +477,7 @@
       "content": "Content",
       "contentPlaceholder": "Text that will be inserted into the chat...",
       "category": "Category",
+      "availableVariables": "Available variables:",
       "categories": {
         "greeting": "Greeting",
         "service": "Service",
@@ -408,6 +507,7 @@
       "newTitle": "New template",
       "editTitle": "Edit template",
       "sync": "Sync with Meta",
+      "syncNever": "Never synced",
       "syncSuccess": "{{count}} template(s) synced successfully",
       "syncError": "Error syncing with Meta",
       "savedSuccess": "Template saved successfully",
@@ -487,11 +587,54 @@
         "category": "Category",
         "status": "Status",
         "lastSync": "Last sync",
-        "actions": "Actions"
+        "actions": "Actions",
+        "showing": "Showing",
+        "of": "of",
+        "page": "Page"
       },
       "empty": {
         "title": "No templates found",
         "subtitle": "Create a template or sync with Meta"
+      }
+    },
+    "ticketTypes": {
+      "title": "Ticket Types",
+      "subtitle": "Manage your workspace ticket types",
+      "new": "New type",
+      "saved": "Type saved successfully",
+      "deleted": "Type removed successfully",
+      "deleteError": "Error removing type",
+      "modalTitle": {
+        "new": "New ticket type",
+        "edit": "Edit ticket type"
+      },
+      "fields": {
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "nameTooLong": "Maximum 60 characters",
+        "description": "Description",
+        "color": "Color",
+        "icon": "Icon",
+        "active": "Active",
+        "requireDueDateForUrgent": "Require a due date when priority is urgent",
+        "requireCategoryForWaiting": "Require a category when status is waiting"
+      },
+      "list": {
+        "order": "Order",
+        "name": "Name",
+        "status": "Status",
+        "actions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive",
+        "yes": "Yes",
+        "no": "No",
+        "urgentRequiresDueDate": "Urgent requires due date: {{value}}",
+        "waitingRequiresCategory": "Waiting requires category: {{value}}"
+      },
+      "modal": {
+        "save": "Save",
+        "saving": "Saving...",
+        "cancel": "Cancel"
       }
     },
     "tags": {
@@ -514,6 +657,9 @@
         "added": "Tag applied",
         "removed": "Tag removed from conversation"
       }
+    },
+    "conversationTags": {
+      "columnOrder": "Order"
     },
     "closeConfig": {
       "title": "Conversation Closing",
@@ -564,6 +710,14 @@
       "statusIndexed": "Indexed",
       "statusError": "Error",
       "sourceType": "Source",
+      "sourceManual": "Manual",
+      "sourceUrl": "URL",
+      "sourceFile": "File",
+      "assistantLabel": "Assistant",
+      "recommendationText": "We recommend using a model with good reasoning capability and long context.",
+      "fileSizeLimit": "Maximum 10MB. Accepted formats: PDF, TXT, DOCX",
+      "columnStatus": "Status",
+      "columnChunks": "Chunks",
       "noArticles": "No articles in the knowledge base",
       "deleteConfirm": "Remove this article from the knowledge base?",
       "disabledNotice": "AI Agent is disabled.",
@@ -584,6 +738,7 @@
       "editTitle": "Edit webhook",
       "empty": "No webhooks configured",
       "name": "Name",
+      "namePlaceholder": "My webhook",
       "url": "Destination URL",
       "secret": "Secret (optional)",
       "secretHint": "Used to sign the payload with HMAC-SHA256",
@@ -628,6 +783,8 @@
     "integrations": {
       "title": "Integrations",
       "subtitle": "Connect ZiraDesk with external tools",
+      "hide": "Hide",
+      "show": "Show",
       "redmine": {
         "title": "Redmine",
         "description": "Sync tickets and comments with Redmine",
@@ -864,12 +1021,6 @@
       "rectification": "Rectification",
       "external_anonymization": "External anonymization"
     },
-    "messages": {
-      "consentUpdated": "Consent updated",
-      "retentionSaved": "Retention policy saved",
-      "exportDone": "Export generated successfully",
-      "anonymized": "Contact anonymized successfully"
-    },
     "retention": {
       "title": "Retention policy",
       "subtitle": "When enabled, the daily routine anonymizes eligible contacts with no open conversations.",
@@ -981,6 +1132,10 @@
       }
     },
     "messages": {
+      "consentUpdated": "Consent updated",
+      "retentionSaved": "Retention policy saved",
+      "exportDone": "Export generated successfully",
+      "anonymized": "Contact anonymized successfully",
       "userConsentUpdated": "User consent updated",
       "userExportDone": "Export generated successfully",
       "userAnonymized": "User anonymized successfully",

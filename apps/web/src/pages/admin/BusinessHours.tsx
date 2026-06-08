@@ -121,7 +121,7 @@ function ShiftRow({
           onClick={() => onAddShift(day.dayOfWeek)}
           disabled={!day.isActive}
         >
-          Adicionar turno
+          {t('tenantAdmin.businessHours.shift.add')}
         </Button>
       </div>
 
@@ -152,7 +152,7 @@ function ShiftRow({
                 onClick={() => onRemoveShift(day.dayOfWeek, shiftIndex)}
                 disabled={day.shifts.length <= 1}
               >
-                Remover
+                {t('tenantAdmin.businessHours.shift.remove')}
               </Button>
             </div>
           ))}
@@ -169,6 +169,8 @@ function HolidayRow({
   holiday: BusinessHoursHoliday;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useTranslation('admin');
+
   return (
     <div
       style={{
@@ -187,14 +189,20 @@ function HolidayRow({
         </div>
         <div style={{ color: 'var(--txt-2)', fontSize: 12 }}>
           {holiday.behavior === 'closed'
-            ? 'Fechado'
-            : `Horário especial: ${holiday.openTime ?? '--:--'} às ${holiday.closeTime ?? '--:--'}`}
-          {holiday.isNational ? ` · Nacional (${holiday.country ?? '--'})` : ' · Personalizado'}
+            ? t('tenantAdmin.businessHours.holiday.closed')
+            : t('tenantAdmin.businessHours.holiday.specialHours', {
+                open: holiday.openTime ?? '--:--',
+                close: holiday.closeTime ?? '--:--',
+              })}
+          {' · '}
+          {holiday.isNational
+            ? t('tenantAdmin.businessHours.holiday.national', { country: holiday.country ?? '--' })
+            : t('tenantAdmin.businessHours.holiday.custom')}
         </div>
       </div>
       {!holiday.isNational && (
         <Button type="button" variant="ghost" onClick={() => onRemove(holiday.id)}>
-          Remover
+          {t('tenantAdmin.businessHours.shift.remove')}
         </Button>
       )}
     </div>
@@ -210,9 +218,7 @@ export function BusinessHours() {
   const [is24x7, setIs24x7] = useState(false);
   const [timezone, setTimezone] = useState('America/Sao_Paulo');
   const [awayMessageEnabled, setAwayMessageEnabled] = useState(true);
-  const [awayMessage, setAwayMessage] = useState(
-    'Olá, no momento estamos fora do horário de atendimento. Retornaremos em breve.',
-  );
+  const [awayMessage, setAwayMessage] = useState(() => t('tenantAdmin.businessHours.defaultAbsence'));
   const [holidayDraft, setHolidayDraft] = useState<HolidayDraft>({
     date: '',
     name: '',
@@ -247,11 +253,8 @@ export function BusinessHours() {
     if (!settings) return;
     setTimezone(settings.timezone ?? 'America/Sao_Paulo');
     setAwayMessageEnabled(settings.away_message_enabled ?? true);
-    setAwayMessage(
-      settings.away_message ??
-        'Olá, no momento estamos fora do horário de atendimento. Retornaremos em breve.',
-    );
-  }, [settings]);
+    setAwayMessage(settings.away_message ?? t('tenantAdmin.businessHours.defaultAbsence'));
+  }, [settings, t]);
 
   const saveScheduleMutation = useMutation({
     mutationFn: (payload: UpdateBusinessHoursPayload) => adminApi.businessHours.update(payload),
@@ -260,7 +263,7 @@ export function BusinessHours() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'business-hours-status'] });
       toast.success(t('tenantAdmin.businessHours.saved'));
     },
-    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+    onError: () => toast.error(t('tenantAdmin.businessHours.saveError')),
   });
 
   const saveSettingsMutation = useMutation({
@@ -274,16 +277,16 @@ export function BusinessHours() {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
       toast.success(t('tenantAdmin.businessHours.saved'));
     },
-    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+    onError: () => toast.error(t('tenantAdmin.businessHours.saveError')),
   });
 
   const importHolidaysMutation = useMutation({
     mutationFn: (country: 'BR' | 'US' | 'PT' | 'AR') => adminApi.businessHours.importNationalHolidays(country),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'business-hours'] });
-      toast.success(`Feriados importados: ${data.imported}`);
+      toast.success(t('tenantAdmin.businessHours.holiday.imported', { count: data.imported }));
     },
-    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
+    onError: () => toast.error(t('tenantAdmin.businessHours.saveError')),
   });
 
   const onToggleActive = (dayOfWeek: number, value: boolean) => {
@@ -345,11 +348,11 @@ export function BusinessHours() {
 
   const addHoliday = () => {
     if (!holidayDraft.date || !holidayDraft.name.trim()) {
-      toast.error('Preencha data e nome do feriado.');
+      toast.error(t('tenantAdmin.businessHours.holiday.required'));
       return;
     }
     if (holidayDraft.behavior === 'custom_hours' && (!holidayDraft.openTime || !holidayDraft.closeTime)) {
-      toast.error('Informe horário de abertura e fechamento para horário especial.');
+      toast.error(t('tenantAdmin.businessHours.holiday.specialHoursRequired'));
       return;
     }
 
@@ -428,7 +431,7 @@ export function BusinessHours() {
               type="button"
               role="switch"
               aria-checked={is24x7}
-              aria-label="Atendimento 24x7 (global)"
+              aria-label={t('tenantAdmin.businessHours.always247')}
               onClick={() => setIs24x7((current) => !current)}
               style={{
                 border: 'none',
@@ -464,7 +467,7 @@ export function BusinessHours() {
                 />
               </span>
             </button>
-            Atendimento 24x7 (global)
+            {t('tenantAdmin.businessHours.always247')}
           </div>
 
           <label style={{ display: 'grid', gap: 8 }}>
@@ -513,7 +516,7 @@ export function BusinessHours() {
 
           <div style={{ display: 'grid', gap: 12 }}>
             <h2 style={{ color: 'var(--txt)', fontSize: 15, fontWeight: 700, margin: 0 }}>
-              Feriados
+              {t('tenantAdmin.businessHours.holidays')}
             </h2>
 
             <div style={{ display: 'grid', gap: 10 }}>
@@ -521,15 +524,20 @@ export function BusinessHours() {
                 <HolidayRow key={holiday.id} holiday={holiday} onRemove={removeHoliday} />
               ))}
               {!holidays.length && (
-                <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>Nenhum feriado configurado.</div>
+                <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>
+                  {t('tenantAdmin.businessHours.holiday.noHolidays')}
+                </div>
               )}
             </div>
 
             <div style={{ display: 'grid', gap: 10, border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 12 }}>
-              <div style={{ color: 'var(--txt-2)', fontSize: 12, fontWeight: 600 }}>Adicionar feriado</div>
+              <div style={{ color: 'var(--txt-2)', fontSize: 12, fontWeight: 600 }}>
+                {t('tenantAdmin.businessHours.addHoliday')}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 160px 130px 130px auto', gap: 8 }}>
                 <input
                   type="date"
+                  aria-label={t('tenantAdmin.businessHours.holidayDate')}
                   value={holidayDraft.date}
                   onChange={(event) => setHolidayDraft((current) => ({ ...current, date: event.target.value }))}
                   className="zd-input"
@@ -537,7 +545,7 @@ export function BusinessHours() {
                 <input
                   type="text"
                   value={holidayDraft.name}
-                  placeholder="Nome do feriado"
+                  placeholder={t('tenantAdmin.businessHours.holidayName')}
                   onChange={(event) => setHolidayDraft((current) => ({ ...current, name: event.target.value }))}
                   className="zd-input"
                 />
@@ -551,8 +559,8 @@ export function BusinessHours() {
                   }
                   style={{ ...selectStyle, height: 36 }}
                 >
-                  <option value="closed">Fechado</option>
-                  <option value="custom_hours">Horário especial</option>
+                  <option value="closed">{t('tenantAdmin.businessHours.holiday.closed')}</option>
+                  <option value="custom_hours">{t('tenantAdmin.businessHours.holiday.special')}</option>
                 </select>
                 <input
                   type="time"
@@ -569,7 +577,7 @@ export function BusinessHours() {
                   style={timeInputStyle}
                 />
                 <Button type="button" onClick={addHoliday} loading={saveScheduleMutation.isPending}>
-                  Adicionar
+                  {t('tenantAdmin.businessHours.addHoliday')}
                 </Button>
               </div>
             </div>
@@ -581,7 +589,7 @@ export function BusinessHours() {
                 onClick={() => importHolidaysMutation.mutate('BR')}
                 loading={importHolidaysMutation.isPending}
               >
-                Importar feriados nacionais (BR)
+                {t('tenantAdmin.businessHours.holiday.importNational', { country: 'BR' })}
               </Button>
               <Button type="button" onClick={saveSchedule} loading={saveScheduleMutation.isPending}>
                 {saveScheduleMutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.businessHours.save')}

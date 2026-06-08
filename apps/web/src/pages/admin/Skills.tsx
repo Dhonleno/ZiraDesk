@@ -272,9 +272,9 @@ export function Skills() {
       setInitialSelectedSkillIds(new Set());
       setSkillLevelsById({});
       setInitialLevelsById({});
-      toast.success(t('tenantAdmin.skills.assign'));
+      toast.success(t('tenantAdmin.skills.saved'));
     },
-    onError: () => toast.error('Erro ao salvar habilidades do agente'),
+    onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
   const openAgentModal = async (agent: AgentWithSkills) => {
@@ -292,7 +292,7 @@ export function Skills() {
       setInitialSelectedSkillIds(new Set(selectedIds));
       setSelectedSkillIds(new Set(selectedIds));
     } catch {
-      toast.error('Erro ao carregar habilidades do agente');
+      toast.error(t('tenantAdmin.common.errorLoad'));
       setSelectedAgent(null);
     } finally {
       setLoadingAgentSkills(false);
@@ -375,7 +375,9 @@ export function Skills() {
         </section>
 
         <section className="rounded-xl p-4" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-          <h2 style={{ margin: '0 0 12px', fontSize: 15, color: 'var(--txt)' }}>Agentes</h2>
+          <h2 style={{ margin: '0 0 12px', fontSize: 15, color: 'var(--txt)' }}>
+            {t('tenantAdmin.skills.agents')}
+          </h2>
           <div style={{ display: 'grid', gap: 8 }}>
             {loadingAgents ? (
               Array.from({ length: 6 }).map((_, index) => (
@@ -492,7 +494,7 @@ export function Skills() {
               fontSize: 12,
             }}
           >
-            Fechar
+            {t('tenantAdmin.skills.close')}
           </button>
           <button
             onClick={() => saveAgentSkillsMutation.mutate()}
@@ -509,7 +511,9 @@ export function Skills() {
               opacity: saveAgentSkillsMutation.isPending ? 0.7 : 1,
             }}
           >
-            {saveAgentSkillsMutation.isPending ? 'Salvando...' : 'Salvar'}
+            {saveAgentSkillsMutation.isPending
+              ? t('tenantAdmin.skills.saving')
+              : t('tenantAdmin.skills.save')}
           </button>
         </div>
       </Modal>

@@ -374,7 +374,7 @@ export function QuickReplies() {
                   }}
                 />
                 <div className="variables-hint">
-                  <span>Variáveis disponíveis:</span>
+                  <span>{t('tenantAdmin.quickReplies.availableVariables')}</span>
                   {QUICK_REPLY_VARIABLES.map((variable) => (
                     <button
                       key={variable}

@@ -289,7 +289,9 @@ export function ConversationTags() {
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>Ordem</span>
+                <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+                  {t('tenantAdmin.conversationTags.columnOrder')}
+                </span>
                 <Input
                   type="number"
                   value={String(form.sort_order)}

@@ -335,7 +335,7 @@ function ContactsTab() {
     mutationFn: (params: { contactId: string; status: ConsentStatus }) =>
       contactsApi.updateLgpdConsent(params.contactId, { status: params.status, source: 'admin_lgpd_panel' }),
     onSuccess: async () => {
-      toast.success(t('lgpd.messages.consentUpdated'));
+      toast.success(t('tenantAdmin.lgpd.messages.consentUpdated'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'contacts'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'requests'] });
     },
@@ -368,7 +368,7 @@ function ContactsTab() {
       const data = await contactsApi.exportLgpdData(contact.id, { include_messages: true });
       const safeName = toSafeFileName(contact.name || 'contato');
       downloadJsonFile(`lgpd-${safeName}-${contact.id.slice(0, 8)}.json`, data);
-      toast.success(t('lgpd.messages.exportDone'));
+      toast.success(t('tenantAdmin.lgpd.messages.exportDone'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'contacts'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'requests'] });
     } catch {
@@ -386,7 +386,7 @@ function ContactsTab() {
         reason: typedReason.trim() || t('lgpd.anonymizeDefaultReason'),
         redact_messages: true,
       });
-      toast.success(t('lgpd.messages.anonymized'));
+      toast.success(t('tenantAdmin.lgpd.messages.anonymized'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'contacts'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'requests'] });
     } catch {
@@ -537,7 +537,7 @@ function ContactsTab() {
                       <td style={{ padding: '10px 12px', color: 'var(--txt)' }}>{req.contact_name ?? '—'}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{t(`lgpd.requestTypes.${req.request_type}`, { defaultValue: req.request_type })}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{req.status}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{req.requested_by_name ?? 'Sistema'}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{req.requested_by_name ?? t('tenantAdmin.lgpd.system')}</td>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           {isRectification && diffEntries.length > 0 && (
@@ -628,7 +628,7 @@ function UsersTab() {
     mutationFn: (params: { userId: string; status: ConsentStatus }) =>
       adminApi.updateUserLgpdConsent(params.userId, { status: params.status, source: 'admin_lgpd_panel' }),
     onSuccess: async () => {
-      toast.success(t('lgpd.messages.consentUpdated'));
+      toast.success(t('tenantAdmin.lgpd.messages.consentUpdated'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'users'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'userRequests'] });
     },
@@ -640,7 +640,7 @@ function UsersTab() {
       const data = await adminApi.exportUserLgpdData(user.id, { include_audit_logs: true });
       const safeName = toSafeFileName(user.name || 'usuario');
       downloadJsonFile(`lgpd-user-${safeName}-${user.id.slice(0, 8)}.json`, data);
-      toast.success(t('lgpd.messages.exportDone'));
+      toast.success(t('tenantAdmin.lgpd.messages.exportDone'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'users'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'userRequests'] });
     } catch {
@@ -697,7 +697,7 @@ function UsersTab() {
               {usersQuery.isLoading ? (
                 <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('lgpd.loading')}</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('lgpd.users.empty')}</td></tr>
+                <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('tenantAdmin.lgpd.users.empty')}</td></tr>
               ) : users.map((user) => {
                 const currentStatus = (selectedStatus[user.id] ?? user.lgpd_consent_status ?? 'pending') as ConsentStatus;
                 const isAnonymized = Boolean(user.lgpd_anonymized_at);
@@ -707,7 +707,7 @@ function UsersTab() {
                       {user.name}
                       {isAnonymized && (
                         <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 999, background: 'var(--bg-4)', color: 'var(--txt-3)' }}>
-                          {t('lgpd.users.anonymizedBadge')}
+                          {t('tenantAdmin.lgpd.users.anonymizedBadge')}
                         </span>
                       )}
                     </td>
@@ -780,7 +780,7 @@ function UsersTab() {
               {userRequestsQuery.isLoading ? (
                 <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('lgpd.loading')}</td></tr>
               ) : userRequests.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('lgpd.userRequests.empty')}</td></tr>
+                <tr><td colSpan={5} style={{ padding: 16, color: 'var(--txt-3)' }}>{t('tenantAdmin.lgpd.userRequests.empty')}</td></tr>
               ) : userRequests.map((req) => (
                 <tr key={req.id} style={{ borderBottom: '1px solid var(--line)' }}>
                   <td style={{ padding: '10px 12px', color: 'var(--txt-2)', fontFamily: 'var(--mono)', fontSize: 11 }}>{new Date(req.requested_at).toLocaleString()}</td>
@@ -797,7 +797,7 @@ function UsersTab() {
                       {req.status}
                     </span>
                   </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{req.requested_by_name ?? 'Sistema'}</td>
+                  <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>{req.requested_by_name ?? t('tenantAdmin.lgpd.system')}</td>
                 </tr>
               ))}
             </tbody>
@@ -972,7 +972,7 @@ function ExternalRequestsTab() {
                         : '—'}
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--txt-2)' }}>
-                      {req.requested_by_name ?? 'Sistema'}
+                      {req.requested_by_name ?? t('tenantAdmin.lgpd.system')}
                     </td>
                   </tr>
                 );
@@ -1018,7 +1018,7 @@ export function Lgpd() {
   const saveRetentionMutation = useMutation({
     mutationFn: () => adminApi.updateSettings({ lgpd_retention_enabled: retentionEnabled, lgpd_retention_days: retentionDays }),
     onSuccess: async () => {
-      toast.success(t('lgpd.messages.retentionSaved'));
+      toast.success(t('tenantAdmin.lgpd.messages.retentionSaved'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
