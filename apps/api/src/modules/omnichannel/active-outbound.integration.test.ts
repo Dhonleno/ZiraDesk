@@ -254,6 +254,25 @@ describe('Envio ativo integration', () => {
     expect(parts).toBe('23:59:59');
   });
 
+  it('mantém waiting_expires_at nulo com settings mode=unlimited', async () => {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { settings: { active_outbound_validity_mode: 'unlimited' } },
+    });
+    const contactId = await createContact(tenant.schemaName);
+    const channelId = await createChannel(tenant.schemaName, 'email');
+
+    const response = await createTestApp()
+      .post('/api/omnichannel/active-outbound')
+      .set(authHeader(tenant))
+      .send({ contactId, channelId, useTemplate: false, subject: 'Sem limite', message: 'Validade ilimitada' });
+
+    expect(response.status).toBe(201);
+    const conversation = await getConversation(tenant.schemaName, response.body.data.id);
+    expect(conversation.waiting_expires_at).toBeNull();
+    expect(conversation.status).toBe('waiting');
+  });
+
   it('cria audit_log após sucesso', async () => {
     const contactId = await createContact(tenant.schemaName);
     const channelId = await createChannel(tenant.schemaName, 'email');

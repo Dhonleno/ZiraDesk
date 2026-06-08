@@ -48,8 +48,10 @@ async function deleteOldLogos(tenantId: string, keepKey: string): Promise<void> 
   );
 }
 
-function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' {
-  return value === 'hours' ? 'hours' : DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE;
+function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' | 'unlimited' {
+  if (value === 'hours') return 'hours';
+  if (value === 'unlimited') return 'unlimited';
+  return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE;
 }
 
 function resolveActiveOutboundValidityHours(value: unknown): number {

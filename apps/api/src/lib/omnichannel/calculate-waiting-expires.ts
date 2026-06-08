@@ -6,11 +6,14 @@ export interface TenantSettings {
   active_outbound_validity_hours?: unknown;
 }
 
-type ValidityMode = 'end_of_day' | 'hours';
+type ValidityMode = 'end_of_day' | 'hours' | 'unlimited';
 
 function resolveMode(settings: TenantSettings): ValidityMode {
   const rawMode = settings.outbound_validity_mode ?? settings.active_outbound_validity_mode;
-  return rawMode === 'end_of_day' ? 'end_of_day' : 'hours';
+  if (rawMode === 'end_of_day') return 'end_of_day';
+  if (rawMode === 'hours') return 'hours';
+  if (rawMode === 'unlimited') return 'unlimited';
+  return 'hours';
 }
 
 function resolveHours(settings: TenantSettings): number {
@@ -64,8 +67,10 @@ function zonedEndOfDayToUtc(now: Date, timeZone: string): Date {
   return utcDate;
 }
 
-export function calculateWaitingExpiresAt(settings: TenantSettings, now = new Date()): Date {
+export function calculateWaitingExpiresAt(settings: TenantSettings, now = new Date()): Date | null {
   const mode = resolveMode(settings);
+  if (mode === 'unlimited') return null;
+
   if (mode === 'end_of_day') {
     return zonedEndOfDayToUtc(now, getTimeZone(settings));
   }
