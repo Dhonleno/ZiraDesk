@@ -396,7 +396,7 @@
     },
     "templates": {
       "title": "Templates WhatsApp",
-      "subtitle": "Gerencie os templates aprovados pela Meta",
+      "subtitle": "Crie, acompanhe e sincronize templates com a Meta",
       "new": "Novo template",
       "newTitle": "Novo template",
       "editTitle": "Editar template",
@@ -404,6 +404,7 @@
       "syncSuccess": "{{count}} template(s) sincronizado(s) com sucesso",
       "syncError": "Erro ao sincronizar com a Meta",
       "savedSuccess": "Template salvo com sucesso",
+      "submittedSuccess": "Template enviado à Meta para análise",
       "deletedSuccess": "Template removido com sucesso",
       "deleteTitle": "Remover template",
       "deleteConfirm": "Tem certeza que deseja remover este template?",
@@ -422,20 +423,59 @@
         "AUTHENTICATION": "Autenticação"
       },
       "statusLabel": "Status",
+      "pendingReview": "Será enviado para análise",
+      "statusManagedHint": "Definido e atualizado pela Meta",
       "status": {
         "approved": "Aprovado",
         "pending": "Pendente",
-        "rejected": "Rejeitado"
+        "rejected": "Rejeitado",
+        "paused": "Pausado",
+        "disabled": "Desativado",
+        "in_appeal": "Em recurso",
+        "pending_deletion": "Exclusão pendente"
       },
       "body": "Corpo da mensagem",
       "bodyRequired": "Informe o corpo da mensagem",
+      "bodyTooLong": "O corpo deve ter no máximo 1.024 caracteres",
+      "bodyVariablesHint": "Use variáveis sequenciais: {{1}}, {{2}}, {{3}}",
+      "variablesFormat": "Use variáveis sequenciais: {{1}}, {{2}}, {{3}}",
       "header": "Cabeçalho (opcional)",
+      "headerRequired": "Informe o texto do cabeçalho",
+      "headerTooLong": "O cabeçalho deve ter no máximo 60 caracteres",
+      "headerVariablesUnsupported": "O cabeçalho não pode conter variáveis neste formulário",
+      "headerType": {
+        "label": "Tipo de cabeçalho",
+        "none": "Nenhum",
+        "text": "Texto",
+        "image": "Imagem",
+        "video": "Vídeo",
+        "document": "Documento"
+      },
+      "upload": {
+        "button": "Selecionar arquivo",
+        "loading": "Enviando para a Meta...",
+        "error": "Falha no upload. Verifique o arquivo e tente novamente.",
+        "remove": "Remover arquivo",
+        "limitImage": "Máximo 5MB. Formatos aceitos: JPEG, PNG",
+        "limitVideo": "Máximo 16MB. Formato aceito: MP4",
+        "limitDocument": "Máximo 100MB. Formato aceito: PDF",
+        "success": "Arquivo enviado para a Meta",
+        "required": "Selecione e envie a mídia do cabeçalho",
+        "invalidFormat": "Formato de arquivo não permitido para este cabeçalho",
+        "tooLarge": "O arquivo excede o limite permitido",
+        "channelRequired": "Selecione o canal antes de enviar o arquivo",
+        "retry": "Tentar novamente"
+      },
       "footer": "Rodapé (opcional)",
+      "footerTooLong": "O rodapé deve ter no máximo 60 caracteres",
+      "footerVariablesUnsupported": "O rodapé não pode conter variáveis",
       "variables": "Variáveis",
       "variableExample": "Exemplo da variável {{index}}",
+      "variableExampleRequired": "Informe um exemplo para esta variável",
+      "submitForReview": "Enviar para análise",
       "preview": "Preview",
       "empty": "Nenhum template cadastrado",
-      "emptyHint": "Crie um template ou sincronize com a Meta"
+      "emptyHint": "Envie um template para análise ou sincronize com a Meta"
     },
     "tags": {
       "title": "Etiquetas",

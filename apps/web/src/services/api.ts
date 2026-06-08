@@ -1086,8 +1086,16 @@ export interface UpdateRedmineIntegrationPayload {
 
 export type WhatsAppTemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 export type WhatsAppTemplateLanguage = 'pt_BR' | 'en_US' | 'es';
-export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected';
+export type WhatsAppTemplateStatus =
+  | 'approved'
+  | 'pending'
+  | 'rejected'
+  | 'paused'
+  | 'disabled'
+  | 'in_appeal'
+  | 'pending_deletion';
 export type WhatsAppTemplateHeaderType = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+export type WhatsAppTemplateInputHeaderType = 'none' | 'text' | 'image' | 'video' | 'document';
 
 export interface WhatsAppTemplateVariable {
   index: string;
@@ -1123,10 +1131,11 @@ export interface CreateWhatsAppTemplatePayload {
   language: WhatsAppTemplateLanguage;
   category: WhatsAppTemplateCategory;
   body: string;
-  header?: string;
+  headerType: WhatsAppTemplateInputHeaderType;
+  headerText?: string;
+  headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
-  status?: WhatsAppTemplateStatus;
 }
 
 export interface UpdateWhatsAppTemplatePayload {
@@ -1136,10 +1145,17 @@ export interface UpdateWhatsAppTemplatePayload {
   language?: WhatsAppTemplateLanguage;
   category?: WhatsAppTemplateCategory;
   body?: string;
-  header?: string;
+  headerType?: WhatsAppTemplateInputHeaderType;
+  headerText?: string;
+  headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
-  status?: WhatsAppTemplateStatus;
+}
+
+export interface WhatsAppTemplateMediaUpload {
+  header_handle: string;
+  mime_type: string;
+  filename: string;
 }
 
 interface QueueConfigSettings {
@@ -1809,6 +1825,17 @@ export const adminApi = {
 
     update: async (id: string, data: UpdateWhatsAppTemplatePayload): Promise<WhatsAppTemplate> => {
       const res = await api.patch<{ success: boolean; data: WhatsAppTemplate }>(`/admin/templates/${id}`, data);
+      return res.data.data;
+    },
+
+    uploadMedia: async (channelId: string, file: File): Promise<WhatsAppTemplateMediaUpload> => {
+      const form = new FormData();
+      form.append('channelId', channelId);
+      form.append('file', file);
+      const res = await api.post<{ success: boolean; data: WhatsAppTemplateMediaUpload }>(
+        '/admin/templates/media-upload',
+        form,
+      );
       return res.data.data;
     },
 

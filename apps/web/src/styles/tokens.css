@@ -2266,3 +2266,19 @@
     grid-template-columns: 1fr;
   }
 }
+.template-media-upload {
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-3);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.template-media-upload:hover {
+  border-color: var(--teal);
+  background: var(--teal-dim);
+}
+
+.template-media-upload.is-error {
+  border-style: solid;
+  border-color: var(--red);
+}

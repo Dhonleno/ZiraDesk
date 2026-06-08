@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,8 +6,9 @@ import {
   type CreateWhatsAppTemplatePayload,
   type WhatsAppTemplate,
   type WhatsAppTemplateCategory,
+  type WhatsAppTemplateInputHeaderType,
   type WhatsAppTemplateLanguage,
-  type WhatsAppTemplateStatus,
+  type UpdateWhatsAppTemplatePayload,
   type WhatsAppTemplateVariable,
 } from '../../services/api';
 import { Button } from '../../components/ui/Button';
@@ -31,10 +32,14 @@ interface TemplateFormState {
   language: WhatsAppTemplateLanguage;
   category: WhatsAppTemplateCategory;
   body: string;
-  header: string;
+  headerType: WhatsAppTemplateInputHeaderType;
+  headerText: string;
+  headerHandle: string;
+  headerFilename: string;
+  headerMimeType: string;
+  headerPreviewUrl: string;
   footer: string;
   variables: WhatsAppTemplateVariable[];
-  status: WhatsAppTemplateStatus;
 }
 
 const TECHNICAL_NAME_REGEX = /^[a-z0-9_]+$/;
@@ -46,10 +51,14 @@ const DEFAULT_FORM: TemplateFormState = {
   language: 'pt_BR',
   category: 'MARKETING',
   body: '',
-  header: '',
+  headerType: 'none',
+  headerText: '',
+  headerHandle: '',
+  headerFilename: '',
+  headerMimeType: '',
+  headerPreviewUrl: '',
   footer: '',
   variables: [],
-  status: 'approved',
 };
 
 function extractVariableIndexes(body: string): string[] {
@@ -126,7 +135,18 @@ function renderTemplatePreview(body: string, variables: WhatsAppTemplateVariable
   });
 }
 
+function templateStatusColors(status: WhatsAppTemplate['status']): { background: string; color: string } {
+  if (status === 'approved') {
+    return { background: 'var(--green-dim)', color: 'var(--green)' };
+  }
+  if (status === 'rejected' || status === 'disabled' || status === 'pending_deletion') {
+    return { background: 'var(--red-dim)', color: 'var(--red)' };
+  }
+  return { background: 'var(--amber-dim)', color: 'var(--amber)' };
+}
+
 function templateToForm(template: WhatsAppTemplate): TemplateFormState {
+  const headerType = template.header_type.toLowerCase() as WhatsAppTemplateInputHeaderType;
   return {
     channelId: template.channel_id,
     technicalName: template.name,
@@ -134,12 +154,37 @@ function templateToForm(template: WhatsAppTemplate): TemplateFormState {
     language: template.language,
     category: template.category,
     body: template.body,
-    header: template.header ?? '',
+    headerType,
+    headerText: template.header ?? '',
+    headerHandle: '',
+    headerFilename: '',
+    headerMimeType: '',
+    headerPreviewUrl: template.header_example_url ?? '',
     footer: template.footer ?? '',
     variables: Array.isArray(template.variables) ? template.variables : [],
-    status: template.status,
   };
 }
+
+const MEDIA_RULES: Record<
+  Extract<WhatsAppTemplateInputHeaderType, 'image' | 'video' | 'document'>,
+  { accept: string; mimeTypes: string[]; maxBytes: number }
+> = {
+  image: {
+    accept: 'image/jpeg,image/png',
+    mimeTypes: ['image/jpeg', 'image/png'],
+    maxBytes: 5 * 1024 * 1024,
+  },
+  video: {
+    accept: 'video/mp4',
+    mimeTypes: ['video/mp4'],
+    maxBytes: 16 * 1024 * 1024,
+  },
+  document: {
+    accept: 'application/pdf',
+    mimeTypes: ['application/pdf'],
+    maxBytes: 100 * 1024 * 1024,
+  },
+};
 
 export function Templates() {
   const { t } = useTranslation('admin');
@@ -153,6 +198,14 @@ export function Templates() {
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncChannelId, setSyncChannelId] = useState('');
+  const [selectedHeaderFile, setSelectedHeaderFile] = useState<File | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const localPreviewUrlRef = useRef<string | null>(null);
+  const uploadGenerationRef = useRef(0);
+
+  useEffect(() => () => {
+    if (localPreviewUrlRef.current) URL.revokeObjectURL(localPreviewUrlRef.current);
+  }, []);
 
   const { data: channels = [] } = useQuery({
     queryKey: ['admin', 'channels', 'whatsapp-for-templates'],
@@ -177,13 +230,18 @@ export function Templates() {
     }
     return grouped;
   }, [templates]);
+  const editingTemplate = useMemo(
+    () => templates.find((template) => template.id === editingTemplateId) ?? null,
+    [editingTemplateId, templates],
+  );
+  const isMetaManagedTemplate = Boolean(editingTemplate?.meta_template_id);
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateWhatsAppTemplatePayload) => adminApi.templates.create(payload),
     onSuccess: async () => {
-      toast.success(t('tenantAdmin.templates.savedSuccess'));
+      toast.success(t('tenantAdmin.templates.submittedSuccess'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'templates'] });
-      setFormOpen(false);
+      closeFormModal();
     },
     onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
       toast.error(error.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
@@ -191,12 +249,16 @@ export function Templates() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<CreateWhatsAppTemplatePayload> }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateWhatsAppTemplatePayload }) =>
       adminApi.templates.update(id, payload),
     onSuccess: async () => {
-      toast.success(t('tenantAdmin.templates.savedSuccess'));
+      toast.success(t(
+        isMetaManagedTemplate
+          ? 'tenantAdmin.templates.savedSuccess'
+          : 'tenantAdmin.templates.submittedSuccess',
+      ));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'templates'] });
-      setFormOpen(false);
+      closeFormModal();
     },
     onError: (error: { response?: { data?: { error?: { message?: string } } } }) => {
       toast.error(error.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
@@ -227,7 +289,49 @@ export function Templates() {
     },
   });
 
+  const mediaUploadMutation = useMutation({
+    mutationFn: ({ channelId, file }: { channelId: string; file: File }) =>
+      adminApi.templates.uploadMedia(channelId, file),
+  });
+
+  function revokeLocalPreview() {
+    if (!localPreviewUrlRef.current) return;
+    URL.revokeObjectURL(localPreviewUrlRef.current);
+    localPreviewUrlRef.current = null;
+  }
+
+  function clearHeaderMedia() {
+    uploadGenerationRef.current += 1;
+    mediaUploadMutation.reset();
+    revokeLocalPreview();
+    setSelectedHeaderFile(null);
+    setFormState((current) => ({
+      ...current,
+      headerHandle: '',
+      headerFilename: '',
+      headerMimeType: '',
+      headerPreviewUrl: '',
+    }));
+    setFormErrors((current) => {
+      const next = { ...current };
+      delete next.headerMedia;
+      return next;
+    });
+    if (mediaInputRef.current) mediaInputRef.current.value = '';
+  }
+
+  function closeFormModal() {
+    uploadGenerationRef.current += 1;
+    mediaUploadMutation.reset();
+    revokeLocalPreview();
+    setSelectedHeaderFile(null);
+    setFormOpen(false);
+  }
+
   function openCreateModal() {
+    mediaUploadMutation.reset();
+    revokeLocalPreview();
+    setSelectedHeaderFile(null);
     setEditingTemplateId(null);
     setFormState({
       ...DEFAULT_FORM,
@@ -238,10 +342,108 @@ export function Templates() {
   }
 
   function openEditModal(template: WhatsAppTemplate) {
+    mediaUploadMutation.reset();
+    revokeLocalPreview();
+    setSelectedHeaderFile(null);
     setEditingTemplateId(template.id);
     setFormState(templateToForm(template));
     setFormErrors({});
     setFormOpen(true);
+  }
+
+  function handleHeaderTypeChange(headerType: WhatsAppTemplateInputHeaderType) {
+    uploadGenerationRef.current += 1;
+    mediaUploadMutation.reset();
+    revokeLocalPreview();
+    setSelectedHeaderFile(null);
+    setFormState((current) => ({
+      ...current,
+      headerType,
+      headerText: headerType === 'text' ? current.headerText : '',
+      headerHandle: '',
+      headerFilename: '',
+      headerMimeType: '',
+      headerPreviewUrl: '',
+    }));
+    setFormErrors((current) => {
+      const next = { ...current };
+      delete next.header;
+      delete next.headerMedia;
+      return next;
+    });
+    if (mediaInputRef.current) mediaInputRef.current.value = '';
+  }
+
+  function uploadHeaderFile(file: File) {
+    const headerType = formState.headerType;
+    if (headerType !== 'image' && headerType !== 'video' && headerType !== 'document') return;
+    if (!formState.channelId) {
+      setFormErrors((current) => ({
+        ...current,
+        channelId: t('tenantAdmin.templates.channelRequired'),
+        headerMedia: t('tenantAdmin.templates.upload.channelRequired'),
+      }));
+      return;
+    }
+
+    const rule = MEDIA_RULES[headerType];
+    if (!rule.mimeTypes.includes(file.type)) {
+      setFormErrors((current) => ({
+        ...current,
+        headerMedia: t('tenantAdmin.templates.upload.invalidFormat'),
+      }));
+      return;
+    }
+    if (file.size > rule.maxBytes) {
+      setFormErrors((current) => ({
+        ...current,
+        headerMedia: t('tenantAdmin.templates.upload.tooLarge'),
+      }));
+      return;
+    }
+
+    revokeLocalPreview();
+    const previewUrl = URL.createObjectURL(file);
+    localPreviewUrlRef.current = previewUrl;
+    setSelectedHeaderFile(file);
+    setFormState((current) => ({
+      ...current,
+      headerHandle: '',
+      headerFilename: file.name,
+      headerMimeType: file.type,
+      headerPreviewUrl: previewUrl,
+    }));
+    setFormErrors((current) => {
+      const next = { ...current };
+      delete next.headerMedia;
+      return next;
+    });
+
+    const uploadGeneration = ++uploadGenerationRef.current;
+    mediaUploadMutation.mutate(
+      { channelId: formState.channelId, file },
+      {
+        onSuccess: (result) => {
+          if (uploadGenerationRef.current !== uploadGeneration) return;
+          setFormState((current) => ({
+            ...current,
+            headerHandle: result.header_handle,
+            headerFilename: result.filename,
+            headerMimeType: result.mime_type,
+          }));
+        },
+        onError: (error: unknown) => {
+          if (uploadGenerationRef.current !== uploadGeneration) return;
+          const apiError = error as { response?: { data?: { error?: { message?: string } } } };
+          setFormErrors((current) => ({
+            ...current,
+            headerMedia:
+              apiError.response?.data?.error?.message
+              ?? t('tenantAdmin.templates.upload.error'),
+          }));
+        },
+      },
+    );
   }
 
   function validateForm(state: TemplateFormState): Record<string, string> {
@@ -256,6 +458,34 @@ export function Templates() {
 
     if (!state.displayName.trim()) errors.displayName = t('tenantAdmin.templates.displayNameRequired');
     if (!state.body.trim()) errors.body = t('tenantAdmin.templates.bodyRequired');
+    if (state.body.length > 1024) errors.body = t('tenantAdmin.templates.bodyTooLong');
+    if (state.headerType === 'text' && !state.headerText.trim()) {
+      errors.header = t('tenantAdmin.templates.headerRequired');
+    }
+    if (state.headerText.length > 60) errors.header = t('tenantAdmin.templates.headerTooLong');
+    if (state.footer.length > 60) errors.footer = t('tenantAdmin.templates.footerTooLong');
+    if (/\{\{[^{}]+\}\}/.test(state.headerText)) {
+      errors.header = t('tenantAdmin.templates.headerVariablesUnsupported');
+    }
+    if (
+      (state.headerType === 'image' || state.headerType === 'video' || state.headerType === 'document')
+      && !state.headerHandle
+    ) {
+      errors.headerMedia = t('tenantAdmin.templates.upload.required');
+    }
+    if (/\{\{[^{}]+\}\}/.test(state.footer)) {
+      errors.footer = t('tenantAdmin.templates.footerVariablesUnsupported');
+    }
+
+    const indexes = extractVariableIndexes(state.body);
+    if (indexes.some((index, position) => index !== String(position + 1))) {
+      errors.body = t('tenantAdmin.templates.variablesFormat');
+    }
+    for (const variable of state.variables) {
+      if (!variable.example.trim()) {
+        errors[`variable.${variable.index}`] = t('tenantAdmin.templates.variableExampleRequired');
+      }
+    }
 
     return errors;
   }
@@ -276,9 +506,22 @@ export function Templates() {
   }
 
   function handleSubmit() {
-    const validationErrors = validateForm(formState);
+    if (mediaUploadMutation.isPending) return;
+    const validationErrors = isMetaManagedTemplate
+      ? (formState.displayName.trim()
+        ? {}
+        : { displayName: t('tenantAdmin.templates.displayNameRequired') })
+      : validateForm(formState);
     setFormErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
+
+    if (editingTemplateId && isMetaManagedTemplate) {
+      updateMutation.mutate({
+        id: editingTemplateId,
+        payload: { displayName: formState.displayName.trim() },
+      });
+      return;
+    }
 
     const payload: CreateWhatsAppTemplatePayload = {
       channelId: formState.channelId,
@@ -287,9 +530,12 @@ export function Templates() {
       language: formState.language,
       category: formState.category,
       body: formState.body.trim(),
+      headerType: formState.headerType,
       variables: formState.variables,
-      status: formState.status,
-      ...(formState.header.trim() ? { header: formState.header.trim() } : {}),
+      ...(formState.headerType === 'text' && formState.headerText.trim()
+        ? { headerText: formState.headerText.trim() }
+        : {}),
+      ...(formState.headerHandle ? { headerHandle: formState.headerHandle } : {}),
       ...(formState.footer.trim() ? { footer: formState.footer.trim() } : {}),
     };
 
@@ -364,7 +610,9 @@ export function Templates() {
                   </div>
 
                   <div style={{ display: 'grid', gap: 1 }}>
-                    {channelTemplates.map((template) => (
+                    {channelTemplates.map((template) => {
+                      const statusColors = templateStatusColors(template.status);
+                      return (
                       <div
                         key={template.id}
                         style={{
@@ -405,8 +653,8 @@ export function Templates() {
                             <span style={{
                               borderRadius: 'var(--r-pill)',
                               border: '1px solid var(--line-2)',
-                              background: template.status === 'approved' ? 'var(--green-dim)' : template.status === 'rejected' ? 'var(--red-dim)' : 'var(--amber-dim)',
-                              color: template.status === 'approved' ? 'var(--green)' : template.status === 'rejected' ? 'var(--red)' : 'var(--amber)',
+                              background: statusColors.background,
+                              color: statusColors.color,
                               padding: '1px 8px',
                               fontSize: 10,
                               fontWeight: 600,
@@ -429,7 +677,8 @@ export function Templates() {
                           </Button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               );
@@ -440,7 +689,7 @@ export function Templates() {
 
       <Modal
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={closeFormModal}
         title={editingTemplateId ? t('tenantAdmin.templates.editTitle') : t('tenantAdmin.templates.newTitle')}
         maxWidth="lg"
       >
@@ -450,7 +699,11 @@ export function Templates() {
               <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.selectChannel')}</label>
               <select
                 value={formState.channelId}
-                onChange={(event) => setFormState((current) => ({ ...current, channelId: event.target.value }))}
+                disabled={isMetaManagedTemplate}
+                onChange={(event) => {
+                  if (formState.headerHandle || selectedHeaderFile) clearHeaderMedia();
+                  setFormState((current) => ({ ...current, channelId: event.target.value }));
+                }}
                 style={{ width: '100%', height: 40, borderRadius: 'var(--r)', border: `1px solid ${formErrors.channelId ? 'var(--red)' : 'var(--line-2)'}`, background: 'var(--bg-3)', color: 'var(--txt)', padding: '0 10px', fontFamily: 'var(--font)', fontSize: 13 }}
               >
                 <option value="">{t('tenantAdmin.templates.selectChannel')}</option>
@@ -464,6 +717,7 @@ export function Templates() {
               <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.language')}</label>
               <select
                 value={formState.language}
+                disabled={isMetaManagedTemplate}
                 onChange={(event) => setFormState((current) => ({ ...current, language: event.target.value as WhatsAppTemplateLanguage }))}
                 style={{ width: '100%', height: 40, borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt)', padding: '0 10px', fontFamily: 'var(--font)', fontSize: 13 }}
               >
@@ -477,6 +731,7 @@ export function Templates() {
           <Input
             label={t('tenantAdmin.templates.technicalName')}
             value={formState.technicalName}
+            disabled={isMetaManagedTemplate}
             onChange={(event) => {
               const nextValue = event.target.value;
               setFormState((current) => ({ ...current, technicalName: nextValue }));
@@ -497,26 +752,43 @@ export function Templates() {
               <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.categoryLabel')}</label>
               <select
                 value={formState.category}
+                disabled={isMetaManagedTemplate}
                 onChange={(event) => setFormState((current) => ({ ...current, category: event.target.value as WhatsAppTemplateCategory }))}
                 style={{ width: '100%', height: 40, borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt)', padding: '0 10px', fontFamily: 'var(--font)', fontSize: 13 }}
               >
                 <option value="MARKETING">{t('tenantAdmin.templates.category.MARKETING')}</option>
                 <option value="UTILITY">{t('tenantAdmin.templates.category.UTILITY')}</option>
-                <option value="AUTHENTICATION">{t('tenantAdmin.templates.category.AUTHENTICATION')}</option>
+                {editingTemplate && (
+                  <option value="AUTHENTICATION">{t('tenantAdmin.templates.category.AUTHENTICATION')}</option>
+                )}
               </select>
             </div>
 
             <div>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.statusLabel')}</label>
-              <select
-                value={formState.status}
-                onChange={(event) => setFormState((current) => ({ ...current, status: event.target.value as WhatsAppTemplateStatus }))}
-                style={{ width: '100%', height: 40, borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt)', padding: '0 10px', fontFamily: 'var(--font)', fontSize: 13 }}
+              <div
+                style={{
+                  minHeight: 40,
+                  borderRadius: 'var(--r)',
+                  border: '1px solid var(--line-2)',
+                  background: 'var(--bg-3)',
+                  color: editingTemplate
+                    ? templateStatusColors(editingTemplate.status).color
+                    : 'var(--amber)',
+                  padding: '0 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
               >
-                <option value="approved">{t('tenantAdmin.templates.status.approved')}</option>
-                <option value="pending">{t('tenantAdmin.templates.status.pending')}</option>
-                <option value="rejected">{t('tenantAdmin.templates.status.rejected')}</option>
-              </select>
+                {editingTemplate
+                  ? t(`tenantAdmin.templates.status.${editingTemplate.status}`)
+                  : t('tenantAdmin.templates.pendingReview')}
+              </div>
+              <span style={{ display: 'block', marginTop: 4, color: 'var(--txt-3)', fontSize: 10 }}>
+                {t('tenantAdmin.templates.statusManagedHint')}
+              </span>
             </div>
           </div>
 
@@ -524,25 +796,208 @@ export function Templates() {
             <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.body')}</label>
             <textarea
               value={formState.body}
+              disabled={isMetaManagedTemplate}
               onChange={(event) => handleBodyChange(event.target.value)}
               rows={5}
+              maxLength={1024}
               style={{ width: '100%', borderRadius: 'var(--r)', border: `1px solid ${formErrors.body ? 'var(--red)' : 'var(--line-2)'}`, background: 'var(--bg-3)', color: 'var(--txt)', padding: '10px 12px', fontFamily: 'var(--font)', fontSize: 13, lineHeight: 1.5, resize: 'vertical' }}
             />
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--txt-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
               {renderBodyWithHighlights(formState.body)}
             </div>
+            <span style={{ display: 'block', marginTop: 4, color: formErrors.body ? 'var(--red)' : 'var(--txt-3)', fontSize: 10 }}>
+              {formErrors.body ?? t('tenantAdmin.templates.bodyVariablesHint')}
+            </span>
           </div>
 
-          <Input
-            label={t('tenantAdmin.templates.header')}
-            value={formState.header}
-            onChange={(event) => setFormState((current) => ({ ...current, header: event.target.value }))}
-          />
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>
+                {t('tenantAdmin.templates.headerType.label')}
+              </label>
+              <select
+                value={formState.headerType}
+                disabled={isMetaManagedTemplate}
+                onChange={(event) => handleHeaderTypeChange(event.target.value as WhatsAppTemplateInputHeaderType)}
+                style={{
+                  width: '100%',
+                  height: 40,
+                  borderRadius: 'var(--r)',
+                  border: '1px solid var(--line-2)',
+                  background: 'var(--bg-3)',
+                  color: 'var(--txt)',
+                  padding: '0 10px',
+                  fontFamily: 'var(--font)',
+                  fontSize: 13,
+                }}
+              >
+                <option value="none">{t('tenantAdmin.templates.headerType.none')}</option>
+                <option value="text">{t('tenantAdmin.templates.headerType.text')}</option>
+                <option value="image">{t('tenantAdmin.templates.headerType.image')}</option>
+                <option value="video">{t('tenantAdmin.templates.headerType.video')}</option>
+                <option value="document">{t('tenantAdmin.templates.headerType.document')}</option>
+              </select>
+            </div>
+
+            {formState.headerType === 'text' && (
+              <Input
+                label={t('tenantAdmin.templates.header')}
+                value={formState.headerText}
+                disabled={isMetaManagedTemplate}
+                maxLength={60}
+                onChange={(event) => setFormState((current) => ({ ...current, headerText: event.target.value }))}
+                error={formErrors.header}
+              />
+            )}
+
+            {(formState.headerType === 'image'
+              || formState.headerType === 'video'
+              || formState.headerType === 'document') && (
+              <div>
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept={MEDIA_RULES[formState.headerType].accept}
+                  disabled={isMetaManagedTemplate || mediaUploadMutation.isPending}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) uploadHeaderFile(file);
+                  }}
+                  style={{ display: 'none' }}
+                />
+
+                <div
+                  className={`template-media-upload${formErrors.headerMedia ? ' is-error' : ''}`}
+                  style={{
+                    padding: 12,
+                    display: 'grid',
+                    gap: 10,
+                  }}
+                >
+                  {formState.headerPreviewUrl ? (
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {formState.headerType === 'image' && (
+                        <img
+                          src={formState.headerPreviewUrl}
+                          alt={formState.headerFilename || t('tenantAdmin.templates.headerType.image')}
+                          style={{
+                            width: '100%',
+                            maxHeight: 180,
+                            objectFit: 'contain',
+                            borderRadius: 'var(--r)',
+                            background: 'var(--bg-2)',
+                          }}
+                        />
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        {(formState.headerType === 'video' || formState.headerType === 'document') && (
+                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden style={{ flex: '0 0 auto', color: 'var(--txt-2)' }}>
+                            {formState.headerType === 'video' ? (
+                              <>
+                                <rect x="3" y="4.5" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                                <path d="m8.5 8 4 2-4 2V8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                              </>
+                            ) : (
+                              <>
+                                <path d="M5 2.75h6l4 4V17.25H5V2.75Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                                <path d="M11 2.75v4h4M7.5 10h5M7.5 12.75h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                              </>
+                            )}
+                          </svg>
+                        )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ color: 'var(--txt)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {formState.headerFilename || t(`tenantAdmin.templates.headerType.${formState.headerType}`)}
+                          </div>
+                          <div style={{ color: 'var(--txt-3)', fontSize: 10, marginTop: 2 }}>
+                            {mediaUploadMutation.isPending
+                              ? t('tenantAdmin.templates.upload.loading')
+                              : formState.headerHandle
+                                ? t('tenantAdmin.templates.upload.success')
+                                : t('tenantAdmin.templates.upload.error')}
+                          </div>
+                        </div>
+                        {!isMetaManagedTemplate && (
+                          <button
+                            type="button"
+                            onClick={clearHeaderMedia}
+                            title={t('tenantAdmin.templates.upload.remove')}
+                            aria-label={t('tenantAdmin.templates.upload.remove')}
+                            disabled={mediaUploadMutation.isPending}
+                            style={{
+                              width: 32,
+                              height: 32,
+                              display: 'grid',
+                              placeItems: 'center',
+                              borderRadius: 'var(--r)',
+                              border: '1px solid var(--line-2)',
+                              background: 'var(--bg-4)',
+                              color: 'var(--txt-2)',
+                              cursor: mediaUploadMutation.isPending ? 'wait' : 'pointer',
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                              <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: 'var(--txt-2)', fontSize: 12 }}>
+                          {t(`tenantAdmin.templates.headerType.${formState.headerType}`)}
+                        </div>
+                        <div style={{ color: 'var(--txt-3)', fontSize: 10, marginTop: 2 }}>
+                          {t(`tenantAdmin.templates.upload.${
+                            formState.headerType === 'image'
+                              ? 'limitImage'
+                              : formState.headerType === 'video'
+                                ? 'limitVideo'
+                                : 'limitDocument'
+                          }`)}
+                        </div>
+                      </div>
+                      {!isMetaManagedTemplate && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => mediaInputRef.current?.click()}
+                        >
+                          {t('tenantAdmin.templates.upload.button')}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {formErrors.headerMedia && (
+                  <span style={{ display: 'block', marginTop: 4, color: 'var(--red)', fontSize: 10 }}>
+                    {formErrors.headerMedia}
+                  </span>
+                )}
+                {selectedHeaderFile && !formState.headerHandle && !mediaUploadMutation.isPending && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => uploadHeaderFile(selectedHeaderFile)}
+                    style={{ marginTop: 8 }}
+                  >
+                    {t('tenantAdmin.templates.upload.retry')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
 
           <Input
             label={t('tenantAdmin.templates.footer')}
             value={formState.footer}
+            disabled={isMetaManagedTemplate}
+            maxLength={60}
             onChange={(event) => setFormState((current) => ({ ...current, footer: event.target.value }))}
+            error={formErrors.footer}
           />
 
           <div style={{ display: 'grid', gap: 8 }}>
@@ -555,7 +1010,9 @@ export function Templates() {
                   key={variable.index}
                   label={t('tenantAdmin.templates.variableExample', { index: variable.index })}
                   value={variable.example}
+                  disabled={isMetaManagedTemplate}
                   onChange={(event) => handleVariableExampleChange(variable.index, event.target.value)}
+                  error={formErrors[`variable.${variable.index}`]}
                 />
               ))
             )}
@@ -563,20 +1020,40 @@ export function Templates() {
 
           <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-3)', padding: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6 }}>{t('tenantAdmin.templates.preview')}</div>
+            {formState.headerType === 'text' && formState.headerText && (
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 8 }}>
+                {formState.headerText}
+              </div>
+            )}
+            {formState.headerType === 'image' && formState.headerPreviewUrl && (
+              <img
+                src={formState.headerPreviewUrl}
+                alt=""
+                style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 'var(--r)', marginBottom: 8 }}
+              />
+            )}
+            {(formState.headerType === 'video' || formState.headerType === 'document') && formState.headerFilename && (
+              <div style={{ fontSize: 12, color: 'var(--txt-2)', marginBottom: 8 }}>
+                {formState.headerFilename}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: 'var(--txt)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
               {previewContent || '—'}
             </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button variant="secondary" onClick={() => setFormOpen(false)}>
+            <Button variant="secondary" onClick={closeFormModal}>
               {t('tenantAdmin.common.cancel')}
             </Button>
             <Button
-              loading={createMutation.isPending || updateMutation.isPending}
+              loading={createMutation.isPending || updateMutation.isPending || mediaUploadMutation.isPending}
+              disabled={mediaUploadMutation.isPending}
               onClick={handleSubmit}
             >
-              {t('tenantAdmin.common.save')}
+              {editingTemplateId && isMetaManagedTemplate
+                ? t('tenantAdmin.common.save')
+                : t('tenantAdmin.templates.submitForReview')}
             </Button>
           </div>
         </div>
