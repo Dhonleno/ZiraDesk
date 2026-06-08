@@ -54,6 +54,10 @@ function ThemeToggle() {
   );
 }
 
+function isExternalUrl(url: string) {
+  return /^https?:\/\//i.test(url);
+}
+
 export function Login() {
   const { t } = useTranslation('auth');
   const { login, isLoggingIn, loginError } = useAuth();
@@ -83,31 +87,46 @@ export function Login() {
   );
   const legalLinks = useMemo(() => {
     const links: ReactNode[] = [];
-    if (legalInfo?.privacyPolicyUrl) {
+
+    const privacyUrl = legalInfo?.privacyPolicyUrl || '/politica-de-privacidade';
+    if (isExternalUrl(privacyUrl)) {
       links.push(
         <a
           key="privacy"
           className="login-legal-link"
-          href={legalInfo.privacyPolicyUrl}
+          href={privacyUrl}
           target="_blank"
           rel="noreferrer"
         >
           {t('login.legal.privacyPolicy')}
         </a>,
       );
+    } else {
+      links.push(
+        <Link key="privacy" className="login-legal-link" to={privacyUrl}>
+          {t('login.legal.privacyPolicy')}
+        </Link>,
+      );
     }
 
-    if (legalInfo?.termsUrl) {
+    const termsUrl = legalInfo?.termsUrl || '/termos-de-uso';
+    if (isExternalUrl(termsUrl)) {
       links.push(
         <a
           key="terms"
           className="login-legal-link"
-          href={legalInfo.termsUrl}
+          href={termsUrl}
           target="_blank"
           rel="noreferrer"
         >
           {t('login.legal.termsOfService')}
         </a>,
+      );
+    } else {
+      links.push(
+        <Link key="terms" className="login-legal-link" to={termsUrl}>
+          {t('login.legal.termsOfService')}
+        </Link>,
       );
     }
 

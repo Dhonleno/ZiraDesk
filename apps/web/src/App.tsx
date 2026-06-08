@@ -62,6 +62,7 @@ import { TVDashboard } from './pages/tv/TVDashboard';
 import { CampaignsPage } from './pages/omnichannel/Campaigns';
 import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
 import { ProtectedRoute } from './router/ProtectedRoute';
+import { PrivacyPolicyPage, TermsOfUsePage } from './pages/legal/LegalDocuments';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -139,6 +140,11 @@ export function App() {
             <Route path="tickets/new" element={<PortalGuard><PortalCreateTicket /></PortalGuard>} />
             <Route path="privacy" element={<PortalGuard><PortalLgpd /></PortalGuard>} />
           </Route>
+
+          <Route path="/termos-de-uso" element={<TermsOfUsePage />} />
+          <Route path="/politica-de-privacidade" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<Navigate to="/termos-de-uso" replace />} />
+          <Route path="/privacy" element={<Navigate to="/politica-de-privacidade" replace />} />
 
           {/* Rotas públicas de autenticação */}
           <Route element={<AuthLayout />}>

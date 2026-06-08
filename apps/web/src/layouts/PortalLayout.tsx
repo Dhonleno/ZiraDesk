@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PortalUserMenu } from '../components/portal/PortalUserMenu';
@@ -52,7 +52,10 @@ export function PortalLayout() {
       <footer className="portal-footer">
         <span>Powered by ZiraDesk</span>
         <span aria-hidden>•</span>
-        <LegalDpoLink />
+        <Link to="/politica-de-privacidade" className="legal-footer-link">Política de Privacidade</Link>
+        <span aria-hidden>•</span>
+        <Link to="/termos-de-uso" className="legal-footer-link">Termos de Uso</Link>
+        <LegalDpoLink prefix={<span aria-hidden>•</span>} />
       </footer>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { adminApi, omnichannelApi } from '../services/api';
@@ -1083,7 +1083,10 @@ export function TenantLayout() {
           <footer className="app-legal-footer">
             <span>Powered by ZiraDesk</span>
             <span className="app-legal-footer-separator" aria-hidden>•</span>
-            <LegalDpoLink />
+            <Link to="/politica-de-privacidade" className="legal-footer-link">Política de Privacidade</Link>
+            <span className="app-legal-footer-separator" aria-hidden>•</span>
+            <Link to="/termos-de-uso" className="legal-footer-link">Termos de Uso</Link>
+            <LegalDpoLink prefix={<span className="app-legal-footer-separator" aria-hidden>•</span>} />
           </footer>
         </main>
       </div>

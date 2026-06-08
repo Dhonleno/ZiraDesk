@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { legalApi } from '../../services/api';
@@ -7,6 +8,7 @@ import { Modal } from '../ui/Modal';
 interface LegalDpoLinkProps {
   className?: string;
   label?: string;
+  prefix?: ReactNode;
 }
 
 function ExternalLink({ href, children }: { href: string; children: string }) {
@@ -33,7 +35,7 @@ function ContactValue({ href, value }: { href: string | undefined; value: string
   );
 }
 
-export function LegalDpoLink({ className, label }: LegalDpoLinkProps) {
+export function LegalDpoLink({ className, label, prefix }: LegalDpoLinkProps) {
   const { t } = useTranslation(['legal', 'common']);
   const [open, setOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -51,6 +53,7 @@ export function LegalDpoLink({ className, label }: LegalDpoLinkProps) {
 
   return (
     <>
+      {prefix}
       <button
         type="button"
         className={className ? `legal-footer-link ${className}` : 'legal-footer-link'}
