@@ -43,6 +43,7 @@ interface TemplateFormState {
 }
 
 const TECHNICAL_NAME_REGEX = /^[a-z0-9_]+$/;
+const PAGE_SIZE = 12;
 
 const DEFAULT_FORM: TemplateFormState = {
   channelId: '',
@@ -139,10 +140,26 @@ function templateStatusColors(status: WhatsAppTemplate['status']): { background:
   if (status === 'approved') {
     return { background: 'var(--green-dim)', color: 'var(--green)' };
   }
-  if (status === 'rejected' || status === 'disabled' || status === 'pending_deletion') {
+  if (status === 'rejected' || status === 'pending_deletion') {
     return { background: 'var(--red-dim)', color: 'var(--red)' };
   }
+  if (status === 'in_appeal') {
+    return { background: 'var(--blue-dim)', color: 'var(--blue)' };
+  }
+  if (status === 'disabled') {
+    return { background: 'var(--bg-4)', color: 'var(--txt-3)' };
+  }
   return { background: 'var(--amber-dim)', color: 'var(--amber)' };
+}
+
+function templateCategoryColors(category: WhatsAppTemplateCategory): { background: string; color: string } {
+  if (category === 'UTILITY') {
+    return { background: 'var(--blue-dim)', color: 'var(--blue)' };
+  }
+  if (category === 'AUTHENTICATION') {
+    return { background: 'var(--purple-dim)', color: 'var(--purple)' };
+  }
+  return { background: 'var(--pink-dim)', color: 'var(--pink)' };
 }
 
 function templateToForm(template: WhatsAppTemplate): TemplateFormState {
@@ -186,8 +203,28 @@ const MEDIA_RULES: Record<
   },
 };
 
+function formatRelativeSync(value: string | null, language: string, neverLabel: string): string {
+  if (!value) return neverLabel;
+
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return neverLabel;
+
+  const diffMs = Date.now() - timestamp;
+  const absMinutes = Math.max(1, Math.round(Math.abs(diffMs) / 60_000));
+  const prefix = language.startsWith('en') ? '' : language.startsWith('es') ? 'hace ' : 'há ';
+  const suffix = language.startsWith('en') ? ' ago' : '';
+
+  if (absMinutes < 60) return `${prefix}${absMinutes}min${suffix}`;
+
+  const absHours = Math.round(absMinutes / 60);
+  if (absHours < 24) return `${prefix}${absHours}h${suffix}`;
+
+  const absDays = Math.round(absHours / 24);
+  return `${prefix}${absDays}d${suffix}`;
+}
+
 export function Templates() {
-  const { t } = useTranslation('admin');
+  const { t, i18n } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -195,6 +232,8 @@ export function Templates() {
   const [formOpen, setFormOpen] = useState(false);
   const [formState, setFormState] = useState<TemplateFormState>(DEFAULT_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [activeChannelId, setActiveChannelId] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncChannelId, setSyncChannelId] = useState('');
@@ -230,11 +269,42 @@ export function Templates() {
     }
     return grouped;
   }, [templates]);
+  const activeChannel = useMemo(
+    () => channels.find((channel) => channel.id === activeChannelId) ?? channels[0] ?? null,
+    [activeChannelId, channels],
+  );
+  const activeChannelTemplates = useMemo(
+    () => (activeChannel ? templatesByChannel.get(activeChannel.id) ?? [] : []),
+    [activeChannel, templatesByChannel],
+  );
+  const totalPages = Math.max(1, Math.ceil(activeChannelTemplates.length / PAGE_SIZE));
+  const pagedTemplates = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return activeChannelTemplates.slice(start, start + PAGE_SIZE);
+  }, [activeChannelTemplates, currentPage]);
   const editingTemplate = useMemo(
     () => templates.find((template) => template.id === editingTemplateId) ?? null,
     [editingTemplateId, templates],
   );
   const isMetaManagedTemplate = Boolean(editingTemplate?.meta_template_id);
+
+  useEffect(() => {
+    if (channels.length === 0) {
+      setActiveChannelId('');
+      return;
+    }
+    if (!activeChannelId || !channels.some((channel) => channel.id === activeChannelId)) {
+      setActiveChannelId(channels[0]!.id);
+    }
+  }, [activeChannelId, channels]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeChannelId]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateWhatsAppTemplatePayload) => adminApi.templates.create(payload),
@@ -556,18 +626,356 @@ export function Templates() {
 
   return (
     <PageShell>
-      <div style={{ display: 'grid', gap: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+      <style>
+        {`
+          .templates-page {
+            height: 100%;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          }
+
+          .templates-page-head {
+            padding: 0 0 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            border-bottom: 1px solid var(--line);
+            flex-shrink: 0;
+          }
+
+          .templates-page-head h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
+            color: var(--txt);
+          }
+
+          .templates-page-head p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--txt-2);
+          }
+
+          .templates-page-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+
+          .templates-seg-tabs {
+            display: flex;
+            gap: 2px;
+            border-bottom: 1px solid var(--line);
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+          }
+
+          .templates-seg-tabs::-webkit-scrollbar {
+            display: none;
+          }
+
+          .templates-seg-tab {
+            border: 0;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            background: transparent;
+            color: var(--txt-2);
+            padding: 10px 14px;
+            font-family: var(--font);
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+          }
+
+          .templates-seg-tab:hover {
+            color: var(--txt);
+          }
+
+          .templates-seg-tab.active {
+            color: var(--teal);
+            border-bottom-color: var(--teal);
+          }
+
+          .templates-table-wrap {
+            min-height: 260px;
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: auto;
+            border-bottom: 1px solid var(--line);
+          }
+
+          .templates-table {
+            width: 100%;
+            min-width: 900px;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+
+          .templates-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--bg-2);
+            border-bottom: 1px solid var(--line);
+            padding: 10px 14px;
+            color: var(--txt-3);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-align: left;
+            white-space: nowrap;
+          }
+
+          .templates-table tbody tr {
+            height: 44px;
+            border-bottom: 1px solid var(--line);
+            transition: background 0.12s;
+          }
+
+          .templates-table tbody tr:hover {
+            background: var(--bg-3);
+          }
+
+          .templates-table tbody td {
+            padding: 10px 14px;
+            vertical-align: middle;
+          }
+
+          .templates-col-name {
+            width: auto;
+            min-width: 200px;
+          }
+
+          .templates-col-language {
+            width: 90px;
+            text-align: center;
+          }
+
+          .templates-col-category {
+            width: 110px;
+          }
+
+          .templates-col-status {
+            width: 120px;
+          }
+
+          .templates-col-sync {
+            width: 140px;
+          }
+
+          .templates-col-actions {
+            width: 80px;
+            text-align: center;
+          }
+
+          .templates-name-cell {
+            min-width: 0;
+            display: grid;
+            gap: 2px;
+          }
+
+          .templates-name-line {
+            min-width: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+          }
+
+          .templates-display-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--txt);
+            font-size: 13px;
+            font-weight: 500;
+          }
+
+          .templates-technical-name,
+          .templates-language-code,
+          .templates-sync-time {
+            font-family: var(--mono);
+            color: var(--txt-3);
+          }
+
+          .templates-technical-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+          }
+
+          .templates-body-preview {
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--txt-2);
+            font-size: 12px;
+          }
+
+          .templates-language-code {
+            font-size: 12px;
+          }
+
+          .templates-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3px 8px;
+            border-radius: var(--r-pill);
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+          }
+
+          .templates-sync-time {
+            font-size: 11px;
+          }
+
+          .templates-row-actions {
+            display: inline-flex;
+            justify-content: center;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.12s;
+          }
+
+          .templates-table tbody tr:hover .templates-row-actions {
+            opacity: 1;
+          }
+
+          .templates-row-action-btn {
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: var(--bg-3);
+            color: var(--txt-3);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+          }
+
+          .templates-row-action-btn:hover {
+            background: var(--bg-4);
+            border-color: var(--line-2);
+            color: var(--txt);
+          }
+
+          .templates-row-action-btn.danger:hover {
+            color: var(--red);
+          }
+
+          .templates-empty {
+            min-height: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-align: center;
+          }
+
+          .templates-empty-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--blue-dim);
+            border: 1px solid var(--line-2);
+            color: var(--blue);
+          }
+
+          .templates-empty strong {
+            color: var(--txt-2);
+            font-size: 13px;
+            font-weight: 500;
+          }
+
+          .templates-empty span {
+            color: var(--txt-3);
+            font-size: 11px;
+          }
+
+          .templates-tbl-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 0 0;
+            flex-shrink: 0;
+            color: var(--txt-3);
+            font-size: 12px;
+          }
+
+          .templates-tbl-foot strong {
+            color: var(--txt);
+            font-family: var(--mono);
+            font-weight: 500;
+          }
+
+          .templates-pagi {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          }
+
+          .templates-pagi-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: var(--bg-3);
+            color: var(--txt-2);
+            font-family: var(--mono);
+            font-size: 11px;
+            cursor: pointer;
+          }
+
+          .templates-pagi-btn:hover {
+            background: var(--bg-4);
+            color: var(--txt);
+          }
+
+          .templates-pagi-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+          }
+
+          .templates-pagi-btn.active {
+            background: var(--teal);
+            border-color: var(--teal);
+            color: var(--on-teal);
+            font-weight: 600;
+          }
+        `}
+      </style>
+
+      <div className="templates-page">
+        <div className="templates-page-head">
           <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.4px' }}>
+            <h1>
               {t('tenantAdmin.templates.title')}
             </h1>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--txt-2)' }}>
+            <p>
               {t('tenantAdmin.templates.subtitle')}
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="templates-page-actions">
             <Button variant="secondary" onClick={() => setSyncOpen(true)}>
               {t('tenantAdmin.templates.sync')}
             </Button>
@@ -576,114 +984,184 @@ export function Templates() {
         </div>
 
         {isLoading ? (
-          <div style={{ color: 'var(--txt-3)', fontSize: 13 }}>…</div>
-        ) : templates.length === 0 ? (
-          <div className="zd-empty-state" style={{ border: '1px dashed var(--line)', borderRadius: 'var(--r-lg)', padding: '34px 16px' }}>
-            <div className="zd-empty-icon" aria-hidden>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-                <path d="M5 3.5h10A1.5 1.5 0 0 1 16.5 5v10A1.5 1.5 0 0 1 15 16.5H5A1.5 1.5 0 0 1 3.5 15V5A1.5 1.5 0 0 1 5 3.5Z" stroke="currentColor" strokeWidth="1.4" />
-                <path d="M6.5 7.5h7M6.5 10h7M6.5 12.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-              </svg>
-            </div>
-            <strong style={{ color: 'var(--txt-2)', fontSize: 13 }}>{t('tenantAdmin.templates.empty')}</strong>
-            <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{t('tenantAdmin.templates.emptyHint')}</span>
-          </div>
+          <div style={{ color: 'var(--txt-3)', fontSize: 13, padding: '16px 0' }}>…</div>
         ) : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {channels.map((channel) => {
-              const channelTemplates = templatesByChannel.get(channel.id) ?? [];
-              if (channelTemplates.length === 0) return null;
+          <>
+            <div className="templates-seg-tabs" role="tablist" aria-label={t('tenantAdmin.templates.selectChannel')}>
+              {channels.map((channel) => {
+                const count = templatesByChannel.get(channel.id)?.length ?? 0;
+                const active = activeChannel?.id === channel.id;
+                return (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`templates-seg-tab${active ? ' active' : ''}`}
+                    onClick={() => setActiveChannelId(channel.id)}
+                  >
+                    {channel.name} <span style={{ fontFamily: 'var(--mono)' }}>({count})</span>
+                  </button>
+                );
+              })}
+            </div>
 
-              return (
-                <section
-                  key={channel.id}
-                  style={{
-                    border: '1px solid var(--line)',
-                    borderRadius: 'var(--r-lg)',
-                    background: 'var(--bg-2)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--line)' }}>
-                    <strong style={{ color: 'var(--txt)', fontSize: 13 }}>{channel.name}</strong>
-                    <span style={{ color: 'var(--txt-3)', fontFamily: 'var(--mono)', fontSize: 11 }}>{channelTemplates.length}</span>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 1 }}>
-                    {channelTemplates.map((template) => {
+            {activeChannelTemplates.length === 0 ? (
+              <div className="templates-empty">
+                <div className="templates-empty-icon" aria-hidden>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden>
+                    <path d="M6 3.5h6.5L16 7v11.5H6V3.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                    <path d="M12.5 3.5V7H16M8.5 11h5M11 8.75v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <strong>
+                  {t('tenantAdmin.templates.empty.title', { defaultValue: t('tenantAdmin.templates.empty') })}
+                </strong>
+                <span>
+                  {t('tenantAdmin.templates.empty.subtitle', { defaultValue: t('tenantAdmin.templates.emptyHint') })}
+                </span>
+                <Button size="sm" onClick={openCreateModal}>
+                  {t('tenantAdmin.templates.new')}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="templates-table-wrap">
+                  <table className="templates-table">
+                    <thead>
+                      <tr>
+                        <th className="templates-col-name">{t('tenantAdmin.templates.table.name', { defaultValue: 'Nome' })}</th>
+                        <th className="templates-col-language">{t('tenantAdmin.templates.table.language', { defaultValue: 'Idioma' })}</th>
+                        <th className="templates-col-category">{t('tenantAdmin.templates.table.category', { defaultValue: 'Categoria' })}</th>
+                        <th className="templates-col-status">{t('tenantAdmin.templates.table.status', { defaultValue: 'Status' })}</th>
+                        <th className="templates-col-sync">{t('tenantAdmin.templates.table.lastSync', { defaultValue: 'Última sync' })}</th>
+                        <th className="templates-col-actions">{t('tenantAdmin.templates.table.actions', { defaultValue: 'Ações' })}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedTemplates.map((template) => {
+                        const categoryColors = templateCategoryColors(template.category);
                       const statusColors = templateStatusColors(template.status);
                       return (
-                      <div
-                        key={template.id}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1fr) auto',
-                          gap: 10,
-                          padding: '12px 14px',
-                          borderTop: '1px solid var(--line)',
-                          background: 'var(--bg-2)',
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <strong style={{ fontSize: 13, color: 'var(--txt)' }}>{template.display_name}</strong>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>{template.name}</span>
-                            <span style={{
-                              borderRadius: 'var(--r-pill)',
-                              border: '1px solid var(--line-2)',
-                              background: 'var(--bg-3)',
-                              color: 'var(--txt-2)',
-                              padding: '1px 8px',
-                              fontSize: 10,
-                              fontWeight: 600,
-                            }}>
-                              {template.language}
-                            </span>
-                            <span style={{
-                              borderRadius: 'var(--r-pill)',
-                              border: '1px solid rgba(0,201,167,.24)',
-                              background: 'var(--teal-dim)',
-                              color: 'var(--teal)',
-                              padding: '1px 8px',
-                              fontSize: 10,
-                              fontWeight: 600,
-                            }}>
-                              {t(`tenantAdmin.templates.category.${template.category}`)}
-                            </span>
-                            <span style={{
-                              borderRadius: 'var(--r-pill)',
-                              border: '1px solid var(--line-2)',
-                              background: statusColors.background,
-                              color: statusColors.color,
-                              padding: '1px 8px',
-                              fontSize: 10,
-                              fontWeight: 600,
-                            }}>
-                              {t(`tenantAdmin.templates.status.${template.status}`)}
-                            </span>
-                          </div>
-
-                          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'pre-wrap' }}>
-                            {template.body}
-                          </p>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 6, alignSelf: 'start' }}>
-                          <Button size="sm" variant="secondary" onClick={() => openEditModal(template)}>
-                            {t('tenantAdmin.common.edit')}
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setDeleteTemplateId(template.id)}>
-                            {t('tenantAdmin.common.remove')}
-                          </Button>
-                        </div>
-                      </div>
+                          <tr key={template.id}>
+                            <td className="templates-col-name">
+                              <div className="templates-name-cell">
+                                <div className="templates-name-line">
+                                  <span className="templates-display-name">{template.display_name}</span>
+                                  <span className="templates-technical-name">{template.name}</span>
+                                </div>
+                                <div className="templates-body-preview">{template.body || '—'}</div>
+                              </div>
+                            </td>
+                            <td className="templates-col-language">
+                              <span className="templates-language-code">{template.language}</span>
+                            </td>
+                            <td className="templates-col-category">
+                              <span
+                                className="templates-pill"
+                                style={{ background: categoryColors.background, color: categoryColors.color }}
+                              >
+                                {t(`tenantAdmin.templates.category.${template.category}`)}
+                              </span>
+                            </td>
+                            <td className="templates-col-status">
+                              <span
+                                className="templates-pill"
+                                style={{ background: statusColors.background, color: statusColors.color }}
+                              >
+                                {t(`tenantAdmin.templates.status.${template.status}`)}
+                              </span>
+                            </td>
+                            <td className="templates-col-sync">
+                              <span className="templates-sync-time">
+                                {formatRelativeSync(
+                                  template.last_synced_at,
+                                  i18n.language,
+                                  t('tenantAdmin.templates.syncNever', { defaultValue: 'nunca' }),
+                                )}
+                              </span>
+                            </td>
+                            <td className="templates-col-actions">
+                              <div className="templates-row-actions">
+                                <button
+                                  type="button"
+                                  className="templates-row-action-btn"
+                                  title={t('tenantAdmin.common.edit')}
+                                  aria-label={t('tenantAdmin.common.edit')}
+                                  onClick={() => openEditModal(template)}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+                                    <path d="M3 11.75 4.1 9.1l6.4-6.4 2.8 2.8-6.4 6.4L4.25 13H3v-1.25Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="templates-row-action-btn danger"
+                                  title={t('tenantAdmin.common.remove')}
+                                  aria-label={t('tenantAdmin.common.remove')}
+                                  onClick={() => setDeleteTemplateId(template.id)}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+                                    <path d="M3 4.5h10M6.25 4.5V3.25h3.5V4.5M5 6.5v6h6v-6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
                       );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="templates-tbl-foot">
+                  <span>
+                    {t('tenantAdmin.templates.table.showing', {
+                      defaultValue: 'Mostrando',
+                    })}{' '}
+                    <strong>{(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, activeChannelTemplates.length)}</strong>
+                    {' '}
+                    {t('tenantAdmin.templates.table.of', { defaultValue: 'de' })}
+                    {' '}
+                    <strong>{activeChannelTemplates.length}</strong>
+                  </span>
+                  {totalPages > 1 && (
+                    <div className="templates-pagi">
+                      <button
+                        type="button"
+                        className="templates-pagi-btn"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                        aria-label={t('tenantAdmin.common.previous', { defaultValue: 'Anterior' })}
+                      >
+                        ‹
+                      </button>
+                      {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                        <button
+                          key={page}
+                          type="button"
+                          className={`templates-pagi-btn${page === currentPage ? ' active' : ''}`}
+                          onClick={() => setCurrentPage(page)}
+                          aria-label={`${t('tenantAdmin.templates.table.page', { defaultValue: 'Página' })} ${page}`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="templates-pagi-btn"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                        aria-label={t('tenantAdmin.common.next', { defaultValue: 'Próxima' })}
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
