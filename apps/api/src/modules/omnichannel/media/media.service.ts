@@ -115,7 +115,7 @@ export async function uploadToMeta(
   form.append('messaging_product', 'whatsapp');
   form.append('type', mimeType);
 
-  const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/media`, {
+  const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_VERSION}/${phoneNumberId}/media`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -169,7 +169,7 @@ export async function getMetaMediaInfo(params: {
   }
 
   const creds = await getMetaCredentialsForConversation(params.tenantId, params.conversationId);
-  const response = await fetch(`https://graph.facebook.com/v19.0/${params.mediaId}`, {
+  const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_VERSION}/${params.mediaId}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${creds.accessToken}`,

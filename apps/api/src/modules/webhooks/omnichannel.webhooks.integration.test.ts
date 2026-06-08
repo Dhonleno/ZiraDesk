@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/database.js';
 import { createTestApp } from '../../test/setup.js';
+import { ensureTemplatesInfrastructure } from '../admin/templates/templates.service.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
 
 interface TempTenant {
@@ -251,6 +252,67 @@ describe('Omnichannel webhooks integration', () => {
       .send(payload);
 
     expect(response.status).toBe(401);
+  });
+
+  it('Webhook de status de template atualiza o status persistido pela Meta', async () => {
+    const { schemaName } = requireGlobalTenant();
+    const wabaId = `waba_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    const channelId = await insertChannel(schemaName, 'whatsapp', {
+      phoneNumberId: `1555333${Math.floor(Math.random() * 100000)}`,
+      accessToken: 'EAAD_TEST_TOKEN',
+      wabaId,
+    });
+    await ensureTemplatesInfrastructure(schemaName);
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${schemaName}".whatsapp_templates
+        (channel_id, name, display_name, language, category, body, status, meta_template_id, last_synced_at)
+       VALUES ($1::uuid, 'webhook_status_test', 'Webhook status test', 'pt_BR', 'UTILITY',
+               'Olá', 'pending', 'meta_webhook_001', NOW())`,
+      channelId,
+    );
+
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: wabaId,
+          changes: [
+            {
+              field: 'message_template_status_update',
+              value: {
+                event: 'APPROVED',
+                message_template_id: 'meta_webhook_001',
+                message_template_name: 'webhook_status_test',
+                message_template_language: 'pt_BR',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const rawBody = JSON.stringify(payload);
+    const response = await createTestApp()
+      .post('/api/webhooks/whatsapp')
+      .set('Content-Type', 'application/json')
+      .set('x-hub-signature-256', createMetaSignature(rawBody))
+      .send(payload);
+
+    expect(response.status).toBe(200);
+
+    const status = await waitFor(async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+        `SELECT status
+         FROM "${schemaName}".whatsapp_templates
+         WHERE channel_id = $1::uuid
+           AND meta_template_id = 'meta_webhook_001'
+         LIMIT 1`,
+        channelId,
+      );
+      return rows[0]?.status === 'approved' ? rows[0].status : null;
+    });
+    expect(status).toBe('approved');
   });
 
   it('Webhook de mensagem de contato inexistente cria contato automaticamente', async () => {

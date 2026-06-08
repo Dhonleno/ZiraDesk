@@ -105,16 +105,22 @@ async function createChannel(schemaName: string): Promise<string> {
   return rows[0]!.id;
 }
 
-async function createTemplate(schemaName: string, channelId: string, status = 'approved'): Promise<string> {
+async function createTemplate(
+  schemaName: string,
+  channelId: string,
+  status = 'approved',
+  metaTemplateId: string | null = 'meta-camp-id',
+): Promise<string> {
   const name = `camp_tmpl_${uniqueSuffix()}`;
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO "${schemaName}".whatsapp_templates
        (channel_id, name, display_name, language, category, body, variables, status, meta_template_id)
-     VALUES ($1::uuid, $3, 'Campaign Template', 'pt_BR', 'UTILITY', 'Olá {{1}}, promoção especial!', '["1"]'::jsonb, $2, 'meta-camp-id')
+     VALUES ($1::uuid, $3, 'Campaign Template', 'pt_BR', 'UTILITY', 'Olá {{1}}, promoção especial!', '["1"]'::jsonb, $2, $4)
      RETURNING id`,
     channelId,
     status,
     name,
+    metaTemplateId,
   );
   return rows[0]!.id;
 }
@@ -180,6 +186,17 @@ describe('Campanhas integration', () => {
       .post('/api/omnichannel/campaigns')
       .set(agentHeader(tenant))
       .send({ name: 'Campanha Rejeitada', channel_id: channelId, template_id: rejectedTemplateId });
+
+    expect(res.status).toBe(422);
+  });
+
+  it('POST /campaigns com template sem vínculo com a Meta → 422', async () => {
+    const localTemplateId = await createTemplate(tenant.schemaName, channelId, 'approved', null);
+
+    const res = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({ name: 'Campanha local', channel_id: channelId, template_id: localTemplateId });
 
     expect(res.status).toBe(422);
   });

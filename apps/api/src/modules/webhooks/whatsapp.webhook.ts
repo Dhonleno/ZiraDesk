@@ -16,6 +16,7 @@ import {
   getBusinessHoursStatus,
   isWithinBusinessHours,
 } from '../admin/business-hours/business-hours.service.js';
+import { updateTemplateStatusFromMeta } from '../admin/templates/templates.service.js';
 import {
   buildProtocolMessage,
   callGenerateProtocol,
@@ -111,8 +112,8 @@ interface MetaWebhookPayload {
     id: string;
     changes: Array<{
       value: {
-        messaging_product: 'whatsapp';
-        metadata: {
+        messaging_product?: 'whatsapp';
+        metadata?: {
           display_phone_number: string;
           phone_number_id: string;
         };
@@ -122,6 +123,10 @@ interface MetaWebhookPayload {
         }>;
         messages?: MetaMessage[];
         statuses?: MetaStatus[];
+        event?: string;
+        message_template_id?: string;
+        message_template_name?: string;
+        message_template_language?: string;
       };
       field: string;
     }>;
@@ -428,6 +433,103 @@ async function findChannelByPhoneNumberId(
   return null;
 }
 
+async function findChannelsByWabaId(wabaId: string): Promise<ChannelMatch[]> {
+  const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
+    `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
+  );
+  const matches: ChannelMatch[] = [];
+  const envFallbackMatches: ChannelMatch[] = [];
+
+  for (const tenant of tenants) {
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM ${quoteIdent(tenant.schema_name)}.channels
+         WHERE type = 'whatsapp' AND status = 'active'
+         LIMIT 100`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[WhatsApp] Failed to query channels for template status update',
+      );
+      continue;
+    }
+
+    for (const channel of channels) {
+      let credentials: Record<string, string>;
+      try {
+        credentials = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[WhatsApp] Invalid channel credentials while processing template status',
+        );
+        continue;
+      }
+
+      const channelWabaId = getCredentialValue(credentials, 'wabaId', 'waba_id');
+      const match = {
+        tenantId: tenant.id,
+        schemaName: tenant.schema_name,
+        channelId: channel.id,
+        channelCredentials: withWhatsappEnvFallback(credentials),
+      };
+
+      if (channelWabaId === wabaId) {
+        matches.push(match);
+      } else if (!channelWabaId && env.WHATSAPP_WABA_ID === wabaId) {
+        envFallbackMatches.push(match);
+      }
+    }
+  }
+
+  if (matches.length > 0) return matches;
+  if (envFallbackMatches.length === 1) {
+    logger.warn({ wabaId }, '[WhatsApp] Using .env fallback for template status update');
+    return envFallbackMatches;
+  }
+  if (envFallbackMatches.length > 1) {
+    logger.warn(
+      { wabaId, count: envFallbackMatches.length },
+      '[WhatsApp] Ambiguous .env fallback for template status update',
+    );
+  }
+  return [];
+}
+
+async function processTemplateStatusUpdate(
+  wabaId: string,
+  value: MetaWebhookPayload['entry'][number]['changes'][number]['value'],
+): Promise<void> {
+  const channels = await findChannelsByWabaId(wabaId);
+  if (channels.length === 0) {
+    logger.warn({ wabaId }, '[WhatsApp] No channel found for template status update');
+    return;
+  }
+
+  let updated = 0;
+  for (const channel of channels) {
+    updated += await updateTemplateStatusFromMeta(channel.schemaName, channel.channelId, {
+      templateId: value.message_template_id,
+      templateName: value.message_template_name,
+      language: value.message_template_language,
+      event: value.event,
+    });
+  }
+
+  logger.info(
+    {
+      wabaId,
+      templateId: value.message_template_id,
+      templateName: value.message_template_name,
+      event: value.event,
+      updated,
+    },
+    '[WhatsApp] Template status updated',
+  );
+}
+
 function getLocalWeekday(timezone: string): number {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
@@ -601,7 +703,7 @@ async function sendWhatsAppInteractiveMenu(
 
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+      `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
@@ -2564,6 +2666,15 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
 
     for (const entry of payload.entry) {
       for (const change of entry.changes) {
+        if (change.field === 'message_template_status_update') {
+          try {
+            await processTemplateStatusUpdate(entry.id, change.value);
+          } catch (err) {
+            request.log.error({ err }, '[WhatsApp] Failed to process template status update');
+          }
+          continue;
+        }
+
         if (change.field !== 'messages') continue;
 
         const value = change.value;
@@ -2585,7 +2696,11 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
           const contact = value.contacts?.[0];
           const senderName = contact?.profile.name ?? message.from;
           const senderPhone = message.from;
-          const phoneNumberId = value.metadata.phone_number_id;
+          const phoneNumberId = value.metadata?.phone_number_id;
+          if (!phoneNumberId) {
+            request.log.warn('[WhatsApp] Incoming message without phone_number_id');
+            continue;
+          }
 
           try {
             await processIncomingMessage(app, {

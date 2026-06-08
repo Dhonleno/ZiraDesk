@@ -238,6 +238,9 @@ export async function createCampaign(
       `Template com status "${template.status}". Envie apenas templates aprovados.`,
     );
   }
+  if (!template.meta_template_id) {
+    throw new ValidationError('Template não está vinculado à Meta. Sincronize os templates e tente novamente.');
+  }
   const headerMedia = validateCampaignHeaderMedia(template, data);
 
   const scheduledAt = data.scheduled_at ? new Date(data.scheduled_at) : null;
@@ -297,6 +300,9 @@ export async function updateCampaign(
     const normalizedStatus = template.status?.toLowerCase().trim();
     if (normalizedStatus !== 'approved') {
       throw new ValidationError(`Template com status "${template.status}". Envie apenas templates aprovados.`);
+    }
+    if (!template.meta_template_id) {
+      throw new ValidationError('Template não está vinculado à Meta. Sincronize os templates e tente novamente.');
     }
   }
 

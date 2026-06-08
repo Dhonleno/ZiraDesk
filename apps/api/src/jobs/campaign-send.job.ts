@@ -117,7 +117,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
       campaign.template_id,
     ).catch(() => [] as TemplateRow[]);
     const template = templateRows[0];
-    if (!template || template.status !== 'approved') {
+    if (!template || template.status !== 'approved' || !template.meta_template_id) {
       logger.warn({ campaignId, templateId: campaign.template_id }, '[CampaignSend] Template unavailable');
       await prisma.$executeRawUnsafe(
         `UPDATE ${schema}.campaigns SET status = 'cancelled', cancelled_at = NOW() WHERE id = $1::uuid`,

@@ -504,7 +504,7 @@ const worker = new Worker<SendMessageJob>(
         const replyExternalId = await resolveReplyExternalId(job.data);
         const sendToMeta = async (payload: ReturnType<typeof buildWhatsAppBody>) => {
           const response = await fetch(
-            `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+            `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${phoneNumberId}/messages`,
             {
               method: 'POST',
               headers: {
@@ -615,7 +615,7 @@ const worker = new Worker<SendMessageJob>(
         }
 
         const igResponse = await fetch(
-          `https://graph.facebook.com/v19.0/${pageId}/messages`,
+          `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${pageId}/messages`,
           {
             method: 'POST',
             headers: {

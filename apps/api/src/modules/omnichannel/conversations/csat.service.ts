@@ -112,7 +112,7 @@ export async function sendWhatsAppTextMessage({
   const normalizedTo = normalizePhoneNumber(to);
   if (!normalizedTo || !phoneNumberId || !accessToken) return false;
 
-  const response = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/${env.META_GRAPH_VERSION}/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,

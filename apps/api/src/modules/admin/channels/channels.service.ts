@@ -108,7 +108,7 @@ async function testWhatsAppChannel(credentials: Record<string, unknown>): Promis
   }
 
   const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v19.0/${encodeURIComponent(phoneNumberId)}?fields=id`,
+    `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${encodeURIComponent(phoneNumberId)}?fields=id`,
     {
       method: 'GET',
       headers: {
@@ -138,7 +138,7 @@ async function testInstagramChannel(credentials: Record<string, unknown>): Promi
   }
 
   const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v19.0/${encodeURIComponent(pageId)}?fields=id`,
+    `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${encodeURIComponent(pageId)}?fields=id`,
     {
       method: 'GET',
       headers: {

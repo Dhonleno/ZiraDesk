@@ -9,7 +9,7 @@ export const templateVariableSchema = z.object({
 
 export const templateLanguageSchema = z.enum(['pt_BR', 'en_US', 'es']);
 export const templateCategorySchema = z.enum(['MARKETING', 'UTILITY', 'AUTHENTICATION']);
-export const templateStatusSchema = z.enum(['approved', 'pending', 'rejected']);
+export const templateHeaderTypeSchema = z.enum(['none', 'text', 'image', 'video', 'document']);
 
 export const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
@@ -21,11 +21,27 @@ export const createTemplateSchema = z.object({
   displayName: z.string().trim().min(2).max(180),
   language: templateLanguageSchema,
   category: templateCategorySchema,
-  body: z.string().trim().min(1).max(4096),
-  header: z.string().trim().max(500).optional(),
-  footer: z.string().trim().max(500).optional(),
+  body: z.string().trim().min(1).max(1024),
+  headerType: templateHeaderTypeSchema.default('none'),
+  headerText: z.string().trim().max(60).optional(),
+  headerHandle: z.string().trim().min(1).max(4096).optional(),
+  footer: z.string().trim().max(60).optional(),
   variables: z.array(templateVariableSchema).max(30).default([]),
-  status: templateStatusSchema.optional(),
+}).superRefine((data, context) => {
+  if (data.headerType === 'text' && !data.headerText) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['headerText'],
+      message: 'Informe o texto do cabeçalho',
+    });
+  }
+  if (['image', 'video', 'document'].includes(data.headerType) && !data.headerHandle) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['headerHandle'],
+      message: 'Envie a mídia de exemplo do cabeçalho',
+    });
+  }
 });
 
 export const updateTemplateSchema = z.object({
@@ -34,11 +50,12 @@ export const updateTemplateSchema = z.object({
   displayName: z.string().trim().min(2).max(180).optional(),
   language: templateLanguageSchema.optional(),
   category: templateCategorySchema.optional(),
-  body: z.string().trim().min(1).max(4096).optional(),
-  header: z.string().trim().max(500).optional(),
-  footer: z.string().trim().max(500).optional(),
+  body: z.string().trim().min(1).max(1024).optional(),
+  headerType: templateHeaderTypeSchema.optional(),
+  headerText: z.string().trim().max(60).optional(),
+  headerHandle: z.string().trim().min(1).max(4096).optional(),
+  footer: z.string().trim().max(60).optional(),
   variables: z.array(templateVariableSchema).max(30).optional(),
-  status: templateStatusSchema.optional(),
 });
 
 export const syncTemplatesSchema = z.object({
