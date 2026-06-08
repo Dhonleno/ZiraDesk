@@ -474,8 +474,18 @@
       "variableExampleRequired": "Informe um exemplo para esta variável",
       "submitForReview": "Enviar para análise",
       "preview": "Preview",
-      "empty": "Nenhum template cadastrado",
-      "emptyHint": "Envie um template para análise ou sincronize com a Meta"
+      "table": {
+        "name": "Nome",
+        "language": "Idioma",
+        "category": "Categoria",
+        "status": "Status",
+        "lastSync": "Última sync",
+        "actions": "Ações"
+      },
+      "empty": {
+        "title": "Nenhum template cadastrado",
+        "subtitle": "Crie um template ou sincronize com a Meta"
+      }
     },
     "tags": {
       "title": "Etiquetas",

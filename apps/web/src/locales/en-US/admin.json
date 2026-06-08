@@ -457,8 +457,18 @@
       "variableExampleRequired": "Provide an example for this variable",
       "submitForReview": "Submit for review",
       "preview": "Preview",
-      "empty": "No templates registered",
-      "emptyHint": "Create a template or sync with Meta"
+      "table": {
+        "name": "Name",
+        "language": "Language",
+        "category": "Category",
+        "status": "Status",
+        "lastSync": "Last sync",
+        "actions": "Actions"
+      },
+      "empty": {
+        "title": "No templates found",
+        "subtitle": "Create a template or sync with Meta"
+      }
     },
     "tags": {
       "title": "Tags",

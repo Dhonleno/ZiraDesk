@@ -1015,10 +1015,10 @@ export function Templates() {
                   </svg>
                 </div>
                 <strong>
-                  {t('tenantAdmin.templates.empty.title', { defaultValue: t('tenantAdmin.templates.empty') })}
+                  {t('tenantAdmin.templates.empty.title')}
                 </strong>
                 <span>
-                  {t('tenantAdmin.templates.empty.subtitle', { defaultValue: t('tenantAdmin.templates.emptyHint') })}
+                  {t('tenantAdmin.templates.empty.subtitle')}
                 </span>
                 <Button size="sm" onClick={openCreateModal}>
                   {t('tenantAdmin.templates.new')}
@@ -1030,12 +1030,12 @@ export function Templates() {
                   <table className="templates-table">
                     <thead>
                       <tr>
-                        <th className="templates-col-name">{t('tenantAdmin.templates.table.name', { defaultValue: 'Nome' })}</th>
-                        <th className="templates-col-language">{t('tenantAdmin.templates.table.language', { defaultValue: 'Idioma' })}</th>
-                        <th className="templates-col-category">{t('tenantAdmin.templates.table.category', { defaultValue: 'Categoria' })}</th>
-                        <th className="templates-col-status">{t('tenantAdmin.templates.table.status', { defaultValue: 'Status' })}</th>
-                        <th className="templates-col-sync">{t('tenantAdmin.templates.table.lastSync', { defaultValue: 'Última sync' })}</th>
-                        <th className="templates-col-actions">{t('tenantAdmin.templates.table.actions', { defaultValue: 'Ações' })}</th>
+                        <th className="templates-col-name">{t('tenantAdmin.templates.table.name')}</th>
+                        <th className="templates-col-language">{t('tenantAdmin.templates.table.language')}</th>
+                        <th className="templates-col-category">{t('tenantAdmin.templates.table.category')}</th>
+                        <th className="templates-col-status">{t('tenantAdmin.templates.table.status')}</th>
+                        <th className="templates-col-sync">{t('tenantAdmin.templates.table.lastSync')}</th>
+                        <th className="templates-col-actions">{t('tenantAdmin.templates.table.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
