@@ -30,6 +30,7 @@ type AttendanceRulesForm = z.infer<typeof attendanceRulesSchema>;
 
 function mapBackendModeToFormMode(value: string | undefined): AttendanceRulesForm['active_outbound_validity_mode'] {
   if (value === 'hours') return 'hours';
+  if (value === 'unlimited') return 'unlimited';
   return 'until_end_of_day';
 }
 
@@ -92,7 +93,11 @@ export function AttendanceRules() {
 
   const mutation = useMutation({
     mutationFn: (values: AttendanceRulesForm) => {
-      const normalizedMode = values.active_outbound_validity_mode === 'hours' ? 'hours' : 'end_of_day';
+      const normalizedMode = values.active_outbound_validity_mode === 'hours'
+        ? 'hours'
+        : values.active_outbound_validity_mode === 'unlimited'
+          ? 'unlimited'
+          : 'end_of_day';
       return adminApi.updateSettings({
         csat_enabled: values.csat_enabled,
         csat_message: values.csat_message ?? null,
@@ -104,7 +109,7 @@ export function AttendanceRules() {
         inactivity_warning_message: values.inactivity_warning_message ?? '',
         inactivity_close_message: values.inactivity_close_message ?? '',
         active_outbound_validity_mode: normalizedMode,
-        ...(values.active_outbound_validity_mode === 'hours'
+        ...(normalizedMode === 'hours'
           ? { active_outbound_validity_hours: values.active_outbound_validity_hours ?? 24 }
           : {}),
         bot_assigned_message: values.bot_assigned_message ?? '',

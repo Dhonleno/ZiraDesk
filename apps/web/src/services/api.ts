@@ -22,7 +22,7 @@ interface TenantSettings {
   inactivity_close_minutes?: number;
   inactivity_warning_message?: string;
   inactivity_close_message?: string;
-  active_outbound_validity_mode?: 'end_of_day' | 'hours';
+  active_outbound_validity_mode?: 'end_of_day' | 'hours' | 'unlimited';
   active_outbound_validity_hours?: number;
   bot_assigned_message?: string;
   max_conversations_per_agent?: number | null;
