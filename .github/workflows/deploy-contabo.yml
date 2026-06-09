@@ -67,6 +67,15 @@ jobs:
           docker compose --env-file .env.production -f docker-compose.production.yml build
           docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
           docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate </dev/null
+
+          stale_recreate_containers="$(
+            docker ps -a --format '{{.ID}} {{.Names}}' \
+              | awk '$2 ~ /^[[:xdigit:]]+_ziradesk-(api|web|nginx)$/ { print $1 }'
+          )"
+          if [ -n "${stale_recreate_containers}" ]; then
+            docker rm -f ${stale_recreate_containers}
+          fi
+
           docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web nginx
 
           docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
