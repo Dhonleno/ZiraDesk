@@ -820,7 +820,17 @@ worker.on('failed', (job, err) => {
       delivery_failed_at: new Date().toISOString(),
     },
     reason,
-  );
+  ).catch((error: unknown) => {
+    logger.error(
+      {
+        jobId: job.id,
+        messageId: job.data.messageId,
+        conversationId: job.data.conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      '[Message Worker] Failed to persist final delivery failure',
+    );
+  });
 });
 
 worker.on('active', (job) => {
