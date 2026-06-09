@@ -17,11 +17,18 @@ export function ChangePassword() {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.mustChangePassword) {
+      navigate('/', { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -52,7 +59,7 @@ export function ChangePassword() {
     setErrorMessage('');
     setIsSubmitting(true);
     try {
-      await profileApi.updatePassword({ currentPassword: undefined, newPassword });
+      await profileApi.updatePassword({ newPassword });
       setUser({ mustChangePassword: false });
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       navigate('/', { replace: true });
