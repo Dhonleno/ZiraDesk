@@ -19,6 +19,7 @@ import { PageShell } from '../../components/layout/PageShell';
 import { maskEmail, maskPhone } from '../../utils/pii-mask';
 import { ContactImportModal } from '../../components/crm/ContactImportModal';
 import { useAuthStore } from '../../stores/auth.store';
+import './Contacts.css';
 
 export function ContactsPage() {
   const { t } = useTranslation('crm');
@@ -233,6 +234,7 @@ export function ContactsPage() {
               return (
                 <div
                   key={contact.id}
+                  className="contact-list-item"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -257,7 +259,7 @@ export function ContactsPage() {
                       </div>
                     </div>
                   </button>
-                  <div style={{ display: 'flex', gap: 2 }}>
+                  <div className="contact-row-actions">
                     <button className="tb-icon-btn" onClick={() => setEditContact(contact)} title={t('contacts.actions.edit')} aria-label={t('contacts.actions.edit')} style={{ width: 26, height: 26 }}>
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
                     </button>
