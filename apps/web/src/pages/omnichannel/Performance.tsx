@@ -141,13 +141,6 @@ function mapPeriodToGoalPeriod(
   return 'monthly';
 }
 
-function computeOverallStatus(statuses: PerformanceMetricStatus[]): PerformanceMetricStatus {
-  const withGoals = statuses.filter((status) => status !== 'no_goal');
-  if (withGoals.length === 0) return 'no_goal';
-  if (withGoals.includes('breach')) return 'breach';
-  if (withGoals.includes('warning')) return 'warning';
-  return 'ok';
-}
 
 function MetricCell({
   value,
@@ -488,13 +481,13 @@ export function PerformancePage() {
             </thead>
             <tbody>
               {(performanceData?.data ?? []).map((agent) => {
-                const goal = agent.goal;
-                const tmaStatus = checkGoal(agent.avg_tma_minutes, goal?.goal_tma_minutes ?? null, 'max');
-                const tmeStatus = checkGoal(agent.avg_tme_minutes, goal?.goal_tme_minutes ?? null, 'max');
-                const slaStatus = checkGoal(agent.sla_percent, goal?.goal_sla_percent ?? null, 'min');
-                const csatStatus = checkGoal(agent.avg_csat, goal?.goal_csat_min ?? null, 'min');
-                const volumeStatus = checkGoal(agent.total_conversations, goal?.goal_volume_min ?? null, 'min');
-                const overallStatus = computeOverallStatus([tmaStatus, tmeStatus, slaStatus, csatStatus, volumeStatus]);
+                const goal         = agent.goal;
+                const tmaStatus    = agent.goal_status?.tma    ?? 'no_goal';
+                const tmeStatus    = agent.goal_status?.tme    ?? 'no_goal';
+                const slaStatus    = agent.goal_status?.sla    ?? 'no_goal';
+                const csatStatus   = agent.goal_status?.csat   ?? 'no_goal';
+                const volumeStatus = agent.goal_status?.volume ?? 'no_goal';
+                const overallStatus = agent.goal_status?.overall ?? 'no_goal';
 
                 return (
                   <tr

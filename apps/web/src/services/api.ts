@@ -2600,13 +2600,13 @@ export interface OmnichannelPerformanceAgent {
   sla_breach: number;
   goal: OmnichannelPerformanceGoal | null;
   goal_status: {
-    tma: PerformanceMetricStatus;
-    tme: PerformanceMetricStatus;
-    sla: PerformanceMetricStatus;
-    csat: PerformanceMetricStatus;
-    volume: PerformanceMetricStatus;
-    overall: PerformanceMetricStatus;
-  };
+    tma: PerformanceMetricStatus | null;
+    tme: PerformanceMetricStatus | null;
+    sla: PerformanceMetricStatus | null;
+    csat: PerformanceMetricStatus | null;
+    volume: PerformanceMetricStatus | null;
+    overall: PerformanceMetricStatus | null;
+  } | null;
 }
 
 export interface OmnichannelPerformanceResponse {
