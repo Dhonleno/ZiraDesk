@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BrandLogo } from '../../components/layout/BrandLogo';
 import { Input } from '../../components/ui/Input';
@@ -11,29 +11,50 @@ function getApiErrorMessage(error: unknown): string | null {
   return response?.data?.error ?? null;
 }
 
-export function ForgotPassword() {
+export function ResetPassword() {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [tenantSlug, setTenantSlug] = useState('');
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') ?? '';
+  const isInvite = searchParams.get('invite') === 'true';
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [tokenInvalid, setTokenInvalid] = useState(!token);
+
+  const validate = (): string | null => {
+    if (newPassword.length < 8 || confirmPassword.length < 8) {
+      return t('resetPassword.minLength');
+    }
+    if (newPassword !== confirmPassword) {
+      return t('resetPassword.mismatch');
+    }
+    return null;
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!email) return;
+    const validationError = validate();
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
 
     setErrorMessage('');
     setIsSubmitting(true);
     try {
-      await api.post('/auth/forgot-password', {
-        email,
-        ...(import.meta.env.DEV && tenantSlug ? { tenantSlug } : {}),
-      });
-      setSent(true);
+      await api.post('/auth/reset-password', { token, password: newPassword });
+      setSuccess(true);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error) ?? t('forgotPassword.submit'));
+      const msg = getApiErrorMessage(error);
+      if (msg && (msg.toLowerCase().includes('inválido') || msg.toLowerCase().includes('expirado') || msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('expired'))) {
+        setTokenInvalid(true);
+      } else {
+        setErrorMessage(msg ?? t('resetPassword.minLength'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -85,7 +106,7 @@ export function ForgotPassword() {
           </div>
         </div>
 
-        {sent ? (
+        {tokenInvalid ? (
           <div
             style={{
               border: '1px solid var(--line)',
@@ -98,33 +119,46 @@ export function ForgotPassword() {
               textAlign: 'center',
             }}
           >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: '50%',
-                background: 'var(--teal-dim)',
-                border: '1px solid var(--teal)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" width={24} height={24} aria-hidden>
-                <path d="M20 6L9 17l-5-5" stroke="var(--teal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <h1 style={{ margin: 0, color: 'var(--txt)', fontSize: 22, fontWeight: 600 }}>
+                {t('resetPassword.invalidToken')}
+              </h1>
+              <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 13, lineHeight: 1.5 }}>
+                {t('resetPassword.invalidToken')}
+              </p>
             </div>
-            <p style={{ margin: 0, color: 'var(--txt)', fontWeight: 500, fontSize: 15 }}>
-              {t('forgotPassword.success')}
-            </p>
+            <Link
+              to="/forgot-password"
+              style={{ color: 'var(--teal)', fontSize: 14, textDecoration: 'none' }}
+            >
+              {t('resetPassword.requestNew')}
+            </Link>
+          </div>
+        ) : success ? (
+          <div
+            style={{
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              background: 'var(--bg-2)',
+              boxShadow: 'var(--shadow-pop)',
+              padding: 24,
+              display: 'grid',
+              gap: 16,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ display: 'grid', gap: 8 }}>
+              <h1 style={{ margin: 0, color: 'var(--txt)', fontSize: 22, fontWeight: 600 }}>
+                {t('resetPassword.success')}
+              </h1>
+            </div>
             <button
               type="button"
-              className="tb-btn"
+              className="tb-btn tb-btn-primary"
               style={{ width: '100%', minHeight: 40 }}
               onClick={() => navigate('/login')}
             >
-              {t('forgotPassword.backToLogin')}
+              {t('resetPassword.goToLogin')}
             </button>
           </div>
         ) : (
@@ -143,30 +177,32 @@ export function ForgotPassword() {
           >
             <div style={{ display: 'grid', gap: 6 }}>
               <h1 style={{ margin: 0, color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: 0 }}>
-                {t('forgotPassword.title')}
+                {isInvite ? t('resetPassword.titleInvite') : t('resetPassword.title')}
               </h1>
               <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 13, lineHeight: 1.5 }}>
-                {t('forgotPassword.subtitle')}
+                {isInvite ? t('resetPassword.subtitleInvite') : t('resetPassword.subtitle')}
               </p>
             </div>
 
             <Input
-              label={t('forgotPassword.email')}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              label={t('resetPassword.newPassword')}
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              minLength={8}
               required
             />
 
-            {import.meta.env.DEV && (
-              <Input
-                label="Workspace (dev)"
-                placeholder="meu-tenant"
-                value={tenantSlug}
-                onChange={(event) => setTenantSlug(event.target.value)}
-              />
-            )}
+            <Input
+              label={t('resetPassword.confirmPassword')}
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              minLength={8}
+              required
+            />
 
             {errorMessage ? (
               <div
@@ -190,16 +226,7 @@ export function ForgotPassword() {
               className="tb-btn tb-btn-primary"
               style={{ width: '100%', minHeight: 40 }}
             >
-              {isSubmitting ? t('forgotPassword.sending') : t('forgotPassword.submit')}
-            </button>
-
-            <button
-              type="button"
-              className="tb-btn"
-              style={{ width: '100%', minHeight: 40 }}
-              onClick={() => navigate('/login')}
-            >
-              {t('forgotPassword.backToLogin')}
+              {isSubmitting ? t('resetPassword.submitting') : t('resetPassword.submit')}
             </button>
           </form>
         )}
