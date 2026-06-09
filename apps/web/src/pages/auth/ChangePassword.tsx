@@ -18,6 +18,7 @@ export function ChangePassword() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const hasLoadedProfile = useAuthStore((state) => state.hasLoadedProfile);
   const setUser = useAuthStore((state) => state.setUser);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,10 +26,10 @@ export function ChangePassword() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user && !user.mustChangePassword) {
+    if (hasLoadedProfile && user && !user.mustChangePassword) {
       navigate('/', { replace: true });
     }
-  }, [user, navigate]);
+  }, [hasLoadedProfile, user, navigate]);
 
   useEffect(() => {
     const previousTitle = document.title;
