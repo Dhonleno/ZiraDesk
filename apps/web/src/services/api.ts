@@ -743,6 +743,38 @@ export interface CrmContact {
   updated_at: string;
 }
 
+export type ContactImportFormat = 'csv' | 'xlsx' | 'vcf';
+export type ContactImportDuplicateAction = 'skip' | 'update';
+
+export interface ContactImportPreview {
+  importId: string;
+  format: ContactImportFormat;
+  totalRows: number;
+  columns: string[];
+  preview: Array<Record<string, string>>;
+}
+
+export interface ContactImportMapping {
+  name: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  organization_name?: string;
+  role?: string;
+  department?: string;
+  tags?: string;
+  custom_fields?: string;
+}
+
+export interface ContactImportResult {
+  jobId: string;
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+}
+
 export interface LgpdRequest {
   id: string;
   contact_id: string | null;
@@ -894,6 +926,23 @@ export const contactsApi = {
   },
   create: async (payload: Partial<CrmContact>): Promise<CrmContact> => {
     const res = await api.post<{ success: boolean; data: CrmContact }>('/crm/contacts', payload);
+    return res.data.data;
+  },
+  previewImport: async (file: File): Promise<ContactImportPreview> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<{ success: boolean; data: ContactImportPreview }>('/crm/contacts/import/preview', form);
+    return res.data.data;
+  },
+  confirmImport: async (payload: {
+    importId: string;
+    mapping: ContactImportMapping;
+    duplicateAction: ContactImportDuplicateAction;
+  }): Promise<{ jobId: string; message: string }> => {
+    const res = await api.post<{ success: boolean; data: { jobId: string; message: string } }>(
+      '/crm/contacts/import/confirm',
+      payload,
+    );
     return res.data.data;
   },
   update: async (id: string, payload: Partial<CrmContact>): Promise<CrmContact> => {

@@ -97,6 +97,32 @@ export const rejectLgpdRequestSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+const optionalImportColumnSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  },
+  z.string().min(1).max(150).optional(),
+);
+
+export const contactImportConfirmSchema = z.object({
+  importId: z.string().uuid(),
+  mapping: z.object({
+    name: z.string().trim().min(1).max(150),
+    email: optionalImportColumnSchema,
+    phone: optionalImportColumnSchema,
+    whatsapp: optionalImportColumnSchema,
+    organization_name: optionalImportColumnSchema,
+    role: optionalImportColumnSchema,
+    department: optionalImportColumnSchema,
+    tags: optionalImportColumnSchema,
+    custom_fields: optionalImportColumnSchema,
+  }),
+  duplicateAction: z.enum(['skip', 'update']).default('skip'),
+});
+
 export type CreateContactInput   = z.infer<typeof createContactSchema>;
 export type UpdateContactInput   = z.infer<typeof updateContactSchema>;
 export type ListContactsQuery    = z.infer<typeof listContactsQuerySchema>;
@@ -107,3 +133,4 @@ export type AnonymizeContactLgpdInput = z.infer<typeof anonymizeContactLgpdSchem
 export type ListLgpdRequestsQuery = z.infer<typeof listLgpdRequestsQuerySchema>;
 export type LgpdRequestActionParams = z.infer<typeof lgpdRequestActionParamsSchema>;
 export type RejectLgpdRequestInput = z.infer<typeof rejectLgpdRequestSchema>;
+export type ContactImportConfirmInput = z.infer<typeof contactImportConfirmSchema>;

@@ -17,17 +17,21 @@ import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
 import { maskEmail, maskPhone } from '../../utils/pii-mask';
+import { ContactImportModal } from '../../components/crm/ContactImportModal';
+import { useAuthStore } from '../../stores/auth.store';
 
 export function ContactsPage() {
   const { t } = useTranslation('crm');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const { id: routeId } = useParams<{ id?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
   const [filterMode, setFilterMode] = useState<'all' | 'linked' | 'standalone'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editContact, setEditContact] = useState<CrmContact | null>(null);
   const [linkContact, setLinkContact] = useState<CrmContact | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<CrmContact | null>(null);
@@ -60,6 +64,7 @@ export function ContactsPage() {
     : (listData?.data ?? []);
   const meta = listData?.meta;
   const totalPages = meta?.total_pages ?? 1;
+  const canImportContacts = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'agent';
 
   useEffect(() => {
     const id = searchParams.get('id') ?? routeId ?? null;
@@ -144,15 +149,31 @@ export function ContactsPage() {
           count={meta?.total ?? null}
           subtitle={t('contacts.subtitle', { count: meta?.total ?? 0 })}
           action={(
-            <PermissionGate permission="contacts:edit">
-              <button
-                onClick={() => setIsCreateOpen(true)}
-                className="zd-btn zd-btn-primary"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                {t('contacts.new')}
-              </button>
-            </PermissionGate>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {canImportContacts ? (
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(true)}
+                  className="tb-btn"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path d="M6 8V1.5M3.5 4L6 1.5 8.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 8.5v1.3c0 .4.3.7.7.7h6.6c.4 0 .7-.3.7-.7V8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  {t('import.button')}
+                </button>
+              ) : null}
+              <PermissionGate permission="contacts:edit">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="zd-btn zd-btn-primary"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  {t('contacts.new')}
+                </button>
+              </PermissionGate>
+            </div>
           )}
         />
 
@@ -320,6 +341,13 @@ export function ContactsPage() {
       </div>
 
         <CreateContactModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+        <ContactImportModal
+          open={isImportOpen}
+          onClose={() => setIsImportOpen(false)}
+          onRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+          }}
+        />
         <EditContactModal contact={editContact} onClose={() => setEditContact(null)} />
         {linkContact ? (
           <LinkOrganizationModal

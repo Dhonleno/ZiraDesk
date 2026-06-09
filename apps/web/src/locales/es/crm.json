@@ -274,6 +274,51 @@
       "submitting": "Vinculando..."
     }
   },
+  "import": {
+    "button": "Importar",
+    "title": "Importar contactos",
+    "dropzone": "Arrastra el archivo aquí o haz clic para seleccionar",
+    "selectFile": "Seleccionar archivo",
+    "formats": "Formatos aceptados: CSV, Excel, vCard",
+    "sizeLimit": "Tamaño máximo: 10MB",
+    "downloadTemplate": "Descargar plantilla CSV",
+    "totalRows": "{{count}} registros encontrados",
+    "duplicateAction": "Duplicados",
+    "skip": "Ignorar duplicados",
+    "update": "Actualizar existentes",
+    "confirm": "Confirmar importación",
+    "inProgress": "Importación en progreso...",
+    "waitMessage": "Será notificado cuando la importación finalice",
+    "close": "Cerrar",
+    "closeAndRefresh": "Cerrar y actualizar",
+    "result": {
+      "total": "Total procesado",
+      "inserted": "Insertados",
+      "updated": "Actualizados",
+      "skipped": "Ignorados",
+      "errors": "Errores"
+    },
+    "mapping": {
+      "title": "Mapeo de columnas",
+      "ignore": "Ignorar"
+    },
+    "fields": {
+      "name": "Nombre*",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "whatsapp": "WhatsApp",
+      "organization": "Organización",
+      "role": "Cargo",
+      "department": "Departamento",
+      "tags": "Tags",
+      "customFields": "Campos personalizados"
+    },
+    "error": {
+      "sizeLimit": "Archivo muy grande. Máximo 10MB",
+      "format": "Formato no soportado. Use CSV, Excel o vCard",
+      "generic": "Error al procesar el archivo"
+    }
+  },
   "pii": {
     "reveal": "Revelar datos",
     "hide": "Ocultar datos",

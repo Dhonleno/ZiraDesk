@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import multipart from '@fastify/multipart';
 import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
-import { requirePermission } from '../../../middleware/rbac.js';
+import { hasRole, requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import {
@@ -12,6 +13,7 @@ import {
   updateContactLgpdConsentSchema,
   exportContactLgpdQuerySchema,
   anonymizeContactLgpdSchema,
+  contactImportConfirmSchema,
   listLgpdRequestsQuerySchema,
   lgpdRequestActionParamsSchema,
   rejectLgpdRequestSchema,
@@ -40,6 +42,8 @@ import {
   ConflictError,
   PlanLimitError,
 } from './contacts.service.js';
+import { contactImportQueue } from '../../../jobs/queue.js';
+import { ContactImportError, createContactImportPreview, getStoredContactImport } from './contacts-import.service.js';
 
 const guard = [
   authMiddleware,
@@ -52,12 +56,22 @@ const contactsDeleteGuard = [...guard, requirePermission('contacts:delete')];
 const contactsLgpdGuard = [...guard, requirePermission('lgpd:manage')];
 const managePortalGuard = [...guard, requirePermission('contacts:edit')];
 const contactsPiiRevealGuard = [...guard, requirePermission('contacts:view'), requirePermission('pii:view-full')];
+const contactsImportGuard = [...guard, hasRole('owner', 'admin', 'agent')];
+
+const MAX_IMPORT_SIZE_BYTES = 10 * 1024 * 1024;
 
 function canViewFullPii(role: string): boolean {
   return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
 }
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    limits: {
+      fileSize: MAX_IMPORT_SIZE_BYTES,
+      files: 1,
+    },
+  });
+
   // GET /api/crm/contacts
   app.get('/', { preHandler: contactsViewGuard }, async (request, reply) => {
     const parsed = listContactsQuerySchema.safeParse(request.query);
@@ -69,6 +83,108 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
       success: true,
       ...result,
       data: includeFullPii ? result.data : maskContactListRecords(result.data),
+    });
+  });
+
+  // POST /api/crm/contacts/import/preview
+  app.post('/import/preview', { preHandler: contactsImportGuard }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(415).send({
+        success: false,
+        error: { message: 'Content-Type deve ser multipart/form-data' },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    const tenantId = request.user.tenantId;
+    if (!schemaName || !tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    let fileBuffer: Buffer | null = null;
+    let fileName: string | null = null;
+
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+          fileBuffer = await part.toBuffer();
+          fileName = part.filename;
+          continue;
+        }
+
+        if (part.type === 'file') {
+          await part.toBuffer();
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes('file too large')) {
+        return reply.code(413).send({ success: false, error: { message: 'Arquivo muito grande. Máximo 10MB' } });
+      }
+      throw err;
+    }
+
+    if (!fileBuffer || !fileName) {
+      return reply.code(400).send({ success: false, error: { message: 'Arquivo não enviado' } });
+    }
+
+    try {
+      const data = await createContactImportPreview({
+        buffer: fileBuffer,
+        fileName,
+        userId: request.user.id,
+        tenantId,
+        schemaName,
+      });
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof ContactImportError) {
+        return reply.code(err.statusCode).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/import/confirm
+  app.post('/import/confirm', { preHandler: contactsImportGuard }, async (request, reply) => {
+    const parsed = contactImportConfirmSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
+    }
+
+    const storedImport = await getStoredContactImport(parsed.data.importId);
+    if (!storedImport) {
+      return reply.code(404).send({ success: false, error: { message: 'Importação expirada ou não encontrada' } });
+    }
+
+    const schemaName = request.user.schemaName;
+    const tenantId = request.user.tenantId;
+    if (!schemaName || !tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    if (
+      storedImport.schemaName !== schemaName
+      || storedImport.tenantId !== tenantId
+      || storedImport.createdBy !== request.user.id
+    ) {
+      return reply.code(404).send({ success: false, error: { message: 'Importação expirada ou não encontrada' } });
+    }
+
+    const job = await contactImportQueue.add('contact-import', {
+      importId: parsed.data.importId,
+      mapping: parsed.data.mapping,
+      duplicateAction: parsed.data.duplicateAction,
+      tenantId,
+      schemaName,
+      userId: request.user.id,
+    });
+
+    return reply.send({
+      success: true,
+      data: {
+        jobId: String(job.id),
+        message: 'Importação iniciada',
+      },
     });
   });
 

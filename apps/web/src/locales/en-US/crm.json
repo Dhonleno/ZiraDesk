@@ -274,6 +274,51 @@
       "submitting": "Linking..."
     }
   },
+  "import": {
+    "button": "Import",
+    "title": "Import contacts",
+    "dropzone": "Drag the file here or click to select",
+    "selectFile": "Select file",
+    "formats": "Accepted formats: CSV, Excel, vCard",
+    "sizeLimit": "Maximum size: 10MB",
+    "downloadTemplate": "Download CSV template",
+    "totalRows": "{{count}} records found",
+    "duplicateAction": "Duplicates",
+    "skip": "Skip duplicates",
+    "update": "Update existing",
+    "confirm": "Confirm import",
+    "inProgress": "Import in progress...",
+    "waitMessage": "You will be notified when the import is complete",
+    "close": "Close",
+    "closeAndRefresh": "Close and refresh",
+    "result": {
+      "total": "Total processed",
+      "inserted": "Inserted",
+      "updated": "Updated",
+      "skipped": "Skipped",
+      "errors": "Errors"
+    },
+    "mapping": {
+      "title": "Column mapping",
+      "ignore": "Ignore"
+    },
+    "fields": {
+      "name": "Name*",
+      "email": "Email",
+      "phone": "Phone",
+      "whatsapp": "WhatsApp",
+      "organization": "Organization",
+      "role": "Role",
+      "department": "Department",
+      "tags": "Tags",
+      "customFields": "Custom fields"
+    },
+    "error": {
+      "sizeLimit": "File too large. Maximum 10MB",
+      "format": "Unsupported format. Use CSV, Excel or vCard",
+      "generic": "Error processing file"
+    }
+  },
   "pii": {
     "reveal": "Reveal data",
     "hide": "Hide data",
