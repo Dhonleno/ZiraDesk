@@ -191,6 +191,7 @@
     "standaloneDesc": "Contactos sin organización vinculada",
     "subtitle": "{{count}} contactos",
     "new": "Nuevo contacto",
+    "newCompact": "Nuevo",
     "search": "Buscar contacto...",
     "clearSearch": "Limpiar",
     "filter": {

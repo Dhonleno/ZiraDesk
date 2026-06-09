@@ -168,9 +168,11 @@ export function ContactsPage() {
                   type="button"
                   onClick={() => setIsCreateOpen(true)}
                   className="zd-btn zd-btn-primary"
+                  title={t('contacts.new')}
+                  aria-label={t('contacts.new')}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                  {t('contacts.new')}
+                  {t('contacts.newCompact')}
                 </button>
               </PermissionGate>
             </div>

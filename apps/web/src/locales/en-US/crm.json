@@ -191,6 +191,7 @@
     "standaloneDesc": "Contacts without a linked organization",
     "subtitle": "{{count}} contacts",
     "new": "New contact",
+    "newCompact": "New",
     "search": "Search contacts...",
     "clearSearch": "Clear",
     "filter": {
