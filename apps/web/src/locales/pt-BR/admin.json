@@ -396,8 +396,9 @@
         "tempPasswordDesc": "O e-mail de convite não pôde ser enviado para {{name}}. Compartilhe a senha abaixo manualmente.",
         "emailNotConfiguredWarning": "Configure RESEND_API_KEY no servidor para enviar convites por e-mail automaticamente.",
         "passwordReset": "Senha de {{name}} redefinida com sucesso",
+        "resetLinkSent": "Link de redefinição enviado para {{email}}",
         "tempPasswordHint": "O usuário deverá trocar a senha no primeiro acesso.",
-        "resetPasswordConfirm": "Redefinir a senha de {{name}} ({{email}})? Uma nova senha temporária será gerada.",
+        "resetPasswordConfirm": "Um link de redefinição será enviado para o e-mail de {{name}} ({{email}}).",
         "inviteEmailNotConfigured": "Convite criado, mas o envio de e-mail não está configurado. Defina RESEND_API_KEY no ambiente da API.",
         "inviteEmailDomainNotVerified": "Convite criado, mas o remetente de e-mail não está válido. Verifique RESEND_FROM_EMAIL e o domínio no Resend.",
         "inviteEmailDeliveryFailed": "Não foi possível enviar o convite por e-mail agora. Revise a configuração do provedor e tente novamente."

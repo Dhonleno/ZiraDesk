@@ -178,9 +178,8 @@ interface InviteUserPayload {
 
 export interface InviteUserResultData {
   user: TenantUser;
-  tempPassword: string | null;
   emailSent: boolean;
-  warning?: 'EMAIL_NOT_CONFIGURED';
+  tempPassword?: string | null;
 }
 
 interface CreateChannelPayload {
@@ -1308,7 +1307,7 @@ export const adminApi = {
   },
 
   resetUserPassword: async (id: string) => {
-    const res = await api.post<{ success: boolean; data: { tempPassword: string } }>(`/admin/users/${id}/reset-password`);
+    const res = await api.post<{ success: boolean; data: { message: string } }>(`/admin/users/${id}/reset-password`);
     return res.data;
   },
 

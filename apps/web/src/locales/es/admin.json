@@ -396,8 +396,9 @@
         "tempPasswordDesc": "No se pudo enviar el correo de invitación a {{name}}. Comparte la contraseña abajo manualmente.",
         "emailNotConfiguredWarning": "Configura RESEND_API_KEY en el servidor para enviar invitaciones por correo automáticamente.",
         "passwordReset": "Contraseña de {{name}} restablecida",
+        "resetLinkSent": "Enlace de restablecimiento enviado a {{email}}",
         "tempPasswordHint": "El usuario deberá cambiar la contraseña en el primer acceso.",
-        "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal.",
+        "resetPasswordConfirm": "Se enviará un enlace de restablecimiento al correo de {{name}} ({{email}}).",
         "inviteEmailNotConfigured": "Invitación creada, pero el envío de correo no está configurado. Define RESEND_API_KEY en el entorno de la API.",
         "inviteEmailDomainNotVerified": "Invitación creada, pero el remitente no es válido. Revisa RESEND_FROM_EMAIL y el dominio verificado en Resend.",
         "inviteEmailDeliveryFailed": "No fue posible enviar la invitación por correo ahora. Revisa la configuración del proveedor e inténtalo de nuevo."

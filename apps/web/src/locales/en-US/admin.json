@@ -396,8 +396,9 @@
         "tempPasswordDesc": "The invite email could not be sent to {{name}}. Share the password below manually.",
         "emailNotConfiguredWarning": "Configure RESEND_API_KEY on the server to send invite emails automatically.",
         "passwordReset": "Password for {{name}} has been reset",
+        "resetLinkSent": "Reset link sent to {{email}}",
         "tempPasswordHint": "The user must change the password on first login.",
-        "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated.",
+        "resetPasswordConfirm": "A reset link will be sent to {{name}}'s email ({{email}}).",
         "inviteEmailNotConfigured": "Invite created, but email delivery is not configured. Set RESEND_API_KEY in the API environment.",
         "inviteEmailDomainNotVerified": "Invite created, but sender email is invalid. Check RESEND_FROM_EMAIL and your verified domain in Resend.",
         "inviteEmailDeliveryFailed": "We could not send the invite email right now. Check provider settings and try again."
