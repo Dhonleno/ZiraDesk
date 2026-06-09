@@ -329,6 +329,8 @@
       "7d": "Últimos 7 días",
       "30d": "Últimos 30 días",
       "month": "Este mes",
+      "last_week": "Semana anterior",
+      "last_month": "Mes anterior",
       "custom": "Personalizado"
     },
     "columns": {

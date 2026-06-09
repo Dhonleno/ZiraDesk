@@ -20,6 +20,8 @@ const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = 
   { labelKey: 'history.periods.7d', value: '7d' },
   { labelKey: 'history.periods.30d', value: '30d' },
   { labelKey: 'history.periods.month', value: 'month' },
+  { labelKey: 'history.periods.last_week', value: 'last_week' },
+  { labelKey: 'history.periods.last_month', value: 'last_month' },
   { labelKey: 'history.periods.custom', value: 'custom' },
 ];
 
@@ -125,8 +127,8 @@ function mapPeriodToGoalPeriod(
   dateTo?: string,
 ): GoalPeriod {
   if (period === 'today' || period === 'yesterday') return 'daily';
-  if (period === '7d') return 'weekly';
-  if (period === '30d' || period === 'month') return 'monthly';
+  if (period === '7d' || period === 'last_week') return 'weekly';
+  if (period === '30d' || period === 'month' || period === 'last_month') return 'monthly';
 
   if (period === 'custom' && dateFrom && dateTo) {
     const from = new Date(`${dateFrom}T00:00:00.000Z`).getTime();

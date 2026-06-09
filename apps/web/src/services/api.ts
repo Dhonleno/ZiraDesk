@@ -2430,7 +2430,7 @@ export interface MetricsFiltersParams {
   department?: string;
 }
 
-export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
+export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'last_week' | 'last_month' | 'custom';
 
 export interface HistoryFiltersParams {
   page?: number;

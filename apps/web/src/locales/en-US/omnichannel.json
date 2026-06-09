@@ -329,6 +329,8 @@
       "7d": "Last 7 days",
       "30d": "Last 30 days",
       "month": "This month",
+      "last_week": "Last week",
+      "last_month": "Last month",
       "custom": "Custom"
     },
     "columns": {

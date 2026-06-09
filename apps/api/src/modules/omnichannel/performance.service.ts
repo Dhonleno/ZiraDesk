@@ -123,6 +123,24 @@ function resolveDateRange(
     return { dateFromLocal: `${today.slice(0, 8)}01`, dateToLocal: today };
   }
 
+  if (period === 'last_week') {
+    const todayDate = new Date(`${today}T00:00:00.000Z`);
+    const dow = todayDate.getUTCDay(); // 0=Dom, 1=Seg, …, 6=Sáb
+    const daysToThisMonday = dow === 0 ? 6 : dow - 1;
+    const lastMonday = addDaysToIsoDate(today, -(daysToThisMonday + 7));
+    return { dateFromLocal: lastMonday, dateToLocal: addDaysToIsoDate(lastMonday, 6) };
+  }
+
+  if (period === 'last_month') {
+    const year = Number(today.slice(0, 4));
+    const month = Number(today.slice(5, 7));
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const firstOfLastMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const firstOfThisMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+    return { dateFromLocal: firstOfLastMonth, dateToLocal: addDaysToIsoDate(firstOfThisMonth, -1) };
+  }
+
   const days = period === '30d' ? 30 : 7;
   return {
     dateFromLocal: addDaysToIsoDate(today, -days),
@@ -142,8 +160,8 @@ function toNullableNumber(value: number | null | undefined): number | null {
 
 function mapRangeToGoalPeriod(period: PerformanceQuery['period'], dateFromLocal: string, dateToLocal: string): GoalPeriod {
   if (period === 'today' || period === 'yesterday') return 'daily';
-  if (period === '7d') return 'weekly';
-  if (period === '30d' || period === 'month') return 'monthly';
+  if (period === '7d' || period === 'last_week') return 'weekly';
+  if (period === '30d' || period === 'month' || period === 'last_month') return 'monthly';
 
   const from = new Date(`${dateFromLocal}T00:00:00.000Z`).getTime();
   const to = new Date(`${dateToLocal}T00:00:00.000Z`).getTime();
