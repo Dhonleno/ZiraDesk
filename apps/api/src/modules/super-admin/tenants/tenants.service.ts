@@ -861,8 +861,8 @@ export async function createTenant(data: CreateTenantInput): Promise<{
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings)
-       VALUES ($1, $2, $3, 'owner', 'active', 'pt-BR', '{}')`,
+      `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings, must_change_password)
+       VALUES ($1, $2, $3, 'owner', 'active', 'pt-BR', '{}', true)`,
       data.ownerName,
       data.ownerEmail,
       passwordHash,

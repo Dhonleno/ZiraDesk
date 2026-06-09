@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { BrandLogo } from '../../components/layout/BrandLogo';
 import { Input } from '../../components/ui/Input';
 import { profileApi } from '../../services/api';
@@ -15,6 +16,7 @@ function getApiErrorMessage(error: unknown): string | null {
 export function ChangePassword() {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setUser = useAuthStore((state) => state.setUser);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,6 +54,7 @@ export function ChangePassword() {
     try {
       await profileApi.updatePassword({ currentPassword: undefined, newPassword });
       setUser({ mustChangePassword: false });
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       navigate('/', { replace: true });
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error) ?? t('changePassword.minLength'));
