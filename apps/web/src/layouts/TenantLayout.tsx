@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
-import { adminApi, omnichannelApi } from '../services/api';
+import { adminApi, omnichannelApi, profileApi } from '../services/api';
 import { connectSocket, disconnectSocket, setPresenceStatus, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
@@ -61,6 +61,113 @@ function ThemeToggle() {
         />
       </svg>
     </button>
+  );
+}
+
+type SupportedLanguage = 'pt-BR' | 'en-US' | 'es';
+
+const LANGUAGE_OPTIONS: Array<{
+  value: SupportedLanguage;
+  labelKey: string;
+  flag: string;
+}> = [
+  { value: 'pt-BR', labelKey: 'language.ptBR', flag: '🇧🇷' },
+  { value: 'en-US', labelKey: 'language.enUS', flag: '🇺🇸' },
+  { value: 'es', labelKey: 'language.es', flag: '🇪🇸' },
+];
+
+function normalizeLanguage(value: string | undefined): SupportedLanguage {
+  if (value === 'en-US' || value?.startsWith('en')) return 'en-US';
+  if (value === 'es' || value?.startsWith('es')) return 'es';
+  return 'pt-BR';
+}
+
+function LanguageSelector() {
+  const { t, i18n } = useTranslation('common');
+  const setUser = useAuthStore((state) => state.setUser);
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const activeLanguage = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+
+  useEffect(() => {
+    const onClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', onClickOutside);
+    return () => window.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const handleSelect = (language: SupportedLanguage) => {
+    setOpen(false);
+    if (language !== activeLanguage) {
+      void i18n.changeLanguage(language);
+    }
+    setUser({ language });
+    void profileApi.update({ language })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        void queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+      })
+      .catch(() => {
+        // A UI já trocou o idioma; localStorage fica como fallback até a próxima sincronização.
+      });
+  };
+
+  return (
+    <div className="language-selector" ref={menuRef}>
+      <button
+        type="button"
+        className="tb-icon-btn"
+        aria-label={t('language.label')}
+        title={t('language.label')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M2.2 8h11.6M8 1.8c1.7 1.7 2.6 3.8 2.6 6.2s-.9 4.5-2.6 6.2C6.3 12.5 5.4 10.4 5.4 8S6.3 3.5 8 1.8Z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="language-menu" role="menu" aria-label={t('language.label')}>
+          {LANGUAGE_OPTIONS.map((option) => {
+            const isActive = option.value === activeLanguage;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={isActive}
+                className={`language-menu-item${isActive ? ' active' : ''}`}
+                onClick={() => handleSelect(option.value)}
+              >
+                <span className="language-menu-label">
+                  <span className="language-menu-flag" aria-hidden>{option.flag}</span>
+                  {t(option.labelKey)}
+                </span>
+                {isActive && (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path d="M3 7.2l2.5 2.4L11 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -724,6 +831,8 @@ export function TenantLayout() {
           )}
 
           <ThemeToggle />
+
+          <LanguageSelector />
 
           <button
             className="topbar-search-btn"

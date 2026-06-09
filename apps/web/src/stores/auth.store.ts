@@ -9,6 +9,7 @@ export interface AuthUser {
   mustChangePassword: boolean;
   tenantId?: string;
   avatar_url?: string | null;
+  language?: string;
 }
 
 type AuthPayloadUser = Omit<AuthUser, 'mustChangePassword'> & { mustChangePassword?: boolean };

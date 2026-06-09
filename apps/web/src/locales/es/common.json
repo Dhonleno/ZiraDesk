@@ -12,6 +12,12 @@
   "filter": "Filtrar",
   "noResults": "No se encontraron resultados",
   "required": "Campo obligatorio",
+  "language": {
+    "label": "Idioma",
+    "ptBR": "Portugués",
+    "enUS": "Inglés",
+    "es": "Español"
+  },
   "phone": {
     "invalid": "Número de teléfono inválido",
     "invalidBR": "El móvil brasileño debe tener 9 después del DDD: (XX) 9XXXX-XXXX",

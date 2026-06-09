@@ -63,6 +63,7 @@ import { CampaignsPage } from './pages/omnichannel/Campaigns';
 import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { PrivacyPolicyPage, TermsOfUsePage } from './pages/legal/LegalDocuments';
+import i18n from './lib/i18n';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,11 +102,15 @@ function RequireTenantUser({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!profileQuery.data) return;
+    if (profileQuery.data.language && profileQuery.data.language !== i18n.language) {
+      void i18n.changeLanguage(profileQuery.data.language);
+    }
     setUser({
       name: profileQuery.data.name,
       email: profileQuery.data.email,
       role: profileQuery.data.role,
       avatar_url: profileQuery.data.avatar_url,
+      language: profileQuery.data.language,
       mustChangePassword: profileQuery.data.must_change_password,
     });
   }, [profileQuery.data, setUser]);

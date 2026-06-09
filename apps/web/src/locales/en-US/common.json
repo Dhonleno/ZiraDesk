@@ -12,6 +12,12 @@
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
+  "language": {
+    "label": "Language",
+    "ptBR": "Portuguese",
+    "enUS": "English",
+    "es": "Spanish"
+  },
   "phone": {
     "invalid": "Invalid phone number",
     "invalidBR": "Brazilian mobile numbers must include 9 after area code: (XX) 9XXXX-XXXX",

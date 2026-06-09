@@ -657,6 +657,61 @@
   color: var(--txt);
 }
 
+.language-selector {
+  position: relative;
+}
+
+.language-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  overflow: hidden;
+  z-index: 220;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+.language-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--txt-2);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.language-menu-item:hover {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+.language-menu-item.active {
+  color: var(--teal);
+  font-weight: 500;
+}
+
+.language-menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-menu-flag {
+  line-height: 1;
+}
+
 /* ── Shared controls (pages/forms) ─────────────────────────────────────────── */
 .zd-btn {
   display: inline-flex;
