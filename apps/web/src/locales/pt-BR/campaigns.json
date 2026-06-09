@@ -14,6 +14,7 @@
     "running": "Em andamento",
     "paused": "Pausada",
     "completed": "Concluída",
+    "completedWithFailures": "Concluída com falhas",
     "cancelled": "Cancelada",
     "all": "Todas"
   },
@@ -42,7 +43,10 @@
     "cancel": "Cancelar",
     "launch": "Lançar",
     "addContacts": "Adicionar contatos",
-    "confirmCancel": "Confirmar cancelamento"
+    "confirmCancel": "Confirmar cancelamento",
+    "retryFailed": "Criar rascunho com falhas",
+    "failedDraftCreated": "Rascunho criado com os contatos que falharam.",
+    "failedDraftError": "Não foi possível criar o rascunho com as falhas."
   },
   "create": {
     "title": "Nova campanha",
@@ -54,6 +58,7 @@
       "channelPlaceholder": "Selecione um canal",
       "template": "Template aprovado",
       "templatePlaceholder": "Selecione um template",
+      "publicTestTemplateBlocked": "O template hello_world é exclusivo dos números públicos de teste da Meta e não pode ser usado em campanhas.",
       "preview": "Prévia do template",
       "variables": "Variáveis do template",
       "variable": "Variável {{n}}",
@@ -89,6 +94,12 @@
     "next": "Próximo",
     "back": "Voltar",
     "saving": "Salvando..."
+  },
+  "retry": {
+    "title": "Reenviar contatos com falha",
+    "confirm": "Criar rascunho para reenvio",
+    "success": "Rascunho criado com os contatos que falharam.",
+    "error": "Não foi possível criar o rascunho para reenvio."
   },
   "contacts": {
     "title": "Adicionar contatos",
@@ -130,6 +141,7 @@
       "title": "Contatos da campanha",
       "filterAll": "Todos",
       "filterPending": "Pendentes",
+      "filterQueued": "Na fila",
       "filterSent": "Enviados",
       "filterDelivered": "Entregues",
       "filterRead": "Lidos",

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { adminApi, campaignsApi, omnichannelApi, type ActiveOutboundTemplate, type Campaign } from '../../services/api';
+import { campaignsApi, omnichannelApi, type ActiveOutboundTemplate, type Campaign } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 
 interface Props {
   onClose: () => void;
   onCreated: (campaign: Campaign) => void;
+  retryFailedCampaign?: Campaign;
 }
 
 type VarMode = 'contact_name' | 'contact_phone' | 'fixed';
@@ -45,23 +46,26 @@ function renderPreview(body: string, values: Record<string, string>): string {
   });
 }
 
-export function CampaignCreateModal({ onClose, onCreated }: Props) {
+export function CampaignCreateModal({ onClose, onCreated, retryFailedCampaign }: Props) {
   const { t } = useTranslation('campaigns');
   const toast = useToast();
   const queryClient = useQueryClient();
   const overlayRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const isRetryingFailed = Boolean(retryFailedCampaign);
 
   const [step, setStep] = useState(1);
-  const [name, setName] = useState('');
-  const [channelId, setChannelId] = useState('');
+  const [name, setName] = useState(
+    retryFailedCampaign ? `${retryFailedCampaign.name} (falhas)` : '',
+  );
+  const [channelId, setChannelId] = useState(retryFailedCampaign?.channel_id ?? '');
   const [templateId, setTemplateId] = useState('');
   const [varModes, setVarModes] = useState<Record<string, VarMode>>({});
   const [fixedValues, setFixedValues] = useState<Record<string, string>>({});
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [headerMediaFilename, setHeaderMediaFilename] = useState('documento.pdf');
-  const [dailyLimit, setDailyLimit] = useState(500);
-  const [notes, setNotes] = useState('');
+  const [dailyLimit, setDailyLimit] = useState(retryFailedCampaign?.daily_limit ?? 500);
+  const [notes, setNotes] = useState(retryFailedCampaign?.notes ?? '');
   const [schedule, setSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
 
@@ -77,7 +81,7 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
 
   const { data: channels = [] } = useQuery({
     queryKey: ['campaign-channels'],
-    queryFn: () => adminApi.listChannelsByTypes(['whatsapp']),
+    queryFn: () => omnichannelApi.listConversationChannels(),
     staleTime: 60_000,
   });
 
@@ -97,6 +101,11 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
     () => templates.find((tp) => tp.id === templateId) ?? null,
     [templates, templateId],
   );
+  const availableTemplates = useMemo(
+    () => templates.filter((template) => template.name.trim().toLowerCase() !== 'hello_world'),
+    [templates],
+  );
+  const hasBlockedPublicTestTemplate = availableTemplates.length !== templates.length;
 
   const variableIds = useMemo(
     () => (selectedTemplate?.body ? extractVariableIds(selectedTemplate.body) : []),
@@ -139,26 +148,32 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
   );
 
   const createMutation = useMutation({
-    mutationFn: () => campaignsApi.create({
-      name: name.trim(),
-      channel_id: channelId,
-      template_id: templateId,
-      template_variables: templateVariables,
-      template_header_media_url: requiresHeaderMedia ? headerMediaUrl.trim() : null,
-      template_header_media_filename: selectedHeaderType === 'DOCUMENT'
-        ? (headerMediaFilename.trim() || 'documento.pdf')
-        : null,
-      scheduled_at: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : null,
-      daily_limit: dailyLimit,
-      notes: notes.trim() || null,
-    }),
+    mutationFn: () => {
+      const payload = {
+        name: name.trim(),
+        template_id: templateId,
+        template_variables: templateVariables,
+        template_header_media_url: requiresHeaderMedia ? headerMediaUrl.trim() : null,
+        template_header_media_filename: selectedHeaderType === 'DOCUMENT'
+          ? (headerMediaFilename.trim() || 'documento.pdf')
+          : null,
+        scheduled_at: schedule && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        daily_limit: dailyLimit,
+        notes: notes.trim() || null,
+      };
+      return retryFailedCampaign
+        ? campaignsApi.duplicateFailed(retryFailedCampaign.id, payload)
+        : campaignsApi.create({ ...payload, channel_id: channelId });
+    },
     onSuccess: (campaign) => {
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success('Campanha criada com sucesso!');
+      toast.success(isRetryingFailed ? t('retry.success') : 'Campanha criada com sucesso!');
       onCreated(campaign);
     },
     onError: () => {
-      toast.error('Erro ao criar campanha. Verifique os dados e tente novamente.');
+      toast.error(isRetryingFailed
+        ? t('retry.error')
+        : 'Erro ao criar campanha. Verifique os dados e tente novamente.');
     },
   });
 
@@ -205,7 +220,7 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
       ref={overlayRef}
       role="dialog"
       aria-modal="true"
-      aria-label={t('create.title')}
+      aria-label={isRetryingFailed ? t('retry.title') : t('create.title')}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       style={{
         position: 'fixed',
@@ -233,7 +248,9 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{t('create.title')}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+              {isRetryingFailed ? t('retry.title') : t('create.title')}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--txt-3)', marginTop: 2 }}>
               {t(`create.step${step}.title` as any)} — {t('common:step', { defaultValue: `Passo ${step} de 3` })}
             </div>
@@ -282,7 +299,12 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
 
               <div style={fieldStyle}>
                 <label style={labelStyle}>{t('create.step1.channel')}</label>
-                <select style={selectStyle} value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+                <select
+                  style={selectStyle}
+                  value={channelId}
+                  onChange={(e) => setChannelId(e.target.value)}
+                  disabled={isRetryingFailed}
+                >
                   <option value="">{t('create.step1.channelPlaceholder')}</option>
                   {whatsappChannels.map((ch) => (
                     <option key={ch.id} value={ch.id}>{ch.name}</option>
@@ -295,10 +317,15 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
                   <label style={labelStyle}>{t('create.step1.template')}</label>
                   <select style={selectStyle} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
                     <option value="">{t('create.step1.templatePlaceholder')}</option>
-                    {templates.map((tp) => (
+                    {availableTemplates.map((tp) => (
                       <option key={tp.id} value={tp.id}>{tp.display_name || tp.name} ({tp.language})</option>
                     ))}
                   </select>
+                  {hasBlockedPublicTestTemplate && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: 'var(--amber)' }}>
+                      {t('create.step1.publicTestTemplateBlocked')}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -561,7 +588,11 @@ export function CampaignCreateModal({ onClose, onCreated }: Props) {
                 disabled={createMutation.isPending}
                 onClick={() => createMutation.mutate()}
               >
-                {createMutation.isPending ? t('create.saving') : t('create.step3.confirm')}
+                {createMutation.isPending
+                  ? t('create.saving')
+                  : isRetryingFailed
+                    ? t('retry.confirm')
+                    : t('create.step3.confirm')}
               </button>
             )}
           </div>

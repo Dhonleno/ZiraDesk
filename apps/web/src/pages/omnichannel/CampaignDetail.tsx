@@ -7,6 +7,7 @@ import { campaignsApi, type Campaign, type CampaignContact, type CampaignContact
 import { useToast } from '../../stores/toast.store';
 import { CampaignContactsModal } from '../../components/omnichannel/CampaignContactsModal';
 import { CampaignLaunchModal } from '../../components/omnichannel/CampaignLaunchModal';
+import { CampaignCreateModal } from '../../components/omnichannel/CampaignCreateModal';
 
 const STATUS_COLORS: Record<CampaignStatus, { bg: string; color: string; border: string }> = {
   draft:     { bg: 'var(--bg-4)',   color: 'var(--txt-2)',  border: 'var(--line-2)' },
@@ -19,6 +20,7 @@ const STATUS_COLORS: Record<CampaignStatus, { bg: string; color: string; border:
 
 const CONTACT_STATUS_COLORS: Record<CampaignContactStatus, string> = {
   pending:   'var(--txt-3)',
+  queued:    'var(--amber)',
   sent:      'var(--txt-2)',
   delivered: 'var(--green)',
   read:      'var(--blue)',
@@ -27,9 +29,12 @@ const CONTACT_STATUS_COLORS: Record<CampaignContactStatus, string> = {
   opted_out: 'var(--amber)',
 };
 
-function StatusPill({ status }: { status: CampaignStatus }) {
+function StatusPill({ status, failedCount = 0 }: { status: CampaignStatus; failedCount?: number }) {
   const { t } = useTranslation('campaigns');
-  const c = STATUS_COLORS[status];
+  const completedWithFailures = status === 'completed' && failedCount > 0;
+  const c = completedWithFailures
+    ? { bg: 'var(--amber-dim)', color: 'var(--amber)', border: 'rgba(245,158,11,.25)' }
+    : STATUS_COLORS[status];
   return (
     <span style={{
       display: 'inline-flex',
@@ -43,7 +48,7 @@ function StatusPill({ status }: { status: CampaignStatus }) {
       fontWeight: 600,
       letterSpacing: '0.03em',
     }}>
-      {t(`status.${status}` as any)}
+      {completedWithFailures ? t('status.completedWithFailures') : t(`status.${status}` as any)}
     </span>
   );
 }
@@ -78,6 +83,7 @@ type ContactFilter = CampaignContactStatus | 'all';
 const CONTACT_FILTERS: { value: ContactFilter; labelKey: string }[] = [
   { value: 'all', labelKey: 'detail.contacts.filterAll' },
   { value: 'pending', labelKey: 'detail.contacts.filterPending' },
+  { value: 'queued', labelKey: 'detail.contacts.filterQueued' },
   { value: 'sent', labelKey: 'detail.contacts.filterSent' },
   { value: 'delivered', labelKey: 'detail.contacts.filterDelivered' },
   { value: 'read', labelKey: 'detail.contacts.filterRead' },
@@ -143,6 +149,7 @@ export function CampaignDetail() {
   const [contactPage, setContactPage] = useState(1);
   const [showContacts, setShowContacts] = useState(false);
   const [showLaunch, setShowLaunch] = useState(false);
+  const [showRetryFailed, setShowRetryFailed] = useState(false);
 
   const { data: campaign, isLoading, error } = useQuery<Campaign>({
     queryKey: ['campaign', id],
@@ -259,7 +266,7 @@ export function CampaignDetail() {
             <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {campaign.name}
             </h1>
-            <StatusPill status={campaign.status} />
+            <StatusPill status={campaign.status} failedCount={campaign.failed_count} />
           </div>
 
           {/* Context actions */}
@@ -284,6 +291,14 @@ export function CampaignDetail() {
             )}
             {(campaign.status === 'completed' || campaign.status === 'cancelled') && (
               <button className="tb-btn" onClick={() => duplicateMutation.mutate()} disabled={duplicateMutation.isPending}>{t('actions.duplicate')}</button>
+            )}
+            {campaign.status === 'completed' && campaign.failed_count > 0 && (
+              <button
+                className="tb-btn tb-btn-primary"
+                onClick={() => setShowRetryFailed(true)}
+              >
+                {t('actions.retryFailed')}
+              </button>
             )}
           </div>
         </div>
@@ -321,7 +336,7 @@ export function CampaignDetail() {
                 { label: t('detail.metrics.delivered'), value: delivered, sub: `${pct(delivered, sent)}%`, color: 'var(--green)', barW: pct(delivered, sent) },
                 { label: t('detail.metrics.read'), value: read, sub: `${pct(read, delivered)}%`, color: 'var(--blue)', barW: pct(read, delivered) },
                 { label: t('detail.metrics.replied'), value: replied, sub: `${pct(replied, read)}%`, color: 'var(--teal)', barW: pct(replied, read) },
-                { label: t('detail.metrics.failed'), value: campaign.failed_count, sub: `${pct(campaign.failed_count, sent)}%`, color: 'var(--red)', barW: pct(campaign.failed_count, sent) },
+                { label: t('detail.metrics.failed'), value: campaign.failed_count, sub: `${pct(campaign.failed_count, campaign.total_contacts)}%`, color: 'var(--red)', barW: pct(campaign.failed_count, campaign.total_contacts) },
               ].map(({ label, value, sub, color, barW }, i) => (
                 <div key={label} style={{ padding: '14px 16px', borderRight: i < 4 ? '1px solid var(--line)' : 'none', minHeight: 92 }}>
                   <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</div>
@@ -488,6 +503,16 @@ export function CampaignDetail() {
           onLaunched={() => {
             setShowLaunch(false);
             void queryClient.invalidateQueries({ queryKey: ['campaign', id] });
+          }}
+        />
+      )}
+      {showRetryFailed && (
+        <CampaignCreateModal
+          retryFailedCampaign={campaign}
+          onClose={() => setShowRetryFailed(false)}
+          onCreated={(draft) => {
+            setShowRetryFailed(false);
+            navigate(`/omnichannel/campaigns/${draft.id}`);
           }}
         />
       )}

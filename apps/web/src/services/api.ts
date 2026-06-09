@@ -3100,7 +3100,7 @@ export const omnichannelApi = {
 // ── Campaign types ────────────────────────────────────────────────────────────
 
 export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
-export type CampaignContactStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed' | 'opted_out';
+export type CampaignContactStatus = 'pending' | 'queued' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed' | 'opted_out';
 
 export interface Campaign {
   id: string;
@@ -3254,6 +3254,23 @@ export const campaignsApi = {
 
   duplicate: async (id: string): Promise<Campaign> => {
     const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/duplicate`);
+    return res.data.data;
+  },
+
+  duplicateFailed: async (id: string, data: {
+    name: string;
+    template_id: string;
+    template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(
+      `/omnichannel/campaigns/${id}/duplicate-failed`,
+      data,
+    );
     return res.data.data;
   },
 

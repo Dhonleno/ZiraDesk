@@ -14,6 +14,7 @@
     "running": "En curso",
     "paused": "Pausada",
     "completed": "Completada",
+    "completedWithFailures": "Completada con fallos",
     "cancelled": "Cancelada",
     "all": "Todas"
   },
@@ -42,7 +43,8 @@
     "cancel": "Cancelar",
     "launch": "Lanzar",
     "addContacts": "Agregar contactos",
-    "confirmCancel": "Confirmar cancelación"
+    "confirmCancel": "Confirmar cancelación",
+    "retryFailed": "Crear borrador con fallos"
   },
   "create": {
     "title": "Nueva campaña",
@@ -54,6 +56,7 @@
       "channelPlaceholder": "Seleccione un canal",
       "template": "Plantilla aprobada",
       "templatePlaceholder": "Seleccione una plantilla",
+      "publicTestTemplateBlocked": "La plantilla hello_world es exclusiva de los números públicos de prueba de Meta y no puede usarse en campañas.",
       "preview": "Vista previa",
       "variables": "Variables de plantilla",
       "variable": "Variable {{n}}",
@@ -89,6 +92,12 @@
     "next": "Siguiente",
     "back": "Atrás",
     "saving": "Guardando..."
+  },
+  "retry": {
+    "title": "Reenviar contactos con fallos",
+    "confirm": "Crear borrador para reenvío",
+    "success": "Borrador creado con los contactos que fallaron.",
+    "error": "No se pudo crear el borrador para reenvío."
   },
   "contacts": {
     "title": "Agregar contactos",
@@ -130,6 +139,7 @@
       "title": "Contactos de la campaña",
       "filterAll": "Todos",
       "filterPending": "Pendientes",
+      "filterQueued": "En cola",
       "filterSent": "Enviados",
       "filterDelivered": "Entregados",
       "filterRead": "Leídos",

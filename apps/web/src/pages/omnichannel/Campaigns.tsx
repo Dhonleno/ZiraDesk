@@ -20,9 +20,12 @@ const STATUS_COLORS: Record<CampaignStatus, { bg: string; color: string; border:
   cancelled: { bg: 'rgba(248,113,113,.1)', color: 'var(--red)', border: 'rgba(248,113,113,.25)' },
 };
 
-function StatusPill({ status }: { status: CampaignStatus }) {
+function StatusPill({ status, failedCount = 0 }: { status: CampaignStatus; failedCount?: number }) {
   const { t } = useTranslation('campaigns');
-  const c = STATUS_COLORS[status];
+  const completedWithFailures = status === 'completed' && failedCount > 0;
+  const c = completedWithFailures
+    ? { bg: 'var(--amber-dim)', color: 'var(--amber)', border: 'rgba(245,158,11,.25)' }
+    : STATUS_COLORS[status];
   return (
     <span style={{
       display: 'inline-flex',
@@ -37,7 +40,7 @@ function StatusPill({ status }: { status: CampaignStatus }) {
       whiteSpace: 'nowrap',
       letterSpacing: '0.03em',
     }}>
-      {t(`status.${status}` as any)}
+      {completedWithFailures ? t('status.completedWithFailures') : t(`status.${status}` as any)}
     </span>
   );
 }
@@ -263,7 +266,7 @@ export function CampaignsPage() {
 
               {/* Status */}
               <div style={{ padding: '0 6px' }}>
-                <StatusPill status={campaign.status} />
+                <StatusPill status={campaign.status} failedCount={campaign.failed_count} />
               </div>
 
               {/* Contacts */}
