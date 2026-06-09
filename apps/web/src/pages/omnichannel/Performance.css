@@ -1,0 +1,42 @@
+/* ── Performance page — overrides escopados ─────────────────────────────── */
+
+/* Layout: gap entre seções e scroll interno na tabela */
+.performance-page {
+  gap: 20px;
+  overflow: hidden;
+  grid-template-rows: auto auto auto 1fr auto;
+}
+
+.performance-page .history-table-wrap {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Cabeçalho da tabela — padrão denso */
+.performance-table thead th {
+  padding: 10px 14px;
+  background: var(--bg-2);
+  letter-spacing: 0.08em;
+}
+
+/* Células — altura ~44px e padding canônico */
+.performance-table tbody td {
+  padding: 10px 14px;
+  height: 44px;
+}
+
+/* Mantém borda na última linha (sobrescreve history-table) */
+.performance-table tbody tr:last-child td {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Avatar 28×28 com gradiente canônico */
+.performance-table .history-agent-avatar {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--purple), #8B5CF6);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}

@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import './Performance.css';
 import { PageShell } from '../../components/layout/PageShell';
 import {
   omnichannelApi,
@@ -169,7 +170,7 @@ function MetricCell({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ color, fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>
+      <span style={{ color, fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 13 }}>
         {formattedValue ?? '—'}
       </span>
 
@@ -205,11 +206,11 @@ function MetricCell({
 }
 
 function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labels: Record<PerformanceMetricStatus, string> }) {
-  const config: Record<PerformanceMetricStatus, { color: string; bg: string; label: string }> = {
+  const config: Record<PerformanceMetricStatus, { color: string; bg: string; label: string; border?: string }> = {
     ok: { label: labels.ok, color: 'var(--green)', bg: 'var(--green-dim)' },
     warning: { label: labels.warning, color: 'var(--amber)', bg: 'var(--amber-dim)' },
     breach: { label: labels.breach, color: 'var(--red)', bg: 'var(--red-dim)' },
-    no_goal: { label: labels.no_goal, color: 'var(--txt-3)', bg: 'var(--bg-4)' },
+    no_goal: { label: labels.no_goal, color: 'var(--txt-3)', bg: 'var(--bg-4)', border: '1px solid var(--line-2)' },
   };
   const current = config[status];
   const icon = status === 'ok' ? (
@@ -237,12 +238,13 @@ function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labe
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        padding: '2px 8px',
+        padding: '3px 8px',
         borderRadius: 'var(--r-pill)',
         background: current.bg,
         color: current.color,
+        border: current.border,
         fontSize: 11,
-        fontWeight: 600,
+        fontWeight: status === 'no_goal' ? 500 : 600,
       }}
     >
       {icon} {current.label}
@@ -363,7 +365,7 @@ export function PerformancePage() {
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
-      <div className="monitor-page history-page">
+      <div className="monitor-page history-page performance-page">
         <div className="monitor-header history-header">
           <div>
             <h1>{t('performance.title')}</h1>
