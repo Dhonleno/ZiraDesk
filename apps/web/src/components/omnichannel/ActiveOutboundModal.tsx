@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  adminApi,
+  api,
   contactsApi,
   omnichannelApi,
   type ActiveOutboundTemplate,
@@ -99,8 +99,9 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   const { data: channels = [] } = useQuery({
     queryKey: ['active-outbound-channels'],
     queryFn: async () => {
-      const result = await adminApi.listChannelsByTypes(['whatsapp', 'email']);
-      return result.filter((channel) => channel.status === 'active' && (channel.type === 'whatsapp' || channel.type === 'email'));
+      const res = await api.get('/omnichannel/conversations/channels');
+      const result = res.data.data as { id: string; type: string; name: string; status: string }[];
+      return result.filter((channel) => channel.type === 'whatsapp' || channel.type === 'email');
     },
     staleTime: 60_000,
   });
