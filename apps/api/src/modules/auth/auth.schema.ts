@@ -6,6 +6,16 @@ export const loginBodySchema = z.object({
   tenantSlug: z.string().optional(),
 });
 
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().email(),
+  tenantSlug: z.string().optional(),
+});
+
+export const resetPasswordBodySchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
+});
+
 export const loginResponseSchema = z.object({
   accessToken: z.string(),
   user: z.object({

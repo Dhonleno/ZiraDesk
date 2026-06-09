@@ -9,6 +9,30 @@ const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL = '7d';
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
+export interface UserResetJwtPayload {
+  sub: string;
+  schemaName: string;
+  tenantSlug: string;
+  type: 'user-reset';
+}
+
+export function generateUserResetToken(
+  payload: UserResetJwtPayload,
+  expiresIn: string = '1h',
+): string {
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn } as jwt.SignOptions);
+}
+
+export function verifyUserResetToken(token: string): UserResetJwtPayload {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as UserResetJwtPayload;
+    if (payload.type !== 'user-reset') throw new Error('invalid type');
+    return payload;
+  } catch {
+    throw new Error('Token inválido ou expirado');
+  }
+}
+
 const messages = {
   'pt-BR': {
     invalidCredentials: 'E-mail ou senha inválidos',
