@@ -12,6 +12,7 @@ import {
   deleteChannel,
   testChannel,
   NotFoundError,
+  ChannelConfigurationError,
 } from './channels.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin')];
@@ -70,8 +71,18 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Dados inválidos', details: parsed.error.flatten() },
       });
     }
-    const data = await createChannel(parsed.data, schemaName);
-    return reply.code(201).send({ success: true, data });
+    try {
+      const data = await createChannel(parsed.data, schemaName);
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof ChannelConfigurationError) {
+        return reply.code(err.statusCode).send({
+          success: false,
+          error: { code: 'CHANNEL_CONFIGURATION_FAILED', message: err.message },
+        });
+      }
+      throw err;
+    }
   });
 
   app.patch<{ Params: { id: string } }>('/:id', { preHandler: guard }, async (request, reply) => {
@@ -96,6 +107,12 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ChannelConfigurationError) {
+        return reply.code(err.statusCode).send({
+          success: false,
+          error: { code: 'CHANNEL_CONFIGURATION_FAILED', message: err.message },
+        });
+      }
       throw err;
     }
   });
@@ -136,6 +153,12 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         if (err instanceof NotFoundError)
           return reply.code(404).send({ success: false, error: { message: err.message } });
+        if (err instanceof ChannelConfigurationError) {
+          return reply.code(err.statusCode).send({
+            success: false,
+            error: { code: 'CHANNEL_CONFIGURATION_FAILED', message: err.message },
+          });
+        }
         const message = err instanceof Error ? err.message : 'Erro ao testar canal';
         return reply.code(502).send({
           success: false,

@@ -3,7 +3,7 @@ import request from 'supertest';
 import { Prisma } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../../config/database.js';
-import { createTestApp, createTestJWT } from '../../test/setup.js';
+import { createIsolatedTestServer, createTestApp, createTestJWT } from '../../test/setup.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
 
@@ -372,6 +372,119 @@ describe('Admin integration', () => {
 
     const responseIds = response.body.data.map((channel: { id: string }) => channel.id);
     expect(responseIds).not.toContain(channelB.id);
+  });
+
+  it('POST /api/admin/channels valida e configura o webhook do WhatsApp', async () => {
+    const tenantA = await createTempTenant('channels-whatsapp');
+    const originalFetch = globalThis.fetch;
+    const phoneNumberId = '1176005248926381';
+    const wabaId = '1922786558561358';
+    const accessToken = 'tenant-whatsapp-token';
+    const appId = '792394403295356';
+    const callbackUrl = 'http://localhost:3334/api/webhooks/whatsapp';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes('/debug_token?')) {
+        return new Response(JSON.stringify({ data: { app_id: appId, is_valid: true } }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith(`/${wabaId}?fields=id`)) {
+        return new Response(JSON.stringify({ id: wabaId }), { status: 200 });
+      }
+      if (url.includes(`/${wabaId}/phone_numbers?`)) {
+        return new Response(JSON.stringify({ data: [{ id: phoneNumberId }] }), { status: 200 });
+      }
+      if (url.endsWith(`/${wabaId}/subscribed_apps`) && init?.method === 'POST') {
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }
+      if (url.endsWith(`/${phoneNumberId}`) && init?.method === 'POST') {
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }
+      if (url.includes(`/${phoneNumberId}?fields=id,webhook_configuration`)) {
+        return new Response(JSON.stringify({
+          id: phoneNumberId,
+          webhook_configuration: { application: callbackUrl },
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ error: { message: `Unexpected Meta request: ${url}` } }), {
+        status: 500,
+      });
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const localApp = await createIsolatedTestServer();
+
+    try {
+      const response = await request(localApp.server)
+        .post('/api/admin/channels')
+        .set(authHeader(tenantA))
+        .send({
+          type: 'whatsapp',
+          name: 'WhatsApp Produção',
+          credentials: { phoneNumberId, wabaId, accessToken },
+        });
+
+      expect(response.status, JSON.stringify(response.body)).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/${wabaId}/subscribed_apps`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/${phoneNumberId}`),
+        expect.objectContaining({ method: 'POST' }),
+      );
+
+      const stored = await prisma.$queryRawUnsafe<Array<{ credentials: string | object }>>(
+        `SELECT credentials
+           FROM "${tenantA.schemaName}".channels
+          WHERE id = $1::uuid`,
+        response.body.data.id,
+      );
+      expect(decryptCredentials(stored[0]!.credentials)).toMatchObject({
+        phoneNumberId,
+        wabaId,
+        accessToken,
+      });
+    } finally {
+      await localApp.close();
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('POST /api/admin/channels rejeita WABA ID inválido sem persistir o canal', async () => {
+    const tenantA = await createTempTenant('channels-invalid-waba');
+
+    const response = await createTestApp()
+      .post('/api/admin/channels')
+      .set(authHeader(tenantA))
+      .send({
+        type: 'whatsapp',
+        name: 'WhatsApp Inválido',
+        credentials: {
+          phoneNumberId: '1176005248926381',
+          wabaId: 'not-a-waba-id',
+          accessToken: 'tenant-whatsapp-token',
+        },
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: {
+        code: 'CHANNEL_CONFIGURATION_FAILED',
+        message: 'WABA ID deve conter apenas números',
+      },
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*)::bigint AS count
+         FROM "${tenantA.schemaName}".channels
+        WHERE name = 'WhatsApp Inválido'`,
+    );
+    expect(Number(rows[0]!.count)).toBe(0);
   });
 
   it('POST /api/admin/smtp salva config SMTP com credenciais criptografadas', async () => {

@@ -32,6 +32,7 @@ const envSchema = z.object({
   WHATSAPP_WABA_ID: z.string(),
   WHATSAPP_ACCESS_TOKEN: z.string(),
   WHATSAPP_VERIFY_TOKEN: z.string(),
+  META_APP_ID: optionalTrimmedString(),
   META_APP_SECRET: z.string().min(1, 'META_APP_SECRET é obrigatório'),
   META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v23.0'),
   TWILIO_ACCOUNT_SID: z.string(),
