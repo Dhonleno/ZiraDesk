@@ -1,6 +1,13 @@
 import { prisma } from '../../../config/database.js';
-import type { ListCampaignsQuery, CreateCampaignBody, UpdateCampaignBody, AddContactsBody } from './campaigns.schema.js';
+import type {
+  ListCampaignsQuery,
+  CreateCampaignBody,
+  UpdateCampaignBody,
+  AddContactsBody,
+  DuplicateFailedCampaignBody,
+} from './campaigns.schema.js';
 import { ensureTemplatesInfrastructure } from '../../admin/templates/templates.service.js';
+import { isPublicTestTemplate } from '../../../jobs/message-delivery-policy.js';
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -241,6 +248,9 @@ export async function createCampaign(
   if (!template.meta_template_id) {
     throw new ValidationError('Template não está vinculado à Meta. Sincronize os templates e tente novamente.');
   }
+  if (isPublicTestTemplate(template.name)) {
+    throw new ValidationError('O template hello_world é exclusivo dos números públicos de teste da Meta.');
+  }
   const headerMedia = validateCampaignHeaderMedia(template, data);
 
   const scheduledAt = data.scheduled_at ? new Date(data.scheduled_at) : null;
@@ -303,6 +313,9 @@ export async function updateCampaign(
     }
     if (!template.meta_template_id) {
       throw new ValidationError('Template não está vinculado à Meta. Sincronize os templates e tente novamente.');
+    }
+    if (isPublicTestTemplate(template.name)) {
+      throw new ValidationError('O template hello_world é exclusivo dos números públicos de teste da Meta.');
     }
   }
 
@@ -511,6 +524,14 @@ export async function launchCampaign(
     throw new ValidationError('Campanha sem contatos. Adicione ao menos 1 contato antes de iniciar');
   }
 
+  const templateRows = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM ${schema}.whatsapp_templates WHERE id = $1::uuid LIMIT 1`,
+    campaign.template_id,
+  );
+  if (isPublicTestTemplate(templateRows[0]?.name)) {
+    throw new ValidationError('O template hello_world é exclusivo dos números públicos de teste da Meta.');
+  }
+
   const scheduledAt = campaign.scheduled_at ? new Date(campaign.scheduled_at) : null;
   const now = new Date();
   const isScheduled = scheduledAt && scheduledAt > now;
@@ -695,6 +716,64 @@ export async function duplicateCampaign(
   return { ...newCampaign, total_contacts: totalContacts };
 }
 
+export async function duplicateFailedCampaign(
+  campaignId: string,
+  data: DuplicateFailedCampaignBody,
+  userId: string,
+  schemaName: string,
+): Promise<CampaignRow> {
+  const schema = quoteIdent(schemaName);
+  const original = await getCampaign(campaignId, schemaName);
+  if (!original.channel_id) {
+    throw new ValidationError('A campanha original não possui um canal válido', 409);
+  }
+
+  const failedCountRows = await prisma.$queryRawUnsafe<Array<{ count: string }>>(
+    `SELECT COUNT(*)::text AS count
+     FROM ${schema}.campaign_contacts
+     WHERE campaign_id = $1::uuid
+       AND status = 'failed'`,
+    campaignId,
+  );
+  const failedContacts = parseInt(failedCountRows[0]?.count ?? '0', 10);
+  if (failedContacts === 0) {
+    throw new ValidationError('A campanha não possui contatos com falha', 409);
+  }
+
+  const newCampaign = await createCampaign({
+    ...data,
+    channel_id: original.channel_id,
+  }, userId, schemaName);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${schema}.campaign_contacts (campaign_id, contact_id)
+     SELECT $1::uuid, contact_id
+     FROM ${schema}.campaign_contacts
+     WHERE campaign_id = $2::uuid
+       AND status = 'failed'`,
+    newCampaign.id,
+    campaignId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.campaigns
+     SET total_contacts = $1::integer
+     WHERE id = $2::uuid`,
+    failedContacts,
+    newCampaign.id,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${schema}.audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'campaign.duplicated_failed', 'campaign', $2::uuid, $3::jsonb)`,
+    userId,
+    newCampaign.id,
+    JSON.stringify({ original_campaign_id: campaignId, failed_contacts: failedContacts }),
+  );
+
+  return { ...newCampaign, total_contacts: failedContacts };
+}
+
 export async function getCampaignReport(
   campaignId: string,
   schemaName: string,
@@ -714,17 +793,17 @@ export async function getCampaignReport(
     failed: string;
   }>>(
     `SELECT
-       DATE(sent_at AT TIME ZONE 'UTC')::text AS date,
-       COUNT(*) FILTER (WHERE status IN ('sent','delivered','read','replied'))::text AS sent,
+       DATE(COALESCE(sent_at, failed_at, created_at) AT TIME ZONE 'UTC')::text AS date,
+       COUNT(*) FILTER (WHERE sent_at IS NOT NULL)::text AS sent,
        COUNT(*) FILTER (WHERE status IN ('delivered','read','replied'))::text AS delivered,
        COUNT(*) FILTER (WHERE status IN ('read','replied'))::text AS read,
        COUNT(*) FILTER (WHERE status = 'replied')::text AS replied,
        COUNT(*) FILTER (WHERE status = 'failed')::text AS failed
      FROM ${schema}.campaign_contacts
      WHERE campaign_id = $1::uuid
-       AND sent_at IS NOT NULL
-     GROUP BY DATE(sent_at AT TIME ZONE 'UTC')
-     ORDER BY DATE(sent_at AT TIME ZONE 'UTC') ASC`,
+       AND (sent_at IS NOT NULL OR failed_at IS NOT NULL)
+      GROUP BY DATE(COALESCE(sent_at, failed_at, created_at) AT TIME ZONE 'UTC')
+      ORDER BY DATE(COALESCE(sent_at, failed_at, created_at) AT TIME ZONE 'UTC') ASC`,
     campaignId,
   );
 

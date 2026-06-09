@@ -5,6 +5,7 @@ import { prisma } from '../../../config/database.js';
 import { createTestApp, createTestJWT } from '../../../test/setup.js';
 import { ensureTemplatesInfrastructure } from '../../admin/templates/templates.service.js';
 import { provisionTenantSchema } from '../../super-admin/tenants/tenants.service.js';
+import { closeFailedInitialOutbound } from '../outbound-failure.service.js';
 import { ensureCampaignsInfrastructure } from './campaigns.infrastructure.js';
 
 interface TempTenant {
@@ -199,6 +200,24 @@ describe('Campanhas integration', () => {
       .send({ name: 'Campanha local', channel_id: channelId, template_id: localTemplateId });
 
     expect(res.status).toBe(422);
+  });
+
+  it('POST /campaigns com hello_world → 422', async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${tenant.schemaName}".whatsapp_templates
+         (channel_id, name, display_name, language, category, body, variables, status, meta_template_id)
+       VALUES ($1::uuid, 'hello_world', 'Hello World', 'en_US', 'UTILITY', 'Hello World', '[]'::jsonb, 'approved', 'meta-hello-world')
+       RETURNING id`,
+      channelId,
+    );
+
+    const res = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({ name: 'Campanha Hello World', channel_id: channelId, template_id: rows[0]!.id });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.message).toContain('números públicos de teste');
   });
 
   it('POST /campaigns com canal não-whatsapp → 422', async () => {
@@ -454,6 +473,88 @@ describe('Campanhas integration', () => {
     expect(res.body.data.status).toBe('draft');
     expect(res.body.data.name).toBe('Campanha Original (cópia)');
     expect(res.body.data.total_contacts).toBe(1);
+  });
+
+  it('POST /campaigns/:id/duplicate-failed → copia somente contatos com falha', async () => {
+    const createRes = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({ name: 'Campanha com Falhas', channel_id: channelId, template_id: templateId });
+    const campaignId = createRes.body.data.id as string;
+    const failedContactId = await createContact(tenant.schemaName);
+    const sentContactId = await createContact(tenant.schemaName);
+
+    await createTestApp()
+      .post(`/api/omnichannel/campaigns/${campaignId}/contacts`)
+      .set(agentHeader(tenant))
+      .send({ contact_ids: [failedContactId, sentContactId] });
+    await prisma.$executeRawUnsafe(
+      `UPDATE "${tenant.schemaName}".campaign_contacts
+       SET status = CASE WHEN contact_id = $2::uuid THEN 'failed' ELSE 'sent' END
+       WHERE campaign_id = $1::uuid`,
+      campaignId,
+      failedContactId,
+    );
+
+    const res = await createTestApp()
+      .post(`/api/omnichannel/campaigns/${campaignId}/duplicate-failed`)
+      .set(agentHeader(tenant))
+      .send({
+        name: 'Campanha com Falhas - novo template',
+        template_id: templateId,
+        template_variables: {},
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe('draft');
+    expect(res.body.data.name).toBe('Campanha com Falhas - novo template');
+    expect(res.body.data.total_contacts).toBe(1);
+
+    const copiedRows = await prisma.$queryRawUnsafe<Array<{ contact_id: string }>>(
+      `SELECT contact_id::text
+       FROM "${tenant.schemaName}".campaign_contacts
+       WHERE campaign_id = $1::uuid`,
+      res.body.data.id,
+    );
+    expect(copiedRows).toEqual([{ contact_id: failedContactId }]);
+  });
+
+  it('fecha automaticamente envio inicial que falhou sem resposta do contato', async () => {
+    const contactId = await createContact(tenant.schemaName);
+    const conversationRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${tenant.schemaName}".conversations
+         (contact_id, channel_id, channel_type, conversation_type, status)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', 'outbound', 'waiting')
+       RETURNING id::text`,
+      contactId,
+      channelId,
+    );
+    const conversationId = conversationRows[0]!.id;
+    const messageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${tenant.schemaName}".messages
+         (conversation_id, sender_type, content, content_type, status)
+       VALUES ($1::uuid, 'agent', 'template', 'template', 'failed')
+       RETURNING id::text`,
+      conversationId,
+    );
+
+    const closed = await closeFailedInitialOutbound({
+      schemaName: tenant.schemaName,
+      conversationId,
+      messageId: messageRows[0]!.id,
+      provider: 'whatsapp',
+      reason: 'Template indisponível para o destinatário',
+    });
+
+    expect(closed).toBe(true);
+    const rows = await prisma.$queryRawUnsafe<Array<{ status: string; closure_reason: { reason?: string } }>>(
+      `SELECT status, closure_reason
+       FROM "${tenant.schemaName}".conversations
+       WHERE id = $1::uuid`,
+      conversationId,
+    );
+    expect(rows[0]?.status).toBe('closed');
+    expect(rows[0]?.closure_reason.reason).toBe('outbound_delivery_failed');
   });
 
   // ─── REPORT ────────────────────────────────────────────────────────────────

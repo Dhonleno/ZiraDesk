@@ -5,6 +5,9 @@ import { logger } from '../config/logger.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { messageQueue } from './queue.js';
 import { buildTemplateComponentsForCampaign } from './campaign-template-components.js';
+import { isPublicTestTemplate } from './message-delivery-policy.js';
+import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
+import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
 
 interface CampaignSendJobData {
   campaignId: string;
@@ -125,6 +128,14 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
       );
       return;
     }
+    if (isPublicTestTemplate(template.name)) {
+      logger.warn({ campaignId, templateId: campaign.template_id }, '[CampaignSend] Public test template blocked');
+      await prisma.$executeRawUnsafe(
+        `UPDATE ${schema}.campaigns SET status = 'cancelled', cancelled_at = NOW() WHERE id = $1::uuid`,
+        campaignId,
+      );
+      return;
+    }
 
     const BATCH_SIZE = 10;
 
@@ -146,8 +157,13 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
         `SELECT COUNT(*)::text AS count
          FROM ${schema}.campaign_contacts
          WHERE campaign_id = $1::uuid
-           AND sent_at >= CURRENT_DATE
-           AND sent_at < CURRENT_DATE + INTERVAL '1 day'`,
+           AND (
+             status = 'queued'
+             OR (
+               sent_at >= CURRENT_DATE
+               AND sent_at < CURRENT_DATE + INTERVAL '1 day'
+             )
+           )`,
         campaignId,
       );
       const sentToday = parseInt(sentTodayRows[0]?.count ?? '0', 10);
@@ -183,17 +199,31 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
       );
 
       if (pendingContacts.length === 0) {
-        logger.info({ campaignId }, '[CampaignSend] All contacts processed, completing campaign');
         await prisma.$executeRawUnsafe(
-          `UPDATE ${schema}.campaigns
-           SET status = 'completed', completed_at = NOW(), updated_at = NOW()
-           WHERE id = $1::uuid AND status = 'running'`,
+          `UPDATE ${schema}.campaign_contacts cc
+           SET status = 'opted_out'
+           WHERE cc.campaign_id = $1::uuid
+             AND cc.status = 'pending'
+             AND EXISTS (
+               SELECT 1
+               FROM ${schema}.campaign_optouts optout
+               WHERE optout.contact_id = cc.contact_id
+             )`,
           campaignId,
+        );
+        const completed = await completeCampaignIfSettled(schemaName, campaignId);
+        logger.info(
+          { campaignId, completed },
+          completed
+            ? '[CampaignSend] All contacts processed, campaign completed'
+            : '[CampaignSend] Dispatch queued, waiting for delivery results',
         );
         break;
       }
 
       for (const cc of pendingContacts) {
+        let conversationId: string | null = null;
+        let messageDbId: string | null = null;
         try {
           const phone = (cc.contact_whatsapp ?? cc.contact_phone ?? '').replace(/\D/g, '');
           if (!phone) {
@@ -227,7 +257,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
             campaign.channel_id,
             JSON.stringify({ campaign_id: campaignId, campaign_contact_id: cc.cc_id }),
           );
-          const conversationId = convRows[0]?.id;
+          conversationId = convRows[0]?.id ?? null;
           if (!conversationId) {
             throw new Error('Falha ao criar conversa para campanha');
           }
@@ -249,7 +279,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
               campaign_id: campaignId,
             }),
           );
-          const messageDbId = msgRows[0]?.id;
+          messageDbId = msgRows[0]?.id ?? null;
           if (!messageDbId) throw new Error('Falha ao inserir mensagem de campanha');
 
           await prisma.$executeRawUnsafe(
@@ -260,7 +290,15 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
             conversationId,
           );
 
-          // Enqueue to send-message job
+          // Mark as queued before publishing to avoid a race with the message worker.
+          await prisma.$executeRawUnsafe(
+            `UPDATE ${schema}.campaign_contacts
+             SET status = 'queued', conversation_id = $1::uuid
+             WHERE id = $2::uuid`,
+            conversationId,
+            cc.cc_id,
+          );
+
           await messageQueue.add('send', {
             messageId: messageDbId,
             conversationId,
@@ -275,34 +313,39 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
             templateComponents: templateComponents.length > 0 ? templateComponents : null,
           });
 
-          // Update campaign_contacts
-          await prisma.$executeRawUnsafe(
-            `UPDATE ${schema}.campaign_contacts
-             SET status = 'sent', sent_at = NOW(), conversation_id = $1::uuid
-             WHERE id = $2::uuid`,
-            conversationId,
-            cc.cc_id,
-          );
-
-          await prisma.$executeRawUnsafe(
-            `UPDATE ${schema}.campaigns
-             SET sent_count = sent_count + 1, updated_at = NOW()
-             WHERE id = $1::uuid`,
-            campaignId,
-          );
-
-          logger.info({ campaignId, contactId: cc.contact_id, conversationId }, '[CampaignSend] Contact processed');
+          logger.info({ campaignId, contactId: cc.contact_id, conversationId }, '[CampaignSend] Contact queued');
         } catch (err) {
           logger.error({ err, campaignId, contactId: cc.contact_id }, '[CampaignSend] Failed to process contact');
+          const errorMessage = err instanceof Error ? err.message.slice(0, 500) : 'Erro desconhecido';
           await prisma.$executeRawUnsafe(
             `UPDATE ${schema}.campaign_contacts
              SET status = 'failed',
                  error_message = $1,
                  failed_at = NOW()
              WHERE id = $2::uuid`,
-            err instanceof Error ? err.message.slice(0, 500) : 'Erro desconhecido',
+            errorMessage,
             cc.cc_id,
           );
+          if (conversationId) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE ${schema}.messages
+               SET status = 'failed',
+                   metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+               WHERE conversation_id = $1::uuid`,
+              conversationId,
+              JSON.stringify({ campaign_queue_error: errorMessage }),
+            );
+            if (messageDbId) {
+              await closeFailedInitialOutbound({
+                schemaName,
+                conversationId,
+                messageId: messageDbId,
+                provider: 'internal_queue',
+                reason: errorMessage,
+                tenantId,
+              });
+            }
+          }
           await prisma.$executeRawUnsafe(
             `UPDATE ${schema}.campaigns SET failed_count = failed_count + 1, updated_at = NOW() WHERE id = $1::uuid`,
             campaignId,

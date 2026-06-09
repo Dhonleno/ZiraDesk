@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
+import { completeCampaignIfSettled } from '../omnichannel/campaigns/campaign-delivery.service.js';
+import { closeFailedInitialOutbound } from '../omnichannel/outbound-failure.service.js';
 import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
 import { verifyWhatsAppMetaSignature } from '../../middleware/meta-signature.js';
@@ -2614,17 +2616,64 @@ async function processStatusUpdate(
                 );
               }
             } else if (status.status === 'failed') {
-              await prisma.$executeRawUnsafe(
-                `UPDATE "${tenant.schema_name}".campaign_contacts
-                 SET status = 'failed',
-                     failed_at = NOW(),
-                     message_id = COALESCE(message_id, $1)
-                 WHERE conversation_id = $2::uuid
-                   AND status = 'sent'`,
+              const firstError = status.errors?.[0];
+              const failureReason =
+                firstError?.error_data?.details
+                || firstError?.message
+                || firstError?.title
+                || 'Falha reportada pela Meta';
+              const failedRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string; previous_status: string }>>(
+                `WITH target AS (
+                   SELECT id, campaign_id, status AS previous_status
+                   FROM "${tenant.schema_name}".campaign_contacts
+                   WHERE conversation_id = $2::uuid
+                     AND status NOT IN ('failed', 'delivered', 'read', 'replied', 'opted_out')
+                 ),
+                 updated AS (
+                   UPDATE "${tenant.schema_name}".campaign_contacts cc
+                   SET status = 'failed',
+                       error_message = $3,
+                       failed_at = NOW(),
+                       message_id = COALESCE(cc.message_id, $1)
+                   FROM target
+                   WHERE cc.id = target.id
+                   RETURNING target.campaign_id::text, target.previous_status
+                 )
+                 SELECT campaign_id, previous_status FROM updated`,
                 status.id,
                 result[0].conversation_id,
+                failureReason.slice(0, 500),
               );
+              if (failedRows[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET failed_count = failed_count + $2::integer,
+                       updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                  failedRows.length,
+                );
+                await completeCampaignIfSettled(tenant.schema_name, campaignId);
+              }
+
             }
+          }
+
+          if (status.status === 'failed') {
+            const firstError = status.errors?.[0];
+            const failureReason =
+              firstError?.error_data?.details
+              || firstError?.message
+              || firstError?.title
+              || 'Falha reportada pela Meta';
+            await closeFailedInitialOutbound({
+              schemaName: tenant.schema_name,
+              conversationId: result[0].conversation_id,
+              messageId: result[0].id,
+              provider: 'whatsapp',
+              reason: failureReason,
+              tenantId: tenant.id,
+            });
           }
         } catch (campaignErr) {
           logger.warn({ err: campaignErr, conversationId: result[0].conversation_id }, '[WhatsApp] Campaign status tracking failed');

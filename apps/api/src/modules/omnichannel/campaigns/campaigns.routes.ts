@@ -8,6 +8,7 @@ import {
   createCampaignBodySchema,
   updateCampaignBodySchema,
   addContactsBodySchema,
+  duplicateFailedCampaignBodySchema,
 } from './campaigns.schema.js';
 import {
   listCampaigns,
@@ -22,6 +23,7 @@ import {
   resumeCampaign,
   cancelCampaign,
   duplicateCampaign,
+  duplicateFailedCampaign,
   getCampaignReport,
   NotFoundError,
   ValidationError,
@@ -258,6 +260,25 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
       return reply.code(201).send({ success: true, data: campaign });
     } catch (err) {
       if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/omnichannel/campaigns/:id/duplicate-failed
+  app.post<{ Params: { id: string }; Body: unknown }>('/:id/duplicate-failed', { preHandler: replyGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema não resolvido' } });
+
+    try {
+      const body = duplicateFailedCampaignBodySchema.parse(request.body);
+      const campaign = await duplicateFailedCampaign(request.params.id, body, request.user.id, schemaName);
+      return reply.code(201).send({ success: true, data: campaign });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'ZodError') {
+        return reply.code(400).send({ success: false, error: { message: 'Dados inválidos' } });
+      }
+      if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ValidationError) return reply.code(err.statusCode).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

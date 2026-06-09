@@ -33,7 +33,12 @@ export const addContactsBodySchema = z.object({
   contact_ids: z.array(z.string().uuid()).min(1).max(1000),
 });
 
+export const duplicateFailedCampaignBodySchema = createCampaignBodySchema.omit({
+  channel_id: true,
+});
+
 export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
 export type CreateCampaignBody = z.infer<typeof createCampaignBodySchema>;
 export type UpdateCampaignBody = z.infer<typeof updateCampaignBodySchema>;
 export type AddContactsBody = z.infer<typeof addContactsBodySchema>;
+export type DuplicateFailedCampaignBody = z.infer<typeof duplicateFailedCampaignBodySchema>;

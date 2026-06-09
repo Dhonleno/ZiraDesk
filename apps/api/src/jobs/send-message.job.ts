@@ -5,6 +5,12 @@ import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { sendEmail } from '../services/email.service.js';
 import { getSocketServer } from '../socket/index.js';
+import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
+import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
+import {
+  isLastProcessorAttempt,
+  isRetryableMetaError,
+} from './message-delivery-policy.js';
 
 interface SendMessageJob {
   messageId: string;
@@ -137,6 +143,8 @@ async function persistSentStatus(job: SendMessageJob): Promise<void> {
      WHERE id = $1::uuid`,
     job.messageId,
   );
+
+  await syncCampaignMessageSent(job, null, schemaName);
 }
 
 async function persistFailedStatus(
@@ -163,17 +171,33 @@ async function persistFailedStatus(
 
 async function syncCampaignMessageSent(
   job: SendMessageJob,
-  externalId: string,
+  externalId: string | null,
   schemaName: string,
 ): Promise<void> {
   try {
-    await prisma.$executeRawUnsafe(
+    const updatedRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string }>>(
       `UPDATE ${quoteIdent(schemaName)}.campaign_contacts cc
-       SET message_id = COALESCE(cc.message_id, $1)
-       WHERE cc.conversation_id = $2::uuid`,
+       SET status = 'sent',
+           sent_at = COALESCE(sent_at, NOW()),
+           message_id = COALESCE(cc.message_id, $1)
+       WHERE cc.conversation_id = $2::uuid
+         AND cc.status = 'queued'
+       RETURNING cc.campaign_id::text`,
       externalId,
       job.conversationId,
     );
+    const campaignId = updatedRows[0]?.campaign_id;
+    if (!campaignId) return;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.campaigns
+       SET sent_count = sent_count + $2::integer,
+           updated_at = NOW()
+       WHERE id = $1::uuid`,
+      campaignId,
+      updatedRows.length,
+    );
+    await completeCampaignIfSettled(schemaName, campaignId);
   } catch (error) {
     logger.warn(
       { error, messageId: job.messageId, conversationId: job.conversationId },
@@ -191,6 +215,10 @@ async function syncCampaignMessageFailed(
     String(metadataPatch['whatsapp_send_error_details'] ?? '')
       || String(metadataPatch['whatsapp_send_error_message'] ?? '')
       || String(metadataPatch['whatsapp_send_error'] ?? '')
+      || String(metadataPatch['instagram_send_error_message'] ?? '')
+      || String(metadataPatch['instagram_send_error'] ?? '')
+      || String(metadataPatch['email_send_error'] ?? '')
+      || String(metadataPatch['delivery_error'] ?? '')
       || 'Falha ao enviar mensagem';
 
   try {
@@ -221,19 +249,38 @@ async function syncCampaignMessageFailed(
     await prisma.$executeRawUnsafe(
       `UPDATE ${quoteIdent(schemaName)}.campaigns
        SET failed_count = failed_count + $2::integer,
-           sent_count = GREATEST(0, sent_count - $3::integer),
            updated_at = NOW()
        WHERE id = $1::uuid`,
       campaignId,
       updatedRows.length,
-      updatedRows.filter((row) => row.previous_status === 'sent').length,
     );
+    await completeCampaignIfSettled(schemaName, campaignId);
   } catch (error) {
     logger.warn(
       { error, messageId: job.messageId, conversationId: job.conversationId },
       '[CampaignSend] Failed to sync message failure',
     );
   }
+}
+
+async function handlePermanentDeliveryFailure(
+  job: SendMessageJob,
+  metadataPatch: Record<string, unknown>,
+  reason: string,
+): Promise<void> {
+  await persistFailedStatus(job, metadataPatch);
+  const schemaName = await resolveSchemaName(job);
+  if (schemaName) {
+    await closeFailedInitialOutbound({
+      schemaName,
+      conversationId: job.conversationId,
+      messageId: job.messageId,
+      provider: job.channelType,
+      reason,
+      tenantId: job.tenantId ?? null,
+    });
+  }
+  await notifyPermanentMessageFailure(job, reason);
 }
 
 async function notifyPermanentMessageFailure(job: SendMessageJob, reason: string): Promise<void> {
@@ -303,11 +350,6 @@ async function notifyPermanentMessageFailure(job: SendMessageJob, reason: string
       '[Message Worker] Failed to create permanent failure notification',
     );
   }
-}
-
-function isFinalAttempt(job: { attemptsMade: number; opts: { attempts?: number } }): boolean {
-  const maxAttempts = job.opts.attempts && job.opts.attempts > 0 ? job.opts.attempts : 1;
-  return job.attemptsMade >= maxAttempts;
 }
 
 function sleep(ms: number) {
@@ -493,11 +535,12 @@ const worker = new Worker<SendMessageJob>(
           env.WHATSAPP_ACCESS_TOKEN;
 
         if (!phoneNumberId || !accessToken) {
-          await persistFailedStatus(job.data, {
+          const reason = 'Credenciais do WhatsApp não configuradas para o canal remetente';
+          await handlePermanentDeliveryFailure(job.data, {
             whatsapp_send_error: 'missing_credentials',
             whatsapp_send_failed_at: new Date().toISOString(),
-          });
-          throw new Error('WhatsApp credentials not configured for sender channel');
+          }, reason);
+          return { ok: false, permanent: true };
         }
         // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
         const sanitizedPhone = (job.data.to ?? '').replace(/\D/g, '');
@@ -550,13 +593,21 @@ const worker = new Worker<SendMessageJob>(
 
         if (!response.ok) {
           const metaError = parseMetaApiError(responseText);
-          await persistFailedStatus(job.data, {
+          const metadataPatch = {
             whatsapp_send_http_status: response.status,
             whatsapp_send_error_code: metaError.code,
             whatsapp_send_error_message: metaError.message,
             whatsapp_send_error_details: metaError.details,
             whatsapp_send_failed_at: new Date().toISOString(),
-          });
+          };
+          const reason = metaError.details || metaError.message || `Meta API HTTP ${response.status}`;
+          const retryable = isRetryableMetaError(response.status, metaError.code);
+
+          if (!retryable || isLastProcessorAttempt(job)) {
+            await handlePermanentDeliveryFailure(job.data, metadataPatch, reason);
+            return { ok: false, permanent: !retryable };
+          }
+
           throw new Error(`Meta API error: ${responseText}`);
         }
 
@@ -566,9 +617,12 @@ const worker = new Worker<SendMessageJob>(
           if (wamid) {
             await persistExternalId(job.data, wamid);
             logger.info({ jobId: job.id, messageId: job.data.messageId, externalId: wamid }, '[WhatsApp Worker] Message sent');
+          } else {
+            await persistSentStatus(job.data);
           }
           return result;
         } catch {
+          await persistSentStatus(job.data);
           return { ok: true, raw: responseText };
         }
       }
@@ -583,14 +637,22 @@ const worker = new Worker<SendMessageJob>(
 
         if (!pageId || !accessToken) {
           logger.error({ jobId: job.id }, '[Instagram] Missing credentials');
-          await persistFailedStatus(job.data, { instagram_send_error: 'missing_credentials' });
+          await handlePermanentDeliveryFailure(
+            job.data,
+            { instagram_send_error: 'missing_credentials' },
+            'credenciais do Instagram não configuradas',
+          );
           return;
         }
 
         const recipientPsid = job.data.to?.trim();
         if (!recipientPsid) {
           logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Instagram] Missing recipient PSID');
-          await persistFailedStatus(job.data, { instagram_send_error: 'missing_recipient_psid' });
+          await handlePermanentDeliveryFailure(
+            job.data,
+            { instagram_send_error: 'missing_recipient_psid' },
+            'destinatário do Instagram ausente',
+          );
           return;
         }
 
@@ -643,13 +705,12 @@ const worker = new Worker<SendMessageJob>(
               { jobId: job.id, code: igErrorCode },
               '[Instagram] Permanent error — no retry',
             );
-            await persistFailedStatus(job.data, {
+            await handlePermanentDeliveryFailure(job.data, {
               instagram_send_http_status: igResponse.status,
               instagram_send_error_code: igErrorCode,
               instagram_send_error_message: igErrorMessage,
               instagram_send_failed_at: new Date().toISOString(),
-            });
-            await notifyPermanentMessageFailure(job.data, igErrorMessage ?? `Instagram API error ${igErrorCode}`);
+            }, igErrorMessage ?? `Instagram API error ${igErrorCode}`);
             return;
           }
 
@@ -660,6 +721,8 @@ const worker = new Worker<SendMessageJob>(
           const igResult = JSON.parse(igText) as { message_id?: string };
           if (igResult.message_id) {
             await persistExternalId(job.data, igResult.message_id);
+          } else {
+            await persistSentStatus(job.data);
           }
           logger.info(
             { jobId: job.id, messageId: job.data.messageId, igMessageId: igResult.message_id },
@@ -675,8 +738,11 @@ const worker = new Worker<SendMessageJob>(
         const toEmail = job.data.to?.trim();
         if (!toEmail) {
           logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Missing recipient email');
-          await persistFailedStatus(job.data, { email_send_error: 'missing_recipient_email' });
-          await notifyPermanentMessageFailure(job.data, 'destinatário de e-mail ausente');
+          await handlePermanentDeliveryFailure(
+            job.data,
+            { email_send_error: 'missing_recipient_email' },
+            'destinatário de e-mail ausente',
+          );
           return;
         }
 
@@ -695,8 +761,11 @@ const worker = new Worker<SendMessageJob>(
 
         if (!emailSchemaName) {
           logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Missing tenant schema');
-          await persistFailedStatus(job.data, { email_send_error: 'missing_tenant_schema' });
-          await notifyPermanentMessageFailure(job.data, 'schema do tenant não resolvido');
+          await handlePermanentDeliveryFailure(
+            job.data,
+            { email_send_error: 'missing_tenant_schema' },
+            'schema do tenant não resolvido',
+          );
           return;
         }
 
@@ -724,11 +793,10 @@ const worker = new Worker<SendMessageJob>(
           const message = error instanceof Error ? error.message : 'unknown_error';
 
           if (message === 'EMAIL_NOT_CONFIGURED') {
-            await persistFailedStatus(job.data, {
+            await handlePermanentDeliveryFailure(job.data, {
               email_send_error: 'email_not_configured',
               email_send_failed_at: new Date().toISOString(),
-            });
-            await notifyPermanentMessageFailure(job.data, 'provedor de e-mail não configurado');
+            }, 'provedor de e-mail não configurado');
             logger.error({ jobId: job.id, messageId: job.data.messageId }, '[Email] Provider not configured');
             return;
           }
@@ -743,9 +811,16 @@ const worker = new Worker<SendMessageJob>(
 
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[WhatsApp Worker] Job failed');
-  if (!job || !isFinalAttempt(job)) return;
+  if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
   const reason = err instanceof Error ? err.message : String(err);
-  void notifyPermanentMessageFailure(job.data, reason);
+  void handlePermanentDeliveryFailure(
+    job.data,
+    {
+      delivery_error: reason.slice(0, 500),
+      delivery_failed_at: new Date().toISOString(),
+    },
+    reason,
+  );
 });
 
 worker.on('active', (job) => {
