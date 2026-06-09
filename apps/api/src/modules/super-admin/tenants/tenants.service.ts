@@ -1138,5 +1138,5 @@ export async function resetTenantUserPasswordAsSuperAdmin(tenantId: string, user
   });
 
   if (!tenant) throw new NotFoundError('Tenant');
-  return resetUserPassword(userId, tenant.schemaName, { allowOwner: true });
+  return resetUserPassword(userId, tenant.id, tenant.schemaName, { allowOwner: true });
 }

@@ -166,9 +166,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    const tenantId = request.user.tenantId;
+    if (!tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Tenant não identificado' } });
+    }
+
     try {
-      const result = await resetUserPassword(request.params.id, schemaName);
-      return reply.send({ success: true, data: result });
+      await resetUserPassword(request.params.id, tenantId, schemaName);
+      return reply.send({ success: true, data: { message: 'E-mail de redefinição enviado' } });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
