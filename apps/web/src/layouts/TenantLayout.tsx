@@ -346,7 +346,7 @@ export function TenantLayout() {
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
   const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
-  const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
+  const canViewMetricsNav = canAny('metrics:view');
   const canViewHistoryNav = canAny('metrics:view');
   const canViewPerformanceNav = canAny('metrics:view');
   const canViewQueue = canAny('conversations:reply', 'conversations:manage');
