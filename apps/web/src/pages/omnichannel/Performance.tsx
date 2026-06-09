@@ -365,14 +365,6 @@ export function PerformancePage() {
           <div>
             <h1>{t('performance.title')}</h1>
             <p>{t('performance.subtitle')}</p>
-            <div className="performance-context-note" role="note" aria-live="polite">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                <path d="M6 1.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Z" stroke="currentColor" strokeWidth="1.1" />
-                <path d="M6 3.6v2.7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-                <circle cx="6" cy="8.1" r="0.55" fill="currentColor" />
-              </svg>
-              <span>{t('performance.outboundRule')}</span>
-            </div>
           </div>
           <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
             {t('performance.exportCsv')}
