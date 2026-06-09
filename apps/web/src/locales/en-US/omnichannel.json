@@ -430,6 +430,10 @@
     "noGoal": "No goal defined",
     "teamKpis": "Team summary"
   },
+  "composer": {
+    "pasteRemove": "Remove file",
+    "pasteImageAlt": "Pasted image"
+  },
   "media": {
     "upload": "Upload file",
     "uploadImage": "Upload image",

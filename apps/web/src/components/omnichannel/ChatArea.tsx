@@ -59,6 +59,19 @@ interface ConversationClosedSocketEvent {
 }
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
+const ALLOWED_PASTED_MEDIA_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 function resolveVariables(text: string, context: {
   contactName?: string | null;
@@ -212,6 +225,12 @@ function formatCallRecordingDuration(seconds: number | undefined): string {
   const minutes = Math.floor(value / 60);
   const remainingSeconds = value % 60;
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function mentionTypeLabel(mention: MentionData, t: TFunction): string {
@@ -420,6 +439,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const [isAssuming, setIsAssuming] = useState(false);
   const [isConversationClosed, setIsConversationClosed] = useState(false);
   const [mentioningMessage, setMentioningMessage] = useState<MentionData | null>(null);
+  const [pastedFile, setPastedFile] = useState<File | null>(null);
+  const [pastedPreviewUrl, setPastedPreviewUrl] = useState<string | null>(null);
+  const [isPastedFileSending, setIsPastedFileSending] = useState(false);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -444,6 +466,26 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const [isMediaActive, setIsMediaActive] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
   const hasValidSession = Boolean(conversationId) && isAuthenticated && Boolean(currentAuthToken);
+
+  const clearPastedFile = useCallback(() => {
+    setPastedFile(null);
+    setPastedPreviewUrl(null);
+  }, []);
+
+  useEffect(() => {
+    if (!pastedFile || !pastedFile.type.startsWith('image/')) {
+      setPastedPreviewUrl(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(pastedFile);
+    setPastedPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [pastedFile]);
+
+  useEffect(() => {
+    clearPastedFile();
+  }, [clearPastedFile, conversationId]);
 
   const shouldRetryQuery = useCallback((failureCount: number, error: unknown) => {
     const status = (error as { response?: { status?: number } })?.response?.status;
@@ -1190,9 +1232,25 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     return () => observer.disconnect();
   }, [handleLoadOlder, hasMore, isLoadingMore, messages.length]);
 
-  function handleSend() {
+  async function handleSend() {
     if (!canSendMessage) return;
-    if (sendMutation.isPending) return;
+    if (sendMutation.isPending || isPastedFileSending) return;
+
+    if (pastedFile) {
+      setIsPastedFileSending(true);
+      try {
+        const sent = await mediaUploadRef.current?.sendFile(pastedFile, content.trim());
+        if (sent) {
+          setContent('');
+          window.requestAnimationFrame(resizeComposer);
+        }
+      } finally {
+        clearPastedFile();
+        setIsPastedFileSending(false);
+      }
+      return;
+    }
+
     if (
       requiresWhatsappTemplateMessage(
         data?.conversation as Conversation | undefined,
@@ -1311,8 +1369,20 @@ export function ChatArea({ conversationId, onClosed }: Props) {
 
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleSend();
+      void handleSend();
     }
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(event.clipboardData.items);
+    const fileItem = items.find((item) => item.kind === 'file');
+    if (!fileItem) return;
+
+    const file = fileItem.getAsFile();
+    if (!file || !ALLOWED_PASTED_MEDIA_TYPES.has(file.type)) return;
+
+    event.preventDefault();
+    setPastedFile(file);
   }
 
   function handleContentChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -1434,8 +1504,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const isTemplateMode = isWhatsappConversation && shouldForceTemplate;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
-  const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
-  const showRecordAction = !useTemplateMessage && !hasTypedContent;
+  const canSubmitComposer = Boolean(pastedFile)
+    || (useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent);
+  const showRecordAction = !useTemplateMessage && !hasTypedContent && !pastedFile;
   useEffect(() => {
     if (isWhatsappConversation) return;
     setUseTemplateMessage(false);
@@ -2355,7 +2426,10 @@ export function ChatArea({ conversationId, onClosed }: Props) {
               conversationId={conversationId}
               disabled={!canSendMessage}
               mentionMessageId={mentioningMessage?.message_id ?? null}
-              onActiveChange={setIsMediaActive}
+              onActiveChange={(active) => {
+                setIsMediaActive(active);
+                if (active) clearPastedFile();
+              }}
               onSent={async (payload) => {
                 registerLocalMediaPreview(payload);
                 setMentioningMessage(null);
@@ -2749,6 +2823,47 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                     </div>
                   </div>
                 )}
+                {pastedFile && (
+                  <div className="paste-preview">
+                    {pastedPreviewUrl ? (
+                      <img
+                        src={pastedPreviewUrl}
+                        alt={t('composer.pasteImageAlt')}
+                        className="paste-preview-image"
+                      />
+                    ) : (
+                      <div className="paste-preview-file">
+                        {pastedFile.type.startsWith('video/') ? (
+                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                            <rect x="2" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+                            <path d="M2 7h14M6 3v4M12 3v4M6 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                            <path d="M4 2.5h6l4 4v9H4v-13Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                            <path d="M10 2.5v4h4M6.5 10h5M6.5 12.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        )}
+                        <span className="paste-preview-name">{pastedFile.name}</span>
+                        {!pastedFile.type.startsWith('video/') && (
+                          <span className="paste-preview-size">{formatFileSize(pastedFile.size)}</span>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="paste-preview-remove tb-icon-btn"
+                      onClick={clearPastedFile}
+                      disabled={isPastedFileSending}
+                      aria-label={t('composer.pasteRemove')}
+                      title={t('composer.pasteRemove')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <div
                   style={{
                     position: 'relative',
@@ -2849,6 +2964,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                   value={content}
                   onChange={handleContentChange}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   aria-label={t('chat.composeAriaLabel')}
                   placeholder={
                     useTemplateMessage
@@ -2859,7 +2975,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                           ? t('chat.internalNotePlaceholder')
                           : t('chat.inputPlaceholder')
                   }
-                  disabled={!canSendMessage || isComposerAttachmentActive}
+                  disabled={!canSendMessage || isComposerAttachmentActive || isPastedFileSending}
                   style={{
                     flex: 1,
                     background: 'none',
@@ -2876,10 +2992,11 @@ export function ChatArea({ conversationId, onClosed }: Props) {
 
                 <button
                   type="button"
-                  onClick={showRecordAction ? () => void audioRecorderRef.current?.start() : handleSend}
+                  onClick={showRecordAction ? () => void audioRecorderRef.current?.start() : () => void handleSend()}
                   disabled={
                     !canSendMessage ||
                     isComposerAttachmentActive ||
+                    isPastedFileSending ||
                     (canSubmitComposer ? sendMutation.isPending : !showRecordAction)
                   }
                   style={{
@@ -2894,7 +3011,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                     background: canSubmitComposer ? 'var(--teal)' : 'var(--bg-4)',
                     color: canSubmitComposer ? 'var(--on-teal)' : 'var(--txt-2)',
                     transition: 'all .2s cubic-bezier(.4,0,.2,1)',
-                    opacity: (!canSendMessage || isComposerAttachmentActive || (canSubmitComposer && sendMutation.isPending)) ? 0.45 : 1,
+                    opacity: (!canSendMessage || isComposerAttachmentActive || isPastedFileSending || (canSubmitComposer && sendMutation.isPending)) ? 0.45 : 1,
                   }}
                   onMouseEnter={(event) => {
                     if (!canSubmitComposer) {

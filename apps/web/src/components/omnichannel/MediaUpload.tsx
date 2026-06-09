@@ -6,6 +6,7 @@ import { useToast } from '../../stores/toast.store';
 export interface MediaUploadHandle {
   openPicker: (accept?: string) => void;
   clear: () => void;
+  sendFile: (file: File, caption?: string) => Promise<boolean>;
 }
 
 export interface SentMediaPayload {
@@ -62,15 +63,6 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
       onActiveChange?.(false);
     };
 
-    useImperativeHandle(ref, () => ({
-      openPicker: (acceptParam?: string) => {
-        if (disabled) return;
-        setAccept(acceptParam);
-        inputRef.current?.click();
-      },
-      clear,
-    }));
-
     const onFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -78,15 +70,15 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
       onActiveChange?.(true);
     };
 
-    const onUpload = async () => {
-      if (!selectedFile || isUploading) return;
+    const uploadFile = async (file: File, fileCaption = ''): Promise<boolean> => {
+      if (isUploading) return false;
       setIsUploading(true);
       let localPreviewUrl: string | null = null;
       let handedOffToParent = false;
       try {
-        const upload = await omnichannelApi.uploadMedia(conversationId, selectedFile);
+        const upload = await omnichannelApi.uploadMedia(conversationId, file);
         await omnichannelApi.sendMessage(conversationId, {
-          content: caption.trim(),
+          content: fileCaption.trim(),
           media_id: upload.media_id,
           media_type: upload.media_type,
           media_filename: upload.filename,
@@ -94,21 +86,41 @@ export const MediaUpload = forwardRef<MediaUploadHandle, MediaUploadProps>(
           ...(mentionMessageId ? { mention_message_id: mentionMessageId } : {}),
         });
 
-        localPreviewUrl = URL.createObjectURL(selectedFile);
+        localPreviewUrl = URL.createObjectURL(file);
         clear();
         await onSent({
           mediaId: upload.media_id,
           localPreviewUrl,
         });
         handedOffToParent = true;
+        return true;
       } catch {
         toast.error(t('media.uploadError'));
+        return false;
       } finally {
         if (localPreviewUrl && !handedOffToParent) {
           URL.revokeObjectURL(localPreviewUrl);
         }
         setIsUploading(false);
       }
+    };
+
+    useImperativeHandle(ref, () => ({
+      openPicker: (acceptParam?: string) => {
+        if (disabled) return;
+        setAccept(acceptParam);
+        inputRef.current?.click();
+      },
+      clear,
+      sendFile: (file: File, fileCaption = '') => {
+        if (disabled) return Promise.resolve(false);
+        return uploadFile(file, fileCaption);
+      },
+    }));
+
+    const onUpload = async () => {
+      if (!selectedFile) return;
+      await uploadFile(selectedFile, caption);
     };
 
     const mediaType = selectedFile ? detectMediaType(selectedFile.type) : null;

@@ -430,6 +430,10 @@
     "noGoal": "Sem meta definida",
     "teamKpis": "Resumo da equipe"
   },
+  "composer": {
+    "pasteRemove": "Remover arquivo",
+    "pasteImageAlt": "Imagem colada"
+  },
   "media": {
     "upload": "Enviar arquivo",
     "uploadImage": "Enviar imagem",
