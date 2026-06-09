@@ -36,8 +36,8 @@ function uniqueToken(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
 }
 
-function createMetaSignature(rawBody: string): string {
-  return `sha256=${createHmac('sha256', META_APP_SECRET_TEST).update(rawBody).digest('hex')}`;
+function createMetaSignature(rawBody: string, appSecret = META_APP_SECRET_TEST): string {
+  return `sha256=${createHmac('sha256', appSecret).update(rawBody).digest('hex')}`;
 }
 
 async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 15_000, intervalMs = 150): Promise<T> {
@@ -174,6 +174,7 @@ describe('Omnichannel webhooks integration', () => {
     const phoneNumberId = `1555000${Math.floor(Math.random() * 100000)}`;
     const waId = `5511999${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`;
     const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+    const tenantAppSecret = `tenant_app_secret_${randomUUID()}`;
 
     await insertChannel(schemaName, 'whatsapp', {
       phoneNumberId,
@@ -184,6 +185,7 @@ describe('Omnichannel webhooks integration', () => {
       verify_token: 'VERIFY_TOKEN',
       wabaId: '1234567890',
       waba_id: '1234567890',
+      appSecret: tenantAppSecret,
     });
 
     // Payload baseado no formato oficial de webhook de mensagens da Meta WhatsApp Cloud API.
@@ -227,7 +229,7 @@ describe('Omnichannel webhooks integration', () => {
     const response = await createTestApp()
       .post('/api/webhooks/whatsapp')
       .set('Content-Type', 'application/json')
-      .set('x-hub-signature-256', createMetaSignature(rawBody))
+      .set('x-hub-signature-256', createMetaSignature(rawBody, tenantAppSecret))
       .send(payload);
 
     expect(response.status).toBe(200);

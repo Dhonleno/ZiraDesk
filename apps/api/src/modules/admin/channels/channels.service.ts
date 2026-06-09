@@ -161,17 +161,6 @@ async function resolveTokenAppId(accessToken: string): Promise<string> {
   return appId;
 }
 
-async function resolveExpectedMetaAppId(): Promise<string> {
-  if (env.META_APP_ID) return env.META_APP_ID;
-  if (!env.WHATSAPP_ACCESS_TOKEN) {
-    throw new ChannelConfigurationError(
-      'Aplicativo Meta do ZiraDesk não configurado no servidor',
-      502,
-    );
-  }
-  return resolveTokenAppId(env.WHATSAPP_ACCESS_TOKEN);
-}
-
 function whatsappWebhookUrl(): string {
   const apiUrl = asTrimmedString(env.API_URL);
   if (!apiUrl) {
@@ -195,8 +184,10 @@ async function validateAndConfigureWhatsAppChannel(
   const accessToken = asTrimmedString(
     credentials.accessToken ?? credentials.access_token ?? env.WHATSAPP_ACCESS_TOKEN,
   );
+  const appId = asTrimmedString(credentials.appId ?? credentials.app_id);
+  const appSecret = asTrimmedString(credentials.appSecret ?? credentials.app_secret);
 
-  if (!phoneNumberId || !wabaId || !accessToken) {
+  if (!phoneNumberId || !wabaId || !accessToken || !appId || !appSecret) {
     throw new ChannelConfigurationError('Credenciais WhatsApp incompletas');
   }
 
@@ -206,16 +197,44 @@ async function validateAndConfigureWhatsAppChannel(
   if (!/^\d+$/.test(wabaId)) {
     throw new ChannelConfigurationError('WABA ID deve conter apenas números');
   }
+  if (!/^\d+$/.test(appId)) {
+    throw new ChannelConfigurationError('App ID deve conter apenas números');
+  }
 
-  const [tokenAppId, expectedAppId] = await Promise.all([
-    resolveTokenAppId(accessToken),
-    resolveExpectedMetaAppId(),
-  ]);
-  if (tokenAppId !== expectedAppId) {
+  const tokenAppId = await resolveTokenAppId(accessToken);
+  if (tokenAppId !== appId) {
     throw new ChannelConfigurationError(
-      'O Access Token pertence a outro aplicativo Meta. Use um token do aplicativo ZiraDesk.',
+      'O Access Token não pertence ao App ID informado.',
     );
   }
+
+  const callbackUrl = whatsappWebhookUrl();
+  const subscribedFields = [
+    'messages',
+    'message_template_components_update',
+    'message_template_quality_update',
+    'message_template_status_update',
+    'phone_number_name_update',
+    'phone_number_quality_update',
+    'account_alerts',
+    'account_review_update',
+    'account_update',
+    'security',
+  ];
+  await requestMeta(
+    `${encodeURIComponent(appId)}/subscriptions`,
+    `${appId}|${appSecret}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        object: 'whatsapp_business_account',
+        callback_url: callbackUrl,
+        verify_token: env.WHATSAPP_VERIFY_TOKEN,
+        fields: subscribedFields.join(','),
+      }),
+    },
+  );
 
   await requestMeta(`${encodeURIComponent(wabaId)}?fields=id`, accessToken);
   const phoneNumbers = await requestMeta(
@@ -229,7 +248,6 @@ async function validateAndConfigureWhatsAppChannel(
     throw new ChannelConfigurationError('O Phone Number ID não pertence à WABA informada');
   }
 
-  const callbackUrl = whatsappWebhookUrl();
   await requestMeta(
     `${encodeURIComponent(wabaId)}/subscribed_apps`,
     accessToken,
@@ -329,9 +347,21 @@ export async function getChannel(id: string, schemaName: string) {
   );
   if (!rows[0]) throw new NotFoundError('Canal');
   const { credentials, ...rest } = rows[0];
+  const decrypted = decryptCredentials(credentials);
+  const {
+    accessToken: _accessToken,
+    access_token: _legacyAccessToken,
+    appSecret: _appSecret,
+    app_secret: _legacyAppSecret,
+    ...publicCredentials
+  } = decrypted;
   return {
     ...rest,
-    credentials: decryptCredentials(credentials),
+    credentials: {
+      ...publicCredentials,
+      hasAccessToken: Boolean(_accessToken || _legacyAccessToken),
+      hasAppSecret: Boolean(_appSecret || _legacyAppSecret),
+    },
   };
 }
 
@@ -382,6 +412,14 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
     && currentCredentials.accessToken
   ) {
     mergedCredentials.accessToken = currentCredentials.accessToken;
+  }
+  if (
+    data.credentials
+    && (!Object.prototype.hasOwnProperty.call(data.credentials, 'appSecret')
+      || !String(data.credentials.appSecret ?? '').trim())
+    && currentCredentials.appSecret
+  ) {
+    mergedCredentials.appSecret = currentCredentials.appSecret;
   }
 
   if (existingRows[0].type === 'whatsapp' && data.credentials) {

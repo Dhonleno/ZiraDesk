@@ -381,6 +381,7 @@ describe('Admin integration', () => {
     const wabaId = '1922786558561358';
     const accessToken = 'tenant-whatsapp-token';
     const appId = '792394403295356';
+    const appSecret = 'tenant-meta-app-secret';
     const callbackUrl = 'http://localhost:3334/api/webhooks/whatsapp';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -389,6 +390,12 @@ describe('Admin integration', () => {
         return new Response(JSON.stringify({ data: { app_id: appId, is_valid: true } }), {
           status: 200,
         });
+      }
+      if (url.endsWith(`/${appId}/subscriptions`) && init?.method === 'POST') {
+        expect(init.headers).toMatchObject({
+          Authorization: `Bearer ${appId}|${appSecret}`,
+        });
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
       }
       if (url.endsWith(`/${wabaId}?fields=id`)) {
         return new Response(JSON.stringify({ id: wabaId }), { status: 200 });
@@ -423,7 +430,7 @@ describe('Admin integration', () => {
         .send({
           type: 'whatsapp',
           name: 'WhatsApp Produção',
-          credentials: { phoneNumberId, wabaId, accessToken },
+          credentials: { phoneNumberId, wabaId, appId, appSecret, accessToken },
         });
 
       expect(response.status, JSON.stringify(response.body)).toBe(201);
@@ -446,8 +453,24 @@ describe('Admin integration', () => {
       expect(decryptCredentials(stored[0]!.credentials)).toMatchObject({
         phoneNumberId,
         wabaId,
+        appId,
+        appSecret,
         accessToken,
       });
+
+      const detailResponse = await request(localApp.server)
+        .get(`/api/admin/channels/${response.body.data.id}`)
+        .set(authHeader(tenantA));
+      expect(detailResponse.status).toBe(200);
+      expect(detailResponse.body.data.credentials).toMatchObject({
+        phoneNumberId,
+        wabaId,
+        appId,
+        hasAccessToken: true,
+        hasAppSecret: true,
+      });
+      expect(detailResponse.body.data.credentials).not.toHaveProperty('accessToken');
+      expect(detailResponse.body.data.credentials).not.toHaveProperty('appSecret');
     } finally {
       await localApp.close();
       globalThis.fetch = originalFetch;
@@ -466,6 +489,8 @@ describe('Admin integration', () => {
         credentials: {
           phoneNumberId: '1176005248926381',
           wabaId: 'not-a-waba-id',
+          appId: '792394403295356',
+          appSecret: 'tenant-meta-app-secret',
           accessToken: 'tenant-whatsapp-token',
         },
       });

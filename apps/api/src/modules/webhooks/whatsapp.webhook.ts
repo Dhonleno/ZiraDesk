@@ -4,7 +4,7 @@ import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
-import { verifyMetaSignature } from '../../middleware/meta-signature.js';
+import { verifyWhatsAppMetaSignature } from '../../middleware/meta-signature.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
@@ -2655,7 +2655,7 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
   // POST /api/webhooks/whatsapp — receive messages from Meta Cloud API
   app.post('/whatsapp', {
     config: { rawBody: true },
-    preHandler: [verifyMetaSignature],
+    preHandler: [verifyWhatsAppMetaSignature],
   }, async (request, reply) => {
     // Meta requires a fast 200 response
     void reply.status(200).send({ success: true });

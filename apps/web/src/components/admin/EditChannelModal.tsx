@@ -18,6 +18,8 @@ interface FormState {
   status: 'active' | 'inactive';
   phoneNumberId: string;
   wabaId: string;
+  appId: string;
+  appSecret: string;
   accessToken: string;
 }
 
@@ -33,6 +35,8 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
     status: 'active',
     phoneNumberId: '',
     wabaId: '',
+    appId: '',
+    appSecret: '',
     accessToken: '',
   });
 
@@ -50,6 +54,8 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
       status: channel.status === 'inactive' ? 'inactive' : 'active',
       phoneNumberId: asString(credentials.phoneNumberId),
       wabaId: asString(credentials.wabaId),
+      appId: asString(credentials.appId),
+      appSecret: '',
       accessToken: '',
     });
   }, [channel]);
@@ -62,14 +68,20 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
         const currentCredentials = (channel.credentials ?? {}) as Record<string, unknown>;
         const phoneNumberId = form.phoneNumberId.trim();
         const wabaId = form.wabaId.trim();
+        const appId = form.appId.trim();
         const credentialsChanged = (
           phoneNumberId !== asString(currentCredentials.phoneNumberId)
           || wabaId !== asString(currentCredentials.wabaId)
+          || appId !== asString(currentCredentials.appId)
+          || Boolean(form.appSecret.trim())
           || Boolean(form.accessToken.trim())
         );
 
         if (credentialsChanged) {
-          credentials = { phoneNumberId, wabaId };
+          credentials = { phoneNumberId, wabaId, appId };
+        }
+        if (form.appSecret.trim()) {
+          credentials!.appSecret = form.appSecret.trim();
         }
         if (form.accessToken.trim()) {
           credentials!.accessToken = form.accessToken.trim();
@@ -149,6 +161,19 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
                 label="WABA ID"
                 value={form.wabaId}
                 onChange={(event) => setForm((prev) => ({ ...prev, wabaId: event.target.value }))}
+              />
+              <Input
+                label="App ID"
+                value={form.appId}
+                onChange={(event) => setForm((prev) => ({ ...prev, appId: event.target.value }))}
+              />
+              <Input
+                label="App Secret"
+                type="password"
+                placeholder="Deixe em branco para manter o atual"
+                value={form.appSecret}
+                onChange={(event) => setForm((prev) => ({ ...prev, appSecret: event.target.value }))}
+                hint="Preencha apenas para alterar o segredo atual"
               />
               <Input
                 label="Access Token"

@@ -202,6 +202,8 @@ function WhatsAppMetaFields({ register }: WhatsAppMetaFieldsProps) {
     <>
       <Input label="Phone Number ID" required placeholder="704423209430762" {...register('phoneNumberId')} />
       <Input label="WABA ID" required placeholder="1922786558561358" {...register('wabaId')} />
+      <Input label="App ID" required placeholder="792394403295356" {...register('appId')} />
+      <Input label="App Secret" type="password" required {...register('appSecret')} />
       <Input label="Access Token" type="password" required {...register('accessToken')} />
       <div
         className="rounded-lg p-3"
