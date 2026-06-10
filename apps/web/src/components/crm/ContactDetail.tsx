@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { adminApi, contactsApi, omnichannelApi, ticketsApi, type CrmContact } from '../../services/api';
+import { contactsApi, omnichannelApi, ticketsApi, type CrmContact } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { ContactAvatar } from './ContactAvatar';
 import { EditContactModal } from './EditContactModal';
@@ -157,7 +157,7 @@ export function ContactDetail({ contactId }: Props) {
   const { data: channels = [] } = useQuery({
     queryKey: ['crm-active-channels'],
     queryFn: async () => {
-      const list = await adminApi.listChannels();
+      const list = await omnichannelApi.listConversationChannels();
       return list.filter((channel) => channel.status === 'active');
     },
     staleTime: 60_000,

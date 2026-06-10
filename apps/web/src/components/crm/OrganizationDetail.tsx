@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import type { CrmOrganization, CrmContact, CrmOrganizationConversation } from '../../services/api';
-import { adminApi, contactsApi, omnichannelApi, organizationsApi } from '../../services/api';
+import { contactsApi, omnichannelApi, organizationsApi } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { OrgStatusBadge } from './ContactBadge';
 import { OrganizationStats } from './OrganizationStats';
@@ -168,7 +168,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const { data: activeChannels = [] } = useQuery({
     queryKey: ['crm-active-channels'],
     queryFn: async () => {
-      const list = await adminApi.listChannels();
+      const list = await omnichannelApi.listConversationChannels();
       return list.filter((channel) => channel.status === 'active');
     },
     staleTime: 60_000,
