@@ -250,15 +250,13 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
         return;
       }
       setDuplicateExistingId(null);
-      const apiMessage = (
-        error as {
-          response?: {
-            data?: {
-              error?: { message?: string };
-            };
-          };
-        }
-      )?.response?.data?.error?.message;
+      const errorObj = response?.data?.error as { code?: string; message?: string } | string | undefined;
+      if (typeof errorObj === 'object' && errorObj?.code === 'WHATSAPP_WINDOW_EXPIRED') {
+        setUseTemplate(true);
+        toast.error(t('outbound.errors.windowExpired'));
+        return;
+      }
+      const apiMessage = typeof errorObj === 'object' ? errorObj?.message : undefined;
       toast.error(apiMessage ?? t('form.errorCreate'));
     },
   });

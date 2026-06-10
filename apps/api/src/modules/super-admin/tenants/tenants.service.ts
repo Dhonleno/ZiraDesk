@@ -755,6 +755,22 @@ async function createTenantTables(schemaName: string): Promise<void> {
     )
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".outbound_webhooks (
+      id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      name              VARCHAR(100) NOT NULL,
+      url               VARCHAR(500) NOT NULL,
+      secret            VARCHAR(255),
+      events            TEXT[]       NOT NULL DEFAULT '{}',
+      headers           JSONB        DEFAULT '{}',
+      is_active         BOOLEAN      DEFAULT true,
+      last_triggered_at TIMESTAMPTZ,
+      last_status       INTEGER,
+      created_at        TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+
   // AI Agent — habilitar pgvector (database-level, idempotente)
   await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS vector`);
 

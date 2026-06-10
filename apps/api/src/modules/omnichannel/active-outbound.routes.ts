@@ -230,6 +230,38 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         };
       }
 
+      if (channel.type === 'whatsapp' && !useTemplate) {
+        const lastClientMessageRows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
+          `SELECT m.created_at
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+           WHERE c.contact_id = $1::uuid
+             AND c.channel_id = $2::uuid
+             AND m.sender_type = 'client'
+           ORDER BY m.created_at DESC
+           LIMIT 1`,
+          contactId,
+          channelId,
+        );
+
+        const lastClientMessage = lastClientMessageRows[0];
+        const withinWindow = lastClientMessage &&
+          (Date.now() - new Date(lastClientMessage.created_at).getTime()) < 24 * 60 * 60 * 1000;
+
+        if (!withinWindow) {
+          return {
+            statusCode: 400 as const,
+            payload: {
+              success: false,
+              error: {
+                code: 'WHATSAPP_WINDOW_EXPIRED',
+                message: 'Fora da janela de 24h. Use um template aprovado para iniciar a conversa.',
+              },
+            },
+          };
+        }
+      }
+
       if (channel.type === 'whatsapp' && useTemplate && !templateNameNormalized) {
         return {
           statusCode: 400 as const,

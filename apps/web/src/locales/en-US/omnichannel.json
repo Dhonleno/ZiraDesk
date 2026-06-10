@@ -77,7 +77,10 @@
   "outbound": {
     "badge": "Active",
     "warning": "It will appear in Active until the customer replies",
-    "activated": "Customer replied to the active attendance!"
+    "activated": "Customer replied to the active attendance!",
+    "errors": {
+      "windowExpired": "Outside the 24h WhatsApp window. Select an approved template to continue."
+    }
   },
   "activeOutbound": {
     "button": "Active outbound",

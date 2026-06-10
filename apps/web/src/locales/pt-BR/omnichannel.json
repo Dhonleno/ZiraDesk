@@ -77,7 +77,10 @@
   "outbound": {
     "badge": "Ativo",
     "warning": "Aparecerá em Ativos até o cliente responder",
-    "activated": "Cliente respondeu ao atendimento ativo!"
+    "activated": "Cliente respondeu ao atendimento ativo!",
+    "errors": {
+      "windowExpired": "Fora da janela de 24h do WhatsApp. Selecione um template aprovado para continuar."
+    }
   },
   "activeOutbound": {
     "button": "Envio ativo",
