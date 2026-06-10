@@ -44,6 +44,13 @@ export class DuplicateOpenConversationError extends ConflictError {
   }
 }
 
+export class WhatsappWindowExpiredError extends Error {
+  constructor() {
+    super('Contato fora da janela de 24h do WhatsApp');
+    this.name = 'WhatsappWindowExpiredError';
+  }
+}
+
 export class ForbiddenError extends Error {
   constructor(message: string) {
     super(message);
@@ -957,7 +964,6 @@ export interface MessageDispatchPayload {
 export interface CreateConversationResult {
   conversation: ConversationRow;
   protocolDispatches: MessageDispatchPayload[];
-  whatsappWindowExpired: boolean;
 }
 
 interface WhatsAppTemplateLookupRow {
@@ -1280,6 +1286,27 @@ export async function createConversation(
     metadata.outbound_timezone = tenantTimezone;
   }
 
+  if (channelCheck[0].type === 'whatsapp' && conversationType !== 'outbound' && schemaName) {
+    const lastClientMsgRows = await prisma.$queryRawUnsafe<Array<{ created_at: Date }>>(
+      `SELECT m.created_at
+       FROM ${quoteIdent(schemaName)}.messages m
+       JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
+       WHERE c.contact_id = $1::uuid
+         AND c.channel_id = $2::uuid
+         AND m.sender_type = 'client'
+       ORDER BY m.created_at DESC
+       LIMIT 1`,
+      data.contact_id,
+      data.channel_id,
+    );
+    const lastClientMsg = lastClientMsgRows[0];
+    const withinWindow = lastClientMsg !== undefined &&
+      (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
+    if (!withinWindow) {
+      throw new WhatsappWindowExpiredError();
+    }
+  }
+
   const protocolNumber = await generateConversationProtocol(prisma, schemaName);
   const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `INSERT INTO conversations (
@@ -1388,43 +1415,12 @@ export async function createConversation(
   );
 
   const protocolDispatches: MessageDispatchPayload[] = [];
-  let whatsappWindowExpired = false;
 
   if (channelCheck[0].type === 'whatsapp') {
     const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
-    const shouldDispatchProtocol =
-      conversationType !== 'outbound';
+    const shouldDispatchProtocol = conversationType !== 'outbound';
 
-    let withinWindow = false;
-    if (schemaName) {
-      const lastClientMsgRows = await prisma.$queryRawUnsafe<Array<{ created_at: Date }>>(
-        `SELECT m.created_at
-         FROM ${quoteIdent(schemaName)}.messages m
-         JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
-         WHERE c.contact_id = $1::uuid
-           AND c.channel_id = $2::uuid
-           AND m.sender_type = 'client'
-         ORDER BY m.created_at DESC
-         LIMIT 1`,
-        data.contact_id,
-        data.channel_id,
-      );
-      const lastClientMsg = lastClientMsgRows[0];
-      withinWindow = lastClientMsg !== undefined &&
-        (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
-    }
-
-    if (shouldDispatchProtocol && !withinWindow) {
-      whatsappWindowExpired = true;
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
-         VALUES ($1::uuid, 'system', $2, 'text', true)`,
-        conversation.id,
-        'Protocolo não enviado ao cliente — contato fora da janela de 24h do WhatsApp. Para iniciar contato, use Envio Ativo com um template aprovado.',
-      );
-    }
-
-    if (shouldDispatchProtocol && withinWindow) {
+    if (shouldDispatchProtocol) {
       protocolDispatches.push({
         messageId: protocolMessageRows[0]!.id,
         protocolNumber,
@@ -1436,7 +1432,7 @@ export async function createConversation(
       });
     }
 
-    if (initialMessageRows[0] && (withinWindow || hasInitialTemplate)) {
+    if (initialMessageRows[0]) {
       protocolDispatches.push({
         messageId: initialMessageRows[0].id,
         content: initialAgentContent,
@@ -1459,7 +1455,7 @@ export async function createConversation(
     });
   }
 
-  return { conversation, protocolDispatches, whatsappWindowExpired };
+  return { conversation, protocolDispatches };
 }
 
 export async function assignConversation(

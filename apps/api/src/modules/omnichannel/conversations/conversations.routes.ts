@@ -34,6 +34,7 @@ import {
   NotFoundError,
   ConflictError,
   DuplicateOpenConversationError,
+  WhatsappWindowExpiredError,
   ForbiddenError,
   TransferError,
 } from './conversations.service.js';
@@ -324,7 +325,6 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(201).send({
         success: true,
         data: result.conversation,
-        ...(result.whatsappWindowExpired ? { whatsappWindowExpired: true } : {}),
       });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -334,6 +334,15 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(409).send({
           error: 'DUPLICATE_OPEN_CONVERSATION',
           existingId: err.existingId,
+        });
+      }
+      if (err instanceof WhatsappWindowExpiredError) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'WHATSAPP_WINDOW_EXPIRED',
+            message: 'Contato fora da janela de 24h do WhatsApp. Use Envio Ativo com um template aprovado.',
+          },
         });
       }
       throw err;

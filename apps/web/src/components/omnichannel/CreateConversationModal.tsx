@@ -68,12 +68,9 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         ...(data.subject?.trim() ? { subject: data.subject.trim() } : {}),
         ...(data.initial_message?.trim() ? { initial_message: data.initial_message.trim() } : {}),
       }),
-    onSuccess: ({ conversation, whatsappWindowExpired }) => {
+    onSuccess: ({ conversation }) => {
       setDuplicateExistingId(null);
       toast.success(t('form.created'));
-      if (whatsappWindowExpired) {
-        toast.warning(t('form.whatsappWindowExpired'), { durationMs: 8000 });
-      }
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
       onCreated(conversation.id);
@@ -83,6 +80,11 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
       const response = (error as { response?: { status?: number; data?: { error?: unknown; existingId?: string } } })?.response;
       if (response?.status === 409 && response.data?.error === 'DUPLICATE_OPEN_CONVERSATION' && response.data.existingId) {
         setDuplicateExistingId(response.data.existingId);
+        return;
+      }
+      const errorObj = (response?.data as { error?: { code?: string } } | undefined)?.error;
+      if (errorObj?.code === 'WHATSAPP_WINDOW_EXPIRED') {
+        toast.warning(t('form.whatsappWindowExpired'), { durationMs: 10000 });
         return;
       }
       setDuplicateExistingId(null);
