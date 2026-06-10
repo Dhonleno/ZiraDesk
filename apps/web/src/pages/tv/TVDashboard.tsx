@@ -245,7 +245,7 @@ function CounterCard({
         background: 'var(--bg-2)',
         border: '1px solid var(--line)',
         borderRadius: 'var(--r-lg)',
-        padding: '10px 12px',
+        padding: '12px 14px',
         cursor: onClick ? 'pointer' : 'default',
       }}
     >
@@ -261,7 +261,7 @@ function CounterCard({
       >
         {label}
       </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 500, lineHeight: 1, color }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', lineHeight: 1, color }}>
         {value}
       </div>
     </div>
@@ -668,6 +668,7 @@ export function TVDashboard() {
   const resolvedToday = data?.conversations?.resolvedToday ?? 0;
   const abandoned = data?.conversations?.abandoned ?? 0;
   const hasCsat = (dashboard.stats.csat ?? 0) > 0;
+  const slaEmpty = dashboard.stats.sla === 0 && queuedCount + inServiceConvCount + resolvedToday + abandoned === 0;
   const botConversations = botData?.conversations ?? [];
   const botTotal = botData?.total ?? botConversations.length;
   const botStuck = botConversations.filter(
@@ -778,31 +779,31 @@ export function TVDashboard() {
 
       {activeTab === 'realtime' ? (
         <>
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 14 }}>
         <CounterCard label={t('tv.offline')} value={String(offlineCount)} color="var(--txt-2)" />
-        <CounterCard label={t('tv.online')} value={String(onlineCount)} color="var(--teal)" />
-        <CounterCard label={t('tv.available')} value={String(availableCount)} color="var(--teal)" />
-        <CounterCard label={t('tv.inService')} value={String(inServiceCount)} color="var(--amber)" />
-        <CounterCard label={t('tv.paused')} value={String(pausedCount)} color="var(--red)" />
+        <CounterCard label={t('tv.online')} value={String(onlineCount)} color="var(--green)" />
+        <CounterCard label={t('tv.available')} value={String(availableCount)} color="var(--green)" />
+        <CounterCard label={t('tv.inService')} value={String(inServiceCount)} color="var(--teal)" />
+        <CounterCard label={t('tv.paused')} value={String(pausedCount)} color="var(--amber)" />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 14 }}>
         <CounterCard label={t('tv.queued')} value={String(queuedCount)} color="var(--red)" />
-        <CounterCard label={t('tv.inService')} value={String(inServiceConvCount)} color="var(--amber)" />
+        <CounterCard label={t('tv.inService')} value={String(inServiceConvCount)} color="var(--teal)" />
         <CounterCard label={t('tv.resolvedToday')} value={String(resolvedToday)} color="var(--teal)" />
         <CounterCard label={t('tv.abandoned')} value={String(abandoned)} color="var(--txt-2)" />
         <CounterCard label={t('monitor.bot.cardLabel')} value={String(botTotal)} color="var(--txt-2)" onClick={() => setActiveTab('bot')} />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
         <CounterCard label={t('tv.tme')} value={formatMinutesMetric(dashboard.stats.tme)} color="var(--txt)" />
         <CounterCard label={t('tv.tma')} value={formatMinutesMetric(dashboard.stats.tma)} color="var(--txt)" />
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', padding: '10px 12px' }}>
+        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', padding: '12px 14px' }}>
           <div style={{ color: 'var(--txt-3)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
             {t('tv.csat')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 32, lineHeight: 1, color: 'var(--txt)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', lineHeight: 1, color: hasCsat ? 'var(--amber)' : 'var(--txt-3)' }}>
               {hasCsat ? dashboard.stats.csat.toFixed(1) : '—'}
             </span>
             {hasCsat ? (
@@ -814,24 +815,24 @@ export function TVDashboard() {
         </div>
         <CounterCard
           label={t('tv.sla')}
-          value={`${Math.round(dashboard.stats.sla)}%`}
-          color={dashboard.stats.sla >= 80 ? 'var(--teal)' : dashboard.stats.sla >= 50 ? 'var(--amber)' : 'var(--red)'}
+          value={slaEmpty ? '—' : `${Math.round(dashboard.stats.sla)}%`}
+          color={slaEmpty ? 'var(--txt-3)' : dashboard.stats.sla >= 80 ? 'var(--teal)' : dashboard.stats.sla >= 50 ? 'var(--amber)' : 'var(--red)'}
         />
       </section>
 
-      <section style={{ minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+      <section style={{ minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.inService')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {inServiceConvs.map((card) => (
-              <div key={card.id} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal)', borderRadius: 'var(--r)', padding: 9 }}>
+              <div key={card.id} style={{ background: 'var(--teal-dim)', border: '1px solid rgba(0, 201, 167, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--teal)' }}>{card.protocol}</span>
                   {channelIcon(card.channelType)}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{card.contactName}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{card.contactName}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.contactPhone || '-'}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.agentName ?? '-'}</div>
                 <ConversationChronometer baseTime={card.assignedAt ?? card.createdAt} color="var(--teal)" />
@@ -840,35 +841,32 @@ export function TVDashboard() {
             {inServiceConvs.length === 0 ? (
               <div
                 style={{
-                  border: '1px dashed var(--line-2)',
-                  borderRadius: 'var(--r)',
-                  minHeight: 96,
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--txt-3)',
-                  fontSize: 12,
-                  textAlign: 'center',
-                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px 0',
+                  gap: 6,
                 }}
               >
-                {t('tv.emptyInService')}
+                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tv.emptyInService')}</span>
               </div>
             ) : null}
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.queued')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {queuedConvs.map((card) => (
-              <div key={card.id} style={{ background: 'var(--red-dim)', border: '1px solid var(--red)', borderRadius: 'var(--r)', padding: 9 }}>
+              <div key={card.id} style={{ background: 'var(--red-dim)', border: '1px solid rgba(248, 113, 113, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--red)' }}>{card.protocol}</span>
                   {channelIcon(card.channelType)}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{card.contactName}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{card.contactName}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.contactPhone || '-'}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)', marginBottom: 2 }}>{t('tv.waiting')}</div>
                 <ConversationChronometer baseTime={card.queueEnteredAt ?? card.createdAt} color="var(--red)" />
@@ -877,14 +875,14 @@ export function TVDashboard() {
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.paused')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {pausedAgents.map((agent) => (
-              <div key={agent.id} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber)', borderRadius: 'var(--r)', padding: 9 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{agent.name}</div>
+              <div key={agent.id} style={{ background: 'var(--amber-dim)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{agent.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{agent.pauseReason ?? '-'}</div>
                 <span style={{ fontFamily: 'var(--mono)', color: 'var(--amber)', fontSize: 12 }}>
                   {agent.pauseStartedAt
@@ -896,32 +894,29 @@ export function TVDashboard() {
             {pausedAgents.length === 0 ? (
               <div
                 style={{
-                  border: '1px dashed var(--line-2)',
-                  borderRadius: 'var(--r)',
-                  minHeight: 96,
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--txt-3)',
-                  fontSize: 12,
-                  textAlign: 'center',
-                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px 0',
+                  gap: 6,
                 }}
               >
-                {t('tv.emptyPaused')}
+                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tv.emptyPaused')}</span>
               </div>
             ) : null}
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.available')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {availableAgents.map((agent) => (
-              <div key={agent.id} style={{ background: 'var(--teal-dim)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 9 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{agent.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--teal)' }}>{t('tv.available_status')}</div>
+              <div key={agent.id} style={{ background: 'var(--teal-dim)', border: '1px solid rgba(0, 201, 167, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{agent.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--green)' }}>{t('tv.available_status')}</div>
               </div>
             ))}
           </div>
