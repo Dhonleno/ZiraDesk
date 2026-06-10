@@ -1391,7 +1391,27 @@ export async function createConversation(
     const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
     const shouldDispatchProtocol =
       conversationType !== 'outbound';
-    if (shouldDispatchProtocol) {
+
+    let withinWindow = false;
+    if (schemaName) {
+      const lastClientMsgRows = await prisma.$queryRawUnsafe<Array<{ created_at: Date }>>(
+        `SELECT m.created_at
+         FROM ${quoteIdent(schemaName)}.messages m
+         JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
+         WHERE c.contact_id = $1::uuid
+           AND c.channel_id = $2::uuid
+           AND m.sender_type = 'client'
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        data.contact_id,
+        data.channel_id,
+      );
+      const lastClientMsg = lastClientMsgRows[0];
+      withinWindow = lastClientMsg !== undefined &&
+        (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
+    }
+
+    if (shouldDispatchProtocol && withinWindow) {
       protocolDispatches.push({
         messageId: protocolMessageRows[0]!.id,
         protocolNumber,
@@ -1403,7 +1423,7 @@ export async function createConversation(
       });
     }
 
-    if (initialMessageRows[0]) {
+    if (initialMessageRows[0] && (withinWindow || hasInitialTemplate)) {
       protocolDispatches.push({
         messageId: initialMessageRows[0].id,
         content: initialAgentContent,
