@@ -13,6 +13,7 @@ import {
 } from './auth.service.js';
 import { prisma } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
+import { buildTenantUrl } from '../../utils/url.js';
 import { env } from '../../config/env.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
@@ -172,7 +173,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const token = generateUserResetToken({ sub: user.id, schemaName, tenantSlug: tenant.slug, type: 'user-reset' });
-    const resetUrl = `${env.APP_URL.replace(/\/$/, '')}/reset-password?token=${token}`;
+    const resetUrl = buildTenantUrl(tenant.slug, `/reset-password?token=${token}`);
     const userName = user.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const tenantName = tenant.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

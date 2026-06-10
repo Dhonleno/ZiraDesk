@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
+import { buildTenantUrl } from '../../../utils/url.js';
 import { logger } from '../../../config/logger.js';
 import { redis } from '../../../config/redis.js';
 import { hasTenantEmailProvider, sendEmail } from '../../../services/email.service.js';
@@ -281,7 +282,7 @@ export async function inviteUser(
     env.JWT_SECRET,
     { expiresIn: '72h' },
   );
-  const resetUrl = `${env.APP_URL.replace(/\/$/, '')}/reset-password?token=${inviteToken}&invite=true`;
+  const resetUrl = buildTenantUrl(tenant.slug, `/reset-password?token=${inviteToken}&invite=true`);
 
   logger.info({ tenantId, email: data.email }, '[Invite] Sending email with link');
 
@@ -418,7 +419,7 @@ export async function resetUserPassword(
     env.JWT_SECRET,
     { expiresIn: '24h' },
   );
-  const resetUrl = `${env.APP_URL.replace(/\/$/, '')}/reset-password?token=${token}`;
+  const resetUrl = buildTenantUrl(tenant.slug, `/reset-password?token=${token}`);
 
   await prisma.$executeRawUnsafe(
     `UPDATE ${usersRef} SET must_change_password = true WHERE id = $1::uuid`,
