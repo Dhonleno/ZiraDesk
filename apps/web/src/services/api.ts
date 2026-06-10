@@ -2893,12 +2893,14 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  createConversation: async (payload: CreateConversationPayload): Promise<OmnichannelConversation> => {
-    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+  createConversation: async (payload: CreateConversationPayload): Promise<{ conversation: OmnichannelConversation; whatsappWindowExpired?: true }> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation; whatsappWindowExpired?: boolean }>(
       '/omnichannel/conversations',
       payload,
     );
-    return res.data.data;
+    return res.data.whatsappWindowExpired
+      ? { conversation: res.data.data, whatsappWindowExpired: true }
+      : { conversation: res.data.data };
   },
 
   listActiveOutboundTemplates: async (channelId?: string): Promise<ActiveOutboundTemplate[]> => {

@@ -68,12 +68,15 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         ...(data.subject?.trim() ? { subject: data.subject.trim() } : {}),
         ...(data.initial_message?.trim() ? { initial_message: data.initial_message.trim() } : {}),
       }),
-    onSuccess: (conv) => {
+    onSuccess: ({ conversation, whatsappWindowExpired }) => {
       setDuplicateExistingId(null);
       toast.success(t('form.created'));
+      if (whatsappWindowExpired) {
+        toast.warning(t('form.whatsappWindowExpired'), { durationMs: 8000 });
+      }
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
-      onCreated(conv.id);
+      onCreated(conversation.id);
       onClose();
     },
     onError: (error: unknown) => {

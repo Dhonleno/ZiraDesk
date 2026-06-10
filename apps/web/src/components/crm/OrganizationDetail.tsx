@@ -310,7 +310,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
         type: 'outbound',
         initial_message: `Olá ${targetContact.name}, iniciamos seu atendimento.`,
       });
-      navigate(`/omnichannel/conversations?conversation=${created.id}`);
+      navigate(`/omnichannel/conversations?conversation=${created.conversation.id}`);
     } catch {
       toast.error(t('organizations.messages.conversationStartError'));
     } finally {

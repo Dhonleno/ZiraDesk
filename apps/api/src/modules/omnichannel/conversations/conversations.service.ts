@@ -957,6 +957,7 @@ export interface MessageDispatchPayload {
 export interface CreateConversationResult {
   conversation: ConversationRow;
   protocolDispatches: MessageDispatchPayload[];
+  whatsappWindowExpired: boolean;
 }
 
 interface WhatsAppTemplateLookupRow {
@@ -1387,6 +1388,8 @@ export async function createConversation(
   );
 
   const protocolDispatches: MessageDispatchPayload[] = [];
+  let whatsappWindowExpired = false;
+
   if (channelCheck[0].type === 'whatsapp') {
     const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
     const shouldDispatchProtocol =
@@ -1409,6 +1412,16 @@ export async function createConversation(
       const lastClientMsg = lastClientMsgRows[0];
       withinWindow = lastClientMsg !== undefined &&
         (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
+    }
+
+    if (shouldDispatchProtocol && !withinWindow) {
+      whatsappWindowExpired = true;
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+         VALUES ($1::uuid, 'system', $2, 'text', true)`,
+        conversation.id,
+        'Protocolo não enviado ao cliente — contato fora da janela de 24h do WhatsApp. Para iniciar contato, use Envio Ativo com um template aprovado.',
+      );
     }
 
     if (shouldDispatchProtocol && withinWindow) {
@@ -1446,7 +1459,7 @@ export async function createConversation(
     });
   }
 
-  return { conversation, protocolDispatches };
+  return { conversation, protocolDispatches, whatsappWindowExpired };
 }
 
 export async function assignConversation(

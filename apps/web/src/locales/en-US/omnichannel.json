@@ -654,6 +654,7 @@
     "creating": "Starting...",
     "created": "Conversation started successfully",
     "title": "New conversation",
+    "whatsappWindowExpired": "Protocol not sent to client — contact is outside the 24h WhatsApp window. Use Active Outbound with an approved template to start contact.",
     "errorCreate": "Error creating conversation",
     "errorLoadClients": "Error loading contacts",
     "errorLoadChannels": "Error loading channels",

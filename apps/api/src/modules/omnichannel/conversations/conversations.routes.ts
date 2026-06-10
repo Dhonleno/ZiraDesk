@@ -321,7 +321,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      return reply.code(201).send({ success: true, data: result.conversation });
+      return reply.code(201).send({
+        success: true,
+        data: result.conversation,
+        ...(result.whatsappWindowExpired ? { whatsappWindowExpired: true } : {}),
+      });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });

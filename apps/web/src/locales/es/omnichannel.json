@@ -654,6 +654,7 @@
     "creating": "Iniciando...",
     "created": "Atención iniciada con éxito",
     "title": "Nueva atención",
+    "whatsappWindowExpired": "Protocolo no enviado al cliente — contacto fuera de la ventana de 24h de WhatsApp. Usa Envío Activo con una plantilla aprobada para iniciar contacto.",
     "errorCreate": "Error al crear la atención",
     "errorLoadClients": "Error al cargar contactos",
     "errorLoadChannels": "Error al cargar canales",

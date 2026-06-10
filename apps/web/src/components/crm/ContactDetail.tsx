@@ -238,7 +238,7 @@ export function ContactDetail({ contactId }: Props) {
         initial_message: `Olá ${contact.name}, iniciamos seu atendimento.`,
         ...(contact.organization_id ? { organization_id: contact.organization_id } : {}),
       });
-      navigate(`/omnichannel/conversations?conversation=${created.id}`);
+      navigate(`/omnichannel/conversations?conversation=${created.conversation.id}`);
     } catch {
       toast.error('Não foi possível iniciar conversa');
     } finally {
