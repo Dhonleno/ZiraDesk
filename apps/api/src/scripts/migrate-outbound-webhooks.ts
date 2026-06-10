@@ -5,7 +5,7 @@ async function main(): Promise<void> {
   const tenants = await prisma.$queryRaw<Array<{ schema_name: string }>>`
     SELECT schema_name
     FROM public.tenants
-    WHERE status = 'active'
+    WHERE status IN ('active', 'trial')
     ORDER BY created_at ASC
   `;
 
