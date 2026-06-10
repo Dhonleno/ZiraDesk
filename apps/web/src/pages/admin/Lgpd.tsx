@@ -316,6 +316,14 @@ function ContactsTab() {
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const contactsQuery = useQuery({
     queryKey: ['admin', 'lgpd', 'contacts', search, page],
     queryFn: () => {
@@ -376,13 +384,11 @@ function ContactsTab() {
     }
   };
 
-  const handleAnonymize = async (contact: CrmContact) => {
-    const confirmed = window.confirm(t('lgpd.confirmAnonymize', { name: contact.name }));
-    if (!confirmed) return;
+  const handleAnonymize = async (contactId: string) => {
     const typedReason = window.prompt(t('lgpd.anonymizeReasonPrompt'), t('lgpd.anonymizeDefaultReason'));
     if (typedReason === null) return;
     try {
-      await contactsApi.anonymizeLgpd(contact.id, {
+      await contactsApi.anonymizeLgpd(contactId, {
         reason: typedReason.trim() || t('lgpd.anonymizeDefaultReason'),
         redact_messages: true,
       });
@@ -467,7 +473,7 @@ function ContactsTab() {
                     <td style={{ padding: '10px 12px' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <button type="button" onClick={() => void handleExport(contact)} style={actionBtnStyle}>{t('lgpd.actions.export')}</button>
-                        <button type="button" onClick={() => void handleAnonymize(contact)} style={dangerBtnStyle}>{t('lgpd.actions.anonymize')}</button>
+                        <button type="button" onClick={() => openConfirm(t('lgpd.anonymizeTitle'), t('lgpd.confirmAnonymize', { name: contact.name }), () => void handleAnonymize(contact.id))} style={dangerBtnStyle}>{t('lgpd.actions.anonymize')}</button>
                       </div>
                     </td>
                   </tr>
@@ -491,6 +497,19 @@ function ContactsTab() {
         onClose={() => setRejectTargetId(null)}
         onConfirm={handleConfirmReject}
       />
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contact requests log */}
       <section style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', overflow: 'hidden' }}>
@@ -609,6 +628,14 @@ function UsersTab() {
   const [page, setPage] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState<Record<string, ConsentStatus>>({});
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const usersQuery = useQuery({
     queryKey: ['admin', 'lgpd', 'users', search, page],
     queryFn: () => {
@@ -648,13 +675,11 @@ function UsersTab() {
     }
   };
 
-  const handleAnonymize = async (user: TenantUser) => {
-    const confirmed = window.confirm(t('lgpd.confirmAnonymizeUser', { name: user.name }));
-    if (!confirmed) return;
+  const handleAnonymize = async (userId: string) => {
     const typedReason = window.prompt(t('lgpd.anonymizeUserReasonPrompt'), t('lgpd.anonymizeDefaultReason'));
     if (typedReason === null) return;
     try {
-      await adminApi.anonymizeUserLgpd(user.id, { reason: typedReason.trim() || t('lgpd.anonymizeDefaultReason') });
+      await adminApi.anonymizeUserLgpd(userId, { reason: typedReason.trim() || t('lgpd.anonymizeDefaultReason') });
       toast.success(t('lgpd.messages.userAnonymized'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'users'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'lgpd', 'userRequests'] });
@@ -739,7 +764,7 @@ function UsersTab() {
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <button type="button" onClick={() => void handleExport(user)} disabled={isAnonymized} style={actionBtnStyle}>{t('lgpd.actions.export')}</button>
                         {!isAnonymized && (
-                          <button type="button" onClick={() => void handleAnonymize(user)} style={dangerBtnStyle}>{t('lgpd.actions.anonymize')}</button>
+                          <button type="button" onClick={() => openConfirm(t('lgpd.anonymizeTitle'), t('lgpd.confirmAnonymizeUser', { name: user.name }), () => void handleAnonymize(user.id))} style={dangerBtnStyle}>{t('lgpd.actions.anonymize')}</button>
                         )}
                       </div>
                     </td>
@@ -804,6 +829,19 @@ function UsersTab() {
           </table>
         </div>
       </section>
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -821,6 +859,14 @@ function ExternalRequestsTab() {
   const [reason, setReason] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExternalStatusFilter>('all');
   const [page, setPage] = useState(1);
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
 
   const requestsQuery = useQuery({
     queryKey: ['admin', 'lgpd', 'external', statusFilter, page],
@@ -852,9 +898,11 @@ function ExternalRequestsTab() {
 
   const handleSubmit = () => {
     if (!externalId.trim() || !reason.trim()) return;
-    const confirmed = window.confirm(t('lgpd.external.confirmAnonymize', { id: externalId.trim() }));
-    if (!confirmed) return;
-    anonymizeMutation.mutate();
+    openConfirm(
+      t('lgpd.anonymizeTitle'),
+      t('lgpd.external.confirmAnonymize', { id: externalId.trim() }),
+      () => anonymizeMutation.mutate(),
+    );
   };
 
   const requests = requestsQuery.data?.data ?? [];
@@ -988,6 +1036,19 @@ function ExternalRequestsTab() {
           </div>
         </div>
       </section>
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

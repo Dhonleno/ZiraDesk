@@ -44,7 +44,16 @@
     "launch": "Lanzar",
     "addContacts": "Agregar contactos",
     "confirmCancel": "Confirmar cancelación",
-    "retryFailed": "Crear borrador con fallos"
+    "retryFailed": "Crear borrador con fallos",
+    "cancelTitle": "Cancelar campaña",
+    "cancelConfirm": "¿Está seguro de que desea cancelar esta campaña?",
+    "cancelScheduledTitle": "Cancelar campaña programada",
+    "cancelScheduledConfirm": "¿Está seguro de que desea cancelar esta campaña programada?",
+    "cancelConfirmNamed": "¿Cancelar la campaña \"{{name}}\"?"
+  },
+  "common": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
   },
   "create": {
     "title": "Nueva campaña",

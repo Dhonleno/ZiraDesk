@@ -46,7 +46,16 @@
     "confirmCancel": "Confirmar cancelamento",
     "retryFailed": "Criar rascunho com falhas",
     "failedDraftCreated": "Rascunho criado com os contatos que falharam.",
-    "failedDraftError": "Não foi possível criar o rascunho com as falhas."
+    "failedDraftError": "Não foi possível criar o rascunho com as falhas.",
+    "cancelTitle": "Cancelar campanha",
+    "cancelConfirm": "Tem certeza que deseja cancelar esta campanha?",
+    "cancelScheduledTitle": "Cancelar campanha agendada",
+    "cancelScheduledConfirm": "Tem certeza que deseja cancelar esta campanha agendada?",
+    "cancelConfirmNamed": "Cancelar a campanha \"{{name}}\"?"
+  },
+  "common": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
   },
   "create": {
     "title": "Nova campanha",

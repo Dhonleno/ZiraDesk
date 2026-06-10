@@ -80,6 +80,14 @@ export function CampaignsPage() {
   const [launchCampaign, setLaunchCampaign] = useState<Campaign | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ['campaigns', statusFilter, page],
     queryFn: () => campaignsApi.list({ ...(statusFilter ? { status: statusFilter } : {}), page, limit: 25 }),
@@ -373,11 +381,11 @@ export function CampaignsPage() {
                     title={t('actions.cancel')}
                     disabled={cancelMutation.isPending}
                     style={{ color: 'var(--red)' }}
-                    onClick={() => {
-                      if (window.confirm(`Cancelar a campanha "${campaign.name}"?`)) {
-                        cancelMutation.mutate(campaign.id);
-                      }
-                    }}
+                    onClick={() => openConfirm(
+                      t('actions.cancelTitle'),
+                      t('actions.cancelConfirmNamed', { name: campaign.name }),
+                      () => cancelMutation.mutate(campaign.id),
+                    )}
                   >
                     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
                       <path d="M2 2l9 9M11 2L2 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -425,6 +433,19 @@ export function CampaignsPage() {
           onClose={() => setLaunchCampaign(null)}
           onLaunched={() => setLaunchCampaign(null)}
         />
+      )}
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('common.confirm')}</button>
+            </div>
+          </div>
+        </div>
       )}
     </PageShell>
   );

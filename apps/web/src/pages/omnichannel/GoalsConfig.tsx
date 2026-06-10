@@ -184,6 +184,14 @@ export function GoalsConfig() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<GoalFormState>(EMPTY_FORM);
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const { data: goals = [] } = useQuery({
     queryKey: ['omnichannel-goals'],
     queryFn: () => omnichannelApi.listGoals(),
@@ -245,9 +253,11 @@ export function GoalsConfig() {
   };
 
   const handleDelete = (goalId: string) => {
-    const confirmed = window.confirm(t('tenantAdmin.common.remove', { ns: 'admin' }));
-    if (!confirmed) return;
-    deleteMutation.mutate(goalId);
+    openConfirm(
+      t('goals.removeTitle'),
+      t('tenantAdmin.common.remove', { ns: 'admin' }),
+      () => deleteMutation.mutate(goalId),
+    );
   };
 
   const handleSave = () => {
@@ -594,6 +604,19 @@ export function GoalsConfig() {
           </div>
         </div>
       ) : null}
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

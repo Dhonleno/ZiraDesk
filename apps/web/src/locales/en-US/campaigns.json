@@ -44,7 +44,16 @@
     "launch": "Launch",
     "addContacts": "Add contacts",
     "confirmCancel": "Confirm cancel",
-    "retryFailed": "Create draft from failures"
+    "retryFailed": "Create draft from failures",
+    "cancelTitle": "Cancel campaign",
+    "cancelConfirm": "Are you sure you want to cancel this campaign?",
+    "cancelScheduledTitle": "Cancel scheduled campaign",
+    "cancelScheduledConfirm": "Are you sure you want to cancel this scheduled campaign?",
+    "cancelConfirmNamed": "Cancel the campaign \"{{name}}\"?"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
   },
   "create": {
     "title": "New campaign",

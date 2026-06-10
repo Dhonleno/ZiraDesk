@@ -374,6 +374,7 @@
     "title": "Goals",
     "subtitle": "Set performance targets for your team",
     "new": "New goal",
+    "removeTitle": "Remove goal",
     "empty": "No goals configured",
     "emptyHint": "Create a goal to track agent performance",
     "name": "Goal name",
@@ -696,5 +697,9 @@
     "reveal": "Reveal",
     "hide": "Hide data",
     "revealing": "Revealing..."
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
   }
 }

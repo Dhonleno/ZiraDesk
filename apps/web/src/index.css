@@ -5351,3 +5351,43 @@
 .impersonation-banner button:hover {
   text-decoration: underline;
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-panel {
+  background: var(--bg-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-pop);
+  padding: 20px 24px;
+  width: 100%;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.modal-body {
+  margin-bottom: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}

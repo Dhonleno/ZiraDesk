@@ -374,6 +374,7 @@
     "title": "Metas",
     "subtitle": "Define parámetros de rendimiento para tu equipo",
     "new": "Nueva meta",
+    "removeTitle": "Eliminar meta",
     "empty": "No hay metas configuradas",
     "emptyHint": "Crea una meta para seguir el rendimiento de los agentes",
     "name": "Nombre de la meta",
@@ -696,5 +697,9 @@
     "reveal": "Revelar",
     "hide": "Ocultar datos",
     "revealing": "Revelando..."
+  },
+  "common": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
   }
 }

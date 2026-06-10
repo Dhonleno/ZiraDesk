@@ -151,6 +151,14 @@ export function CampaignDetail() {
   const [showLaunch, setShowLaunch] = useState(false);
   const [showRetryFailed, setShowRetryFailed] = useState(false);
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const { data: campaign, isLoading, error } = useQuery<Campaign>({
     queryKey: ['campaign', id],
     queryFn: () => campaignsApi.get(id!),
@@ -283,11 +291,11 @@ export function CampaignDetail() {
             {campaign.status === 'paused' && (
               <>
                 <button className="tb-btn tb-btn-primary" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>{t('actions.resume')}</button>
-                <button className="tb-btn" style={{ color: 'var(--red)' }} onClick={() => { if (window.confirm('Cancelar campanha?')) cancelMutation.mutate(); }} disabled={cancelMutation.isPending}>{t('actions.cancel')}</button>
+                <button className="tb-btn" style={{ color: 'var(--red)' }} onClick={() => openConfirm(t('actions.cancelTitle'), t('actions.cancelConfirm'), () => cancelMutation.mutate())} disabled={cancelMutation.isPending}>{t('actions.cancel')}</button>
               </>
             )}
             {campaign.status === 'scheduled' && (
-              <button className="tb-btn" style={{ color: 'var(--red)' }} onClick={() => { if (window.confirm('Cancelar campanha agendada?')) cancelMutation.mutate(); }} disabled={cancelMutation.isPending}>{t('actions.cancel')}</button>
+              <button className="tb-btn" style={{ color: 'var(--red)' }} onClick={() => openConfirm(t('actions.cancelScheduledTitle'), t('actions.cancelScheduledConfirm'), () => cancelMutation.mutate())} disabled={cancelMutation.isPending}>{t('actions.cancel')}</button>
             )}
             {(campaign.status === 'completed' || campaign.status === 'cancelled') && (
               <button className="tb-btn" onClick={() => duplicateMutation.mutate()} disabled={duplicateMutation.isPending}>{t('actions.duplicate')}</button>
@@ -515,6 +523,19 @@ export function CampaignDetail() {
             navigate(`/omnichannel/campaigns/${draft.id}`);
           }}
         />
+      )}
+
+      {confirmState.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
+            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('common.confirm')}</button>
+            </div>
+          </div>
+        </div>
       )}
     </PageShell>
   );

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, type AIAgentConfig, type KnowledgeArticle } from '../../services/api';
@@ -63,6 +63,14 @@ export function AIAgentPage() {
   const [configForm, setConfigForm] = useState<Partial<AIAgentConfig>>({});
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [configDirty, setConfigDirty] = useState(false);
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
 
   const { data: config, isLoading: configLoading } = useQuery({
     queryKey: ['ai-config'],
@@ -463,11 +471,11 @@ export function AIAgentPage() {
                       <button
                         className="ai-delete-btn"
                         title={t('tenantAdmin.aiAgent.deleteConfirm')}
-                        onClick={() => {
-                          if (window.confirm(t('tenantAdmin.aiAgent.deleteConfirm'))) {
-                            deleteMutation.mutate(article.id);
-                          }
-                        }}
+                        onClick={() => openConfirm(
+                          t('tenantAdmin.aiAgent.deleteTitle'),
+                          t('tenantAdmin.aiAgent.deleteConfirm'),
+                          () => deleteMutation.mutate(article.id),
+                        )}
                       >
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                           <path d="M2 3.5h10M5.5 3.5V2.5h3v1M6 6v4M8 6v4M3 3.5l.7 7.5h6.6L11 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -481,6 +489,28 @@ export function AIAgentPage() {
           </section>
         </div>
       </div>
+
+      {confirmState.open && (
+        <div className="modal-overlay" style={overlayStyle} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span>{confirmState.title}</span>
+              <button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
+
+const overlayStyle: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 };
