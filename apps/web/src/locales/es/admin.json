@@ -86,6 +86,7 @@
       "quickReplies": "Respuestas Rápidas",
       "templates": "Templates",
       "ticketTypes": "Tipos de Ticket",
+      "ticketCategories": "Categorías de Ticket",
       "conversationTags": "Etiquetas",
       "closeConfig": "Cierre de Atención",
       "aiAgent": "Agente de IA",
@@ -596,6 +597,39 @@
       "empty": {
         "title": "Sin plantillas",
         "subtitle": "Crea una plantilla o sincroniza con Meta"
+      }
+    },
+    "ticketCategories": {
+      "title": "Categorías de Ticket",
+      "subtitle": "Gestiona las categorías de tickets de tu workspace",
+      "new": "Nueva categoría",
+      "saved": "Categoría guardada con éxito",
+      "deleted": "Categoría eliminada con éxito",
+      "deleteError": "Esta categoría está en uso por tickets existentes",
+      "modalTitle": {
+        "new": "Nueva categoría de ticket",
+        "edit": "Editar categoría de ticket"
+      },
+      "fields": {
+        "name": "Nombre",
+        "nameRequired": "Ingrese el nombre",
+        "description": "Descripción",
+        "color": "Color",
+        "active": "Activo"
+      },
+      "list": {
+        "order": "Orden",
+        "name": "Nombre",
+        "description": "Descripción",
+        "color": "Color",
+        "status": "Estado",
+        "actions": "Acciones",
+        "active": "Activo",
+        "inactive": "Inactivo"
+      },
+      "empty": {
+        "title": "Sin categorías",
+        "subtitle": "Crea categorías para organizar tus tickets"
       }
     },
     "ticketTypes": {

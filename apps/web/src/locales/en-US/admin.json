@@ -86,6 +86,7 @@
       "quickReplies": "Quick Replies",
       "templates": "Templates",
       "ticketTypes": "Ticket Types",
+      "ticketCategories": "Ticket Categories",
       "conversationTags": "Tags",
       "closeConfig": "Conversation Closing",
       "aiAgent": "AI Agent",
@@ -596,6 +597,39 @@
       "empty": {
         "title": "No templates found",
         "subtitle": "Create a template or sync with Meta"
+      }
+    },
+    "ticketCategories": {
+      "title": "Ticket Categories",
+      "subtitle": "Manage your workspace ticket categories",
+      "new": "New category",
+      "saved": "Category saved successfully",
+      "deleted": "Category removed successfully",
+      "deleteError": "This category is in use by existing tickets",
+      "modalTitle": {
+        "new": "New ticket category",
+        "edit": "Edit ticket category"
+      },
+      "fields": {
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "description": "Description",
+        "color": "Color",
+        "active": "Active"
+      },
+      "list": {
+        "order": "Order",
+        "name": "Name",
+        "description": "Description",
+        "color": "Color",
+        "status": "Status",
+        "actions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "empty": {
+        "title": "No categories found",
+        "subtitle": "Create categories to organize your tickets"
       }
     },
     "ticketTypes": {

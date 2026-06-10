@@ -245,6 +245,16 @@ const NAV_GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        label: 'nav.ticketCategories',
+        path: '/admin/ticket-categories',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M2 4.5h12M2 8h8M2 11.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <circle cx="13" cy="11.5" r="2" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        ),
+      },
     ],
   },
   {

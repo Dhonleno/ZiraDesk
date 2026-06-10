@@ -91,9 +91,9 @@ export default function CreateTicket() {
     queryFn: adminApi.ticketTypes.list,
     staleTime: 60_000,
   });
-  const { data: categoriesData } = useQuery({
-    queryKey: ['ticket-categories-options'],
-    queryFn: () => ticketsApi.list({ per_page: 100, sort_by: 'updated_at', sort_order: 'desc' }),
+  const { data: ticketCategories = [] } = useQuery({
+    queryKey: ['ticket-categories'],
+    queryFn: adminApi.ticketCategories.list,
     staleTime: 60_000,
   });
   const selectedType = useMemo(
@@ -110,14 +110,15 @@ export default function CreateTicket() {
     ),
     [form.priority, form.status, selectedType?.require_category_for_waiting, selectedType?.require_due_date_for_urgent],
   );
-  const categoryOptions = useMemo(() => {
-    const values = new Set<string>();
-    (categoriesData?.data ?? []).forEach((item) => {
-      if (item.category) values.add(item.category);
-    });
-    if (form.category) values.add(form.category);
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [categoriesData?.data, form.category]);
+  const categoryOptions = useMemo(
+    () => ticketCategories
+      .filter((c) => c.is_active)
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.name.localeCompare(b.name, 'pt-BR');
+      }),
+    [ticketCategories],
+  );
 
   const { data: agentsData } = useQuery({
     queryKey: ['create-ticket-agents'],
@@ -598,8 +599,8 @@ export default function CreateTicket() {
                 }}
               >
                 <option value="">Selecione a categoria</option>
-                {categoryOptions.map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                {categoryOptions.map((cat) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
             </div>

@@ -88,7 +88,6 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
   const status = watch('status');
   const priority = watch('priority');
   const selectedTypeId = watch('type_id');
-  const categoryValue = watch('category');
   const hasSourceConversation = Boolean(defaultValues?.source_conversation_id);
   const contactReadonly = hasSourceConversation;
   const organizationReadonly = hasSourceConversation;
@@ -169,20 +168,21 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     enabled: debouncedOrganizationSearch.length > 1 && showOrganizationDropdown,
     staleTime: 10_000,
   });
-  const { data: categoriesData } = useQuery({
-    queryKey: ['ticket-categories-options'],
-    queryFn: () => ticketsApi.list({ per_page: 100, sort_by: 'updated_at', sort_order: 'desc' }),
+  const { data: ticketCategories = [] } = useQuery({
+    queryKey: ['ticket-categories'],
+    queryFn: adminApi.ticketCategories.list,
     staleTime: 60_000,
     enabled: open,
   });
-  const categoryOptions = useMemo(() => {
-    const values = new Set<string>();
-    (categoriesData?.data ?? []).forEach((item) => {
-      if (item.category) values.add(item.category);
-    });
-    if (categoryValue) values.add(categoryValue);
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [categoriesData?.data, categoryValue]);
+  const categoryOptions = useMemo(
+    () => ticketCategories
+      .filter((c) => c.is_active)
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.name.localeCompare(b.name, 'pt-BR');
+      }),
+    [ticketCategories],
+  );
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -535,9 +535,9 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
                 </label>
                 <select style={selectStyle} {...register('category')}>
                   <option value="">{t('tickets.form.selectCategory', { defaultValue: 'Selecione a categoria' })}</option>
-                  {categoryOptions.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
+                  {categoryOptions.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
                     </option>
                   ))}
                 </select>

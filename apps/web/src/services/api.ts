@@ -375,6 +375,17 @@ export interface TicketType {
   updated_at: string;
 }
 
+export interface TicketCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ConversationCloseConfigItem {
   id: string;
   label: string;
@@ -1636,6 +1647,43 @@ export const adminApi = {
 
     delete: async (id: string): Promise<TicketType> => {
       const res = await api.delete<{ success: boolean; data: TicketType }>(`/admin/ticket-types/${id}`);
+      return res.data.data;
+    },
+  },
+
+  ticketCategories: {
+    list: async (): Promise<TicketCategory[]> => {
+      const res = await api.get<{ success: boolean; data: TicketCategory[] }>('/admin/ticket-categories');
+      return res.data.data;
+    },
+
+    create: async (data: {
+      name: string;
+      description?: string;
+      color?: string;
+      is_active?: boolean;
+      sort_order?: number;
+    }): Promise<TicketCategory> => {
+      const res = await api.post<{ success: boolean; data: TicketCategory }>('/admin/ticket-categories', data);
+      return res.data.data;
+    },
+
+    update: async (
+      id: string,
+      data: Partial<{
+        name: string;
+        description: string;
+        color: string | null;
+        is_active: boolean;
+        sort_order: number;
+      }>,
+    ): Promise<TicketCategory> => {
+      const res = await api.patch<{ success: boolean; data: TicketCategory }>(`/admin/ticket-categories/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<TicketCategory> => {
+      const res = await api.delete<{ success: boolean; data: TicketCategory }>(`/admin/ticket-categories/${id}`);
       return res.data.data;
     },
   },

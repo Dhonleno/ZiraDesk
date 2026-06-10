@@ -38,6 +38,7 @@ import { PauseReasons as AdminPauseReasons } from './pages/admin/PauseReasons';
 import { Skills as AdminSkills } from './pages/admin/Skills';
 import { ConversationTags as AdminConversationTags } from './pages/admin/ConversationTags';
 import { TicketTypes as AdminTicketTypes } from './pages/admin/TicketTypes';
+import { TicketCategories as AdminTicketCategories } from './pages/admin/TicketCategories';
 import { CloseConfig as AdminCloseConfig } from './pages/admin/CloseConfig';
 import { AIAgentPage as AdminAIAgent } from './pages/admin/AIAgent';
 import { Webhooks as AdminWebhooks } from './pages/admin/Webhooks';
@@ -296,6 +297,7 @@ export function App() {
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="templates" element={<AdminTemplates />} />
               <Route path="ticket-types" element={<AdminTicketTypes />} />
+              <Route path="ticket-categories" element={<AdminTicketCategories />} />
               <Route path="conversation-tags" element={<AdminConversationTags />} />
               <Route path="close-config" element={<AdminCloseConfig />} />
               <Route path="ai-agent" element={<AdminAIAgent />} />

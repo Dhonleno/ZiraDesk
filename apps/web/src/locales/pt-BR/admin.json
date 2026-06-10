@@ -86,6 +86,7 @@
       "quickReplies": "Respostas Rápidas",
       "templates": "Templates",
       "ticketTypes": "Tipos de Ticket",
+      "ticketCategories": "Categorias de Ticket",
       "conversationTags": "Etiquetas",
       "closeConfig": "Encerramento de Atendimento",
       "aiAgent": "Agente de IA",
@@ -596,6 +597,39 @@
       "empty": {
         "title": "Nenhum template cadastrado",
         "subtitle": "Crie um template ou sincronize com a Meta"
+      }
+    },
+    "ticketCategories": {
+      "title": "Categorias de Ticket",
+      "subtitle": "Gerencie as categorias dos tickets do seu workspace",
+      "new": "Nova categoria",
+      "saved": "Categoria salva com sucesso",
+      "deleted": "Categoria removida com sucesso",
+      "deleteError": "Esta categoria está em uso por tickets existentes",
+      "modalTitle": {
+        "new": "Nova categoria de ticket",
+        "edit": "Editar categoria de ticket"
+      },
+      "fields": {
+        "name": "Nome",
+        "nameRequired": "Informe o nome",
+        "description": "Descrição",
+        "color": "Cor",
+        "active": "Ativo"
+      },
+      "list": {
+        "order": "Ordem",
+        "name": "Nome",
+        "description": "Descrição",
+        "color": "Cor",
+        "status": "Status",
+        "actions": "Ações",
+        "active": "Ativo",
+        "inactive": "Inativo"
+      },
+      "empty": {
+        "title": "Nenhuma categoria cadastrada",
+        "subtitle": "Crie categorias para organizar seus tickets"
       }
     },
     "ticketTypes": {
