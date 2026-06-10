@@ -94,6 +94,7 @@
       "delete": "Eliminar",
       "startConversation": "Iniciar conversación",
       "addContact": "Agregar contacto",
+      "linkContact": "Vincular contacto",
       "assume": "Asumir",
       "more": "Más opciones",
       "saveNotes": "Guardar notas",
@@ -174,6 +175,14 @@
     "notes": {
       "placeholder": "Agregar notas sobre esta organización...",
       "hint": "Las notas se guardan al hacer clic en Guardar"
+    },
+    "linkContact": {
+      "title": "Vincular contacto existente",
+      "search": "Buscar contacto...",
+      "typeToSearch": "Escribe al menos 2 caracteres para buscar",
+      "empty": "No se encontraron contactos",
+      "confirm": "Vincular",
+      "success": "Contacto vinculado con éxito"
     }
   },
   "unlinkContact": "Desvincular contacto",

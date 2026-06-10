@@ -94,6 +94,7 @@
       "delete": "Delete",
       "startConversation": "Start conversation",
       "addContact": "Add contact",
+      "linkContact": "Link contact",
       "assume": "Take ownership",
       "more": "More options",
       "saveNotes": "Save notes",
@@ -174,6 +175,14 @@
     "notes": {
       "placeholder": "Add notes about this organization...",
       "hint": "Notes are saved when you click Save"
+    },
+    "linkContact": {
+      "title": "Link existing contact",
+      "search": "Search contact...",
+      "typeToSearch": "Type at least 2 characters to search",
+      "empty": "No contacts found",
+      "confirm": "Link",
+      "success": "Contact linked successfully"
     }
   },
   "unlinkContact": "Unlink contact",
