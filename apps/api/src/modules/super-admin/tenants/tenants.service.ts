@@ -421,6 +421,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       status          "${schemaName}".conversation_status NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       assigned_at     TIMESTAMPTZ,
+      bot_option_id   UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE SET NULL,
       close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
       close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
       closed_at       TIMESTAMPTZ,

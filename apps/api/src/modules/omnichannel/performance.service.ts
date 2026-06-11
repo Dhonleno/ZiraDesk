@@ -574,6 +574,150 @@ export async function listPerformance(
   };
 }
 
+interface PerformanceByGroupRowDb {
+  bot_option_id: string | null;
+  group_name: string | null;
+  total_conversations: number | bigint | null;
+  avg_tma_minutes: number | null;
+  avg_tme_minutes: number | null;
+  avg_csat: number | null;
+  sla_percent: number | null;
+}
+
+export async function listPerformanceByGroup(
+  schemaName: string,
+  query: PerformanceQuery,
+  timezone: string,
+) {
+  const dateRange = resolveDateRange(
+    query.period,
+    timezone,
+    query.date_from,
+    query.date_to,
+  );
+
+  if (dateRange.dateFromLocal > dateRange.dateToLocal) {
+    throw new Error('Período inválido: date_from maior que date_to');
+  }
+
+  const safeSchema = quoteIdent(schemaName);
+
+  const params: unknown[] = [];
+  const pushParam = (value: unknown): string => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+
+  const dateFromToken = pushParam(dateRange.dateFromLocal);
+  const dateToToken = pushParam(dateRange.dateToLocal);
+  const timezoneToken = pushParam(timezone);
+
+  const conditions: string[] = [
+    `c.status IN ('open', 'waiting', 'closed')`,
+    `c.created_at >= ((${dateFromToken}::date)::timestamp AT TIME ZONE ${timezoneToken}::text)`,
+    `c.created_at < ((((${dateToToken}::date + INTERVAL '1 day')::timestamp) AT TIME ZONE ${timezoneToken}::text))`,
+  ];
+
+  if (query.bot_option_id) {
+    conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const rows = await prisma.$queryRawUnsafe<PerformanceByGroupRowDb[]>(`
+    WITH filtered_conversations AS (
+      SELECT
+        c.id,
+        c.bot_option_id,
+        COALESCE(NULLIF(c.metadata->>'bot_department', ''), '—') AS group_name,
+        c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
+        c.assigned_at,
+        c.resolved_at,
+        c.closed_at,
+        c.last_message_at,
+        c.status,
+        c.csat_score,
+        fr.first_response_seconds
+      FROM ${safeSchema}.conversations c
+      LEFT JOIN LATERAL (
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
+        FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
+        WHERE m.conversation_id = c.id
+          AND m.sender_type = 'agent'
+          AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
+      ) fr ON TRUE
+      WHERE ${whereClause}
+    )
+    SELECT
+      fc.bot_option_id,
+      fc.group_name,
+      COUNT(DISTINCT fc.id)::bigint AS total_conversations,
+      AVG(
+        EXTRACT(EPOCH FROM (
+          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
+        )) / 60
+      ) FILTER (
+        WHERE fc.status = 'closed'
+          AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tma_minutes,
+      AVG(
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
+      AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
+      ROUND(
+        100.0 * COUNT(fc.id) FILTER (
+          WHERE fc.first_response_seconds IS NOT NULL
+            AND fc.first_response_seconds <= 300
+        ) / NULLIF(
+          COUNT(fc.id) FILTER (WHERE fc.first_response_seconds IS NOT NULL),
+          0
+        )
+      ) AS sla_percent
+    FROM filtered_conversations fc
+    GROUP BY fc.bot_option_id, fc.group_name
+    ORDER BY total_conversations DESC
+  `, ...params);
+
+  return {
+    data: rows.map((row) => ({
+      bot_option_id: row.bot_option_id,
+      group_name: row.group_name ?? '—',
+      total_conversations: toNumber(row.total_conversations),
+      avg_tma_minutes: toNullableNumber(row.avg_tma_minutes),
+      avg_tme_minutes: toNullableNumber(row.avg_tme_minutes),
+      avg_csat: toNullableNumber(row.avg_csat),
+      sla_percent: toNullableNumber(row.sla_percent),
+    })),
+    applied_filters: {
+      ...query,
+      date_from: dateRange.dateFromLocal,
+      date_to: dateRange.dateToLocal,
+      timezone,
+    },
+  };
+}
+
 export function exportPerformanceCsv(data: Array<{
   agent_name: string;
   total_conversations: number;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -251,6 +251,7 @@ export function PerformancePage() {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'agent' | 'department'>('agent');
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const canQueryPerformance = useMemo(() => hasValidCustomRange(filters), [filters]);
 
@@ -275,6 +276,12 @@ export function PerformancePage() {
   const { data: goals = [] } = useQuery({
     queryKey: ['omnichannel-goals'],
     queryFn: () => omnichannelApi.listGoals(),
+  });
+
+  const { data: performanceByGroupData, isLoading: isLoadingByGroup } = useQuery({
+    queryKey: ['omnichannel-performance-by-group', filters],
+    queryFn: () => omnichannelApi.listPerformanceByGroup(filters),
+    enabled: canQueryPerformance && activeTab === 'department',
   });
 
   const updateFilterParams = useCallback((values: Partial<Record<string, string | null>>, resetPage = true) => {
@@ -462,7 +469,95 @@ export function PerformancePage() {
           </div>
         </div>
 
+        {/* Abas Por Agente / Por Departamento */}
+        <div style={{ display: 'flex', gap: 2, padding: '0 0 0 0', borderBottom: '1px solid var(--line)', marginBottom: 0 }}>
+          {(['agent', 'department'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '8px 16px',
+                fontSize: 12, fontWeight: 500,
+                border: 'none', background: 'transparent',
+                borderBottom: activeTab === tab ? '2px solid var(--teal)' : '2px solid transparent',
+                color: activeTab === tab ? 'var(--teal)' : 'var(--txt-3)',
+                cursor: 'pointer', fontFamily: 'var(--font)',
+                transition: 'all .15s',
+              }}
+            >
+              {tab === 'agent' ? t('performance.byAgent') : t('performance.byDepartment')}
+            </button>
+          ))}
+        </div>
+
         <div className="history-table-wrap">
+          {activeTab === 'department' ? (
+            <>
+              <table className="history-table performance-table" role="grid">
+                <thead>
+                  <tr>
+                    <th>{t('performance.table.department')}</th>
+                    <th>{t('performance.columns.volume')}</th>
+                    <th>{t('performance.columns.tma')}</th>
+                    <th>{t('performance.columns.tme')}</th>
+                    <th>{t('performance.columns.sla')}</th>
+                    <th>{t('performance.columns.csat')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(performanceByGroupData?.data ?? []).map((row, idx) => (
+                    <tr key={row.bot_option_id ?? `__no_group_${idx}`}>
+                      <td>
+                        <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
+                          {row.group_name}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--txt)' }}>
+                          {row.total_conversations}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_tma_minutes !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
+                          {formatMetric(row.avg_tma_minutes, 'minutes') ?? '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_tme_minutes !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
+                          {formatMetric(row.avg_tme_minutes, 'minutes') ?? '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.sla_percent !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
+                          {formatMetric(row.sla_percent, 'percent') ?? '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_csat !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
+                          {formatMetric(row.avg_csat, 'csat') ?? '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {!isLoadingByGroup && (performanceByGroupData?.data.length ?? 0) === 0 ? (
+                <div className="zd-empty-state history-empty">
+                  <div className="zd-empty-icon" aria-hidden>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                      <rect x="3" y="3" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                      <path d="M3 8h16M8 8v11" stroke="currentColor" strokeWidth="1.3" />
+                    </svg>
+                  </div>
+                  <div>{t('history.noResults')}</div>
+                  <div className="history-empty-hint">{t('history.noResultsHint')}</div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+          <>
           <table className="history-table performance-table" role="grid">
             <thead>
               <tr>
@@ -578,6 +673,8 @@ export function PerformancePage() {
               <div className="history-empty-hint">{t('history.noResultsHint')}</div>
             </div>
           ) : null}
+          </>
+          )}
         </div>
 
         <div className="history-pagination">

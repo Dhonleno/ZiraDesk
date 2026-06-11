@@ -432,7 +432,12 @@
     },
     "exportCsv": "Exportar CSV",
     "noGoal": "Sem meta definida",
-    "teamKpis": "Resumo da equipe"
+    "teamKpis": "Resumo da equipe",
+    "byAgent": "Por Agente",
+    "byDepartment": "Por Departamento",
+    "table": {
+      "department": "Departamento"
+    }
   },
   "composer": {
     "pasteRemove": "Remover arquivo",
@@ -701,5 +706,10 @@
   "common": {
     "confirm": "Confirmar",
     "cancel": "Cancelar"
+  },
+  "conversations": {
+    "group": "Grupo",
+    "noGroup": "Sem grupo",
+    "changeGroup": "Alterar grupo"
   }
 }

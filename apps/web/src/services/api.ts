@@ -2367,6 +2367,8 @@ export interface OmnichannelConversation {
   queue_entered_at?: string | null;
   channel_id: string | null;
   channel_name: string | null;
+  bot_option_id?: string | null;
+  bot_department?: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
   tags?: ConversationTag[];
@@ -2668,6 +2670,20 @@ export interface OmnichannelPerformanceResponse {
   };
 }
 
+export interface PerformanceByGroupRow {
+  bot_option_id: string | null;
+  group_name: string;
+  total_conversations: number;
+  avg_tma_minutes: number | null;
+  avg_tme_minutes: number | null;
+  avg_csat: number | null;
+  sla_percent: number | null;
+}
+
+export interface PerformanceByGroupResponse {
+  data: PerformanceByGroupRow[];
+}
+
 export interface MetricsOverviewData {
   total: {
     total: number;
@@ -2897,6 +2913,11 @@ export const omnichannelApi = {
     };
   },
 
+  listPerformanceByGroup: async (params?: PerformanceFiltersParams): Promise<PerformanceByGroupResponse> => {
+    const res = await api.get<{ success: boolean } & PerformanceByGroupResponse>('/omnichannel/performance/by-group', { params });
+    return { data: res.data.data };
+  },
+
   exportPerformanceCsv: async (params?: PerformanceFiltersParams): Promise<Blob> => {
     const res = await api.get<Blob>('/omnichannel/performance', {
       params: { ...params, export: 'csv' },
@@ -3086,6 +3107,17 @@ export const omnichannelApi = {
 
   getTransferSkills: async (): Promise<TransferSkill[]> => {
     const res = await api.get<{ success: boolean; data: TransferSkill[] }>('/omnichannel/transfer/skills');
+    return res.data.data;
+  },
+
+  updateConversationGroup: async (
+    conversationId: string,
+    bot_option_id: string | null,
+  ): Promise<{ id: string; bot_option_id: string | null; bot_department: string | null }> => {
+    const res = await api.patch<{
+      success: boolean;
+      data: { id: string; bot_option_id: string | null; bot_department: string | null };
+    }>(`/omnichannel/conversations/${conversationId}/group`, { bot_option_id });
     return res.data.data;
   },
 

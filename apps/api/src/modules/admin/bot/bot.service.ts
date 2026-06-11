@@ -267,6 +267,7 @@ export async function ensureBotInfrastructure(
 ): Promise<void> {
   const botMenusRef = tableRef('bot_menus', schemaName);
   const botOptionsRef = tableRef('bot_options', schemaName);
+  const conversationsRef = tableRef('conversations', schemaName);
 
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${botMenusRef} (
@@ -329,6 +330,28 @@ export async function ensureBotInfrastructure(
            'Digite o numero da opcao desejada.'
     WHERE NOT EXISTS (SELECT 1 FROM ${botMenusRef})
   `);
+
+  const conversationTableName = schemaName
+    ? `${schemaName}.conversations`
+    : 'conversations';
+  const conversationTableRows = await db.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    'SELECT to_regclass($1::text) IS NOT NULL AS exists',
+    conversationTableName,
+  );
+
+  if (conversationTableRows[0]?.exists) {
+    await db.$executeRawUnsafe(`
+      ALTER TABLE ${conversationsRef}
+      ADD COLUMN IF NOT EXISTS bot_option_id UUID
+      REFERENCES ${botOptionsRef}(id) ON DELETE SET NULL
+    `);
+
+    await db.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_bot_option_id
+      ON ${conversationsRef}(bot_option_id)
+      WHERE bot_option_id IS NOT NULL
+    `);
+  }
 }
 
 export async function getMenu(db: BotDbClient = prisma): Promise<BotMenu> {
@@ -606,6 +629,7 @@ async function handleTransferToAgent(
     `UPDATE conversations
      SET status = 'open',
          queue_entered_at = COALESCE(queue_entered_at, NOW()),
+         bot_option_id = $1::uuid,
          metadata = COALESCE(metadata, '{}'::jsonb)
            || jsonb_build_object(
              'bot_option_id', $1::uuid,

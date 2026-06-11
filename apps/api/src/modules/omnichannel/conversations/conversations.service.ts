@@ -1319,6 +1319,7 @@ export async function createConversation(
        protocol_number,
        assigned_to,
        subject,
+       bot_option_id,
        metadata,
        waiting_expires_at,
        queue_entered_at
@@ -1333,6 +1334,7 @@ export async function createConversation(
        $7,
        $8::uuid,
        $9,
+       $12::uuid,
        $10::jsonb,
        $11::timestamptz,
        CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
@@ -1349,6 +1351,7 @@ export async function createConversation(
     data.subject ?? null,
     JSON.stringify(metadata),
     waitingExpiresAt,
+    data.bot_option_id ?? null,
   );
   const conversation = convRows[0]!;
   const protocolMessage = buildProtocolMessage(protocolNumber, {

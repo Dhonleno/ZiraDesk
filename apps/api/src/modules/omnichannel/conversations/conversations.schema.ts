@@ -34,6 +34,7 @@ export const createConversationBodySchema = z
     contact_id: z.string().uuid(),
     organization_id: z.string().uuid().optional(),
     channel_id: z.string().uuid(),
+    bot_option_id: z.string().uuid().optional(),
     type: z.enum(['inbound', 'outbound']).default('inbound'),
     subject: z.string().max(255).optional(),
     initial_message: z.string().max(4000).optional(),

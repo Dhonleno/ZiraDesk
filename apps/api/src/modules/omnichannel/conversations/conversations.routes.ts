@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
+import { z } from 'zod';
 import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
@@ -936,5 +937,90 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>('/:id/help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const data = await endHelp(request.params.id, request.user.id, request.user.tenantId);
     return reply.send({ success: true, data });
+  });
+
+  // PATCH /api/omnichannel/conversations/:id/group
+  app.patch<{ Params: { id: string } }>('/:id/group', { preHandler: conversationsReplyGuard }, async (request, reply) => {
+    const bodySchema = z.object({
+      bot_option_id: z.string().uuid().nullable(),
+    });
+    const parsed = bodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const safeSchema = ensureSafeSchemaName(schemaName);
+    const { bot_option_id } = parsed.data;
+
+    return withTenantSchema(schemaName, async (tx) => {
+      // Valida que a conversa existe
+      const convRows = await tx.$queryRawUnsafe<Array<{ id: string; metadata: unknown }>>(
+        `SELECT id, metadata FROM "${safeSchema}".conversations WHERE id = $1::uuid LIMIT 1`,
+        request.params.id,
+      );
+      if (!convRows[0]) {
+        return reply.code(404).send({ success: false, error: { message: 'Conversa não encontrada' } });
+      }
+
+      // Valida que o bot_option_id existe no tenant (se não for null)
+      let groupLabel: string | null = null;
+      if (bot_option_id) {
+        const optionRows = await tx.$queryRawUnsafe<Array<{ id: string; label: string; parent_option_id: string | null }>>(
+          `SELECT id, label, parent_option_id FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
+          bot_option_id,
+        );
+        if (!optionRows[0]) {
+          return reply.code(404).send({ success: false, error: { message: 'Opção de grupo não encontrada' } });
+        }
+        // bot_department = label da opção pai (se existir) ou da própria opção
+        if (optionRows[0].parent_option_id) {
+          const parentRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+            `SELECT label FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
+            optionRows[0].parent_option_id,
+          );
+          groupLabel = parentRows[0]?.label ?? optionRows[0].label;
+        } else {
+          groupLabel = optionRows[0].label;
+        }
+      }
+
+      const updatedRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `UPDATE "${safeSchema}".conversations
+         SET bot_option_id = $2::uuid,
+             metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+               'bot_option_id', $2::uuid,
+               'bot_department', $3::text
+             )
+         WHERE id = $1::uuid
+         RETURNING id`,
+        request.params.id,
+        bot_option_id,
+        groupLabel ?? '',
+      );
+
+      if (!updatedRows[0]) {
+        return reply.code(404).send({ success: false, error: { message: 'Conversa não encontrada' } });
+      }
+
+      const io = getSocketServer();
+      io.to(`tenant:${request.user.tenantId}`).emit('conversation:updated', {
+        conversationId: request.params.id,
+        bot_option_id,
+        bot_department: groupLabel,
+      });
+
+      return reply.send({
+        success: true,
+        data: { id: request.params.id, bot_option_id, bot_department: groupLabel },
+      });
+    });
   });
 }

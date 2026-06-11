@@ -351,6 +351,7 @@ async function persistAutoAssignment(
   conversationId: string,
   agentId: string,
   agentName: string,
+  requiredBotOptionId?: string,
 ): Promise<boolean> {
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
@@ -362,6 +363,7 @@ async function persistAutoAssignment(
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
          status = 'open',
+         bot_option_id = COALESCE($3::uuid, bot_option_id),
          metadata = CASE
            WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
              'queue_wait_started_at', queue_entered_at,
@@ -380,6 +382,7 @@ async function persistAutoAssignment(
      RETURNING id`,
     agentId,
     conversationId,
+    requiredBotOptionId ?? null,
   );
 
   if (!updatedRows[0]) return false;
@@ -617,6 +620,7 @@ export async function autoAssignConversation(
     conversationId,
     nextAgent.user_id,
     nextAgent.name,
+    requiredBotOptionId,
   );
 
   if (!assigned) return null;

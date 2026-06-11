@@ -7,6 +7,7 @@ import { performanceQuerySchema } from './performance.schema.js';
 import {
   exportPerformanceCsv,
   listPerformance,
+  listPerformanceByGroup,
   resolvePerformanceSchema,
 } from './performance.service.js';
 
@@ -56,6 +57,32 @@ export async function omnichannelPerformanceRoutes(app: FastifyInstance): Promis
       return reply.code(400).send({
         success: false,
         error: { message: error instanceof Error ? error.message : 'Erro ao carregar performance' },
+      });
+    }
+  });
+
+  app.get('/performance/by-group', { preHandler: guard }, async (request, reply) => {
+    const parsed = performanceQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inv\u00E1lida', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = await resolvePerformanceSchema(request.user.tenantId);
+    if (!schemaName) {
+      return reply.send({ success: true, data: [], applied_filters: parsed.data });
+    }
+
+    try {
+      const timezone = await resolveTenantTimezone(request.user.tenantId);
+      const result = await listPerformanceByGroup(schemaName, parsed.data, timezone);
+      return reply.send({ success: true, ...result });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar performance por grupo' },
       });
     }
   });

@@ -432,7 +432,12 @@
     },
     "exportCsv": "Export CSV",
     "noGoal": "No goal defined",
-    "teamKpis": "Team summary"
+    "teamKpis": "Team summary",
+    "byAgent": "By Agent",
+    "byDepartment": "By Department",
+    "table": {
+      "department": "Department"
+    }
   },
   "composer": {
     "pasteRemove": "Remove file",
@@ -701,5 +706,10 @@
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel"
+  },
+  "conversations": {
+    "group": "Group",
+    "noGroup": "No group",
+    "changeGroup": "Change group"
   }
 }

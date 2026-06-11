@@ -68,6 +68,7 @@ const listTemplatesQuerySchema = z.object({
 const activeOutboundSchema = z.object({
   contactId: z.string().uuid(),
   channelId: z.string().uuid(),
+  bot_option_id: z.string().uuid().optional(),
   templateName: z.string().trim().min(1).max(512).optional(),
   templateLanguage: z.string().trim().min(2).max(20).optional(),
   templateComponents: z.array(z.record(z.unknown())).optional(),
@@ -159,6 +160,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const {
       contactId,
       channelId,
+      bot_option_id: botOptionId,
       templateName,
       templateLanguage,
       templateComponents,
@@ -409,6 +411,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            waiting_expires_at,
            protocol_number,
            subject,
+           bot_option_id,
            metadata
          ) VALUES (
            $1::uuid,
@@ -421,6 +424,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            $8::timestamptz,
            $5,
            $6,
+           $9::uuid,
            $7::jsonb
          )
          RETURNING *`,
@@ -432,6 +436,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         normalizedSubject,
         JSON.stringify(metadata),
         waitingExpiresAt,
+        botOptionId ?? null,
       );
 
       const conversation = inserted[0];
