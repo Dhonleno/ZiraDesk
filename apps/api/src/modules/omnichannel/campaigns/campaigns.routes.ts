@@ -12,6 +12,7 @@ import {
 } from './campaigns.schema.js';
 import {
   listCampaigns,
+  getCampaignStats,
   getCampaign,
   createCampaign,
   updateCampaign,
@@ -78,6 +79,14 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
       }
       throw err;
     }
+  });
+
+  // GET /api/omnichannel/campaigns/stats
+  app.get('/stats', { preHandler: replyGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema não resolvido' } });
+    const data = await getCampaignStats(schemaName);
+    return reply.send({ success: true, data });
   });
 
   // GET /api/omnichannel/campaigns/:id

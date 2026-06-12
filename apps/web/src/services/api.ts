@@ -3423,6 +3423,11 @@ export const campaignsApi = {
     const res = await api.get<{ success: boolean; data: CampaignReport }>(`/omnichannel/campaigns/${id}/report`);
     return res.data.data;
   },
+
+  stats: async (): Promise<{ total: number; running: number; completed: number; avg_delivery_rate: number }> => {
+    const res = await api.get<{ success: boolean; data: { total: number; running: number; completed: number; avg_delivery_rate: number } }>('/omnichannel/campaigns/stats');
+    return res.data.data;
+  },
 };
 
 // ── Agent status API ──────────────────────────────────────────────────────────

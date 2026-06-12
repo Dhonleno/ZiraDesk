@@ -187,6 +187,42 @@ export async function listCampaigns(
   };
 }
 
+export async function getCampaignStats(schemaName: string): Promise<{
+  total: number;
+  running: number;
+  completed: number;
+  avg_delivery_rate: number;
+}> {
+  const schema = quoteIdent(schemaName);
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    total: string;
+    running: string;
+    completed: string;
+    avg_delivery_rate: string | null;
+  }>>(
+    `SELECT
+       COUNT(*)::text AS total,
+       COUNT(*) FILTER (WHERE status = 'running')::text AS running,
+       COUNT(*) FILTER (WHERE status = 'completed')::text AS completed,
+       COALESCE(
+         AVG(
+           CASE WHEN sent_count > 0
+           THEN (delivered_count::float / sent_count) * 100
+           ELSE NULL END
+         ) FILTER (WHERE status = 'completed'),
+         0
+       )::text AS avg_delivery_rate
+     FROM ${schema}.campaigns`,
+  );
+  const row = rows[0] ?? { total: '0', running: '0', completed: '0', avg_delivery_rate: '0' };
+  return {
+    total: parseInt(row.total, 10),
+    running: parseInt(row.running, 10),
+    completed: parseInt(row.completed, 10),
+    avg_delivery_rate: Math.round(parseFloat(row.avg_delivery_rate ?? '0')),
+  };
+}
+
 export async function getCampaign(id: string, schemaName: string): Promise<CampaignRow> {
   const schema = quoteIdent(schemaName);
   const rows = await prisma.$queryRawUnsafe<CampaignRow[]>(

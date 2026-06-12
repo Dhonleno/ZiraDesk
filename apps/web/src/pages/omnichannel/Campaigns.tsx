@@ -65,7 +65,7 @@ const FILTERS: { value: StatusFilter; labelKey: string }[] = [
   { value: 'cancelled', labelKey: 'status.cancelled' },
 ];
 
-const COL = 'minmax(0,2fr) 96px 72px 70px 70px 62px 68px minmax(120px,1fr) 80px';
+const COL = 'minmax(0,2fr) 130px 72px 70px 70px 62px 68px minmax(120px,1fr) 80px';
 
 export function CampaignsPage() {
   const { t } = useTranslation('campaigns');
@@ -94,19 +94,20 @@ export function CampaignsPage() {
     staleTime: 15_000,
   });
 
+  const { data: stats } = useQuery({
+    queryKey: ['campaigns-stats'],
+    queryFn: () => campaignsApi.stats(),
+    staleTime: 15_000,
+  });
+
   const campaigns = data?.data ?? [];
   const meta = data?.meta;
   const total = meta?.total ?? 0;
 
-  // KPIs
-  const kpiRunning = campaigns.filter((c) => c.status === 'running').length;
-  const kpiCompleted = campaigns.filter((c) => c.status === 'completed').length;
-  const avgDelivery = (() => {
-    const withSent = campaigns.filter((c) => c.sent_count > 0);
-    if (!withSent.length) return 0;
-    const avg = withSent.reduce((sum, c) => sum + (c.delivered_count / c.sent_count), 0) / withSent.length;
-    return Math.round(avg * 100);
-  })();
+  // KPIs — sourced from /stats to reflect all campaigns, not just the current page
+  const kpiRunning = stats?.running ?? 0;
+  const kpiCompleted = stats?.completed ?? 0;
+  const avgDelivery = stats?.avg_delivery_rate ?? 0;
 
   const pauseMutation = useMutation({
     mutationFn: (id: string) => campaignsApi.pause(id),
@@ -273,7 +274,7 @@ export function CampaignsPage() {
               </div>
 
               {/* Status */}
-              <div style={{ padding: '0 6px' }}>
+              <div style={{ padding: '0 6px', overflow: 'hidden' }}>
                 <StatusPill status={campaign.status} failedCount={campaign.failed_count} />
               </div>
 
