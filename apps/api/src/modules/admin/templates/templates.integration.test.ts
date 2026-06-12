@@ -88,6 +88,7 @@ describe('Templates (WhatsApp) integration', () => {
           { index: '1', example: 'Maria' },
           { index: '2', example: 'ZD-123' },
         ],
+        buttons: [],
       });
 
       expect(data).toMatchObject({
@@ -144,6 +145,7 @@ describe('Templates (WhatsApp) integration', () => {
         headerType: 'image',
         headerHandle: 'meta-upload-handle-001',
         variables: [],
+        buttons: [],
       });
 
       expect(data).toMatchObject({

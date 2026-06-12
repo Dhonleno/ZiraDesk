@@ -544,7 +544,7 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
     data.footer?.trim() || null,
     JSON.stringify(variables),
     JSON.stringify(components),
-    JSON.stringify(data.buttons),
+    JSON.stringify(data.buttons ?? []),
     status,
     metaTemplate.id,
   );
