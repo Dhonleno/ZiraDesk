@@ -8,6 +8,8 @@ import { getSocketServer } from '../socket/index.js';
 import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
 import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
 import {
+  buildFinalMetaFailureReason,
+  getProcessorAttemptLimit,
   isLastProcessorAttempt,
   isRetryableMetaError,
 } from './message-delivery-policy.js';
@@ -598,12 +600,19 @@ const worker = new Worker<SendMessageJob>(
             whatsapp_send_error_code: metaError.code,
             whatsapp_send_error_message: metaError.message,
             whatsapp_send_error_details: metaError.details,
+            whatsapp_send_attempts: job.attemptsMade + 1,
             whatsapp_send_failed_at: new Date().toISOString(),
           };
-          const reason = metaError.details || metaError.message || `Meta API HTTP ${response.status}`;
+          const providerReason = metaError.details || metaError.message || `Meta API HTTP ${response.status}`;
           const retryable = isRetryableMetaError(response.status, metaError.code);
 
           if (!retryable || isLastProcessorAttempt(job)) {
+            const reason = buildFinalMetaFailureReason({
+              fallback: providerReason,
+              retryable,
+              errorCode: metaError.code,
+              attempts: getProcessorAttemptLimit(job),
+            });
             await handlePermanentDeliveryFailure(job.data, metadataPatch, reason);
             return { ok: false, permanent: !retryable };
           }

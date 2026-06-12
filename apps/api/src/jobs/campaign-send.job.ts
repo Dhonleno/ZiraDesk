@@ -5,7 +5,11 @@ import { logger } from '../config/logger.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { messageQueue } from './queue.js';
 import { buildTemplateComponentsForCampaign } from './campaign-template-components.js';
-import { isPublicTestTemplate } from './message-delivery-policy.js';
+import {
+  CAMPAIGN_MESSAGE_ATTEMPTS,
+  CAMPAIGN_MESSAGE_BACKOFF_DELAY_MS,
+  isPublicTestTemplate,
+} from './message-delivery-policy.js';
 import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
 import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
 
@@ -311,6 +315,12 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
             templateName: template.name,
             templateLanguage: template.language,
             templateComponents: templateComponents.length > 0 ? templateComponents : null,
+          }, {
+            attempts: CAMPAIGN_MESSAGE_ATTEMPTS,
+            backoff: {
+              type: 'exponential',
+              delay: CAMPAIGN_MESSAGE_BACKOFF_DELAY_MS,
+            },
           });
 
           logger.info({ campaignId, contactId: cc.contact_id, conversationId }, '[CampaignSend] Contact queued');
