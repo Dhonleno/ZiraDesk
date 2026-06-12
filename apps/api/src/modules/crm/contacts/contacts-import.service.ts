@@ -75,6 +75,81 @@ function normalizeCell(value: unknown): string {
   return String(value).trim();
 }
 
+function countDelimiterOutsideQuotes(value: string, delimiter: string): number {
+  let count = 0;
+  let quoted = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '"') {
+      if (quoted && value[index + 1] === '"') {
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+
+    if (!quoted && character === delimiter) count += 1;
+  }
+
+  return count;
+}
+
+function detectEmbeddedDelimiter(header: string): string | null {
+  const candidates = [',', ';', '\t', '|']
+    .map((delimiter) => ({
+      delimiter,
+      occurrences: countDelimiterOutsideQuotes(header, delimiter),
+    }))
+    .sort((left, right) => right.occurrences - left.occurrences);
+
+  const best = candidates[0];
+  return best && best.occurrences >= 2 ? best.delimiter : null;
+}
+
+function expandEmbeddedDelimitedSheet(
+  worksheet: XLSX.WorkSheet,
+): XLSX.WorkSheet {
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+    blankrows: false,
+  });
+  const headerRow = matrix[0] ?? [];
+  if (headerRow.length !== 1) return worksheet;
+
+  const header = normalizeCell(headerRow[0]);
+  const delimiter = detectEmbeddedDelimiter(header);
+  if (!delimiter) return worksheet;
+
+  const lines = matrix
+    .map((row) => normalizeCell(row[0]))
+    .filter((line, index) => index === 0 || Boolean(line));
+  const embeddedWorkbook = XLSX.read(lines.join('\n'), {
+    type: 'string',
+    cellDates: true,
+    raw: false,
+    FS: delimiter,
+  });
+  const embeddedSheetName = embeddedWorkbook.SheetNames[0];
+  const embeddedSheet = embeddedSheetName
+    ? embeddedWorkbook.Sheets[embeddedSheetName]
+    : undefined;
+
+  if (!embeddedSheet) return worksheet;
+
+  const embeddedHeader = XLSX.utils.sheet_to_json<unknown[]>(embeddedSheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+    range: 0,
+  })[0] ?? [];
+
+  return embeddedHeader.length > 1 ? embeddedSheet : worksheet;
+}
+
 function parseTabularRows(buffer: Buffer): { columns: string[]; rows: ContactImportRow[] } {
   const workbook = XLSX.read(buffer, {
     type: 'buffer',
@@ -91,7 +166,8 @@ function parseTabularRows(buffer: Buffer): { columns: string[]; rows: ContactImp
     return { columns: [], rows: [] };
   }
 
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+  const normalizedWorksheet = expandEmbeddedDelimitedSheet(worksheet);
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(normalizedWorksheet, {
     defval: '',
     raw: false,
   });

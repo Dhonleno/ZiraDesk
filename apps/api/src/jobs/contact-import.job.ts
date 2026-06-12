@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
@@ -40,6 +41,9 @@ interface MappedContactRow {
   tags: string[];
   customFields: Record<string, unknown>;
 }
+
+const CONTACT_NAME_MAX_LENGTH = 150;
+const ORGANIZATION_NAME_MAX_LENGTH = 150;
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -109,16 +113,23 @@ function mapRow(row: ContactImportRow, mapping: ContactImportJobData['mapping'])
   if (!name) {
     throw new Error('Nome obrigatório');
   }
+  if (name.length > CONTACT_NAME_MAX_LENGTH) {
+    throw new Error(`Nome deve ter no máximo ${CONTACT_NAME_MAX_LENGTH} caracteres`);
+  }
 
   const phone = normalizePhone(clean(cell(row, mapping.phone)));
   const whatsapp = normalizePhone(clean(cell(row, mapping.whatsapp)) ?? phone);
+  const organizationName = clean(cell(row, mapping.organization_name));
+  if (organizationName && organizationName.length > ORGANIZATION_NAME_MAX_LENGTH) {
+    throw new Error(`Organização deve ter no máximo ${ORGANIZATION_NAME_MAX_LENGTH} caracteres`);
+  }
 
   return {
     name,
     email: clean(cell(row, mapping.email))?.toLowerCase() ?? null,
     phone,
     whatsapp,
-    organizationName: clean(cell(row, mapping.organization_name)),
+    organizationName,
     role: clean(cell(row, mapping.role)),
     department: clean(cell(row, mapping.department)),
     tags: parseTags(clean(cell(row, mapping.tags))),
@@ -126,10 +137,14 @@ function mapRow(row: ContactImportRow, mapping: ContactImportJobData['mapping'])
   };
 }
 
-async function findOrCreateOrganization(schema: string, name: string | null): Promise<string | null> {
+async function findOrCreateOrganization(
+  tx: Prisma.TransactionClient,
+  schema: string,
+  name: string | null,
+): Promise<string | null> {
   if (!name) return null;
 
-  const existing = await prisma.$queryRawUnsafe<OrganizationRow[]>(
+  const existing = await tx.$queryRawUnsafe<OrganizationRow[]>(
     `SELECT id::text AS id
      FROM ${schema}.organizations
      WHERE lower(trim(name)) = lower(trim($1))
@@ -138,7 +153,7 @@ async function findOrCreateOrganization(schema: string, name: string | null): Pr
   );
   if (existing[0]) return existing[0].id;
 
-  const inserted = await prisma.$queryRawUnsafe<OrganizationRow[]>(
+  const inserted = await tx.$queryRawUnsafe<OrganizationRow[]>(
     `INSERT INTO ${schema}.organizations (name, status)
      VALUES ($1, 'lead')
      RETURNING id::text AS id`,
@@ -147,14 +162,18 @@ async function findOrCreateOrganization(schema: string, name: string | null): Pr
   return inserted[0]?.id ?? null;
 }
 
-async function findDuplicateContact(schema: string, row: MappedContactRow): Promise<string | null> {
+async function findDuplicateContact(
+  tx: Prisma.TransactionClient,
+  schema: string,
+  row: MappedContactRow,
+): Promise<string | null> {
   const email = row.email?.trim().toLowerCase() || null;
   const phoneDigits = row.phone?.replace(/\D/g, '') || null;
   const whatsappDigits = row.whatsapp?.replace(/\D/g, '') || null;
 
   if (!email && !phoneDigits && !whatsappDigits) return null;
 
-  const duplicates = await prisma.$queryRawUnsafe<DuplicateContactRow[]>(
+  const duplicates = await tx.$queryRawUnsafe<DuplicateContactRow[]>(
     `SELECT id::text AS id
      FROM ${schema}.contacts
      WHERE ($1::text IS NOT NULL AND lower(trim(COALESCE(email, ''))) = $1)
@@ -176,8 +195,13 @@ async function findDuplicateContact(schema: string, row: MappedContactRow): Prom
   return duplicates[0]?.id ?? null;
 }
 
-async function insertContact(schema: string, row: MappedContactRow, organizationId: string | null): Promise<void> {
-  await prisma.$executeRawUnsafe(
+async function insertContact(
+  tx: Prisma.TransactionClient,
+  schema: string,
+  row: MappedContactRow,
+  organizationId: string | null,
+): Promise<void> {
+  await tx.$executeRawUnsafe(
     `INSERT INTO ${schema}.contacts (
        organization_id, name, email, phone, whatsapp, role, department, tags, custom_fields
      ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::text[], $9::jsonb)`,
@@ -193,8 +217,14 @@ async function insertContact(schema: string, row: MappedContactRow, organization
   );
 }
 
-async function updateContact(schema: string, contactId: string, row: MappedContactRow, organizationId: string | null): Promise<void> {
-  await prisma.$executeRawUnsafe(
+async function updateContact(
+  tx: Prisma.TransactionClient,
+  schema: string,
+  contactId: string,
+  row: MappedContactRow,
+  organizationId: string | null,
+): Promise<void> {
+  await tx.$executeRawUnsafe(
     `UPDATE ${schema}.contacts
      SET organization_id = COALESCE($1::uuid, organization_id),
          name = $2,
@@ -256,22 +286,22 @@ export const contactImportWorker = new Worker<ContactImportJobData>(
       for (const rawRow of rows) {
         try {
           const mapped = mapRow(rawRow, job.data.mapping);
-          const organizationId = await findOrCreateOrganization(schema, mapped.organizationName);
-          const duplicateContactId = await findDuplicateContact(schema, mapped);
+          const outcome = await prisma.$transaction(async (tx) => {
+            const duplicateContactId = await findDuplicateContact(tx, schema, mapped);
+            if (duplicateContactId && job.data.duplicateAction === 'skip') {
+              return 'skipped' as const;
+            }
 
-          if (duplicateContactId && job.data.duplicateAction === 'skip') {
-            result.skipped += 1;
-            continue;
-          }
+            const organizationId = await findOrCreateOrganization(tx, schema, mapped.organizationName);
+            if (duplicateContactId) {
+              await updateContact(tx, schema, duplicateContactId, mapped, organizationId);
+              return 'updated' as const;
+            }
 
-          if (duplicateContactId) {
-            await updateContact(schema, duplicateContactId, mapped, organizationId);
-            result.updated += 1;
-            continue;
-          }
-
-          await insertContact(schema, mapped, organizationId);
-          result.inserted += 1;
+            await insertContact(tx, schema, mapped, organizationId);
+            return 'inserted' as const;
+          });
+          result[outcome] += 1;
         } catch (err) {
           result.errors += 1;
           logger.warn({ err, importId: job.data.importId }, '[ContactImport] Failed to process row');
