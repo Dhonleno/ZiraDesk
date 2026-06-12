@@ -883,6 +883,13 @@ interface ListContactsParams {
   status?: 'lead' | 'prospect' | 'client' | 'inactive';
 }
 
+export interface CrmBulkDeleteResult {
+  requested: number;
+  deleted: string[];
+  blocked: Array<{ id: string; reason: string }>;
+  not_found: string[];
+}
+
 // ── CRM API ───────────────────────────────────────────────────────────────────
 
 export const organizationsApi = {
@@ -903,6 +910,13 @@ export const organizationsApi = {
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/organizations/${id}`),
+  bulkDelete: async (ids: string[]): Promise<CrmBulkDeleteResult> => {
+    const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
+      '/crm/organizations/bulk-delete',
+      { ids },
+    );
+    return res.data.data;
+  },
   getStats: async (id: string): Promise<CrmOrganizationStats> => {
     const res = await api.get<{ success: boolean; data: CrmOrganizationStats }>(`/crm/organizations/${id}/stats`);
     return res.data.data;
@@ -1001,6 +1015,13 @@ export const contactsApi = {
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
+  bulkDelete: async (ids: string[]): Promise<CrmBulkDeleteResult> => {
+    const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
+      '/crm/contacts/bulk-delete',
+      { ids },
+    );
+    return res.data.data;
+  },
   linkOrganization: async (id: string, organization_id: string) =>
     api.post(`/crm/contacts/${id}/link-organization`, { organization_id }),
   listLgpdRequests: async (params?: {

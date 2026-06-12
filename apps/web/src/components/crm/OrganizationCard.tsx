@@ -3,10 +3,15 @@ import type { TFunction } from 'i18next';
 import type { CrmOrganization } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { OrgStatusBadge } from './ContactBadge';
+import { CrmSelectionCheckbox } from './CrmSelectionCheckbox';
 
 interface OrganizationCardProps {
   org: CrmOrganization;
   selected: boolean;
+  selectable?: boolean;
+  checked?: boolean;
+  selectionLabel?: string;
+  onToggleSelection?: () => void;
   onClick: () => void;
 }
 
@@ -23,7 +28,15 @@ function relativeTime(dateStr: string | null | undefined, locale: string, t: TFu
   return new Date(dateStr).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
 }
 
-export function OrganizationCard({ org, selected, onClick }: OrganizationCardProps) {
+export function OrganizationCard({
+  org,
+  selected,
+  selectable = false,
+  checked = false,
+  selectionLabel,
+  onToggleSelection,
+  onClick,
+}: OrganizationCardProps) {
   const { t, i18n } = useTranslation('crm');
   const statusLabels: Record<string, string> = {
     lead:     t('organizations.status.lead'),
@@ -39,7 +52,7 @@ export function OrganizationCard({ org, selected, onClick }: OrganizationCardPro
         padding: '12px 16px',
         cursor: 'pointer',
         borderBottom: '1px solid var(--line)',
-        background: selected ? 'rgba(0,201,167,.06)' : 'transparent',
+        background: selected ? 'var(--teal-dim)' : 'transparent',
         transition: 'background .12s',
         boxShadow: selected ? 'inset 3px 0 0 var(--teal)' : 'none',
         position: 'relative',
@@ -52,6 +65,15 @@ export function OrganizationCard({ org, selected, onClick }: OrganizationCardPro
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        {selectable ? (
+          <div style={{ marginTop: 3, flexShrink: 0 }}>
+            <CrmSelectionCheckbox
+              checked={checked}
+              label={selectionLabel ?? ''}
+              onChange={() => onToggleSelection?.()}
+            />
+          </div>
+        ) : null}
         <ContactAvatar id={org.id} name={org.name} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Name + badge */}

@@ -8,6 +8,20 @@
     "noSelectionSub": "Click an organization in the list to view details",
     "loading": "Loading...",
     "total": "{{n}} organizations",
+    "bulkDelete": {
+      "selectPage": "Select page",
+      "selectItem": "Select {{name}}",
+      "selected": "{{count}} selected",
+      "clear": "Clear",
+      "action": "Delete",
+      "title": "Delete organizations",
+      "confirm": "Permanently delete {{count}} organization(s)? Contacts, conversations, and tickets will be preserved but unlinked from the organization.",
+      "confirmAction": "Delete",
+      "cancel": "Cancel",
+      "success": "{{count}} organization(s) deleted",
+      "partial": "Partial operation: {{blocked}} blocked and {{notFound}} not found.",
+      "error": "Could not delete the selected organizations"
+    },
     "type": {
       "company": "Company",
       "person": "Individual"
@@ -256,6 +270,20 @@
     },
     "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
     "deleteWarning": "This action cannot be undone.",
+    "bulkDelete": {
+      "selectPage": "Select page",
+      "selectItem": "Select {{name}}",
+      "selected": "{{count}} selected",
+      "clear": "Clear",
+      "action": "Delete",
+      "title": "Delete contacts",
+      "confirm": "Permanently delete {{count}} contact(s)? Contacts with open conversations will be kept.",
+      "confirmAction": "Delete",
+      "cancel": "Cancel",
+      "success": "{{count}} contact(s) deleted",
+      "partial": "Partial operation: {{blocked}} blocked and {{notFound}} not found.",
+      "error": "Could not delete the selected contacts"
+    },
     "hasActiveConversations": "Contact has active conversations.",
     "hasNoActiveChannels": "No active channel available",
     "selectContact": "Select a contact",

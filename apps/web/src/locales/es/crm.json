@@ -8,6 +8,20 @@
     "noSelectionSub": "Haga clic en una organización de la lista para ver los detalles",
     "loading": "Cargando...",
     "total": "{{n}} organizaciones",
+    "bulkDelete": {
+      "selectPage": "Seleccionar página",
+      "selectItem": "Seleccionar {{name}}",
+      "selected": "{{count}} seleccionada(s)",
+      "clear": "Limpiar",
+      "action": "Eliminar",
+      "title": "Eliminar organizaciones",
+      "confirm": "¿Eliminar permanentemente {{count}} organización(es)? Los contactos, conversaciones y tickets se conservarán, pero quedarán sin organización vinculada.",
+      "confirmAction": "Eliminar",
+      "cancel": "Cancelar",
+      "success": "{{count}} organización(es) eliminada(s)",
+      "partial": "Operación parcial: {{blocked}} bloqueada(s) y {{notFound}} no encontrada(s).",
+      "error": "No se pudieron eliminar las organizaciones seleccionadas"
+    },
     "type": {
       "company": "Empresa",
       "person": "Persona"
@@ -256,6 +270,20 @@
     },
     "deleteConfirm": "¿Seguro que deseas eliminar \"{{name}}\"?",
     "deleteWarning": "Esta acción no se puede deshacer.",
+    "bulkDelete": {
+      "selectPage": "Seleccionar página",
+      "selectItem": "Seleccionar {{name}}",
+      "selected": "{{count}} seleccionado(s)",
+      "clear": "Limpiar",
+      "action": "Eliminar",
+      "title": "Eliminar contactos",
+      "confirm": "¿Eliminar permanentemente {{count}} contacto(s)? Los contactos con conversaciones abiertas se conservarán.",
+      "confirmAction": "Eliminar",
+      "cancel": "Cancelar",
+      "success": "{{count}} contacto(s) eliminado(s)",
+      "partial": "Operación parcial: {{blocked}} bloqueado(s) y {{notFound}} no encontrado(s).",
+      "error": "No se pudieron eliminar los contactos seleccionados"
+    },
     "hasActiveConversations": "El contacto tiene conversaciones activas.",
     "hasNoActiveChannels": "No hay canales activos disponibles",
     "selectContact": "Seleccione un contacto",

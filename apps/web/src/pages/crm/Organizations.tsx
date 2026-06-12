@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi, organizationsApi } from '../../services/api';
 import type { CrmOrganization } from '../../services/api';
@@ -11,7 +11,12 @@ import { CreateOrganizationModal } from '../../components/crm/CreateOrganization
 import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
 import { CrmSearchField } from '../../components/crm/CrmSearchField';
 import { CrmActiveFilterChips } from '../../components/crm/CrmActiveFilterChips';
+import { CrmBulkSelectionBar } from '../../components/crm/CrmBulkSelectionBar';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
+import { usePermission } from '../../hooks/usePermission';
+import { useToast } from '../../stores/toast.store';
 import './Organizations.css';
 
 type StatusFilter = 'all' | 'lead' | 'prospect' | 'client' | 'inactive';
@@ -45,6 +50,9 @@ function isNonEmptyString(value: string | null | undefined): value is string {
 
 export function OrganizationsPage() {
   const { t } = useTranslation('crm');
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { can } = usePermission();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
   const [segmentRaw, setSegmentRaw] = useState(searchParams.get('segment') ?? '');
@@ -57,7 +65,11 @@ export function OrganizationsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'));
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
+  const canDeleteOrganizations = can('organizations:delete');
 
   const search = useDebounce(searchRaw, 300);
   const segment = useDebounce(segmentRaw, 300);
@@ -107,7 +119,7 @@ export function OrganizationsPage() {
     sortOrder?: SortOrder;
     page?: number;
   }) {
-    const nextId = next.id ?? selectedId;
+    const nextId = Object.prototype.hasOwnProperty.call(next, 'id') ? (next.id ?? null) : selectedId;
     const nextQ = next.q ?? searchRaw;
     const nextStatus = next.status ?? statusFilter;
     const nextSegment = next.segment ?? segmentRaw;
@@ -178,6 +190,10 @@ export function OrganizationsPage() {
       ...(filters.tag ? [filters.tag] : []),
     ]),
   ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, statusFilter, segment, tag, responsibleId, sortBy, sortOrder, page]);
 
   useEffect(() => {
     if (organizations.length === 0) {
@@ -321,6 +337,61 @@ export function OrganizationsPage() {
       page: 1,
     });
   }
+
+  function toggleOrganizationSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllOrganizations() {
+    const visibleIds = organizations.map((organization) => organization.id);
+    const allSelected = visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const result = await organizationsApi.bulkDelete(ids);
+      if (result.deleted.length > 0) {
+        toast.success(t('organizations.bulkDelete.success', { count: result.deleted.length }));
+      }
+      if (result.blocked.length > 0 || result.not_found.length > 0) {
+        toast.warning(t('organizations.bulkDelete.partial', {
+          blocked: result.blocked.length,
+          notFound: result.not_found.length,
+        }));
+      }
+
+      const deletedIds = new Set(result.deleted);
+      setSelectedIds(new Set(result.blocked.map((item) => item.id)));
+      setBulkDeleteOpen(false);
+
+      if (selectedId && deletedIds.has(selectedId)) {
+        setSelectedId(null);
+        updateParams({ id: null });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['crm-organizations'] });
+      for (const id of result.deleted) {
+        queryClient.removeQueries({ queryKey: ['crm-organization', id] });
+      }
+    } catch {
+      toast.error(t('organizations.bulkDelete.error'));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  const allOrganizationsSelected = organizations.length > 0
+    && organizations.every((organization) => selectedIds.has(organization.id));
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
@@ -518,6 +589,20 @@ export function OrganizationsPage() {
           clearAllLabel={t('organizations.filters.clearAll')}
           onClearAll={clearAllFilters}
         />
+        <PermissionGate permission="organizations:delete">
+          <CrmBulkSelectionBar
+            visibleCount={organizations.length}
+            selectedCount={selectedIds.size}
+            allSelected={allOrganizationsSelected}
+            selectAllLabel={t('organizations.bulkDelete.selectPage')}
+            selectedLabel={t('organizations.bulkDelete.selected', { count: selectedIds.size })}
+            clearLabel={t('organizations.bulkDelete.clear')}
+            deleteLabel={t('organizations.bulkDelete.action')}
+            onToggleAll={toggleAllOrganizations}
+            onClear={() => setSelectedIds(new Set())}
+            onDelete={() => setBulkDeleteOpen(true)}
+          />
+        </PermissionGate>
 
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent' }}>
@@ -541,6 +626,10 @@ export function OrganizationsPage() {
                 key={org.id}
                 org={org}
                 selected={selectedId === org.id}
+                selectable={canDeleteOrganizations}
+                checked={selectedIds.has(org.id)}
+                selectionLabel={t('organizations.bulkDelete.selectItem', { name: org.name })}
+                onToggleSelection={() => toggleOrganizationSelection(org.id)}
                 onClick={() => selectOrg(org.id)}
               />
             ))
@@ -620,6 +709,17 @@ export function OrganizationsPage() {
       </div>
 
         <CreateOrganizationModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+        <ConfirmModal
+          open={bulkDeleteOpen}
+          title={t('organizations.bulkDelete.title')}
+          message={t('organizations.bulkDelete.confirm', { count: selectedIds.size })}
+          confirmLabel={t('organizations.bulkDelete.confirmAction')}
+          cancelLabel={t('organizations.bulkDelete.cancel')}
+          confirmVariant="danger"
+          loading={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
+        />
       </div>
     </PageShell>
   );

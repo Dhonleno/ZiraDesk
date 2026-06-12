@@ -13,6 +13,8 @@ import { EditContactModal } from '../../components/crm/EditContactModal';
 import { LinkOrganizationModal } from '../../components/crm/LinkOrganizationModal';
 import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
 import { CrmSearchField } from '../../components/crm/CrmSearchField';
+import { CrmBulkSelectionBar } from '../../components/crm/CrmBulkSelectionBar';
+import { CrmSelectionCheckbox } from '../../components/crm/CrmSelectionCheckbox';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
@@ -37,6 +39,9 @@ export function ContactsPage() {
   const [linkContact, setLinkContact] = useState<CrmContact | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<CrmContact | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(
     searchParams.get('id') ?? routeId ?? null,
   );
@@ -46,6 +51,10 @@ export function ContactsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [filterMode, search]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filterMode, search, currentPage]);
 
   const { data: listData, isLoading } = useQuery({
     queryKey: ['crm-contacts', search, filterMode, currentPage, 'sidebar'],
@@ -141,6 +150,63 @@ export function ContactsPage() {
     }
   }
 
+  function toggleContactSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllContacts() {
+    const visibleIds = contacts.map((contact) => contact.id);
+    const allSelected = visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const result = await contactsApi.bulkDelete(ids);
+      if (result.deleted.length > 0) {
+        toast.success(t('contacts.bulkDelete.success', { count: result.deleted.length }));
+      }
+      if (result.blocked.length > 0 || result.not_found.length > 0) {
+        toast.warning(t('contacts.bulkDelete.partial', {
+          blocked: result.blocked.length,
+          notFound: result.not_found.length,
+        }));
+      }
+
+      const deletedIds = new Set(result.deleted);
+      setSelectedIds(new Set(result.blocked.map((item) => item.id)));
+      setBulkDeleteOpen(false);
+
+      if (selectedId && deletedIds.has(selectedId)) {
+        setSelectedId(null);
+        const params: Record<string, string> = {};
+        if (searchRaw.trim()) params.q = searchRaw.trim();
+        setSearchParams(params, { replace: true });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      for (const id of result.deleted) {
+        queryClient.removeQueries({ queryKey: ['crm-contact', id] });
+      }
+    } catch {
+      toast.error(t('contacts.bulkDelete.error'));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  const allContactsSelected = contacts.length > 0
+    && contacts.every((contact) => selectedIds.has(contact.id));
+
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
@@ -212,6 +278,21 @@ export function ContactsPage() {
           </div>
         </div>
 
+        <PermissionGate permission="contacts:delete">
+          <CrmBulkSelectionBar
+            visibleCount={contacts.length}
+            selectedCount={selectedIds.size}
+            allSelected={allContactsSelected}
+            selectAllLabel={t('contacts.bulkDelete.selectPage')}
+            selectedLabel={t('contacts.bulkDelete.selected', { count: selectedIds.size })}
+            clearLabel={t('contacts.bulkDelete.clear')}
+            deleteLabel={t('contacts.bulkDelete.action')}
+            onToggleAll={toggleAllContacts}
+            onClear={() => setSelectedIds(new Set())}
+            onDelete={() => setBulkDeleteOpen(true)}
+          />
+        </PermissionGate>
+
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {isLoading ? (
             <div style={{ padding: 16, color: 'var(--txt-3)', fontSize: 12 }}>{t('contacts.loading')}</div>
@@ -244,6 +325,13 @@ export function ContactsPage() {
                     background: selected ? 'var(--bg-2)' : 'transparent',
                   }}
                 >
+                  <PermissionGate permission="contacts:delete">
+                    <CrmSelectionCheckbox
+                      checked={selectedIds.has(contact.id)}
+                      label={t('contacts.bulkDelete.selectItem', { name: contact.name })}
+                      onChange={() => toggleContactSelection(contact.id)}
+                    />
+                  </PermissionGate>
                   <button
                     type="button"
                     onClick={() => handleSelectContact(contact.id)}
@@ -374,6 +462,17 @@ export function ContactsPage() {
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirm(null)}
+        />
+        <ConfirmModal
+          open={bulkDeleteOpen}
+          title={t('contacts.bulkDelete.title')}
+          message={t('contacts.bulkDelete.confirm', { count: selectedIds.size })}
+          confirmLabel={t('contacts.bulkDelete.confirmAction')}
+          cancelLabel={t('contacts.bulkDelete.cancel')}
+          confirmVariant="danger"
+          loading={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
         />
       </div>
     </PageShell>

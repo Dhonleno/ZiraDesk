@@ -638,6 +638,57 @@
   color: var(--red);
 }
 
+/* ── Dense-list selection checkbox ─────────────────────────────────────── */
+.crm-selection-checkbox {
+  width: 24px;
+  height: 24px;
+  margin: -5px;
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.crm-selection-checkbox-box {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1.5px solid var(--line-2);
+  background: var(--bg-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.crm-selection-checkbox:hover .crm-selection-checkbox-box {
+  border-color: var(--txt-3);
+}
+
+.crm-selection-checkbox.is-active {
+  color: var(--on-teal);
+}
+
+.crm-selection-checkbox.is-active .crm-selection-checkbox-box {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.crm-selection-checkbox:focus-visible {
+  outline: none;
+}
+
+.crm-selection-checkbox:focus-visible .crm-selection-checkbox-box {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
 .tb-icon-btn {
   display: flex;
   align-items: center;
