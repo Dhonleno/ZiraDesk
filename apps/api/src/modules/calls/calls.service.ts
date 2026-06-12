@@ -113,22 +113,42 @@ export async function ensureCallRecordsInfrastructure(
   schemaName: string,
 ): Promise<void> {
   const tableRef = `${quoteIdent(schemaName)}.call_records`;
+  const ivrSessionsRef = `${quoteIdent(schemaName)}.call_ivr_sessions`;
   const conversationsRef = `${quoteIdent(schemaName)}.conversations`;
+  const contactsRef = `${quoteIdent(schemaName)}.contacts`;
   const usersRef = `${quoteIdent(schemaName)}.users`;
+  const botOptionsRef = `${quoteIdent(schemaName)}.bot_options`;
 
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${tableRef} (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      conversation_id UUID REFERENCES ${conversationsRef}(id) ON DELETE CASCADE,
-      agent_id UUID REFERENCES ${usersRef}(id),
-      call_sid VARCHAR(50) UNIQUE NOT NULL,
-      to_phone VARCHAR(30),
-      from_phone VARCHAR(30),
-      status VARCHAR(30) DEFAULT 'initiated',
-      duration INTEGER,
-      recording_url TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID          REFERENCES ${conversationsRef}(id) ON DELETE CASCADE,
+      contact_id      UUID          REFERENCES ${contactsRef}(id) ON DELETE SET NULL,
+      agent_id        UUID          REFERENCES ${usersRef}(id),
+      direction       VARCHAR(10)   NOT NULL DEFAULT 'outbound',
+      call_sid        VARCHAR(50)   UNIQUE NOT NULL,
+      to_phone        VARCHAR(60),
+      from_phone      VARCHAR(120),
+      status          VARCHAR(30)   DEFAULT 'initiated',
+      bot_option_id   UUID          REFERENCES ${botOptionsRef}(id) ON DELETE SET NULL,
+      duration        INTEGER,
+      recording_url   TEXT,
+      created_at      TIMESTAMPTZ   DEFAULT NOW()
     )
+  `);
+
+  await db.$executeRawUnsafe(`
+    ALTER TABLE ${tableRef}
+      ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${contactsRef}(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS direction VARCHAR(10) NOT NULL DEFAULT 'outbound',
+      ADD COLUMN IF NOT EXISTS bot_option_id UUID REFERENCES ${botOptionsRef}(id) ON DELETE SET NULL
+  `);
+
+  await db.$executeRawUnsafe(`
+    ALTER TABLE ${tableRef}
+    ALTER COLUMN conversation_id DROP NOT NULL,
+    ALTER COLUMN to_phone TYPE VARCHAR(60),
+    ALTER COLUMN from_phone TYPE VARCHAR(120)
   `);
 
   await db.$executeRawUnsafe(`
@@ -136,12 +156,29 @@ export async function ensureCallRecordsInfrastructure(
     ON ${tableRef}(conversation_id)
   `);
 
-  // Browser-originated calls can include identifiers like "client:<uuid>".
-  // Keep enough room to persist those values without truncation errors.
   await db.$executeRawUnsafe(`
-    ALTER TABLE ${tableRef}
-    ALTER COLUMN to_phone TYPE VARCHAR(60),
-    ALTER COLUMN from_phone TYPE VARCHAR(120)
+    CREATE INDEX IF NOT EXISTS ${quoteIdent('idx_call_records_contact')}
+    ON ${tableRef}(contact_id)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${ivrSessionsRef} (
+      id                UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+      call_sid          VARCHAR(50)   UNIQUE NOT NULL,
+      from_phone        VARCHAR(60)   NOT NULL,
+      contact_id        UUID          REFERENCES ${contactsRef}(id) ON DELETE SET NULL,
+      bot_option_id     UUID          REFERENCES ${botOptionsRef}(id) ON DELETE SET NULL,
+      candidate_agents  JSONB         NOT NULL DEFAULT '[]',
+      current_attempt   INTEGER       NOT NULL DEFAULT 0,
+      status            VARCHAR(30)   NOT NULL DEFAULT 'ivr',
+      created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS ${quoteIdent('idx_call_ivr_sessions_call_sid')}
+    ON ${ivrSessionsRef}(call_sid)
   `);
 }
 

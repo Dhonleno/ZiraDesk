@@ -24,6 +24,51 @@ function authHeader(): { Authorization: string } {
 }
 
 describe('Calls integration', () => {
+  it('provisiona a infraestrutura de chamadas entrantes de forma idempotente', async () => {
+    const schema = requireSchema();
+
+    await ensureCallRecordsInfrastructure(prisma, schema);
+    await ensureCallRecordsInfrastructure(prisma, schema);
+
+    const columns = await prisma.$queryRawUnsafe<Array<{
+      column_name: string;
+      is_nullable: string;
+      column_default: string | null;
+    }>>(
+      `SELECT column_name, is_nullable, column_default
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = 'call_records'
+          AND column_name IN ('conversation_id', 'contact_id', 'direction', 'bot_option_id')`,
+      schema,
+    );
+    const columnsByName = new Map(columns.map((column) => [column.column_name, column]));
+
+    expect(columnsByName.get('conversation_id')?.is_nullable).toBe('YES');
+    expect(columnsByName.get('contact_id')).toBeDefined();
+    expect(columnsByName.get('bot_option_id')).toBeDefined();
+    expect(columnsByName.get('direction')?.is_nullable).toBe('NO');
+    expect(columnsByName.get('direction')?.column_default).toContain('outbound');
+
+    const [infrastructure] = await prisma.$queryRawUnsafe<Array<{
+      sessions_table: string | null;
+      contact_index: string | null;
+      session_call_sid_index: string | null;
+    }>>(
+      `SELECT
+         to_regclass($1)::text AS sessions_table,
+         to_regclass($2)::text AS contact_index,
+         to_regclass($3)::text AS session_call_sid_index`,
+      `${schema}.call_ivr_sessions`,
+      `${schema}.idx_call_records_contact`,
+      `${schema}.idx_call_ivr_sessions_call_sid`,
+    );
+
+    expect(infrastructure?.sessions_table).toBe(`${schema}.call_ivr_sessions`);
+    expect(infrastructure?.contact_index).toBe(`${schema}.idx_call_records_contact`);
+    expect(infrastructure?.session_call_sid_index).toBe(`${schema}.idx_call_ivr_sessions_call_sid`);
+  });
+
   it('GET /api/calls/token retorna token Twilio para agente autenticado', async () => {
     const response = await createTestApp()
       .get('/api/calls/token')
