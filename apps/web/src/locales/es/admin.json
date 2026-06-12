@@ -601,6 +601,26 @@
       "empty": {
         "title": "Sin plantillas",
         "subtitle": "Crea una plantilla o sincroniza con Meta"
+      },
+      "buttons": {
+        "title": "Botones (opcional)",
+        "hint": "Agrega hasta 10 botones. Máx: 3 respuesta rápida, 2 URL, 1 teléfono.",
+        "add": "Agregar botón",
+        "untitled": "Botón sin texto",
+        "type": {
+          "quickReply": "Respuesta rápida",
+          "url": "Enlace (URL)",
+          "phone": "Teléfono"
+        },
+        "textPlaceholder": "Texto del botón (máx. 25)",
+        "urlPlaceholder": "https://ejemplo.com o https://ejemplo.com/{{1}}",
+        "urlExampleLabel": "Ejemplo para la variable de URL",
+        "errors": {
+          "maxQuickReply": "Máximo de 3 botones de respuesta rápida",
+          "maxUrl": "Máximo de 2 botones de URL",
+          "maxPhone": "Máximo de 1 botón de teléfono",
+          "invalidPhone": "Formato inválido. Use +5511999999999"
+        }
       }
     },
     "ticketCategories": {

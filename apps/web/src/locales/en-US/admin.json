@@ -601,6 +601,26 @@
       "empty": {
         "title": "No templates found",
         "subtitle": "Create a template or sync with Meta"
+      },
+      "buttons": {
+        "title": "Buttons (optional)",
+        "hint": "Add up to 10 buttons. Max: 3 quick reply, 2 URL, 1 phone.",
+        "add": "Add button",
+        "untitled": "Untitled button",
+        "type": {
+          "quickReply": "Quick reply",
+          "url": "URL link",
+          "phone": "Phone"
+        },
+        "textPlaceholder": "Button text (max 25)",
+        "urlPlaceholder": "https://example.com or https://example.com/{{1}}",
+        "urlExampleLabel": "Example for URL variable",
+        "errors": {
+          "maxQuickReply": "Maximum of 3 quick reply buttons",
+          "maxUrl": "Maximum of 2 URL buttons",
+          "maxPhone": "Maximum of 1 phone button",
+          "invalidPhone": "Invalid format. Use +5511999999999"
+        }
       }
     },
     "ticketCategories": {

@@ -4,6 +4,7 @@ import { decryptCredentials } from '../../../utils/crypto.js';
 import type {
   CreateTemplateInput,
   ListTemplatesQuery,
+  TemplateButtonInput,
   TemplateVariableInput,
   UpdateTemplateInput,
 } from './templates.schema.js';
@@ -302,6 +303,23 @@ function buildMetaComponents(
     });
   }
 
+  if (data.buttons.length > 0) {
+    components.push({
+      type: 'BUTTONS',
+      buttons: data.buttons.map((btn) => {
+        if (btn.type === 'URL' && btn.url.includes('{{1}}')) {
+          return {
+            type: 'URL',
+            text: btn.text,
+            url: btn.url,
+            example: btn.example ?? ['exemplo'],
+          };
+        }
+        return btn;
+      }),
+    });
+  }
+
   return components;
 }
 
@@ -509,9 +527,9 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
   const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
     `INSERT INTO ${schema}.whatsapp_templates
       (channel_id, name, display_name, language, category, body, header, header_type,
-       footer, variables, components, status, meta_template_id, last_synced_at)
+       footer, variables, components, buttons, status, meta_template_id, last_synced_at)
      VALUES
-      ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, NOW())
+      ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, NOW())
      RETURNING id, channel_id, name, display_name, language, category, body, header,
                header_type, header_example_url, footer, variables, components, buttons,
                status, meta_template_id, last_synced_at, created_at, updated_at`,
@@ -526,6 +544,7 @@ export async function createTemplate(schemaName: string, data: CreateTemplateInp
     data.footer?.trim() || null,
     JSON.stringify(variables),
     JSON.stringify(components),
+    JSON.stringify(data.buttons),
     status,
     metaTemplate.id,
   );
@@ -568,6 +587,7 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
       'headerHandle',
       'footer',
       'variables',
+      'buttons',
     ] as const;
     if (structuralFields.some((field) => data[field] !== undefined)) {
       throw new ValidationError(
@@ -597,6 +617,9 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
       ? normalizeVariables(current.variables)
       : extractVariablesFromBody(body);
 
+  const buttons: TemplateButtonInput[] = data.buttons
+    ?? (normalizeJsonArray(current.buttons) as TemplateButtonInput[]);
+
   const channel = await getChannel(schemaName, channelId);
   if (channel.type !== 'whatsapp') {
     throw new ValidationError('Templates só podem ser vinculados a canais WhatsApp');
@@ -614,6 +637,7 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
       body,
       headerType,
       variables,
+      buttons,
       ...(headerText ? { headerText } : {}),
       ...(headerHandle ? { headerHandle } : {}),
       ...(footer ? { footer } : {}),
@@ -638,11 +662,12 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
            footer = $9,
            variables = $10::jsonb,
            components = $11::jsonb,
-           status = $12,
-           meta_template_id = $13,
+           buttons = $12::jsonb,
+           status = $13,
+           meta_template_id = $14,
            last_synced_at = NOW(),
            updated_at = NOW()
-       WHERE id = $14::uuid
+       WHERE id = $15::uuid
        RETURNING id, channel_id, name, display_name, language, category, body, header,
                  header_type, header_example_url, footer, variables, components, buttons,
                  status, meta_template_id, last_synced_at, created_at, updated_at`,
@@ -657,6 +682,7 @@ export async function updateTemplate(schemaName: string, id: string, data: Updat
       footer,
       JSON.stringify(validatedVariables),
       JSON.stringify(components),
+      JSON.stringify(buttons),
       status,
       metaTemplate.id,
       id,

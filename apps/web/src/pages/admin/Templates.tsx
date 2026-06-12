@@ -6,6 +6,7 @@ import {
   adminApi,
   type CreateWhatsAppTemplatePayload,
   type WhatsAppTemplate,
+  type WhatsAppTemplateButton,
   type WhatsAppTemplateCategory,
   type WhatsAppTemplateInputHeaderType,
   type WhatsAppTemplateLanguage,
@@ -41,6 +42,7 @@ interface TemplateFormState {
   headerPreviewUrl: string;
   footer: string;
   variables: WhatsAppTemplateVariable[];
+  buttons: WhatsAppTemplateButton[];
 }
 
 const TECHNICAL_NAME_REGEX = /^[a-z0-9_]+$/;
@@ -61,7 +63,10 @@ const DEFAULT_FORM: TemplateFormState = {
   headerPreviewUrl: '',
   footer: '',
   variables: [],
+  buttons: [],
 };
+
+const PHONE_REGEX = /^\+[1-9]\d{1,14}$/;
 
 function extractVariableIndexes(body: string): string[] {
   const regex = /\{\{\s*([^{}\s]+)\s*\}\}/g;
@@ -180,6 +185,7 @@ function templateToForm(template: WhatsAppTemplate): TemplateFormState {
     headerPreviewUrl: template.header_example_url ?? '',
     footer: template.footer ?? '',
     variables: Array.isArray(template.variables) ? template.variables : [],
+    buttons: Array.isArray(template.buttons) ? (template.buttons as unknown as WhatsAppTemplateButton[]) : [],
   };
 }
 
@@ -559,6 +565,24 @@ export function Templates() {
       }
     }
 
+    const qrCount = state.buttons.filter((b) => b.type === 'QUICK_REPLY').length;
+    const urlCount = state.buttons.filter((b) => b.type === 'URL').length;
+    const phoneCount = state.buttons.filter((b) => b.type === 'PHONE_NUMBER').length;
+    if (qrCount > 3) {
+      errors.buttons = t('tenantAdmin.templates.buttons.errors.maxQuickReply');
+    } else if (urlCount > 2) {
+      errors.buttons = t('tenantAdmin.templates.buttons.errors.maxUrl');
+    } else if (phoneCount > 1) {
+      errors.buttons = t('tenantAdmin.templates.buttons.errors.maxPhone');
+    } else {
+      for (const btn of state.buttons) {
+        if (btn.type === 'PHONE_NUMBER' && !PHONE_REGEX.test(btn.phone_number)) {
+          errors.buttons = t('tenantAdmin.templates.buttons.errors.invalidPhone');
+          break;
+        }
+      }
+    }
+
     return errors;
   }
 
@@ -574,6 +598,56 @@ export function Templates() {
     setFormState((current) => ({
       ...current,
       variables: current.variables.map((item) => (item.index === index ? { ...item, example: value } : item)),
+    }));
+  }
+
+  function addButton() {
+    setFormState((current) => ({
+      ...current,
+      buttons: [...current.buttons, { type: 'QUICK_REPLY', text: '' }],
+    }));
+  }
+
+  function removeButton(index: number) {
+    setFormState((current) => ({
+      ...current,
+      buttons: current.buttons.filter((_, i) => i !== index),
+    }));
+    setFormErrors((current) => {
+      const next = { ...current };
+      delete next.buttons;
+      return next;
+    });
+  }
+
+  function updateButtonType(index: number, type: string) {
+    setFormState((current) => ({
+      ...current,
+      buttons: current.buttons.map((btn, i) => {
+        if (i !== index) return btn;
+        if (type === 'URL') return { type: 'URL', text: btn.text, url: '' };
+        if (type === 'PHONE_NUMBER') return { type: 'PHONE_NUMBER', text: btn.text, phone_number: '' };
+        return { type: 'QUICK_REPLY', text: btn.text };
+      }) as WhatsAppTemplateButton[],
+    }));
+  }
+
+  function updateButtonField(index: number, field: string, value: string) {
+    setFormState((current) => ({
+      ...current,
+      buttons: current.buttons.map((btn, i) =>
+        i === index ? ({ ...btn, [field]: value } as WhatsAppTemplateButton) : btn,
+      ),
+    }));
+  }
+
+  function updateButtonUrlExample(index: number, value: string) {
+    setFormState((current) => ({
+      ...current,
+      buttons: current.buttons.map((btn, i) => {
+        if (i !== index || btn.type !== 'URL') return btn;
+        return { ...btn, example: value ? [value] : undefined };
+      }) as WhatsAppTemplateButton[],
     }));
   }
 
@@ -604,6 +678,7 @@ export function Templates() {
       body: formState.body.trim(),
       headerType: formState.headerType,
       variables: formState.variables,
+      buttons: formState.buttons,
       ...(formState.headerType === 'text' && formState.headerText.trim()
         ? { headerText: formState.headerText.trim() }
         : {}),
@@ -962,6 +1037,111 @@ export function Templates() {
             border-color: var(--teal);
             color: var(--on-teal);
             font-weight: 600;
+          }
+
+          .template-buttons-section {
+            display: grid;
+            gap: 8px;
+          }
+
+          .template-buttons-hint {
+            margin: 0;
+            font-size: 11px;
+            color: var(--txt-3);
+          }
+
+          .template-button-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            margin-bottom: 4px;
+          }
+
+          .template-button-row select {
+            height: 36px;
+            flex: 0 0 140px;
+            border-radius: var(--r);
+            border: 1px solid var(--line-2);
+            background: var(--bg-3);
+            color: var(--txt);
+            padding: 0 8px;
+            font-family: var(--font);
+            font-size: 12px;
+          }
+
+          .template-button-input {
+            flex: 1;
+            min-width: 0;
+            height: 36px;
+            border-radius: var(--r);
+            border: 1px solid var(--line-2);
+            background: var(--bg-3);
+            color: var(--txt);
+            padding: 0 10px;
+            font-family: var(--font);
+            font-size: 12px;
+          }
+
+          .template-button-input::placeholder {
+            color: var(--txt-4, var(--txt-3));
+          }
+
+          .template-button-url-group {
+            flex: 1;
+            min-width: 0;
+            display: grid;
+            gap: 4px;
+          }
+
+          .template-btn-remove {
+            flex: 0 0 auto;
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            border-radius: var(--r);
+            border: 1px solid var(--line-2);
+            background: var(--bg-3);
+            color: var(--txt-3);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+          }
+
+          .template-btn-remove:hover {
+            background: var(--red-dim);
+            color: var(--red);
+            border-color: var(--red);
+          }
+
+          .template-btn-add {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: none;
+            border: none;
+            color: var(--teal);
+            font-family: var(--font);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 2px 0;
+          }
+
+          .template-btn-add:hover {
+            text-decoration: underline;
+          }
+
+          .template-preview-buttons {
+            border-top: 1px solid var(--line-2);
+            margin-top: 8px;
+          }
+
+          .template-preview-button {
+            border-top: 1px solid var(--line-2);
+            padding: 8px;
+            text-align: center;
+            color: var(--teal);
+            font-size: 12px;
           }
         `}
       </style>
@@ -1508,6 +1688,90 @@ export function Templates() {
             error={formErrors.footer}
           />
 
+          {!isMetaManagedTemplate && (
+            <div className="template-buttons-section">
+              <label style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+                {t('tenantAdmin.templates.buttons.title')}
+              </label>
+              <p className="template-buttons-hint">
+                {t('tenantAdmin.templates.buttons.hint')}
+              </p>
+
+              {formState.buttons.map((button, index) => (
+                <div key={index} className="template-button-row">
+                  <select
+                    value={button.type}
+                    onChange={(e) => updateButtonType(index, e.target.value)}
+                  >
+                    <option value="QUICK_REPLY">{t('tenantAdmin.templates.buttons.type.quickReply')}</option>
+                    <option value="URL">{t('tenantAdmin.templates.buttons.type.url')}</option>
+                    <option value="PHONE_NUMBER">{t('tenantAdmin.templates.buttons.type.phone')}</option>
+                  </select>
+
+                  <input
+                    className="template-button-input"
+                    style={{ flex: '0 0 auto', width: 130 }}
+                    placeholder={t('tenantAdmin.templates.buttons.textPlaceholder')}
+                    value={button.text}
+                    maxLength={25}
+                    onChange={(e) => updateButtonField(index, 'text', e.target.value)}
+                  />
+
+                  {button.type === 'URL' && (
+                    <div className="template-button-url-group">
+                      <input
+                        className="template-button-input"
+                        style={{ width: '100%' }}
+                        placeholder={t('tenantAdmin.templates.buttons.urlPlaceholder')}
+                        value={button.url}
+                        onChange={(e) => updateButtonField(index, 'url', e.target.value)}
+                      />
+                      {button.url.includes('{{1}}') && (
+                        <input
+                          className="template-button-input"
+                          style={{ width: '100%' }}
+                          placeholder={t('tenantAdmin.templates.buttons.urlExampleLabel')}
+                          value={button.example?.[0] ?? ''}
+                          onChange={(e) => updateButtonUrlExample(index, e.target.value)}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {button.type === 'PHONE_NUMBER' && (
+                    <input
+                      className="template-button-input"
+                      placeholder="+5511999999999"
+                      value={button.phone_number}
+                      onChange={(e) => updateButtonField(index, 'phone_number', e.target.value)}
+                    />
+                  )}
+
+                  <button
+                    type="button"
+                    className="template-btn-remove"
+                    aria-label={t('tenantAdmin.common.remove')}
+                    onClick={() => removeButton(index)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                      <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+
+              {formState.buttons.length < 10 && (
+                <button type="button" className="template-btn-add" onClick={addButton}>
+                  + {t('tenantAdmin.templates.buttons.add')}
+                </button>
+              )}
+
+              {formErrors.buttons && (
+                <span style={{ color: 'var(--red)', fontSize: 11 }}>{formErrors.buttons}</span>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gap: 8 }}>
             <label style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.variables')}</label>
             {formState.variables.length === 0 ? (
@@ -1548,6 +1812,15 @@ export function Templates() {
             <div style={{ fontSize: 13, color: 'var(--txt)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
               {previewContent || '—'}
             </div>
+            {formState.buttons.length > 0 && (
+              <div className="template-preview-buttons">
+                {formState.buttons.map((btn, i) => (
+                  <div key={i} className="template-preview-button">
+                    {btn.text || t('tenantAdmin.templates.buttons.untitled')}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

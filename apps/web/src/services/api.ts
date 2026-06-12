@@ -1202,6 +1202,29 @@ export interface WhatsAppTemplateVariable {
   example: string;
 }
 
+export interface WhatsAppTemplateButtonQuickReply {
+  type: 'QUICK_REPLY';
+  text: string;
+}
+
+export interface WhatsAppTemplateButtonUrl {
+  type: 'URL';
+  text: string;
+  url: string;
+  example?: string[];
+}
+
+export interface WhatsAppTemplateButtonPhone {
+  type: 'PHONE_NUMBER';
+  text: string;
+  phone_number: string;
+}
+
+export type WhatsAppTemplateButton =
+  | WhatsAppTemplateButtonQuickReply
+  | WhatsAppTemplateButtonUrl
+  | WhatsAppTemplateButtonPhone;
+
 export interface WhatsAppTemplate {
   id: string;
   channel_id: string;
@@ -1236,6 +1259,7 @@ export interface CreateWhatsAppTemplatePayload {
   headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
+  buttons?: WhatsAppTemplateButton[];
 }
 
 export interface UpdateWhatsAppTemplatePayload {
@@ -1250,6 +1274,7 @@ export interface UpdateWhatsAppTemplatePayload {
   headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
+  buttons?: WhatsAppTemplateButton[];
 }
 
 export interface WhatsAppTemplateMediaUpload {
