@@ -15,6 +15,7 @@
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
+    "contacts:migrate-tags": "tsx --env-file=.env src/scripts/migrate-contact-tags.ts",
     "contacts:normalize-phones": "tsx --env-file=.env src/scripts/normalize-contact-phones.ts",
     "whatsapp:templates:resync": "tsx --env-file=.env src/scripts/resync-templates.ts",
     "whatsapp:webhook:simulate": "tsx --env-file=.env src/scripts/simulate-whatsapp-webhook.ts",

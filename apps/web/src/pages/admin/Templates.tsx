@@ -1081,17 +1081,31 @@ export function Templates() {
                             </td>
                             <td className="templates-col-actions">
                               <div className="templates-row-actions">
-                                <button
-                                  type="button"
-                                  className="templates-row-action-btn"
-                                  title={t('tenantAdmin.common.edit')}
-                                  aria-label={t('tenantAdmin.common.edit')}
-                                  onClick={() => openEditModal(template)}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-                                    <path d="M3 11.75 4.1 9.1l6.4-6.4 2.8 2.8-6.4 6.4L4.25 13H3v-1.25Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                                  </svg>
-                                </button>
+                                {template.meta_template_id ? (
+                                  <button
+                                    type="button"
+                                    className="templates-row-action-btn"
+                                    title={t('tenantAdmin.templates.rename')}
+                                    aria-label={t('tenantAdmin.templates.rename')}
+                                    onClick={() => openEditModal(template)}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                                      <path d="M1.5 7.5L5.5 11.5L11.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="templates-row-action-btn"
+                                    title={t('tenantAdmin.common.edit')}
+                                    aria-label={t('tenantAdmin.common.edit')}
+                                    onClick={() => openEditModal(template)}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+                                      <path d="M3 11.75 4.1 9.1l6.4-6.4 2.8 2.8-6.4 6.4L4.25 13H3v-1.25Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                                    </svg>
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className="templates-row-action-btn danger"
@@ -1168,6 +1182,26 @@ export function Templates() {
         maxWidth="lg"
       >
         <div style={{ display: 'grid', gap: 12 }}>
+          {isMetaManagedTemplate && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 12px',
+              background: 'var(--blue-dim)',
+              border: '1px solid rgba(96,165,250,.25)',
+              borderRadius: 'var(--r)',
+              fontSize: 12,
+              color: 'var(--blue)',
+              marginBottom: 16,
+            }}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M6.5 3.5v3M6.5 9h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {t('tenantAdmin.templates.metaManagedHint')}
+            </div>
+          )}
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             <div>
               <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--txt-2)' }}>{t('tenantAdmin.templates.selectChannel')}</label>
