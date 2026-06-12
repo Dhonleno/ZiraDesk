@@ -147,18 +147,23 @@ async function requestMeta(
   return readMetaResponse(response, `Falha na configuração do WhatsApp (HTTP ${response.status})`);
 }
 
-async function resolveTokenAppId(accessToken: string): Promise<string> {
+async function resolveTokenAppId(
+  accessToken: string,
+  appId: string,
+  appSecret: string,
+): Promise<string> {
+  const appAccessToken = `${appId}|${appSecret}`;
   const payload = await requestMeta(
     `debug_token?input_token=${encodeURIComponent(accessToken)}`,
-    accessToken,
+    appAccessToken,
   ) as { data?: { app_id?: unknown; is_valid?: unknown } };
-  const appId = asTrimmedString(payload.data?.app_id);
+  const resolvedAppId = asTrimmedString(payload.data?.app_id);
 
-  if (payload.data?.is_valid !== true || !appId) {
+  if (payload.data?.is_valid !== true || !resolvedAppId) {
     throw new ChannelConfigurationError('Access Token do WhatsApp inválido');
   }
 
-  return appId;
+  return resolvedAppId;
 }
 
 function whatsappWebhookUrl(): string {
@@ -201,7 +206,7 @@ async function validateAndConfigureWhatsAppChannel(
     throw new ChannelConfigurationError('App ID deve conter apenas números');
   }
 
-  const tokenAppId = await resolveTokenAppId(accessToken);
+  const tokenAppId = await resolveTokenAppId(accessToken, appId, appSecret);
   if (tokenAppId !== appId) {
     throw new ChannelConfigurationError(
       'O Access Token não pertence ao App ID informado.',
