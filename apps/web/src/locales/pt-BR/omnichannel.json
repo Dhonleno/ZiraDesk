@@ -78,6 +78,8 @@
     "badge": "Ativo",
     "warning": "Aparecerá em Ativos até o cliente responder",
     "activated": "Cliente respondeu ao atendimento ativo!",
+    "withinWindow": "Dentro da janela de 24h — mensagem livre disponível",
+    "windowExpiredNotice": "Janela de 24h expirada. Apenas templates aprovados são permitidos.",
     "errors": {
       "windowExpired": "Fora da janela de 24h do WhatsApp. Selecione um template aprovado para continuar."
     }

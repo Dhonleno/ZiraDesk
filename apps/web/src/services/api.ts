@@ -2534,6 +2534,11 @@ export interface CreateActiveOutboundPayload {
   useTemplate?: boolean;
 }
 
+export interface WhatsAppWindowStatus {
+  withinWindow: boolean;
+  lastClientMessageAt: string | null;
+}
+
 export interface SendMessagePayload {
   content?: string;
   contentType?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'template';
@@ -3078,6 +3083,14 @@ export const omnichannelApi = {
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       '/omnichannel/active-outbound',
       payload,
+    );
+    return res.data.data;
+  },
+
+  getWindowStatus: async (contactId: string, channelId: string): Promise<WhatsAppWindowStatus> => {
+    const res = await api.get<{ success: boolean; data: WhatsAppWindowStatus }>(
+      '/omnichannel/active-outbound/window-status',
+      { params: { contactId, channelId } },
     );
     return res.data.data;
   },

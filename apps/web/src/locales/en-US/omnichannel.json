@@ -78,6 +78,8 @@
     "badge": "Active",
     "warning": "It will appear in Active until the customer replies",
     "activated": "Customer replied to the active attendance!",
+    "withinWindow": "Within the 24h window — free message available",
+    "windowExpiredNotice": "24h window expired. Only approved templates are allowed.",
     "errors": {
       "windowExpired": "Outside the 24h WhatsApp window. Select an approved template to continue."
     }

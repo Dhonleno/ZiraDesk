@@ -65,6 +65,11 @@ const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
 });
 
+const windowStatusQuerySchema = z.object({
+  contactId: z.string().uuid(),
+  channelId: z.string().uuid(),
+});
+
 const activeOutboundSchema = z.object({
   contactId: z.string().uuid(),
   channelId: z.string().uuid(),
@@ -115,6 +120,35 @@ async function withTenantSchema<T>(
   });
 }
 
+async function getWhatsAppWindowStatus(
+  contactId: string,
+  channelId: string,
+  tx: TenantRawDbClient,
+): Promise<{ withinWindow: boolean; lastClientMessageAt: string | null }> {
+  const rows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
+    `SELECT m.created_at
+     FROM messages m
+     JOIN conversations c ON c.id = m.conversation_id
+     WHERE c.contact_id = $1::uuid
+       AND c.channel_id = $2::uuid
+       AND m.sender_type = 'client'
+     ORDER BY m.created_at DESC
+     LIMIT 1`,
+    contactId,
+    channelId,
+  );
+  const lastClientMessage = rows[0];
+  if (!lastClientMessage) {
+    return { withinWindow: false, lastClientMessageAt: null };
+  }
+  const withinWindow =
+    Date.now() - new Date(lastClientMessage.created_at).getTime() < 24 * 60 * 60 * 1000;
+  return {
+    withinWindow,
+    lastClientMessageAt: new Date(lastClientMessage.created_at).toISOString(),
+  };
+}
+
 export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> {
   app.get('/templates', { preHandler: guard }, async (request, reply) => {
     const parsed = listTemplatesQuerySchema.safeParse(request.query);
@@ -137,6 +171,29 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       return status === 'approved' && Boolean(template.meta_template_id);
     });
     return reply.send({ success: true, data: approvedTemplates });
+  });
+
+  app.get('/active-outbound/window-status', { preHandler: guard }, async (request, reply) => {
+    const parsed = windowStatusQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const user = request.user as AuthUser;
+    const schemaName = user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const { contactId, channelId } = parsed.data;
+    const status = await withTenantSchema(schemaName, (tx) =>
+      getWhatsAppWindowStatus(contactId, channelId, tx),
+    );
+
+    return reply.send({ success: true, data: status });
   });
 
   app.post('/active-outbound', { preHandler: guard }, async (request, reply) => {
@@ -233,23 +290,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       }
 
       if (channel.type === 'whatsapp' && !useTemplate) {
-        const lastClientMessageRows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
-          `SELECT m.created_at
-           FROM messages m
-           JOIN conversations c ON c.id = m.conversation_id
-           WHERE c.contact_id = $1::uuid
-             AND c.channel_id = $2::uuid
-             AND m.sender_type = 'client'
-           ORDER BY m.created_at DESC
-           LIMIT 1`,
-          contactId,
-          channelId,
-        );
-
-        const lastClientMessage = lastClientMessageRows[0];
-        const withinWindow = lastClientMessage &&
-          (Date.now() - new Date(lastClientMessage.created_at).getTime()) < 24 * 60 * 60 * 1000;
-
+        const { withinWindow } = await getWhatsAppWindowStatus(contactId, channelId, tx);
         if (!withinWindow) {
           return {
             statusCode: 400 as const,

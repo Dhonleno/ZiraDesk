@@ -8,6 +8,7 @@ import {
   omnichannelApi,
   type ActiveOutboundTemplate,
   type CrmContact,
+  type WhatsAppWindowStatus,
 } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
@@ -145,6 +146,16 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
 
   const lastConversation = previousConversations[0] ?? null;
 
+  const { data: windowStatus, isFetching: isWindowLoading } = useQuery<WhatsAppWindowStatus>({
+    queryKey: ['active-outbound-window-status', selectedContact?.id, selectedChannelId],
+    queryFn: () => omnichannelApi.getWindowStatus(selectedContact!.id, selectedChannelId),
+    enabled: Boolean(selectedContact?.id) && Boolean(selectedChannelId) && selectedChannel?.type === 'whatsapp',
+    staleTime: 30_000,
+  });
+
+  const isOutsideWindow =
+    selectedChannel?.type === 'whatsapp' && windowStatus !== undefined && !windowStatus.withinWindow;
+
   useEffect(() => {
     if (!selectedChannel) return;
 
@@ -162,6 +173,10 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       setTemplateValues({});
     }
   }, [selectedChannel]);
+
+  useEffect(() => {
+    if (isOutsideWindow) setUseTemplate(true);
+  }, [isOutsideWindow]);
 
   useEffect(() => {
     if (!selectedTemplateName) {
@@ -439,23 +454,55 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
 
             {selectedChannel?.type === 'whatsapp' && (
               <div style={{ display: 'grid', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setUseTemplate((current) => !current)}
-                  style={{
-                    width: 'fit-content',
-                    borderRadius: 'var(--r-pill)',
-                    border: `1px solid ${useTemplate ? 'rgba(0,201,167,.4)' : 'var(--line-2)'}`,
-                    background: useTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
-                    color: useTemplate ? 'var(--teal)' : 'var(--txt-2)',
-                    padding: '4px 10px',
-                    fontSize: 11,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t('activeOutbound.useTemplate')}
-                </button>
+                {isWindowLoading && selectedContact && (
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden style={{ animation: 'spin 1s linear infinite' }}>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                )}
+
+                {!isWindowLoading && windowStatus?.withinWindow && (
+                  <div style={{ fontSize: 11, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
+                      <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {t('outbound.withinWindow')}
+                  </div>
+                )}
+
+                {!isWindowLoading && isOutsideWindow && (
+                  <div style={{ fontSize: 11, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    {t('outbound.windowExpiredNotice')}
+                  </div>
+                )}
+
+                {!isOutsideWindow && (
+                  <button
+                    type="button"
+                    onClick={() => setUseTemplate((current) => !current)}
+                    style={{
+                      width: 'fit-content',
+                      borderRadius: 'var(--r-pill)',
+                      border: `1px solid ${useTemplate ? 'rgba(0,201,167,.4)' : 'var(--line-2)'}`,
+                      background: useTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
+                      color: useTemplate ? 'var(--teal)' : 'var(--txt-2)',
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('activeOutbound.useTemplate')}
+                  </button>
+                )}
 
                 {useTemplate ? (
                   <>
@@ -584,7 +631,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
               <button
                 type="button"
                 className="topbar-primary-btn"
-                disabled={createMutation.isPending || !selectedContact || !selectedChannel}
+                disabled={createMutation.isPending || !selectedContact || !selectedChannel || isWindowLoading}
                 onClick={() => createMutation.mutate()}
                 title={t('activeOutbound.send')}
                 aria-label={t('activeOutbound.send')}
