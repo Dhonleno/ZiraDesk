@@ -303,7 +303,7 @@ function buildMetaComponents(
     });
   }
 
-  if (data.buttons.length > 0) {
+  if (data.buttons && data.buttons.length > 0) {
     components.push({
       type: 'BUTTONS',
       buttons: data.buttons.map((btn) => {
