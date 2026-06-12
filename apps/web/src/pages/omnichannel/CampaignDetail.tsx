@@ -150,6 +150,16 @@ export function CampaignDetail() {
   const [showContacts, setShowContacts] = useState(false);
   const [showLaunch, setShowLaunch] = useState(false);
   const [showRetryFailed, setShowRetryFailed] = useState(false);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+
+  const handleRefreshAll = async () => {
+    setIsRefreshingAll(true);
+    try {
+      await Promise.all([refetchCampaign(), refetchContacts(), refetchReport()]);
+    } finally {
+      setIsRefreshingAll(false);
+    }
+  };
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean; title: string; message: string; onConfirm: () => void;
@@ -159,7 +169,7 @@ export function CampaignDetail() {
     setConfirmState({ open: true, title, message, onConfirm });
   };
 
-  const { data: campaign, isLoading, error } = useQuery<Campaign>({
+  const { data: campaign, isLoading, error, refetch: refetchCampaign } = useQuery<Campaign>({
     queryKey: ['campaign', id],
     queryFn: () => campaignsApi.get(id!),
     staleTime: 15_000,
@@ -170,14 +180,14 @@ export function CampaignDetail() {
     enabled: Boolean(id),
   });
 
-  const { data: contactsData } = useQuery({
+  const { data: contactsData, refetch: refetchContacts } = useQuery({
     queryKey: ['campaign-contacts', id, contactPage],
     queryFn: () => campaignsApi.listContacts(id!, { page: contactPage, limit: 30 }),
     staleTime: 15_000,
     enabled: Boolean(id),
   });
 
-  const { data: reportData } = useQuery({
+  const { data: reportData, refetch: refetchReport } = useQuery({
     queryKey: ['campaign-report', id],
     queryFn: () => campaignsApi.report(id!),
     staleTime: 30_000,
@@ -279,6 +289,26 @@ export function CampaignDetail() {
 
           {/* Context actions */}
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => void handleRefreshAll()}
+              disabled={isRefreshingAll}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                border: '1px solid var(--line-2)', borderRadius: 'var(--r)',
+                background: 'var(--bg-3)', color: 'var(--txt)',
+                fontSize: 12, fontWeight: 600, padding: '7px 10px',
+                cursor: isRefreshingAll ? 'wait' : 'pointer',
+                opacity: isRefreshingAll ? 0.7 : 1,
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"
+                style={{ animation: isRefreshingAll ? 'spin 0.8s linear infinite' : 'none' }}>
+                <path d="M12.5 7a5.5 5.5 0 1 1-1.6-3.9M12.5 1.5v3h-3"
+                  stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {t('detail.refresh')}
+            </button>
             {campaign.status === 'draft' && (
               <>
                 <button className="tb-btn" onClick={() => setShowContacts(true)}>{t('actions.addContacts')}</button>
@@ -463,7 +493,7 @@ export function CampaignDetail() {
                     <div style={dataCell}>{cc.contact_phone ?? '—'}</div>
                     <div style={{ padding: '0 6px' }}>
                       <span style={{ fontSize: 10, fontWeight: 600, color: CONTACT_STATUS_COLORS[cc.status] }}>
-                        {cc.status}
+                        {t(`detail.contacts.contactStatus.${cc.status}` as const as never, cc.status)}
                       </span>
                     </div>
                     <div style={{ ...dataCell, fontSize: 10 }}>{fmt(cc.sent_at)}</div>

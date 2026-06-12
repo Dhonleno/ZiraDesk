@@ -143,6 +143,7 @@
   },
   "detail": {
     "breadcrumb": "Campanhas",
+    "refresh": "Atualizar",
     "metrics": {
       "title": "Métricas em tempo real",
       "sent": "Enviados",
@@ -172,7 +173,17 @@
       "colReadAt": "Lido",
       "colRepliedAt": "Respondeu",
       "colError": "Erro",
-      "noResults": "Nenhum contato neste filtro"
+      "noResults": "Nenhum contato neste filtro",
+      "contactStatus": {
+        "pending": "Pendente",
+        "queued": "Na fila",
+        "sent": "Enviado",
+        "delivered": "Entregue",
+        "read": "Lido",
+        "replied": "Respondeu",
+        "failed": "Falhou",
+        "opted_out": "Descadastrado"
+      }
     }
   }
 }

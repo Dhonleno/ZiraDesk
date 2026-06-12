@@ -141,6 +141,7 @@
   },
   "detail": {
     "breadcrumb": "Campaigns",
+    "refresh": "Refresh",
     "metrics": {
       "title": "Real-time metrics",
       "sent": "Sent",
@@ -170,7 +171,17 @@
       "colReadAt": "Read",
       "colRepliedAt": "Replied",
       "colError": "Error",
-      "noResults": "No contacts in this filter"
+      "noResults": "No contacts in this filter",
+      "contactStatus": {
+        "pending": "Pending",
+        "queued": "Queued",
+        "sent": "Sent",
+        "delivered": "Delivered",
+        "read": "Read",
+        "replied": "Replied",
+        "failed": "Failed",
+        "opted_out": "Opted out"
+      }
     }
   }
 }

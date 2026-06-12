@@ -141,6 +141,7 @@
   },
   "detail": {
     "breadcrumb": "Campañas",
+    "refresh": "Actualizar",
     "metrics": {
       "title": "Métricas en tiempo real",
       "sent": "Enviados",
@@ -170,7 +171,17 @@
       "colReadAt": "Leído",
       "colRepliedAt": "Respondió",
       "colError": "Error",
-      "noResults": "Sin contactos en este filtro"
+      "noResults": "Sin contactos en este filtro",
+      "contactStatus": {
+        "pending": "Pendiente",
+        "queued": "En cola",
+        "sent": "Enviado",
+        "delivered": "Entregado",
+        "read": "Leído",
+        "replied": "Respondió",
+        "failed": "Falló",
+        "opted_out": "Dado de baja"
+      }
     }
   }
 }
