@@ -110,6 +110,14 @@
     "success": "Rascunho criado com os contatos que falharam.",
     "error": "Não foi possível criar o rascunho para reenvio."
   },
+  "addContacts": {
+    "selectAll": "Selecionar todos",
+    "confirm": "Adicionar selecionados",
+    "confirmWithCount": "Adicionar {{count}} selecionado(s)",
+    "allStatuses": "Todos os status",
+    "allTags": "Todas as tags",
+    "noPhone": "Sem telefone"
+  },
   "contacts": {
     "title": "Adicionar contatos",
     "search": "Buscar por nome ou telefone...",

@@ -870,6 +870,8 @@ interface ListContactsParams {
   organization_id?: string;
   search?: string;
   standalone_only?: boolean;
+  tags?: string[];
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
 }
 
 // ── CRM API ───────────────────────────────────────────────────────────────────
@@ -916,7 +918,13 @@ export const organizationsApi = {
 
 export const contactsApi = {
   list: async (params?: ListContactsParams): Promise<{ data: CrmContact[]; meta: CrmListMeta }> => {
-    const res = await api.get<{ success: boolean; data: CrmContact[]; meta: CrmListMeta }>('/crm/contacts', { params });
+    const { tags, ...rest } = params ?? {};
+    const res = await api.get<{ success: boolean; data: CrmContact[]; meta: CrmListMeta }>('/crm/contacts', {
+      params: {
+        ...rest,
+        ...(tags?.length ? { tags: tags.join(',') } : {}),
+      },
+    });
     return { data: res.data.data, meta: res.data.meta };
   },
   get: async (id: string): Promise<CrmContact> => {

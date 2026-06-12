@@ -323,8 +323,9 @@ export async function listContacts(
     return withOptionalSchema(schemaName, (tx) => listContacts(query, undefined, tx));
   }
 
-  const { page, per_page, organization_id, search, standalone_only } = query;
+  const { page, per_page, organization_id, search, standalone_only, tags, status } = query;
   const offset = (page - 1) * per_page;
+  const tagsFilter = tags?.length ? tags : null;
 
   const rows = await db.$queryRawUnsafe<ContactRow[]>(
     `${BASE_SELECT}
@@ -334,20 +335,36 @@ export async function listContacts(
                              OR ct.phone ILIKE '%' || $2 || '%'
                              OR ct.whatsapp ILIKE '%' || $2 || '%')
        AND ($3::boolean = false OR ct.organization_id IS NULL)
+       AND ($4::text[] IS NULL OR ct.tags && $4::text[])
+       AND ($5::text IS NULL OR o.status = $5::text)
      ORDER BY ct.is_primary DESC, ct.name ASC
-     LIMIT $4 OFFSET $5`,
-    organization_id ?? null, search ?? null, standalone_only, per_page, offset,
+     LIMIT $6 OFFSET $7`,
+    organization_id ?? null,
+    search ?? null,
+    standalone_only,
+    tagsFilter,
+    status ?? null,
+    per_page,
+    offset,
   );
 
   const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
-    `SELECT COUNT(*) AS count FROM contacts ct
+    `SELECT COUNT(*) AS count
+     FROM contacts ct
+     LEFT JOIN organizations o ON o.id = ct.organization_id
      WHERE ($1::uuid IS NULL OR ct.organization_id = $1::uuid)
        AND ($2::text IS NULL OR ct.name ILIKE '%' || $2 || '%'
                              OR ct.email ILIKE '%' || $2 || '%'
                              OR ct.phone ILIKE '%' || $2 || '%'
                              OR ct.whatsapp ILIKE '%' || $2 || '%')
-       AND ($3::boolean = false OR ct.organization_id IS NULL)`,
-    organization_id ?? null, search ?? null, standalone_only,
+       AND ($3::boolean = false OR ct.organization_id IS NULL)
+       AND ($4::text[] IS NULL OR ct.tags && $4::text[])
+       AND ($5::text IS NULL OR o.status = $5::text)`,
+    organization_id ?? null,
+    search ?? null,
+    standalone_only,
+    tagsFilter,
+    status ?? null,
   );
 
   const total = Number(countRows[0]?.count ?? 0);

@@ -61,6 +61,16 @@ export const listContactsQuerySchema = z.object({
   organization_id: z.string().uuid().optional(),
   search:          z.string().optional(),
   standalone_only: z.coerce.boolean().default(false),
+  tags:            z.preprocess(
+    (value) => {
+      if (typeof value === 'string') {
+        return value.split(',').map((tag) => tag.trim()).filter(Boolean);
+      }
+      return value;
+    },
+    z.array(z.string().trim().min(1)).max(50).optional(),
+  ),
+  status:          z.enum(['lead', 'prospect', 'client', 'inactive']).optional(),
 });
 
 export const linkOrganizationSchema = z.object({

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { campaignsApi, contactsApi, type Campaign, type CrmContact } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -10,19 +10,22 @@ interface Props {
   onClose: () => void;
 }
 
+type ContactStatusFilter = '' | 'lead' | 'prospect' | 'client' | 'inactive';
+
 function hasPhone(contact: CrmContact): boolean {
   return Boolean(contact.whatsapp?.trim() || contact.phone?.trim());
 }
 
 export function CampaignContactsModal({ campaign, onClose }: Props) {
-  const { t } = useTranslation('campaigns');
+  const { t } = useTranslation(['campaigns', 'crm']);
   const toast = useToast();
   const queryClient = useQueryClient();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>('');
+  const [tagFilter, setTagFilter] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [page, setPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 280);
 
@@ -32,11 +35,27 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  useEffect(() => { setPage(1); }, [debouncedSearch]);
-
-  const { data: contactsData, isFetching } = useQuery({
-    queryKey: ['campaign-contacts-search', debouncedSearch, page],
-    queryFn: () => contactsApi.list({ ...(debouncedSearch ? { search: debouncedSearch } : {}), per_page: 30, page }),
+  const {
+    data: contactsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['campaign-contacts-search', debouncedSearch, statusFilter, tagFilter],
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) => contactsApi.list({
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(tagFilter ? { tags: [tagFilter] } : {}),
+      per_page: 30,
+      page: pageParam,
+    }),
+    getNextPageParam: (lastPage) => (
+      lastPage.meta.page < lastPage.meta.total_pages
+        ? lastPage.meta.page + 1
+        : undefined
+    ),
     staleTime: 30_000,
   });
 
@@ -51,8 +70,14 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     [existingContacts],
   );
 
-  const contacts = contactsData?.data ?? [];
-  const meta = contactsData?.meta;
+  const contacts = contactsData?.pages.flatMap((result) => result.data) ?? [];
+  const availableTags = useMemo(
+    () => Array.from(new Set([
+      ...(tagFilter ? [tagFilter] : []),
+      ...contacts.flatMap((contact) => contact.tags ?? []),
+    ])).sort((left, right) => left.localeCompare(right)),
+    [contacts, tagFilter],
+  );
 
   const addMutation = useMutation({
     mutationFn: () => campaignsApi.addContacts(campaign.id, Array.from(selected)),
@@ -70,6 +95,11 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
 
   const isDraft = campaign.status === 'draft';
   const selectedCount = selected.size;
+  const selectableVisibleContacts = contacts.filter(
+    (contact) => isDraft && !existingContactIds.has(contact.id) && hasPhone(contact),
+  );
+  const allVisibleSelected = selectableVisibleContacts.length > 0
+    && selectableVisibleContacts.every((contact) => selected.has(contact.id));
 
   const toggleSelect = (contactId: string, contact: CrmContact) => {
     if (!isDraft || existingContactIds.has(contactId) || !hasPhone(contact)) return;
@@ -79,6 +109,25 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
       else next.add(contactId);
       return next;
     });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      selectableVisibleContacts.forEach((contact) => {
+        if (checked) next.add(contact.id);
+        else next.delete(contact.id);
+      });
+      return next;
+    });
+  };
+
+  const handleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+    const isNearEnd = scrollHeight - scrollTop - clientHeight < 80;
+    if (isNearEnd && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -140,13 +189,36 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
 
         {/* Search */}
         <div style={{ padding: '10px 18px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-          <input
-            autoFocus
-            style={inputStyle}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('contacts.search')}
-          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              autoFocus
+              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('contacts.search')}
+            />
+            <select
+              className="fchip"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as ContactStatusFilter)}
+            >
+              <option value="">{t('addContacts.allStatuses')}</option>
+              <option value="lead">{t('organizations.status.lead', { ns: 'crm' })}</option>
+              <option value="prospect">{t('organizations.status.prospect', { ns: 'crm' })}</option>
+              <option value="client">{t('organizations.status.client', { ns: 'crm' })}</option>
+              <option value="inactive">{t('organizations.status.inactive', { ns: 'crm' })}</option>
+            </select>
+            <select
+              className="fchip"
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+            >
+              <option value="">{t('addContacts.allTags')}</option>
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>{tag}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Selection bar */}
@@ -165,7 +237,25 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
         )}
 
         {/* Contact list */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        <div onScroll={handleListScroll} style={{ overflowY: 'auto', flex: 1 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 18px',
+            borderBottom: '1px solid var(--line)',
+            fontSize: 12,
+            color: 'var(--txt-2)',
+          }}>
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              disabled={selectableVisibleContacts.length === 0}
+              onChange={(event) => toggleSelectAll(event.target.checked)}
+            />
+            <span>{t('addContacts.selectAll')}</span>
+          </div>
+
           {isFetching && contacts.length === 0 && (
             <div style={{ padding: 32, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>
               Carregando...
@@ -201,24 +291,20 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
                 }}
               >
                 {/* Checkbox */}
-                <div style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: 4,
-                  border: `1.5px solid ${isChecked ? 'var(--teal)' : 'var(--line-2)'}`,
-                  background: isChecked ? 'var(--teal)' : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'all .12s',
-                }}>
-                  {isChecked && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-                      <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  disabled={disabled}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={() => toggleSelect(contact.id, contact)}
+                  style={{
+                    width: 16,
+                    height: 16,
+                    flexShrink: 0,
+                    accentColor: 'var(--teal)',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                  }}
+                />
 
                 {/* Avatar */}
                 <div style={{
@@ -252,30 +338,20 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
                   </span>
                 )}
                 {noPhone && !isExisting && (
-                  <span style={{ fontSize: 10, color: 'var(--red)', flexShrink: 0 }}>
-                    {t('contacts.noPhone')}
+                  <span
+                    className="tag-pill"
+                    style={{ background: 'var(--bg-4)', color: 'var(--txt-3)', flexShrink: 0 }}
+                  >
+                    {t('addContacts.noPhone')}
                   </span>
                 )}
               </div>
             );
           })}
 
-          {/* Pagination */}
-          {meta && meta.total > 30 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '12px 18px' }}>
-              {page > 1 && (
-                <button className="tb-btn" onClick={() => setPage((p) => p - 1)} style={{ fontSize: 11 }}>
-                  Anterior
-                </button>
-              )}
-              <span style={{ fontSize: 11, color: 'var(--txt-3)', alignSelf: 'center' }}>
-                {(page - 1) * 30 + 1}–{Math.min(page * 30, meta.total)} de {meta.total}
-              </span>
-              {page * 30 < meta.total && (
-                <button className="tb-btn" onClick={() => setPage((p) => p + 1)} style={{ fontSize: 11 }}>
-                  {t('contacts.loadMore')}
-                </button>
-              )}
+          {isFetchingNextPage && (
+            <div style={{ padding: '12px 18px', textAlign: 'center', fontSize: 11, color: 'var(--txt-3)' }}>
+              Carregando...
             </div>
           )}
         </div>
@@ -290,7 +366,9 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
           >
             {addMutation.isPending
               ? t('contacts.adding')
-              : t('contacts.add')}
+              : selectedCount > 0
+                ? t('addContacts.confirmWithCount', { count: selectedCount })
+                : t('addContacts.confirm')}
           </button>
         </div>
       </div>

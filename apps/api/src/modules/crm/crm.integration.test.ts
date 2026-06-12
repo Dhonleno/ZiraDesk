@@ -567,6 +567,34 @@ describe('CRM integration', () => {
     });
   });
 
+  it('GET /api/crm/contacts filtra por tags e status da organização', async () => {
+    const matchingOrganization = await createOrganization({ status: 'client' });
+    const wrongStatusOrganization = await createOrganization({ status: 'prospect' });
+
+    const matchingContact = await createContact({
+      organization_id: matchingOrganization.id,
+      tags: ['vip', 'priority'],
+    });
+    await createContact({
+      organization_id: wrongStatusOrganization.id,
+      tags: ['priority'],
+    });
+    await createContact({
+      organization_id: matchingOrganization.id,
+      tags: ['standard'],
+    });
+
+    const response = await createTestApp()
+      .get('/api/crm/contacts')
+      .query({ tags: 'priority,enterprise', status: 'client' })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(matchingContact.id);
+    expect(response.body.meta.total).toBe(1);
+  });
+
   it('GET /api/crm/organizations mascara PII para role sem pii:view-full', async () => {
     await createOrganization({
       name: 'Org Mascara',

@@ -108,6 +108,14 @@
     "success": "Draft created with the failed contacts.",
     "error": "Could not create the retry draft."
   },
+  "addContacts": {
+    "selectAll": "Select all",
+    "confirm": "Add selected",
+    "confirmWithCount": "Add {{count}} selected",
+    "allStatuses": "All statuses",
+    "allTags": "All tags",
+    "noPhone": "No phone"
+  },
   "contacts": {
     "title": "Add contacts",
     "search": "Search by name or phone...",

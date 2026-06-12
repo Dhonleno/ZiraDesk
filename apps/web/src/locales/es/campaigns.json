@@ -108,6 +108,14 @@
     "success": "Borrador creado con los contactos que fallaron.",
     "error": "No se pudo crear el borrador para reenvío."
   },
+  "addContacts": {
+    "selectAll": "Seleccionar todos",
+    "confirm": "Agregar seleccionados",
+    "confirmWithCount": "Agregar {{count}} seleccionado(s)",
+    "allStatuses": "Todos los estados",
+    "allTags": "Todas las etiquetas",
+    "noPhone": "Sin teléfono"
+  },
   "contacts": {
     "title": "Agregar contactos",
     "search": "Buscar por nombre o teléfono...",
