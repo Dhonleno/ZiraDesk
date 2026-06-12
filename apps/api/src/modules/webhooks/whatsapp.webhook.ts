@@ -53,7 +53,7 @@ interface MetaMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction';
+  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction' | 'button';
   context?: {
     id?: string;
     from?: string;
@@ -84,6 +84,7 @@ interface MetaMessage {
   audio?: { id: string; mime_type: string };
   video?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; filename: string; mime_type: string };
+  button?: { text?: string; payload?: string };
 }
 
 interface InteractiveMenuOption {
@@ -929,6 +930,7 @@ async function processIncomingMessage(
   let content = '';
   let contentType = 'text';
   let interactiveReplyId: string | null = null;
+  let templateButtonPayload: string | null = null;
   let externalMediaId: string | null = null;
   const mediaMetadata: Record<string, unknown> = {};
 
@@ -988,6 +990,12 @@ async function processIncomingMessage(
       content = message.reaction?.emoji?.trim() || 'Reação removida';
       contentType = 'text';
       break;
+    case 'button': {
+      content = message.button?.text?.trim() || message.button?.payload?.trim() || '[Resposta de botão]';
+      contentType = 'text';
+      templateButtonPayload = message.button?.payload?.trim() || null;
+      break;
+    }
     default:
       content = '📎 Anexo';
       contentType = 'text';
@@ -1223,6 +1231,7 @@ async function processIncomingMessage(
       ...mediaMetadata,
       ...(mentionMetadata ? { mention: mentionMetadata } : {}),
       ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
+      ...(templateButtonPayload !== null ? { template_button_payload: templateButtonPayload } : {}),
     };
 
     const isCsatPending = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
