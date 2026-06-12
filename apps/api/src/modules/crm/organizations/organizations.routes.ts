@@ -4,7 +4,12 @@ import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
-import { createOrganizationSchema, updateOrganizationSchema, listOrganizationsQuerySchema } from './organizations.schema.js';
+import {
+  bulkDeleteOrganizationsSchema,
+  createOrganizationSchema,
+  updateOrganizationSchema,
+  listOrganizationsQuerySchema,
+} from './organizations.schema.js';
 import {
   listOrganizations,
   maskOrganizationContactRecords,
@@ -19,6 +24,7 @@ import {
   createOrganization,
   updateOrganization,
   deleteOrganization,
+  bulkDeleteOrganizations,
   NotFoundError,
   ConflictError,
 } from './organizations.service.js';
@@ -65,6 +71,24 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(409).send({ success: false, error: { message: err.message } });
       throw err;
     }
+  });
+
+  // POST /api/crm/organizations/bulk-delete
+  app.post('/bulk-delete', { preHandler: organizationsDeleteGuard }, async (request, reply) => {
+    const parsed = bulkDeleteOrganizationsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const result = await bulkDeleteOrganizations(
+      parsed.data.ids,
+      request.user.id,
+      request.user.schemaName,
+    );
+    return reply.send({ success: true, data: result });
   });
 
   // GET /api/crm/organizations/:id

@@ -589,7 +589,20 @@ export async function deleteOrganization(
   const existing = await getOrganization(id, undefined, db);
 
   await db.$executeRawUnsafe(
-    `UPDATE organizations SET status = 'inactive', updated_at = NOW() WHERE id = $1::uuid`, id,
+    `UPDATE contacts SET organization_id = NULL, updated_at = NOW() WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `UPDATE conversations SET organization_id = NULL WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `UPDATE tickets SET organization_id = NULL WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `DELETE FROM organizations WHERE id = $1::uuid`,
+    id,
   );
 
   await db.$executeRawUnsafe(
@@ -598,5 +611,50 @@ export async function deleteOrganization(
     deletedBy, id, JSON.stringify(existing),
   );
 
-  return { ...existing, status: 'inactive' };
+  return existing;
+}
+
+export interface BulkDeleteOrganizationsResult {
+  requested: number;
+  deleted: string[];
+  blocked: Array<{ id: string; reason: string }>;
+  not_found: string[];
+}
+
+export async function bulkDeleteOrganizations(
+  ids: string[],
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<BulkDeleteOrganizationsResult> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => bulkDeleteOrganizations(ids, deletedBy, undefined, tx));
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const result: BulkDeleteOrganizationsResult = {
+    requested: uniqueIds.length,
+    deleted: [],
+    blocked: [],
+    not_found: [],
+  };
+
+  for (const id of uniqueIds) {
+    try {
+      await deleteOrganization(id, deletedBy, undefined, db);
+      result.deleted.push(id);
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        result.blocked.push({ id, reason: error.message });
+        continue;
+      }
+      if (error instanceof NotFoundError) {
+        result.not_found.push(id);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return result;
 }

@@ -75,6 +75,10 @@ export const listContactsQuerySchema = z.object({
   status:          z.enum(['lead', 'prospect', 'client', 'inactive']).optional(),
 });
 
+export const bulkDeleteContactsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export const linkOrganizationSchema = z.object({
   organization_id: z.string().uuid(),
 });
@@ -147,6 +151,7 @@ export const contactImportConfirmSchema = z.object({
 export type CreateContactInput   = z.infer<typeof createContactSchema>;
 export type UpdateContactInput   = z.infer<typeof updateContactSchema>;
 export type ListContactsQuery    = z.infer<typeof listContactsQuerySchema>;
+export type BulkDeleteContactsInput = z.infer<typeof bulkDeleteContactsSchema>;
 export type LinkOrganizationBody = z.infer<typeof linkOrganizationSchema>;
 export type UpdateContactLgpdConsentInput = z.infer<typeof updateContactLgpdConsentSchema>;
 export type ExportContactLgpdQuery = z.infer<typeof exportContactLgpdQuerySchema>;

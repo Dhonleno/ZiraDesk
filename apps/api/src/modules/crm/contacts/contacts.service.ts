@@ -841,6 +841,51 @@ export async function deleteContact(
   return existing;
 }
 
+export interface BulkDeleteContactsResult {
+  requested: number;
+  deleted: string[];
+  blocked: Array<{ id: string; reason: string }>;
+  not_found: string[];
+}
+
+export async function bulkDeleteContacts(
+  ids: string[],
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<BulkDeleteContactsResult> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => bulkDeleteContacts(ids, deletedBy, undefined, tx));
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const result: BulkDeleteContactsResult = {
+    requested: uniqueIds.length,
+    deleted: [],
+    blocked: [],
+    not_found: [],
+  };
+
+  for (const id of uniqueIds) {
+    try {
+      await deleteContact(id, deletedBy, undefined, db);
+      result.deleted.push(id);
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        result.blocked.push({ id, reason: error.message });
+        continue;
+      }
+      if (error instanceof NotFoundError) {
+        result.not_found.push(id);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return result;
+}
+
 /* ── linkToOrganization ──────────────────────────────────────────────────── */
 export async function linkToOrganization(
   contactId: string,

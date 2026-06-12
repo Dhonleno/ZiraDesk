@@ -506,9 +506,14 @@ describe('CRM integration', () => {
   });
 
   it('DELETE /api/crm/organizations/:id remove organização', async () => {
+    const tenant = requireSuiteTenant();
     const organization = await createOrganization({
       name: uniqueText('Delete org'),
       status: 'client',
+    });
+    const contact = await createContact({
+      name: uniqueText('Contato vinculado'),
+      organization_id: organization.id,
     });
 
     const response = await createTestApp()
@@ -519,8 +524,43 @@ describe('CRM integration', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toMatchObject({
       id: organization.id,
-      status: 'inactive',
+      status: 'client',
     });
+
+    const getResponse = await createTestApp()
+      .get(`/api/crm/organizations/${organization.id}`)
+      .set(authHeader());
+    expect(getResponse.status).toBe(404);
+
+    const contactRows = await prisma.$queryRawUnsafe<Array<{ organization_id: string | null }>>(
+      `SELECT organization_id FROM "${tenant.schemaName}".contacts WHERE id = $1::uuid`,
+      contact.id,
+    );
+    expect(contactRows[0]?.organization_id).toBeNull();
+  });
+
+  it('POST /api/crm/organizations/bulk-delete exclui lote e informa ausentes', async () => {
+    const first = await createOrganization({ name: uniqueText('Bulk org 1') });
+    const second = await createOrganization({ name: uniqueText('Bulk org 2') });
+    const missingId = randomUUID();
+
+    const response = await createTestApp()
+      .post('/api/crm/organizations/bulk-delete')
+      .set(authHeader())
+      .send({ ids: [first.id, second.id, first.id, missingId] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({
+      requested: 3,
+      deleted: [first.id, second.id],
+      blocked: [],
+      not_found: [missingId],
+    });
+
+    const listResponse = await createTestApp()
+      .get('/api/crm/organizations')
+      .set(authHeader());
+    expect(listResponse.body.data).toHaveLength(0);
   });
 
   it('POST /api/crm/contacts cria contato', async () => {
@@ -543,6 +583,43 @@ describe('CRM integration', () => {
       portal_enabled: false,
     });
     expect(response.body.data.whatsapp).toBe(uniquePhone(401));
+  });
+
+  it('POST /api/crm/contacts/bulk-delete exclui parcialmente e preserva contato com conversa aberta', async () => {
+    const tenant = requireSuiteTenant();
+    const deletable = await createContact({ name: uniqueText('Bulk deletable') });
+    const blocked = await createContact({ name: uniqueText('Bulk blocked') });
+    const missingId = randomUUID();
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".conversations
+         (id, contact_id, channel_type, protocol_number, status, subject)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', $3, 'open', 'Conversa ativa')`,
+      randomUUID(),
+      blocked.id,
+      uniqueProtocol(),
+    );
+
+    const response = await createTestApp()
+      .post('/api/crm/contacts/bulk-delete')
+      .set(authHeader())
+      .send({ ids: [deletable.id, blocked.id, deletable.id, missingId] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({
+      requested: 3,
+      deleted: [deletable.id],
+      blocked: [{
+        id: blocked.id,
+        reason: 'Contato possui conversas ativas. Encerre-as antes de excluir.',
+      }],
+      not_found: [missingId],
+    });
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${tenant.schemaName}".contacts ORDER BY id`,
+    );
+    expect(rows.map((row) => row.id)).toEqual([blocked.id]);
   });
 
   it('GET /api/crm/contacts mascara PII para role sem pii:view-full', async () => {

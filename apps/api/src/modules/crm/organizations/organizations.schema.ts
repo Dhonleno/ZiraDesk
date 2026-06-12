@@ -52,6 +52,11 @@ export const listOrganizationsQuerySchema = z.object({
   sort_order:     z.enum(['asc', 'desc']).default('desc'),
 });
 
+export const bulkDeleteOrganizationsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export type CreateOrganizationInput  = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput  = z.infer<typeof updateOrganizationSchema>;
 export type ListOrganizationsQuery   = z.infer<typeof listOrganizationsQuerySchema>;
+export type BulkDeleteOrganizationsInput = z.infer<typeof bulkDeleteOrganizationsSchema>;

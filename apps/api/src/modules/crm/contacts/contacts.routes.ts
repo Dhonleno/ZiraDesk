@@ -19,6 +19,7 @@ import {
   rejectLgpdRequestSchema,
   addContactTagSchema,
   contactTagParamsSchema,
+  bulkDeleteContactsSchema,
 } from './contacts.schema.js';
 import {
   approveLgpdRectificationRequest,
@@ -38,6 +39,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  bulkDeleteContacts,
   linkToOrganization,
   updateContactLgpdConsent,
   exportContactLgpdData,
@@ -273,6 +275,24 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
         message: 'Importação iniciada',
       },
     });
+  });
+
+  // POST /api/crm/contacts/bulk-delete
+  app.post('/bulk-delete', { preHandler: contactsDeleteGuard }, async (request, reply) => {
+    const parsed = bulkDeleteContactsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const result = await bulkDeleteContacts(
+      parsed.data.ids,
+      request.user.id,
+      request.user.schemaName,
+    );
+    return reply.send({ success: true, data: result });
   });
 
   // GET /api/crm/contacts/lgpd/requests
