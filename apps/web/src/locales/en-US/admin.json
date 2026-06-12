@@ -510,6 +510,8 @@
       "new": "New template",
       "newTitle": "New template",
       "editTitle": "Edit template",
+      "rename": "Rename",
+      "metaManagedHint": "This template was approved by Meta. Only the display name can be changed.",
       "sync": "Sync with Meta",
       "syncNever": "Never synced",
       "syncSuccess": "{{count}} template(s) synced successfully",
@@ -909,6 +911,24 @@
       "agent": "Agent",
       "viewer": "Viewer"
     }
+  },
+  "tags": {
+    "subtitle": "Manage tags used in conversations and contacts",
+    "tabs": {
+      "conversations": "Conversations",
+      "contacts": "Contacts"
+    },
+    "columns": {
+      "name": "Name",
+      "color": "Color / preview",
+      "order": "Order",
+      "actions": "Actions"
+    }
+  },
+  "contactTags": {
+    "new": "New tag",
+    "saved": "Tag saved successfully",
+    "deleted": "Tag removed successfully"
   },
   "nav": {
     "admin": "Administration",

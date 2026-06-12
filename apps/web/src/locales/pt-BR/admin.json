@@ -510,6 +510,8 @@
       "new": "Novo template",
       "newTitle": "Novo template",
       "editTitle": "Editar template",
+      "rename": "Renomear",
+      "metaManagedHint": "Este template foi aprovado pela Meta. Apenas o nome amigável pode ser alterado.",
       "sync": "Sincronizar com Meta",
       "syncNever": "Nunca sincronizado",
       "syncSuccess": "{{count}} template(s) sincronizado(s) com sucesso",
@@ -903,6 +905,24 @@
       "agent": "Agente",
       "viewer": "Visualizador"
     }
+  },
+  "tags": {
+    "subtitle": "Gerencie as etiquetas usadas em conversas e contatos",
+    "tabs": {
+      "conversations": "Conversas",
+      "contacts": "Contatos"
+    },
+    "columns": {
+      "name": "Nome",
+      "color": "Cor / preview",
+      "order": "Ordem",
+      "actions": "Ações"
+    }
+  },
+  "contactTags": {
+    "new": "Nova tag",
+    "saved": "Tag salva com sucesso",
+    "deleted": "Tag removida com sucesso"
   },
   "nav": {
     "admin": "Administração",

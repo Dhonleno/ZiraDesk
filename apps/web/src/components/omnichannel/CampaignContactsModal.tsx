@@ -70,14 +70,16 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     [existingContacts],
   );
 
+  const { data: allTags = [] } = useQuery({
+    queryKey: ['contact-tags'],
+    queryFn: () => contactsApi.listTags(),
+    staleTime: 5 * 60_000,
+  });
+
   const contacts = contactsData?.pages.flatMap((result) => result.data) ?? [];
-  const availableTags = useMemo(
-    () => Array.from(new Set([
-      ...(tagFilter ? [tagFilter] : []),
-      ...contacts.flatMap((contact) => contact.tags ?? []),
-    ])).sort((left, right) => left.localeCompare(right)),
-    [contacts, tagFilter],
-  );
+  const availableTags = useMemo(() => (
+    [...allTags].sort((left, right) => left.name.localeCompare(right.name))
+  ), [allTags]);
 
   const addMutation = useMutation({
     mutationFn: () => campaignsApi.addContacts(campaign.id, Array.from(selected)),
@@ -215,7 +217,7 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
             >
               <option value="">{t('addContacts.allTags')}</option>
               {availableTags.map((tag) => (
-                <option key={tag} value={tag}>{tag}</option>
+                <option key={tag.id} value={tag.id}>{tag.name}</option>
               ))}
             </select>
           </div>

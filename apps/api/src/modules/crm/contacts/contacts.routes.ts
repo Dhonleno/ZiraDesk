@@ -17,6 +17,8 @@ import {
   listLgpdRequestsQuerySchema,
   lgpdRequestActionParamsSchema,
   rejectLgpdRequestSchema,
+  addContactTagSchema,
+  contactTagParamsSchema,
 } from './contacts.schema.js';
 import {
   approveLgpdRectificationRequest,
@@ -26,6 +28,10 @@ import {
   registerContactPiiAccess,
   registerContactPiiReveal,
   listContacts,
+  listDistinctContactTags,
+  listContactTagAssignments,
+  addContactTag,
+  removeContactTag,
   listLgpdRequests,
   getContact,
   getContactStats,
@@ -85,6 +91,87 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
       data: includeFullPii ? result.data : maskContactListRecords(result.data),
     });
   });
+
+  // GET /api/crm/contacts/tags
+  app.get('/tags', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+    const tags = await listDistinctContactTags(schemaName);
+    return reply.send({ success: true, data: tags });
+  });
+
+  // GET /api/crm/contacts/:id/tags
+  app.get<{ Params: { id: string } }>('/:id/tags', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const parsed = contactTagParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Parâmetros inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const data = await listContactTagAssignments(parsed.data.id, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  // POST /api/crm/contacts/:id/tags
+  app.post<{ Params: { id: string } }>('/:id/tags', { preHandler: contactsEditGuard }, async (request, reply) => {
+    const parsedParams = contactTagParamsSchema.safeParse(request.params);
+    const parsedBody = addContactTagSchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        success: false,
+        error: {
+          message: 'Dados inválidos',
+          details: {
+            params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+            body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          },
+        },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    await addContactTag(parsedParams.data.id, parsedBody.data.tag_id, schemaName);
+    return reply.code(201).send({
+      success: true,
+      data: { contact_id: parsedParams.data.id, tag_id: parsedBody.data.tag_id },
+    });
+  });
+
+  // DELETE /api/crm/contacts/:id/tags/:tagId
+  app.delete<{ Params: { id: string; tagId: string } }>(
+    '/:id/tags/:tagId',
+    { preHandler: contactsEditGuard },
+    async (request, reply) => {
+      const parsed = contactTagParamsSchema.safeParse(request.params);
+      if (!parsed.success || !parsed.data.tagId) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Parâmetros inválidos', details: parsed.success ? undefined : parsed.error.flatten() },
+        });
+      }
+
+      const schemaName = request.user.schemaName;
+      if (!schemaName) {
+        return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+      }
+
+      await removeContactTag(parsed.data.id, parsed.data.tagId, schemaName);
+      return reply.send({ success: true, data: { removed: true } });
+    },
+  );
 
   // POST /api/crm/contacts/import/preview
   app.post('/import/preview', { preHandler: contactsImportGuard }, async (request, reply) => {

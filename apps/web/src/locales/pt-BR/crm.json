@@ -234,6 +234,19 @@
       "notes": "Notas",
       "tagsHint": "Digite e pressione Enter para adicionar"
     },
+    "tagsSection": {
+      "title": "Tags do contato",
+      "add": "Adicionar",
+      "empty": "Nenhuma tag",
+      "remove": "Remover {{name}}",
+      "error": "Não foi possível atualizar as tags do contato",
+      "picker": {
+        "title": "Selecionar tags",
+        "empty": "Nenhuma tag disponível. Cadastre em Administração → Etiquetas.",
+        "error": "Não foi possível carregar o catálogo de tags.",
+        "close": "Fechar seletor de tags"
+      }
+    },
     "actions": {
       "link": "Vincular organização",
       "unlink": "Desvincular",

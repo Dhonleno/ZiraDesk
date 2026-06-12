@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { api, contactsApi, conversationTags, omnichannelApi, type CrmContact, type TransferSkill } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
 import { EditContactModal } from '../crm/EditContactModal';
+import { ContactTagPicker } from '../crm/ContactTagPicker';
 import { TagDropdown } from './TagDropdown';
 import { subscribeToEvent } from '../../services/socket';
 import { CreateTicketModal } from '../tickets/CreateTicketModal';
@@ -12,6 +13,8 @@ import { CallWidget } from './CallWidget';
 import { avatarClass } from '../../utils/avatar';
 import { PiiReveal } from '../common/PiiReveal';
 import { maskEmail, maskPhone } from '../../utils/pii-mask';
+import { usePermission } from '../../hooks/usePermission';
+import { useToast } from '../../stores/toast.store';
 
 interface Conversation {
   id: string;
@@ -195,13 +198,17 @@ interface Props {
 }
 
 export function InfoPanel({ conversationId }: Props) {
-  const { t, i18n } = useTranslation('omnichannel');
+  const { t, i18n } = useTranslation(['omnichannel', 'crm']);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
+  const { can } = usePermission();
+  const canEditContacts = can('contacts:edit');
   const [activeTab, setActiveTab] = useState<Tab>('contact');
   const [linkOrgOpen, setLinkOrgOpen] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [contactTagPickerOpen, setContactTagPickerOpen] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [editingGroup, setEditingGroup] = useState(false);
   const [groupSaving, setGroupSaving] = useState(false);
@@ -244,6 +251,10 @@ export function InfoPanel({ conversationId }: Props) {
 
   const conv = data?.conversation;
   const contactId = conv?.contact_id ?? null;
+
+  useEffect(() => {
+    setContactTagPickerOpen(false);
+  }, [contactId]);
 
   const { data: contactData } = useQuery({
     queryKey: ['crm-contact', contactId],
@@ -311,6 +322,35 @@ export function InfoPanel({ conversationId }: Props) {
     enabled: Boolean(conversationId),
   });
 
+  const { data: contactTags = [] } = useQuery({
+    queryKey: ['contact-tags-assigned', contactId],
+    queryFn: () => contactsApi.getTags(contactId!),
+    enabled: Boolean(contactId),
+  });
+
+  const { data: contactTagCatalog = [] } = useQuery({
+    queryKey: ['contact-tags'],
+    queryFn: () => contactsApi.listTags(),
+    enabled: Boolean(contactId) && contactTagPickerOpen,
+    staleTime: 5 * 60_000,
+  });
+
+  const addContactTagMutation = useMutation({
+    mutationFn: (tagId: string) => contactsApi.addTag(contactId!, tagId),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['contact-tags-assigned', contactId] });
+    },
+    onError: () => toast.error(t('contacts.tagsSection.error', { ns: 'crm' })),
+  });
+
+  const removeContactTagMutation = useMutation({
+    mutationFn: (tagId: string) => contactsApi.removeTag(contactId!, tagId),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['contact-tags-assigned', contactId] });
+    },
+    onError: () => toast.error(t('contacts.tagsSection.error', { ns: 'crm' })),
+  });
+
   const { data: transferSkills = [] } = useQuery<TransferSkill[]>({
     queryKey: ['transfer-skills'],
     queryFn: omnichannelApi.getTransferSkills,
@@ -358,6 +398,14 @@ export function InfoPanel({ conversationId }: Props) {
     await refetchConvTags();
     await qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
     await qc.invalidateQueries({ queryKey: ['conversations'] });
+  }
+
+  function handleAddContactTag(tagId: string) {
+    addContactTagMutation.mutate(tagId);
+  }
+
+  function handleRemoveContactTag(tagId: string) {
+    removeContactTagMutation.mutate(tagId);
   }
 
   function handleCreateTicket(overrides?: { title?: string; category?: string }) {
@@ -565,6 +613,83 @@ export function InfoPanel({ conversationId }: Props) {
                 </div>
               ) : null}
             </div>
+
+            {contactId && (
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+                <SectionTitle
+                  action={canEditContacts ? (
+                    <button
+                      type="button"
+                      onClick={() => setContactTagPickerOpen((value) => !value)}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        color: 'var(--teal)',
+                        cursor: 'pointer',
+                        fontSize: 10,
+                      }}
+                    >
+                      + {t('contacts.tagsSection.add', { ns: 'crm' })}
+                    </button>
+                  ) : undefined}
+                >
+                  {t('contacts.tagsSection.title', { ns: 'crm' })}
+                </SectionTitle>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {contactTags.length === 0 ? (
+                    <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>
+                      {t('contacts.tagsSection.empty', { ns: 'crm' })}
+                    </span>
+                  ) : (
+                    contactTags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="tag-pill"
+                        style={{
+                          background: `${tag.color}26`,
+                          color: tag.color,
+                          border: `1px solid ${tag.color}40`,
+                          fontSize: 11,
+                        }}
+                      >
+                        {tag.name}
+                        {canEditContacts && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContactTag(tag.id)}
+                            disabled={removeContactTagMutation.isPending}
+                            aria-label={t('contacts.tagsSection.remove', { ns: 'crm', name: tag.name })}
+                            style={{
+                              marginLeft: 2,
+                              padding: 0,
+                              border: 'none',
+                              background: 'none',
+                              color: 'inherit',
+                              cursor: removeContactTagMutation.isPending ? 'wait' : 'pointer',
+                              fontSize: 14,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                {contactTagPickerOpen && canEditContacts && (
+                  <ContactTagPicker
+                    tags={contactTagCatalog}
+                    selectedTagIds={contactTags.map((tag) => tag.id)}
+                    disabled={addContactTagMutation.isPending}
+                    onSelect={(tag) => handleAddContactTag(tag.id)}
+                    onClose={() => setContactTagPickerOpen(false)}
+                  />
+                )}
+              </div>
+            )}
 
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
               <SectionTitle

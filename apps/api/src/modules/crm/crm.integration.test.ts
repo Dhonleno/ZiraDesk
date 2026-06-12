@@ -111,6 +111,8 @@ async function resetTenantCrmData(schemaName: string): Promise<void> {
       "${schemaName}".ticket_relations,
       "${schemaName}".tickets,
       "${schemaName}".lgpd_requests,
+      "${schemaName}".contact_tag_assignments,
+      "${schemaName}".contact_tags,
       "${schemaName}".contacts,
       "${schemaName}".organizations,
       "${schemaName}".audit_logs
@@ -227,6 +229,26 @@ async function createContact(
     whatsapp: string | null;
     document: string | null;
     portal_enabled: boolean;
+    tags: string[];
+  };
+}
+
+async function createContactTag(
+  payload: { name: string; color: string; sort_order?: number },
+  tenant: TempTenant = requireSuiteTenant(),
+) {
+  const response = await createTestApp()
+    .post('/api/admin/contact-tags')
+    .set(authHeader(tenant))
+    .send(payload);
+
+  expect(response.status).toBe(201);
+
+  return response.body.data as {
+    id: string;
+    name: string;
+    color: string;
+    sort_order: number;
   };
 }
 
@@ -570,29 +592,148 @@ describe('CRM integration', () => {
   it('GET /api/crm/contacts filtra por tags e status da organização', async () => {
     const matchingOrganization = await createOrganization({ status: 'client' });
     const wrongStatusOrganization = await createOrganization({ status: 'prospect' });
+    const priorityTag = await createContactTag({ name: 'priority', color: '#00C9A7', sort_order: 1 });
+    const enterpriseTag = await createContactTag({ name: 'enterprise', color: '#3B82F6', sort_order: 2 });
+    const standardTag = await createContactTag({ name: 'standard', color: '#8B5CF6', sort_order: 3 });
 
     const matchingContact = await createContact({
       organization_id: matchingOrganization.id,
-      tags: ['vip', 'priority'],
     });
-    await createContact({
+    const wrongStatusContact = await createContact({
       organization_id: wrongStatusOrganization.id,
-      tags: ['priority'],
     });
-    await createContact({
+    const standardContact = await createContact({
       organization_id: matchingOrganization.id,
-      tags: ['standard'],
     });
+
+    await createTestApp()
+      .post(`/api/crm/contacts/${matchingContact.id}/tags`)
+      .set(authHeader())
+      .send({ tag_id: priorityTag.id });
+    await createTestApp()
+      .post(`/api/crm/contacts/${wrongStatusContact.id}/tags`)
+      .set(authHeader())
+      .send({ tag_id: priorityTag.id });
+    await createTestApp()
+      .post(`/api/crm/contacts/${standardContact.id}/tags`)
+      .set(authHeader())
+      .send({ tag_id: standardTag.id });
 
     const response = await createTestApp()
       .get('/api/crm/contacts')
-      .query({ tags: 'priority,enterprise', status: 'client' })
+      .query({ tags: `${priorityTag.id},${enterpriseTag.id}`, status: 'client' })
       .set(authHeader());
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].id).toBe(matchingContact.id);
     expect(response.body.meta.total).toBe(1);
+  });
+
+  it('GET /api/crm/contacts/tags lista o catálogo por ordem e nome', async () => {
+    const vipTag = await createContactTag({ name: 'vip', color: '#F59E0B', sort_order: 2 });
+    const priorityTag = await createContactTag({ name: 'priority', color: '#EF4444', sort_order: 1 });
+    const enterpriseTag = await createContactTag({ name: 'enterprise', color: '#3B82F6', sort_order: 2 });
+
+    const response = await createTestApp()
+      .get('/api/crm/contacts/tags')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      data: [
+        { id: priorityTag.id, name: 'priority', color: '#EF4444' },
+        { id: enterpriseTag.id, name: 'enterprise', color: '#3B82F6' },
+        { id: vipTag.id, name: 'vip', color: '#F59E0B' },
+      ],
+    });
+  });
+
+  it('adiciona, lista e remove tags vinculadas ao contato', async () => {
+    const contact = await createContact();
+    const tag = await createContactTag({ name: 'vip', color: '#F59E0B', sort_order: 1 });
+
+    const addResponse = await createTestApp()
+      .post(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader())
+      .send({ tag_id: tag.id });
+
+    expect(addResponse.status).toBe(201);
+    expect(addResponse.body.data).toEqual({ contact_id: contact.id, tag_id: tag.id });
+
+    const listResponse = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader());
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data).toEqual([{ id: tag.id, name: 'vip', color: '#F59E0B' }]);
+
+    const removeResponse = await createTestApp()
+      .delete(`/api/crm/contacts/${contact.id}/tags/${tag.id}`)
+      .set(authHeader());
+
+    expect(removeResponse.status).toBe(200);
+    expect(removeResponse.body.data).toEqual({ removed: true });
+
+    const emptyResponse = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader());
+
+    expect(emptyResponse.status).toBe(200);
+    expect(emptyResponse.body.data).toEqual([]);
+  });
+
+  it('cria e atualiza contato sincronizando tag_ids com as atribuições', async () => {
+    const priorityTag = await createContactTag({ name: 'priority', color: '#EF4444', sort_order: 1 });
+    const vipTag = await createContactTag({ name: 'vip', color: '#F59E0B', sort_order: 2 });
+    const standardTag = await createContactTag({ name: 'standard', color: '#3B82F6', sort_order: 3 });
+
+    const contact = await createContact({
+      tag_ids: [vipTag.id, priorityTag.id],
+    });
+
+    expect(contact.tags).toEqual(['priority', 'vip']);
+
+    const createdAssignments = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader());
+
+    expect(createdAssignments.status).toBe(200);
+    expect(createdAssignments.body.data).toEqual([
+      { id: priorityTag.id, name: 'priority', color: '#EF4444' },
+      { id: vipTag.id, name: 'vip', color: '#F59E0B' },
+    ]);
+
+    const updateResponse = await createTestApp()
+      .patch(`/api/crm/contacts/${contact.id}`)
+      .set(authHeader())
+      .send({ tag_ids: [standardTag.id] });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.data.tags).toEqual(['standard']);
+
+    const updatedAssignments = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader());
+
+    expect(updatedAssignments.body.data).toEqual([
+      { id: standardTag.id, name: 'standard', color: '#3B82F6' },
+    ]);
+
+    const clearResponse = await createTestApp()
+      .patch(`/api/crm/contacts/${contact.id}`)
+      .set(authHeader())
+      .send({ tag_ids: [] });
+
+    expect(clearResponse.status).toBe(200);
+    expect(clearResponse.body.data.tags).toEqual([]);
+
+    const clearedAssignments = await createTestApp()
+      .get(`/api/crm/contacts/${contact.id}/tags`)
+      .set(authHeader());
+
+    expect(clearedAssignments.body.data).toEqual([]);
   });
 
   it('GET /api/crm/organizations mascara PII para role sem pii:view-full', async () => {

@@ -753,6 +753,15 @@ export interface CrmContact {
   updated_at: string;
 }
 
+export interface ContactTag {
+  id: string;
+  name: string;
+  color: string;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type ContactImportFormat = 'csv' | 'xlsx' | 'vcf';
 export type ContactImportDuplicateAction = 'skip' | 'update';
 
@@ -927,6 +936,27 @@ export const contactsApi = {
     });
     return { data: res.data.data, meta: res.data.meta };
   },
+  listTags: async (): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>('/crm/contacts/tags');
+    return res.data.data;
+  },
+  getTags: async (id: string): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>(`/crm/contacts/${id}/tags`);
+    return res.data.data;
+  },
+  addTag: async (id: string, tagId: string): Promise<{ contact_id: string; tag_id: string }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { contact_id: string; tag_id: string };
+    }>(`/crm/contacts/${id}/tags`, { tag_id: tagId });
+    return res.data.data;
+  },
+  removeTag: async (id: string, tagId: string): Promise<{ removed: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+      `/crm/contacts/${id}/tags/${tagId}`,
+    );
+    return res.data.data;
+  },
   get: async (id: string): Promise<CrmContact> => {
     const res = await api.get<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`);
     return res.data.data;
@@ -942,7 +972,7 @@ export const contactsApi = {
     }>(`/crm/contacts/${id}/stats`);
     return res.data.data;
   },
-  create: async (payload: Partial<CrmContact>): Promise<CrmContact> => {
+  create: async (payload: Partial<CrmContact> & { tag_ids?: string[] }): Promise<CrmContact> => {
     const res = await api.post<{ success: boolean; data: CrmContact }>('/crm/contacts', payload);
     return res.data.data;
   },
@@ -963,7 +993,10 @@ export const contactsApi = {
     );
     return res.data.data;
   },
-  update: async (id: string, payload: Partial<CrmContact>): Promise<CrmContact> => {
+  update: async (
+    id: string,
+    payload: Partial<CrmContact> & { tag_ids?: string[] },
+  ): Promise<CrmContact> => {
     const res = await api.patch<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`, payload);
     return res.data.data;
   },
@@ -2091,6 +2124,31 @@ export const conversationTags = {
     const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
       `/omnichannel/conversations/${convId}/tags/${tagId}`,
     );
+    return res.data.data;
+  },
+};
+
+export const contactTags = {
+  list: async (): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>('/admin/contact-tags');
+    return res.data.data;
+  },
+
+  create: async (data: { name: string; color: string; sort_order?: number }): Promise<ContactTag> => {
+    const res = await api.post<{ success: boolean; data: ContactTag }>('/admin/contact-tags', data);
+    return res.data.data;
+  },
+
+  update: async (
+    id: string,
+    data: Partial<{ name: string; color: string; sort_order: number }>,
+  ): Promise<ContactTag> => {
+    const res = await api.patch<{ success: boolean; data: ContactTag }>(`/admin/contact-tags/${id}`, data);
+    return res.data.data;
+  },
+
+  delete: async (id: string): Promise<ContactTag> => {
+    const res = await api.delete<{ success: boolean; data: ContactTag }>(`/admin/contact-tags/${id}`);
     return res.data.data;
   },
 };

@@ -202,6 +202,91 @@ function normalizeEmailForComparison(value: string | null | undefined): string |
   return normalized || null;
 }
 
+export interface ContactTagAssignmentRow {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export async function listDistinctContactTags(schemaName: string): Promise<ContactTagAssignmentRow[]> {
+  return prisma.$queryRawUnsafe<ContactTagAssignmentRow[]>(
+    `SELECT id, name, color
+     FROM ${quoteIdent(schemaName)}.contact_tags
+     ORDER BY sort_order ASC, name ASC`,
+  );
+}
+
+export async function listContactTagAssignments(
+  contactId: string,
+  schemaName: string,
+): Promise<ContactTagAssignmentRow[]> {
+  return prisma.$queryRawUnsafe<ContactTagAssignmentRow[]>(
+    `SELECT ct.id, ct.name, ct.color
+     FROM ${quoteIdent(schemaName)}.contact_tag_assignments cta
+     JOIN ${quoteIdent(schemaName)}.contact_tags ct ON ct.id = cta.tag_id
+     WHERE cta.contact_id = $1::uuid
+     ORDER BY ct.sort_order ASC, ct.name ASC`,
+    contactId,
+  );
+}
+
+export async function addContactTag(contactId: string, tagId: string, schemaName: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${quoteIdent(schemaName)}.contact_tag_assignments (contact_id, tag_id)
+     VALUES ($1::uuid, $2::uuid)
+     ON CONFLICT (contact_id, tag_id) DO NOTHING`,
+    contactId,
+    tagId,
+  );
+}
+
+export async function removeContactTag(contactId: string, tagId: string, schemaName: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${quoteIdent(schemaName)}.contact_tag_assignments
+     WHERE contact_id = $1::uuid AND tag_id = $2::uuid`,
+    contactId,
+    tagId,
+  );
+}
+
+async function syncContactTagAssignments(
+  contactId: string,
+  tagIds: string[],
+  db: RawExecutor,
+): Promise<void> {
+  const uniqueTagIds = [...new Set(tagIds)];
+
+  await db.$executeRawUnsafe(
+    `DELETE FROM contact_tag_assignments
+     WHERE contact_id = $1::uuid`,
+    contactId,
+  );
+
+  if (uniqueTagIds.length > 0) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO contact_tag_assignments (contact_id, tag_id)
+       SELECT $1::uuid, ct.id
+       FROM contact_tags ct
+       WHERE ct.id = ANY($2::uuid[])
+       ON CONFLICT (contact_id, tag_id) DO NOTHING`,
+      contactId,
+      uniqueTagIds,
+    );
+  }
+
+  await db.$executeRawUnsafe(
+    `UPDATE contacts
+     SET tags = COALESCE((
+       SELECT array_agg(ct.name ORDER BY ct.sort_order ASC, ct.name ASC)
+       FROM contact_tag_assignments cta
+       JOIN contact_tags ct ON ct.id = cta.tag_id
+       WHERE cta.contact_id = $1::uuid
+     ), ARRAY[]::text[])
+     WHERE id = $1::uuid`,
+    contactId,
+  );
+}
+
 async function assertUniqueContactPhone(
   phone: string | null,
   ignoreContactId?: string,
@@ -335,7 +420,13 @@ export async function listContacts(
                              OR ct.phone ILIKE '%' || $2 || '%'
                              OR ct.whatsapp ILIKE '%' || $2 || '%')
        AND ($3::boolean = false OR ct.organization_id IS NULL)
-       AND ($4::text[] IS NULL OR ct.tags && $4::text[])
+       AND ($4::text[] IS NULL OR EXISTS (
+         SELECT 1
+         FROM contact_tag_assignments cta
+         JOIN contact_tags contact_tag ON contact_tag.id = cta.tag_id
+         WHERE cta.contact_id = ct.id
+           AND (contact_tag.id::text = ANY($4::text[]) OR contact_tag.name = ANY($4::text[]))
+       ))
        AND ($5::text IS NULL OR o.status = $5::text)
      ORDER BY ct.is_primary DESC, ct.name ASC
      LIMIT $6 OFFSET $7`,
@@ -358,7 +449,13 @@ export async function listContacts(
                              OR ct.phone ILIKE '%' || $2 || '%'
                              OR ct.whatsapp ILIKE '%' || $2 || '%')
        AND ($3::boolean = false OR ct.organization_id IS NULL)
-       AND ($4::text[] IS NULL OR ct.tags && $4::text[])
+       AND ($4::text[] IS NULL OR EXISTS (
+         SELECT 1
+         FROM contact_tag_assignments cta
+         JOIN contact_tags contact_tag ON contact_tag.id = cta.tag_id
+         WHERE cta.contact_id = ct.id
+           AND (contact_tag.id::text = ANY($4::text[]) OR contact_tag.name = ANY($4::text[]))
+       ))
        AND ($5::text IS NULL OR o.status = $5::text)`,
     organization_id ?? null,
     search ?? null,
@@ -560,7 +657,12 @@ export async function createContact(
     data.is_primary ?? false, tagsLiteral, customFieldsJson, data.notes ?? null,
   );
 
-  const contact = rows[0]!;
+  let contact = rows[0]!;
+
+  if (data.tag_ids !== undefined) {
+    await syncContactTagAssignments(contact.id, data.tag_ids, db);
+    contact = await getContact(contact.id, undefined, db);
+  }
 
   await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
@@ -687,7 +789,12 @@ export async function updateContact(
   );
 
   if (!rows[0]) throw new NotFoundError('Contato');
-  const updated = rows[0];
+  let updated = rows[0];
+
+  if (data.tag_ids !== undefined) {
+    await syncContactTagAssignments(id, data.tag_ids, db);
+    updated = await getContact(id, undefined, db);
+  }
 
   await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)

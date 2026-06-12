@@ -234,6 +234,19 @@
       "notes": "Notes",
       "tagsHint": "Type and press Enter to add"
     },
+    "tagsSection": {
+      "title": "Contact tags",
+      "add": "Add",
+      "empty": "No tags",
+      "remove": "Remove {{name}}",
+      "error": "Could not update contact tags",
+      "picker": {
+        "title": "Select tags",
+        "empty": "No tags available. Create them in Admin → Tags.",
+        "error": "Could not load the tag catalog.",
+        "close": "Close tag picker"
+      }
+    },
     "actions": {
       "link": "Link organization",
       "unlink": "Unlink",

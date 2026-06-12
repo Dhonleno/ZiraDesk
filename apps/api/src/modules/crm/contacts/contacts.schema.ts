@@ -22,6 +22,7 @@ export const createContactSchema = z.object({
   department:      z.string().max(100).optional(),
   is_primary:      z.boolean().default(false),
   tags:            z.array(z.string()).optional(),
+  tag_ids:         z.array(z.string().uuid()).max(50).optional(),
   custom_fields:   z.record(z.unknown()).optional(),
   notes:           z.string().optional(),
 });
@@ -38,6 +39,7 @@ const updateContactSchemaBase = z.object({
   department:      z.string().max(100).nullable().optional(),
   is_primary:      z.boolean().nullable().optional(),
   tags:            z.array(z.string()).nullable().optional(),
+  tag_ids:         z.array(z.string().uuid()).max(50).optional(),
   custom_fields:   z.record(z.unknown()).nullable().optional(),
   notes:           z.string().nullable().optional(),
 });
@@ -75,6 +77,15 @@ export const listContactsQuerySchema = z.object({
 
 export const linkOrganizationSchema = z.object({
   organization_id: z.string().uuid(),
+});
+
+export const addContactTagSchema = z.object({
+  tag_id: z.string().uuid(),
+});
+
+export const contactTagParamsSchema = z.object({
+  id: z.string().uuid(),
+  tagId: z.string().uuid().optional(),
 });
 
 export const updateContactLgpdConsentSchema = z.object({
