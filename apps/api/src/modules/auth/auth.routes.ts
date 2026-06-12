@@ -257,7 +257,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const payload = verifyRefreshToken(refreshToken, lang);
+      const payload = await verifyRefreshToken(refreshToken, lang);
       const accessToken = refreshAccessToken(payload);
 
       return reply.code(200).send({ accessToken });

@@ -71,6 +71,30 @@ describe('Auth integration', () => {
     expect(refresh.body.accessToken).toEqual(expect.any(String));
   });
 
+  it('POST /api/auth/refresh sincroniza o papel atual do usuário no banco', async () => {
+    const staleRefreshToken = jwt.sign(
+      {
+        sub: TEST_USER_ID,
+        email: TEST_EMAIL,
+        name: 'Integration Test User',
+        role: 'agent',
+        tenantId: globalThis.__ZIRADESK_TEST_TENANT_ID__,
+        schemaName: globalThis.__ZIRADESK_TEST_TENANT_SCHEMA__,
+        isSuperAdmin: false,
+      },
+      env.JWT_REFRESH_SECRET,
+      { expiresIn: '5m' },
+    );
+
+    const response = await createTestApp()
+      .post('/api/auth/refresh')
+      .set('Cookie', `${REFRESH_COOKIE}=${staleRefreshToken}`);
+
+    expect(response.status).toBe(200);
+    const accessPayload = jwt.verify(response.body.accessToken, env.JWT_SECRET) as { role: string };
+    expect(accessPayload.role).toBe('owner');
+  });
+
   it('POST /api/auth/refresh com cookie expirado retorna 401', async () => {
     const expiredToken = jwt.sign(
       {

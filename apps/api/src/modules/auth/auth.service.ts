@@ -147,14 +147,24 @@ export async function loginWithEmailPassword(
   return { tokens: signTokens(user), user };
 }
 
-export function verifyRefreshToken(
+export async function verifyRefreshToken(
   token: string,
   lang: SupportedLanguage = 'pt-BR',
-): UserPayload {
+): Promise<UserPayload> {
   const msg = getAuthMessages(lang);
 
+  let payload: {
+    sub: string;
+    email: string;
+    name: string;
+    role: string;
+    tenantId?: string;
+    schemaName?: string;
+    isSuperAdmin: boolean;
+  };
+
   try {
-    const payload = jwt.verify(token, env.JWT_REFRESH_SECRET) as {
+    payload = jwt.verify(token, env.JWT_REFRESH_SECRET) as {
       sub: string;
       email: string;
       name: string;
@@ -163,20 +173,59 @@ export function verifyRefreshToken(
       schemaName?: string;
       isSuperAdmin: boolean;
     };
-
-    const result: UserPayload = {
-      id: payload.sub,
-      name: payload.name,
-      email: payload.email,
-      role: payload.role,
-      isSuperAdmin: payload.isSuperAdmin,
-    };
-    if (payload.tenantId) result.tenantId = payload.tenantId;
-    if (payload.schemaName) result.schemaName = payload.schemaName;
-    return result;
   } catch {
     throw new Error(msg.tokenExpired);
   }
+
+  if (payload.isSuperAdmin) {
+    const superAdmin = await prisma.superAdmin.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, name: true, email: true },
+    });
+    if (!superAdmin) throw new Error(msg.tokenExpired);
+
+    return {
+      id: superAdmin.id,
+      name: superAdmin.name,
+      email: superAdmin.email,
+      role: 'super_admin',
+      isSuperAdmin: true,
+    };
+  }
+
+  if (!payload.tenantId) throw new Error(msg.tokenExpired);
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: payload.tenantId },
+    select: { schemaName: true, status: true },
+  });
+  if (!tenant || (tenant.status !== 'active' && tenant.status !== 'trial')) {
+    throw new Error(msg.tokenExpired);
+  }
+
+  const schemaName = tenant.schemaName.replaceAll('"', '""');
+  const users = await prisma.$queryRawUnsafe<
+    Array<{ id: string; name: string; email: string; role: string; avatar_url: string | null }>
+  >(
+    `SELECT id, name, email, role, avatar_url
+     FROM "${schemaName}".users
+     WHERE id = $1::uuid AND status = 'active'
+     LIMIT 1`,
+    payload.sub,
+  );
+  const user = users[0];
+  if (!user) throw new Error(msg.tokenExpired);
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    avatar_url: user.avatar_url,
+    tenantId: payload.tenantId,
+    schemaName: tenant.schemaName,
+    isSuperAdmin: false,
+  };
 }
 
 export function refreshAccessToken(payload: UserPayload): string {
