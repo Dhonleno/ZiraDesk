@@ -901,6 +901,16 @@ interface ListContactsParams {
   status?: 'lead' | 'prospect' | 'client' | 'inactive';
 }
 
+export interface ContactFilterParams {
+  search?: string;
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
+  tags?: string[];
+}
+
+export type AddCampaignContactsPayload =
+  | { contact_ids: string[] }
+  | { filter: ContactFilterParams; exclude_ids?: string[] };
+
 export interface CrmBulkDeleteResult {
   requested: number;
   deleted: string[];
@@ -967,6 +977,16 @@ export const contactsApi = {
       },
     });
     return { data: res.data.data, meta: res.data.meta };
+  },
+  count: async (params?: ContactFilterParams): Promise<{ count: number }> => {
+    const { tags, ...rest } = params ?? {};
+    const res = await api.get<{ count: number }>('/crm/contacts/count', {
+      params: {
+        ...rest,
+        ...(tags?.length ? { tags: tags.join(',') } : {}),
+      },
+    });
+    return res.data;
   },
   listTags: async (): Promise<ContactTag[]> => {
     const res = await api.get<{ success: boolean; data: ContactTag[] }>('/crm/contacts/tags');
@@ -3442,10 +3462,13 @@ export const campaignsApi = {
     return res.data.data;
   },
 
-  addContacts: async (id: string, contact_ids: string[]): Promise<{ added: number; total_contacts: number }> => {
+  addContacts: async (
+    id: string,
+    payload: AddCampaignContactsPayload,
+  ): Promise<{ added: number; total_contacts: number }> => {
     const res = await api.post<{ success: boolean; data: { added: number; total_contacts: number } }>(
       `/omnichannel/campaigns/${id}/contacts`,
-      { contact_ids },
+      payload,
     );
     return res.data.data;
   },

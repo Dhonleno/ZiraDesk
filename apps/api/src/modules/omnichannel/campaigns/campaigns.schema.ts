@@ -30,8 +30,17 @@ export const updateCampaignBodySchema = z.object({
 });
 
 export const addContactsBodySchema = z.object({
-  contact_ids: z.array(z.string().uuid()).min(1).max(1000),
-});
+  contact_ids: z.array(z.string().uuid()).min(1).max(1000).optional(),
+  filter: z.object({
+    search: z.string().trim().optional(),
+    status: z.string().trim().optional(),
+    tags: z.array(z.string().uuid()).max(50).optional(),
+  }).optional(),
+  exclude_ids: z.array(z.string().uuid()).max(1000).optional(),
+}).refine(
+  (data) => data.contact_ids !== undefined || data.filter !== undefined,
+  'Informe contact_ids ou filter',
+);
 
 export const duplicateFailedCampaignBodySchema = createCampaignBodySchema.omit({
   channel_id: true,

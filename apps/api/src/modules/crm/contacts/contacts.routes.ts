@@ -9,6 +9,7 @@ import {
   createContactSchema,
   updateContactSchema,
   listContactsQuerySchema,
+  countContactsQuerySchema,
   linkOrganizationSchema,
   updateContactLgpdConsentSchema,
   exportContactLgpdQuerySchema,
@@ -29,6 +30,7 @@ import {
   registerContactPiiAccess,
   registerContactPiiReveal,
   listContacts,
+  countContactsByFilter,
   listDistinctContactTags,
   listContactTagAssignments,
   addContactTag,
@@ -102,6 +104,25 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
     const tags = await listDistinctContactTags(schemaName);
     return reply.send({ success: true, data: tags });
+  });
+
+  // GET /api/crm/contacts/count
+  app.get('/count', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const parsed = countContactsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const count = await countContactsByFilter(parsed.data, schemaName);
+    return reply.send({ count });
   });
 
   // GET /api/crm/contacts/:id/tags

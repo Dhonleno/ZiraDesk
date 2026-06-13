@@ -8,6 +8,7 @@ import type {
 } from './campaigns.schema.js';
 import { ensureTemplatesInfrastructure } from '../../admin/templates/templates.service.js';
 import { isPublicTestTemplate } from '../../../jobs/message-delivery-policy.js';
+import { buildContactFilterWhere } from '../../crm/contacts/contact-filter.js';
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -433,31 +434,53 @@ export async function addContacts(
     throw new ValidationError('Só é possível adicionar contatos a campanhas em rascunho', 409);
   }
 
-  let addedCount = 0;
-  for (const contactId of data.contact_ids) {
-    const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string; phone: string | null; whatsapp: string | null }>>(
-      `SELECT id::text, phone, whatsapp FROM ${schema}.contacts WHERE id = $1::uuid LIMIT 1`,
-      contactId,
-    );
-    const contact = contactRows[0];
-    if (!contact) continue;
+  let addedCount: number;
 
-    const hasPhone = Boolean(contact.whatsapp?.trim() || contact.phone?.trim());
-    if (!hasPhone) {
-      throw new ValidationError(
-        `Contato ${contactId} não possui WhatsApp ou telefone cadastrado`,
+  if (data.contact_ids) {
+    addedCount = 0;
+    for (const contactId of data.contact_ids) {
+      const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string; phone: string | null; whatsapp: string | null }>>(
+        `SELECT id::text, phone, whatsapp FROM ${schema}.contacts WHERE id = $1::uuid LIMIT 1`,
+        contactId,
       );
-    }
+      const contact = contactRows[0];
+      if (!contact) continue;
 
-    const upserted = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      const hasPhone = Boolean(contact.whatsapp?.trim() || contact.phone?.trim());
+      if (!hasPhone) {
+        throw new ValidationError(
+          `Contato ${contactId} não possui WhatsApp ou telefone cadastrado`,
+        );
+      }
+
+      const upserted = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO ${schema}.campaign_contacts (campaign_id, contact_id)
+         VALUES ($1::uuid, $2::uuid)
+         ON CONFLICT (campaign_id, contact_id) DO NOTHING
+         RETURNING id`,
+        campaignId,
+        contactId,
+      );
+      if (upserted[0]) addedCount++;
+    }
+  } else {
+    const filter = data.filter ?? {};
+    const where = buildContactFilterWhere({
+      schemaName,
+      filter,
+      excludeIds: data.exclude_ids,
+      startParamIndex: 2,
+    });
+
+    addedCount = await prisma.$executeRawUnsafe(
       `INSERT INTO ${schema}.campaign_contacts (campaign_id, contact_id)
-       VALUES ($1::uuid, $2::uuid)
-       ON CONFLICT (campaign_id, contact_id) DO NOTHING
-       RETURNING id`,
+       SELECT $1::uuid, ct.id
+       FROM ${schema}.contacts ct
+       WHERE ${where.sql}
+       ON CONFLICT (campaign_id, contact_id) DO NOTHING`,
       campaignId,
-      contactId,
+      ...where.params,
     );
-    if (upserted[0]) addedCount++;
   }
 
   const countRows = await prisma.$queryRawUnsafe<Array<{ count: string }>>(

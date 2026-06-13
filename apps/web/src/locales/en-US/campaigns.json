@@ -116,6 +116,11 @@
     "allTags": "All tags",
     "noPhone": "No phone"
   },
+  "contactsModal": {
+    "selectAll": "Select all (visible)",
+    "selectAllMatching": "Select all matching filter ({{count}})",
+    "addAllMatching": "Add {{count}} contact(s)"
+  },
   "contacts": {
     "title": "Add contacts",
     "search": "Search by name or phone...",

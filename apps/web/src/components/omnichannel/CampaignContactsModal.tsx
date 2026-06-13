@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { campaignsApi, contactsApi, type Campaign, type CrmContact } from '../../services/api';
+import {
+  campaignsApi,
+  contactsApi,
+  type AddCampaignContactsPayload,
+  type Campaign,
+  type CrmContact,
+} from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 
@@ -25,6 +31,7 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>('');
   const [tagFilter, setTagFilter] = useState('');
+  const [selectAllMode, setSelectAllMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const debouncedSearch = useDebounce(search, 280);
@@ -76,18 +83,30 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     staleTime: 5 * 60_000,
   });
 
+  const { data: countData, isFetching: isFetchingCount } = useQuery({
+    queryKey: ['contacts-count', debouncedSearch, statusFilter, tagFilter],
+    queryFn: () => contactsApi.count({
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(tagFilter ? { tags: [tagFilter] } : {}),
+    }),
+    staleTime: 30_000,
+  });
+
   const contacts = contactsData?.pages.flatMap((result) => result.data) ?? [];
+  const totalCount = countData?.count ?? 0;
   const availableTags = useMemo(() => (
     [...allTags].sort((left, right) => left.name.localeCompare(right.name))
   ), [allTags]);
 
   const addMutation = useMutation({
-    mutationFn: () => campaignsApi.addContacts(campaign.id, Array.from(selected)),
+    mutationFn: (payload: AddCampaignContactsPayload) => campaignsApi.addContacts(campaign.id, payload),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.id] });
       void queryClient.invalidateQueries({ queryKey: ['campaign-existing-contacts', campaign.id] });
       toast.success(`${result.added} contato(s) adicionado(s). Total: ${result.total_contacts}`);
+      setSelectAllMode(false);
       setSelected(new Set());
     },
     onError: () => {
@@ -97,11 +116,13 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
 
   const isDraft = campaign.status === 'draft';
   const selectedCount = selected.size;
-  const selectableVisibleContacts = contacts.filter(
-    (contact) => isDraft && !existingContactIds.has(contact.id) && hasPhone(contact),
-  );
-  const allVisibleSelected = selectableVisibleContacts.length > 0
-    && selectableVisibleContacts.every((contact) => selected.has(contact.id));
+  const matchingSelectedCount = Math.max(0, totalCount - selectedCount);
+
+  useEffect(() => {
+    if (selectAllMode) {
+      setSelected(new Set());
+    }
+  }, [debouncedSearch, selectAllMode, statusFilter, tagFilter]);
 
   const toggleSelect = (contactId: string, contact: CrmContact) => {
     if (!isDraft || existingContactIds.has(contactId) || !hasPhone(contact)) return;
@@ -113,15 +134,20 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     });
   };
 
-  const toggleSelectAll = (checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      selectableVisibleContacts.forEach((contact) => {
-        if (checked) next.add(contact.id);
-        else next.delete(contact.id);
+  const handleSubmit = () => {
+    if (selectAllMode) {
+      addMutation.mutate({
+        filter: {
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(tagFilter ? { tags: [tagFilter] } : {}),
+        },
+        exclude_ids: Array.from(selected),
       });
-      return next;
-    });
+      return;
+    }
+
+    addMutation.mutate({ contact_ids: Array.from(selected) });
   };
 
   const handleListScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -224,7 +250,7 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
         </div>
 
         {/* Selection bar */}
-        {selectedCount > 0 && (
+        {(selectAllMode || selectedCount > 0) && (
           <div style={{
             padding: '8px 18px',
             background: 'var(--teal-dim)',
@@ -234,7 +260,9 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
             fontWeight: 500,
             flexShrink: 0,
           }}>
-            {t('contacts.selected', { count: selectedCount })}
+            {selectAllMode
+              ? t('contactsModal.addAllMatching', { count: matchingSelectedCount })
+              : t('contacts.selected', { count: selectedCount })}
           </div>
         )}
 
@@ -251,11 +279,18 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
           }}>
             <input
               type="checkbox"
-              checked={allVisibleSelected}
-              disabled={selectableVisibleContacts.length === 0}
-              onChange={(event) => toggleSelectAll(event.target.checked)}
+              checked={selectAllMode}
+              disabled={!isDraft || isFetchingCount || totalCount === 0}
+              onChange={(event) => {
+                setSelectAllMode(event.target.checked);
+                setSelected(new Set());
+              }}
             />
-            <span>{t('addContacts.selectAll')}</span>
+            <span>
+              {selectAllMode
+                ? t('contactsModal.selectAllMatching', { count: totalCount })
+                : t('contactsModal.selectAll')}
+            </span>
           </div>
 
           {isFetching && contacts.length === 0 && (
@@ -273,7 +308,9 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
           {contacts.map((contact) => {
             const isExisting = existingContactIds.has(contact.id);
             const noPhone = !hasPhone(contact);
-            const isChecked = selected.has(contact.id) || isExisting;
+            const isExcluded = selectAllMode && selected.has(contact.id);
+            const isChecked = isExisting
+              || (selectAllMode ? !noPhone && !isExcluded : selected.has(contact.id));
             const disabled = isExisting || noPhone || !isDraft;
 
             return (
@@ -287,7 +324,7 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
                   padding: '9px 18px',
                   borderBottom: '1px solid var(--line)',
                   cursor: disabled ? 'default' : 'pointer',
-                  background: selected.has(contact.id) ? 'var(--teal-dim)' : 'transparent',
+                  background: isChecked && !isExisting ? 'var(--teal-dim)' : 'transparent',
                   opacity: noPhone ? 0.5 : 1,
                   transition: 'background .1s',
                 }}
@@ -363,12 +400,18 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
           <button className="tb-btn" onClick={onClose}>Cancelar</button>
           <button
             className="tb-btn tb-btn-primary"
-            disabled={selectedCount === 0 || addMutation.isPending || !isDraft}
-            onClick={() => addMutation.mutate()}
+            disabled={
+              addMutation.isPending
+              || !isDraft
+              || (selectAllMode ? isFetchingCount || matchingSelectedCount === 0 : selectedCount === 0)
+            }
+            onClick={handleSubmit}
           >
             {addMutation.isPending
               ? t('contacts.adding')
-              : selectedCount > 0
+              : selectAllMode
+                ? t('contactsModal.addAllMatching', { count: matchingSelectedCount })
+                : selectedCount > 0
                 ? t('addContacts.confirmWithCount', { count: selectedCount })
                 : t('addContacts.confirm')}
           </button>

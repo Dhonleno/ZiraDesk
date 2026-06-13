@@ -118,6 +118,11 @@
     "allTags": "Todas as tags",
     "noPhone": "Sem telefone"
   },
+  "contactsModal": {
+    "selectAll": "Selecionar todos (visíveis)",
+    "selectAllMatching": "Selecionar todos que correspondem ao filtro ({{count}})",
+    "addAllMatching": "Adicionar {{count}} contato(s)"
+  },
   "contacts": {
     "title": "Adicionar contatos",
     "search": "Buscar por nome ou telefone...",

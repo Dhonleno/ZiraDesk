@@ -11,6 +11,7 @@ import type {
   CreateContactInput,
   UpdateContactInput,
   ListContactsQuery,
+  CountContactsQuery,
   UpdateContactLgpdConsentInput,
   AnonymizeContactLgpdInput,
   ListLgpdRequestsQuery,
@@ -19,6 +20,7 @@ import bcrypt from 'bcryptjs';
 import { normalizePhoneForStorage, PhoneNormalizationError } from '../../../utils/phone.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
 import { maskDocument, maskEmail, maskPhone, maskPiiFields } from '../../../utils/pii-mask.js';
+import { buildContactFilterWhere } from './contact-filter.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -469,6 +471,22 @@ export async function listContacts(
     data: rows,
     meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
   };
+}
+
+export async function countContactsByFilter(
+  filter: CountContactsQuery,
+  schemaName: string,
+): Promise<number> {
+  const schema = quoteIdent(schemaName);
+  const where = buildContactFilterWhere({ schemaName, filter });
+  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count
+     FROM ${schema}.contacts ct
+     WHERE ${where.sql}`,
+    ...where.params,
+  );
+
+  return Number(rows[0]?.count ?? 0);
 }
 
 /* ── getContact ──────────────────────────────────────────────────────────── */

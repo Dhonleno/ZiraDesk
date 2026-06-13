@@ -298,6 +298,47 @@ describe('Campanhas integration', () => {
     expect(res.status).toBe(422);
   });
 
+  it('POST /campaigns/:id/contacts adiciona por filtro e respeita exclusões', async () => {
+    const createRes = await createTestApp()
+      .post('/api/omnichannel/campaigns')
+      .set(agentHeader(tenant))
+      .send({ name: 'Campanha por filtro', channel_id: channelId, template_id: templateId });
+    const campaignId = createRes.body.data.id as string;
+
+    const matchingRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${tenant.schemaName}".contacts (name, email, phone, whatsapp)
+       VALUES
+         ('Filtro Campanha A', 'filtro-a@test.com', '5511999991001', '5511999991001'),
+         ('Filtro Campanha B', 'filtro-b@test.com', '5511999991002', '5511999991002')
+       RETURNING id`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${tenant.schemaName}".contacts (name, email)
+       VALUES ('Filtro Campanha sem telefone', 'filtro-sem-telefone@test.com')`,
+    );
+
+    const excludedId = matchingRows[1]!.id;
+    const res = await createTestApp()
+      .post(`/api/omnichannel/campaigns/${campaignId}/contacts`)
+      .set(agentHeader(tenant))
+      .send({
+        filter: { search: 'Filtro Campanha' },
+        exclude_ids: [excludedId],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.added).toBe(1);
+    expect(res.body.data.total_contacts).toBe(1);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ contact_id: string }>>(
+      `SELECT contact_id::text
+       FROM "${tenant.schemaName}".campaign_contacts
+       WHERE campaign_id = $1::uuid`,
+      campaignId,
+    );
+    expect(rows.map((row) => row.contact_id)).toEqual([matchingRows[0]!.id]);
+  });
+
   it('GET /campaigns/:id/contacts → lista com status', async () => {
     const createRes = await createTestApp()
       .post('/api/omnichannel/campaigns')
