@@ -9,7 +9,7 @@ import { messageQueue } from '../../jobs/queue.js';
 import { verifyWhatsAppMetaSignature } from '../../middleware/meta-signature.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
-import { normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
+import { normalizePhoneForStorage, normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
 import {
   ensureBotInfrastructure,
   processBotMessage,
@@ -220,6 +220,16 @@ const LOW_SIGNAL_MESSAGE_REGEX = /^(oi+|ol[aá]|opa|e ai|e aí|bom dia|boa tarde
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function alternateBrazilMobileDigits(digits: string): string {
+  if (digits.length === 13 && digits.startsWith('55') && digits.charAt(4) === '9') {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  if (digits.length === 12 && digits.startsWith('55')) {
+    return digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  return digits;
 }
 
 function isLowSignalMessage(content: string): boolean {
@@ -904,8 +914,14 @@ async function processIncomingMessage(
 
   const { tenantId, schemaName, channelId, channelCredentials } = found;
 
-  const formattedPhone = normalizeWhatsAppSenderPhone(senderPhone);
+  let formattedPhone: string;
+  try {
+    formattedPhone = normalizePhoneForStorage(senderPhone) ?? normalizeWhatsAppSenderPhone(senderPhone);
+  } catch {
+    formattedPhone = normalizeWhatsAppSenderPhone(senderPhone);
+  }
   const formattedPhoneDigits = formattedPhone.replace(/\D/g, '');
+  const formattedPhoneDigitsAlt = alternateBrazilMobileDigits(formattedPhoneDigits);
   const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
     'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
     tenantId,
@@ -1025,9 +1041,12 @@ async function processIncomingMessage(
           OR phone = $1
           OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $2
           OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $2
+          OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $3
+          OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $3
        LIMIT 1`,
       formattedPhone,
       formattedPhoneDigits,
+      formattedPhoneDigitsAlt,
     );
 
     let contactId: string;

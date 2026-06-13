@@ -400,6 +400,104 @@ describe('Omnichannel webhooks integration', () => {
     expect(Number(after[0]?.count ?? 0n)).toBe(Number(before[0]?.count ?? 0n) + 1);
   });
 
+  it('Webhook com celular BR legado reutiliza contato e conversa com nono dígito', async () => {
+    const { schemaName } = await createExtraTenant();
+    const phoneNumberId = `1555444${Math.floor(Math.random() * 100000)}`;
+    const legacyPhone = `556285${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`;
+    const normalizedPhone = `+${legacyPhone.slice(0, 4)}9${legacyPhone.slice(4)}`;
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+    const channelId = await insertChannel(schemaName, 'whatsapp', {
+      phoneNumberId,
+      accessToken: 'EAAD_TEST_TOKEN',
+      verifyToken: 'VERIFY_TOKEN',
+      wabaId: '1234567890',
+    });
+
+    const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".contacts (name, phone, whatsapp)
+       VALUES ('Contato normalizado', $1, $1)
+       RETURNING id`,
+      normalizedPhone,
+    );
+    const contactId = contactRows[0]!.id;
+    const conversationRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".conversations
+         (contact_id, channel_id, channel_type, conversation_type, status)
+       VALUES ($1::uuid, $2::uuid, 'whatsapp', 'inbound', 'open')
+       RETURNING id`,
+      contactId,
+      channelId,
+    );
+    const conversationId = conversationRows[0]!.id;
+
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: '102290129340398',
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: '+1 555 078 3881',
+                  phone_number_id: phoneNumberId,
+                },
+                contacts: [
+                  {
+                    profile: { name: 'Contato normalizado' },
+                    wa_id: legacyPhone,
+                  },
+                ],
+                messages: [
+                  {
+                    from: legacyPhone,
+                    id: externalId,
+                    timestamp: '1697040126',
+                    text: { body: 'Mensagem pelo número legado' },
+                    type: 'text',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const rawBody = JSON.stringify(payload);
+    const response = await createTestApp()
+      .post('/api/webhooks/whatsapp')
+      .set('Content-Type', 'application/json')
+      .set('x-hub-signature-256', createMetaSignature(rawBody))
+      .send(payload);
+
+    expect(response.status).toBe(200);
+
+    const persistedConversationId = await waitFor(async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ conversation_id: string }>>(
+        `SELECT conversation_id::text
+         FROM "${schemaName}".messages
+         WHERE external_id = $1
+         LIMIT 1`,
+        externalId,
+      );
+      return rows[0]?.conversation_id ?? null;
+    });
+    expect(persistedConversationId).toBe(conversationId);
+
+    const contactCountRows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*)::bigint AS count
+       FROM "${schemaName}".contacts
+       WHERE regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') IN ($1, $2)
+          OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') IN ($1, $2)`,
+      legacyPhone,
+      normalizedPhone.replace(/\D/g, ''),
+    );
+    expect(Number(contactCountRows[0]?.count ?? 0n)).toBe(1);
+  });
+
   it('Webhook duplicado (mesmo external_id) não duplica mensagem', async () => {
     const { schemaName } = requireGlobalTenant();
     await ensure24x7(schemaName);
