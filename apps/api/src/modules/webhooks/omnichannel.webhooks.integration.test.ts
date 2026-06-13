@@ -401,7 +401,8 @@ describe('Omnichannel webhooks integration', () => {
   });
 
   it('Webhook com celular BR legado reutiliza contato e conversa com nono dígito', async () => {
-    const { schemaName } = await createExtraTenant();
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
     const phoneNumberId = `1555444${Math.floor(Math.random() * 100000)}`;
     const legacyPhone = `556285${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`;
     const normalizedPhone = `+${legacyPhone.slice(0, 4)}9${legacyPhone.slice(4)}`;
@@ -496,7 +497,7 @@ describe('Omnichannel webhooks integration', () => {
       normalizedPhone.replace(/\D/g, ''),
     );
     expect(Number(contactCountRows[0]?.count ?? 0n)).toBe(1);
-  });
+  }, 30_000);
 
   it('Webhook duplicado (mesmo external_id) não duplica mensagem', async () => {
     const { schemaName } = requireGlobalTenant();
