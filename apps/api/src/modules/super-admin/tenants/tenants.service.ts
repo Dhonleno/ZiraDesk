@@ -69,6 +69,26 @@ function toSchemaName(slug: string): string {
   return `tenant_${slug.replace(/-/g, '_')}`;
 }
 
+export async function ensureTenantVoiceConfigInfrastructure(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.tenant_voice_config (
+      id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id             TEXT UNIQUE NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+      twilio_phone_number   VARCHAR(20) UNIQUE NOT NULL,
+      default_bot_menu_id   UUID,
+      ivr_enabled           BOOLEAN NOT NULL DEFAULT true,
+      ring_timeout_seconds  INTEGER NOT NULL DEFAULT 20,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_tenant_voice_config_phone
+    ON public.tenant_voice_config(twilio_phone_number)
+  `);
+}
+
 async function createTenantTables(schemaName: string): Promise<void> {
   // Cada execução é separada para rastreabilidade de erros
   await prisma.$executeRawUnsafe(`
@@ -907,6 +927,8 @@ export async function createTenant(data: CreateTenantInput): Promise<{
   tenant: { id: string; name: string; slug: string; schemaName: string };
   tempPassword: string;
 }> {
+  await ensureTenantVoiceConfigInfrastructure();
+
   const existing = await prisma.tenant.findUnique({ where: { slug: data.slug } });
   if (existing) throw new ConflictError('Subdomínio já está em uso');
 

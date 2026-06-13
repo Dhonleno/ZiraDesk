@@ -100,6 +100,15 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.voiceConfig',
+        path: '/admin/voice-config',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M4.2 2.4h2l1 3-1.5 1.2a10.2 10.2 0 0 0 3.7 3.7l1.2-1.5 3 1v2c0 .8-.6 1.4-1.4 1.4A9.8 9.8 0 0 1 2.8 3.8c0-.8.6-1.4 1.4-1.4Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.attendanceRules',
         path: '/admin/attendance-rules',
         permission: 'settings:manage',

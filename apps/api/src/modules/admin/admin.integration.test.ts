@@ -6,6 +6,7 @@ import { prisma } from '../../config/database.js';
 import { createIsolatedTestServer, createTestApp, createTestJWT } from '../../test/setup.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { provisionTenantSchema } from '../super-admin/tenants/tenants.service.js';
+import { getTenantByTwilioNumber } from './voice-config/voice-config.service.js';
 
 type TenantRole = 'owner' | 'admin' | 'agent' | 'viewer';
 
@@ -34,6 +35,10 @@ let suitePlanId: string | null = null;
 
 function uniqueToken(): string {
   return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+function uniquePhoneNumber(): string {
+  return `+1555${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
 }
 
 function requireSuitePlanId(): string {
@@ -372,6 +377,81 @@ describe('Admin integration', () => {
 
     const responseIds = response.body.data.map((channel: { id: string }) => channel.id);
     expect(responseIds).not.toContain(channelB.id);
+  });
+
+  it('PATCH /api/admin/voice-config salva e permite lookup público pelo número Twilio', async () => {
+    const tenant = await createTempTenant('voice-config');
+    const phoneNumber = uniquePhoneNumber();
+    const botMenus = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${tenant.schemaName}".bot_menus ORDER BY created_at ASC LIMIT 1`,
+    );
+    const botMenuId = botMenus[0]?.id;
+    expect(botMenuId).toBeTruthy();
+
+    const response = await createTestApp()
+      .patch('/api/admin/voice-config')
+      .set(authHeader(tenant))
+      .send({
+        twilioPhoneNumber: phoneNumber,
+        defaultBotMenuId: botMenuId,
+        ivrEnabled: true,
+        ringTimeoutSeconds: 25,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      tenantId: tenant.id,
+      twilioPhoneNumber: phoneNumber,
+      defaultBotMenuId: botMenuId,
+      ivrEnabled: true,
+      ringTimeoutSeconds: 25,
+    });
+
+    const lookup = await getTenantByTwilioNumber(phoneNumber);
+    expect(lookup).toMatchObject({
+      tenantId: tenant.id,
+      schemaName: tenant.schemaName,
+      config: {
+        twilioPhoneNumber: phoneNumber,
+        defaultBotMenuId: botMenuId,
+      },
+    });
+  });
+
+  it('PATCH /api/admin/voice-config rejeita menu de outro tenant e número duplicado', async () => {
+    const tenantA = await createTempTenant('voice-config-a');
+    const tenantB = await createTempTenant('voice-config-b');
+    const phoneNumber = uniquePhoneNumber();
+    const tenantBMenus = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${tenantB.schemaName}".bot_menus ORDER BY created_at ASC LIMIT 1`,
+    );
+
+    const invalidMenuResponse = await createTestApp()
+      .patch('/api/admin/voice-config')
+      .set(authHeader(tenantA))
+      .send({
+        twilioPhoneNumber: phoneNumber,
+        defaultBotMenuId: tenantBMenus[0]?.id,
+      });
+
+    expect(invalidMenuResponse.status).toBe(400);
+    expect(invalidMenuResponse.body.error).toMatchObject({ code: 'INVALID_BOT_MENU' });
+
+    const firstSave = await createTestApp()
+      .patch('/api/admin/voice-config')
+      .set(authHeader(tenantA))
+      .send({ twilioPhoneNumber: phoneNumber });
+    expect(firstSave.status).toBe(200);
+
+    const duplicateResponse = await createTestApp()
+      .patch('/api/admin/voice-config')
+      .set(authHeader(tenantB))
+      .send({ twilioPhoneNumber: phoneNumber });
+
+    expect(duplicateResponse.status).toBe(409);
+    expect(duplicateResponse.body.error).toMatchObject({
+      code: 'DUPLICATE_TWILIO_PHONE_NUMBER',
+    });
   });
 
   it('POST /api/admin/channels valida e configura o webhook do WhatsApp', async () => {

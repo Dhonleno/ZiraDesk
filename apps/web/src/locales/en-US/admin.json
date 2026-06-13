@@ -80,6 +80,7 @@
       "users": "Users",
       "channels": "Channels",
       "businessHours": "Business hours",
+      "voiceConfig": "Voice Configuration",
       "bot": "Support bot",
       "autoAssign": "Automatic Distribution",
       "skills": "Skills",
@@ -275,6 +276,24 @@
       "addHoliday": "Add holiday",
       "holidayDate": "Holiday date",
       "holidayName": "Holiday name"
+    },
+    "voiceConfig": {
+      "title": "Voice Configuration",
+      "subtitle": "Configure the phone number to receive calls",
+      "sectionTitle": "Incoming calls",
+      "twilioPhoneNumber": "Twilio Number",
+      "twilioPhoneNumberHint": "International format, e.g. +5562999999999",
+      "defaultBotMenu": "Bot menu for IVR",
+      "noBotMenu": "No menu selected",
+      "ivrEnabled": "Enable voice menu (IVR)",
+      "ringTimeout": "Ring time per agent (seconds)",
+      "saved": "Configuration saved successfully",
+      "errors": {
+        "duplicatePhone": "This number is already used by another tenant",
+        "invalidPhone": "Enter a valid number in E.164 format",
+        "timeoutRange": "Enter a value between 5 and 60 seconds",
+        "save": "Error saving voice configuration"
+      }
     },
     "bot": {
       "title": "Support Bot",
@@ -954,6 +973,7 @@
     "permissions": "Permissions and Access",
     "channels": "Channels",
     "businessHours": "Business Hours",
+    "voiceConfig": "Voice Configuration",
     "supportBot": "Support Bot",
     "autoDistribution": "Auto Distribution",
     "skills": "Skills",

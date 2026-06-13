@@ -80,6 +80,7 @@
       "users": "Usuarios",
       "channels": "Canales",
       "businessHours": "Horario de atención",
+      "voiceConfig": "Configuración de Voz",
       "bot": "Bot de atención",
       "autoAssign": "Distribución Automática",
       "skills": "Habilidades",
@@ -275,6 +276,24 @@
       "addHoliday": "Agregar feriado",
       "holidayDate": "Fecha del feriado",
       "holidayName": "Nombre del feriado"
+    },
+    "voiceConfig": {
+      "title": "Configuración de Voz",
+      "subtitle": "Configura el número de teléfono para recibir llamadas",
+      "sectionTitle": "Recepción de llamadas",
+      "twilioPhoneNumber": "Número de Twilio",
+      "twilioPhoneNumberHint": "Formato internacional, ej: +5562999999999",
+      "defaultBotMenu": "Menú del bot para IVR",
+      "noBotMenu": "Ningún menú seleccionado",
+      "ivrEnabled": "Habilitar menú de voz (IVR)",
+      "ringTimeout": "Tiempo de timbre por agente (segundos)",
+      "saved": "Configuración guardada con éxito",
+      "errors": {
+        "duplicatePhone": "Este número ya está en uso por otro tenant",
+        "invalidPhone": "Ingresa un número válido en formato E.164",
+        "timeoutRange": "Ingresa un valor entre 5 y 60 segundos",
+        "save": "Error al guardar la configuración de voz"
+      }
     },
     "bot": {
       "title": "Bot de Atención",
@@ -954,6 +973,7 @@
     "permissions": "Permisos y Acceso",
     "channels": "Canales",
     "businessHours": "Horario de atención",
+    "voiceConfig": "Configuración de Voz",
     "supportBot": "Bot de atención",
     "autoDistribution": "Distribución automática",
     "skills": "Habilidades",

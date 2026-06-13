@@ -375,6 +375,24 @@ export interface TicketType {
   updated_at: string;
 }
 
+export interface VoiceConfig {
+  id: string;
+  tenantId: string;
+  twilioPhoneNumber: string;
+  defaultBotMenuId: string | null;
+  ivrEnabled: boolean;
+  ringTimeoutSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateVoiceConfigPayload {
+  twilioPhoneNumber: string;
+  defaultBotMenuId?: string | null;
+  ivrEnabled?: boolean;
+  ringTimeoutSeconds?: number;
+}
+
 export interface TicketCategory {
   id: string;
   name: string;
@@ -1627,6 +1645,18 @@ export const adminApi = {
 
     updateSettings: async (data: Partial<TenantSettings>): Promise<TenantSettings> => {
       const res = await api.patch<{ success: boolean; data: TenantSettings }>('/admin/settings', data);
+      return res.data.data;
+    },
+  },
+
+  voiceConfig: {
+    get: async (): Promise<VoiceConfig | null> => {
+      const res = await api.get<{ success: boolean; data: VoiceConfig | null }>('/admin/voice-config');
+      return res.data.data;
+    },
+
+    update: async (data: UpdateVoiceConfigPayload): Promise<VoiceConfig> => {
+      const res = await api.patch<{ success: boolean; data: VoiceConfig }>('/admin/voice-config', data);
       return res.data.data;
     },
   },

@@ -46,6 +46,7 @@ import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
 import { Templates as AdminTemplates } from './pages/admin/Templates';
 import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
 import { QueueConfig as AdminQueueConfig } from './pages/admin/QueueConfig';
+import { VoiceConfig as AdminVoiceConfig } from './pages/admin/VoiceConfig';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -282,6 +283,7 @@ export function App() {
               />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="business-hours" element={<AdminBusinessHours />} />
+              <Route path="voice-config" element={<AdminVoiceConfig />} />
               <Route
                 path="attendance-rules"
                 element={(

@@ -197,6 +197,7 @@ function Breadcrumb() {
     '/admin/roles':       t('roles.title'),
     '/admin/channels':    t('tenantAdmin.nav.channels'),
     '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
+    '/admin/voice-config': t('tenantAdmin.nav.voiceConfig'),
     '/admin/bot': t('tenantAdmin.nav.bot'),
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
