@@ -60,13 +60,6 @@ interface TenantUserInviteResponse {
   };
 }
 
-interface TenantUserResetPasswordResponse {
-  success: boolean;
-  data: {
-    tempPassword: string;
-  };
-}
-
 const statusVariant: Record<TenantStatus, 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
   active: 'success',
   trial: 'info',
@@ -94,10 +87,6 @@ export function TenantDetail() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<TenantUserRole>('admin');
   const [resetUser, setResetUser] = useState<TenantUser | null>(null);
-  const [credential, setCredential] = useState<{
-    userName: string;
-    tempPassword: string;
-  } | null>(null);
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['super-admin', 'tenant', id],
@@ -143,12 +132,11 @@ export function TenantDetail() {
       });
       return res.data.data;
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       setInviteOpen(false);
       setInviteName('');
       setInviteEmail('');
       setInviteRole('admin');
-      setCredential({ userName: result.user.name, tempPassword: result.tempPassword });
       void qc.invalidateQueries({ queryKey: ['super-admin', 'tenant-users', id] });
       toast.success(t('superAdmin.tenants.access.messages.userCreated'));
     },
@@ -159,18 +147,15 @@ export function TenantDetail() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async (user: TenantUser) => {
-      const res = await api.post<TenantUserResetPasswordResponse>(
-        `/super-admin/tenants/${id!}/users/${user.id}/reset-password`,
-      );
-      return { user, tempPassword: res.data.data.tempPassword };
+      await api.post(`/super-admin/tenants/${id!}/users/${user.id}/reset-password`);
+      return user;
     },
-    onSuccess: ({ user, tempPassword }) => {
+    onSuccess: (user) => {
       setResetUser(null);
-      setCredential({ userName: user.name, tempPassword });
-      toast.success(t('superAdmin.tenants.access.messages.passwordReset'));
+      toast.success(t('superAdmin.tenants.access.resetEmailSent', { name: user.name }));
     },
-    onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
+    onError: () => {
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -446,40 +431,6 @@ export function TenantDetail() {
         </div>
       </Modal>
 
-      <Modal
-        open={!!credential}
-        onClose={() => setCredential(null)}
-        title={t('superAdmin.tenants.access.credentialsTitle')}
-        maxWidth="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm" style={{ color: 'var(--txt-2)' }}>
-            {t('superAdmin.tenants.access.credentialsDescription', {
-              name: credential?.userName ?? '',
-            })}
-          </p>
-          <div
-            className="rounded-lg px-4 py-3"
-            style={{
-              border: '1px solid rgba(0,201,167,.25)',
-              background: 'rgba(0,201,167,.08)',
-            }}
-          >
-            <p className="m-0 text-xs uppercase tracking-wide" style={{ color: 'var(--txt-3)' }}>
-              {t('tenantAdmin.users.messages.tempPassword')}
-            </p>
-            <p className="mt-1 mb-0 font-mono text-lg" style={{ color: 'var(--teal)' }}>
-              {credential?.tempPassword}
-            </p>
-          </div>
-          <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
-            {t('tenantAdmin.users.messages.tempPasswordHint')}
-          </p>
-          <div className="flex justify-end pt-2">
-            <Button onClick={() => setCredential(null)}>{t('tenantAdmin.common.close')}</Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

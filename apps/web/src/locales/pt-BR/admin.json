@@ -394,13 +394,11 @@
         "deactivated": "Usuário desativado",
         "reactivated": "Usuário reativado com sucesso",
         "cantDeleteSelf": "Você não pode remover a si mesmo",
-        "tempPassword": "Senha temporária",
         "tempPasswordTitle": "Usuário criado - senha temporária",
         "tempPasswordDesc": "O e-mail de convite não pôde ser enviado para {{name}}. Compartilhe a senha abaixo manualmente.",
         "emailNotConfiguredWarning": "Configure RESEND_API_KEY no servidor para enviar convites por e-mail automaticamente.",
         "passwordReset": "Senha de {{name}} redefinida com sucesso",
         "resetLinkSent": "Link de redefinição enviado para {{email}}",
-        "tempPasswordHint": "O usuário deverá trocar a senha no primeiro acesso.",
         "resetPasswordConfirm": "Um link de redefinição será enviado para o e-mail de {{name}} ({{email}}).",
         "inviteEmailNotConfigured": "Convite criado, mas o envio de e-mail não está configurado. Defina RESEND_API_KEY no ambiente da API.",
         "inviteEmailDomainNotVerified": "Convite criado, mas o remetente de e-mail não está válido. Verifique RESEND_FROM_EMAIL e o domínio no Resend.",
@@ -1347,8 +1345,7 @@
         "subtitle": "Cadastre logins e redefina senhas sem precisar impersonar.",
         "createLogin": "Cadastrar login",
         "empty": "Nenhum acesso encontrado para este tenant.",
-        "credentialsTitle": "Senha temporária gerada",
-        "credentialsDescription": "Compartilhe a senha temporária com {{name}}.",
+        "resetEmailSent": "E-mail de redefinição enviado para {{name}}.",
         "table": {
           "actions": "Ações"
         },

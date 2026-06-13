@@ -178,8 +178,8 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: guard },
     async (request, reply) => {
       try {
-        const result = await resetTenantUserPasswordAsSuperAdmin(request.params.id, request.params.userId);
-        return reply.send({ success: true, data: result });
+        await resetTenantUserPasswordAsSuperAdmin(request.params.id, request.params.userId);
+        return reply.send({ success: true, data: { message: 'E-mail de redefinição enviado' } });
       } catch (err) {
         if (err instanceof NotFoundError || err instanceof UsersNotFoundError) {
           return reply.code(404).send({ success: false, error: { message: err.message } });
