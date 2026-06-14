@@ -2,13 +2,17 @@ interface ContactFilter {
   search?: string | undefined;
   status?: string | undefined;
   tags?: string[] | undefined;
+  organization_id?: string | undefined;
+  standalone_only?: boolean | undefined;
+  linked_only?: boolean | undefined;
 }
 
 interface BuildContactFilterOptions {
-  schemaName: string;
+  schemaName?: string;
   filter: ContactFilter;
   excludeIds?: string[] | undefined;
   startParamIndex?: number;
+  requirePhone?: boolean;
 }
 
 interface ContactFilterWhere {
@@ -25,13 +29,24 @@ export function buildContactFilterWhere({
   filter,
   excludeIds = [],
   startParamIndex = 1,
+  requirePhone = true,
 }: BuildContactFilterOptions): ContactFilterWhere {
-  const schema = quoteIdent(schemaName);
-  const conditions = [
-    `(NULLIF(BTRIM(ct.whatsapp), '') IS NOT NULL OR NULLIF(BTRIM(ct.phone), '') IS NOT NULL)`,
-  ];
+  const tablePrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const conditions: string[] = [];
   const params: unknown[] = [];
   let paramIndex = startParamIndex;
+
+  if (requirePhone) {
+    conditions.push(
+      `(NULLIF(BTRIM(ct.whatsapp), '') IS NOT NULL OR NULLIF(BTRIM(ct.phone), '') IS NOT NULL)`,
+    );
+  }
+
+  if (filter.organization_id) {
+    conditions.push(`ct.organization_id = $${paramIndex}::uuid`);
+    params.push(filter.organization_id);
+    paramIndex++;
+  }
 
   if (filter.search) {
     conditions.push(
@@ -48,7 +63,7 @@ export function buildContactFilterWhere({
     conditions.push(
       `EXISTS (
         SELECT 1
-        FROM ${schema}.organizations organization
+        FROM ${tablePrefix}organizations organization
         WHERE organization.id = ct.organization_id
           AND organization.status = $${paramIndex}
       )`,
@@ -61,13 +76,23 @@ export function buildContactFilterWhere({
     conditions.push(
       `EXISTS (
         SELECT 1
-        FROM ${schema}.contact_tag_assignments assignment
+        FROM ${tablePrefix}contact_tag_assignments assignment
+        JOIN ${tablePrefix}contact_tags contact_tag ON contact_tag.id = assignment.tag_id
         WHERE assignment.contact_id = ct.id
-          AND assignment.tag_id = ANY($${paramIndex}::uuid[])
+          AND (
+            contact_tag.id::text = ANY($${paramIndex}::text[])
+            OR contact_tag.name = ANY($${paramIndex}::text[])
+          )
       )`,
     );
     params.push(filter.tags);
     paramIndex++;
+  }
+
+  if (filter.standalone_only) {
+    conditions.push('ct.organization_id IS NULL');
+  } else if (filter.linked_only) {
+    conditions.push('ct.organization_id IS NOT NULL');
   }
 
   if (excludeIds.length) {
@@ -76,7 +101,7 @@ export function buildContactFilterWhere({
   }
 
   return {
-    sql: conditions.join(' AND '),
+    sql: conditions.length > 0 ? conditions.join(' AND ') : 'TRUE',
     params,
   };
 }

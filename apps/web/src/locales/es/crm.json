@@ -1,4 +1,11 @@
 {
+  "bulkSelect": {
+    "selectAllMatching": "Seleccionar todos los {{count}} resultados",
+    "confirmTitle": "Confirmar eliminación masiva",
+    "confirmWarning": "Esta acción eliminará permanentemente {{count}} registro(s). No se puede deshacer.",
+    "confirmInstruction": "Escribe {{count}} para confirmar.",
+    "confirmDelete": "Eliminar permanentemente"
+  },
   "organizations": {
     "title": "Organizaciones",
     "new": "Nueva organización",

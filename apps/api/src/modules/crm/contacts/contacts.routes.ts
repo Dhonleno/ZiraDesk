@@ -309,7 +309,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const result = await bulkDeleteContacts(
-      parsed.data.ids,
+      parsed.data,
       request.user.id,
       request.user.schemaName,
     );

@@ -87,11 +87,27 @@ export const countContactsQuerySchema = z.object({
     },
     z.array(z.string().uuid()).max(50).optional(),
   ),
+  organization_id: z.string().uuid().optional(),
+  standalone_only: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  linked_only: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  include_without_phone: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
 });
 
 export const bulkDeleteContactsSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1).max(100),
-});
+  ids: z.array(z.string().uuid()).min(1).max(100).optional(),
+  filter: z.object({
+    search: z.string().trim().optional(),
+    status: z.enum(['lead', 'prospect', 'client', 'inactive']).optional(),
+    tags: z.array(z.string().trim().min(1)).max(50).optional(),
+    organization_id: z.string().uuid().optional(),
+    standalone_only: z.boolean().optional(),
+    linked_only: z.boolean().optional(),
+  }).optional(),
+  exclude_ids: z.array(z.string().uuid()).max(1000).optional(),
+}).refine(
+  (data) => data.ids !== undefined || data.filter !== undefined,
+  'Informe ids ou filter',
+);
 
 export const linkOrganizationSchema = z.object({
   organization_id: z.string().uuid(),

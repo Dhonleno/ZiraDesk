@@ -891,6 +891,14 @@ interface ListOrganizationsParams {
   sort_order?: 'asc' | 'desc';
 }
 
+export interface OrganizationFilterParams {
+  search?: string;
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
+  segment?: string;
+  responsible_id?: string;
+  tag?: string;
+}
+
 interface ListContactsParams {
   page?: number;
   per_page?: number;
@@ -905,11 +913,19 @@ export interface ContactFilterParams {
   search?: string;
   status?: 'lead' | 'prospect' | 'client' | 'inactive';
   tags?: string[];
+  organization_id?: string;
+  standalone_only?: boolean;
+  linked_only?: boolean;
+  include_without_phone?: boolean;
 }
 
 export type AddCampaignContactsPayload =
   | { contact_ids: string[] }
   | { filter: ContactFilterParams; exclude_ids?: string[] };
+
+export type CrmBulkDeletePayload<TFilter> =
+  | { ids: string[] }
+  | { filter: TFilter; exclude_ids?: string[] };
 
 export interface CrmBulkDeleteResult {
   requested: number;
@@ -925,6 +941,10 @@ export const organizationsApi = {
     const res = await api.get<{ success: boolean; data: CrmOrganization[]; meta: CrmListMeta }>('/crm/organizations', { params });
     return { data: res.data.data, meta: res.data.meta };
   },
+  count: async (params?: OrganizationFilterParams): Promise<{ count: number }> => {
+    const res = await api.get<{ count: number }>('/crm/organizations/count', { params });
+    return res.data;
+  },
   get: async (id: string): Promise<CrmOrganization> => {
     const res = await api.get<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}`);
     return res.data.data;
@@ -938,10 +958,12 @@ export const organizationsApi = {
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/organizations/${id}`),
-  bulkDelete: async (ids: string[]): Promise<CrmBulkDeleteResult> => {
+  bulkDelete: async (
+    payload: CrmBulkDeletePayload<OrganizationFilterParams>,
+  ): Promise<CrmBulkDeleteResult> => {
     const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
       '/crm/organizations/bulk-delete',
-      { ids },
+      payload,
     );
     return res.data.data;
   },
@@ -1053,10 +1075,12 @@ export const contactsApi = {
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
-  bulkDelete: async (ids: string[]): Promise<CrmBulkDeleteResult> => {
+  bulkDelete: async (
+    payload: CrmBulkDeletePayload<Omit<ContactFilterParams, 'include_without_phone'>>,
+  ): Promise<CrmBulkDeleteResult> => {
     const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
       '/crm/contacts/bulk-delete',
-      { ids },
+      payload,
     );
     return res.data.data;
   },

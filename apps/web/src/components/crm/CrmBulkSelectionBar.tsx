@@ -8,7 +8,10 @@ interface CrmBulkSelectionBarProps {
   selectedLabel: string;
   clearLabel: string;
   deleteLabel: string;
+  selectAllMatchingLabel?: string;
+  showSelectAllMatching?: boolean;
   onToggleAll: () => void;
+  onSelectAllMatching?: () => void;
   onClear: () => void;
   onDelete: () => void;
 }
@@ -21,7 +24,10 @@ export function CrmBulkSelectionBar({
   selectedLabel,
   clearLabel,
   deleteLabel,
+  selectAllMatchingLabel,
+  showSelectAllMatching = false,
   onToggleAll,
+  onSelectAllMatching,
   onClear,
   onDelete,
 }: CrmBulkSelectionBarProps) {
@@ -38,6 +44,7 @@ export function CrmBulkSelectionBar({
         alignItems: 'center',
         gap: 8,
         flexShrink: 0,
+        flexWrap: 'wrap',
       }}
     >
       <label
@@ -76,6 +83,27 @@ export function CrmBulkSelectionBar({
             {deleteLabel}
           </button>
         </>
+      ) : null}
+
+      {showSelectAllMatching && selectAllMatchingLabel && onSelectAllMatching ? (
+        <button
+          type="button"
+          onClick={onSelectAllMatching}
+          style={{
+            width: '100%',
+            border: '1px dashed var(--teal)',
+            borderRadius: 'var(--r)',
+            background: 'var(--teal-dim)',
+            color: 'var(--teal)',
+            fontFamily: 'var(--font)',
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '6px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          {selectAllMatchingLabel}
+        </button>
       ) : null}
     </div>
   );

@@ -12,6 +12,7 @@ import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
 import { CrmSearchField } from '../../components/crm/CrmSearchField';
 import { CrmActiveFilterChips } from '../../components/crm/CrmActiveFilterChips';
 import { CrmBulkSelectionBar } from '../../components/crm/CrmBulkSelectionBar';
+import { CrmBulkDeleteConfirmModal } from '../../components/crm/CrmBulkDeleteConfirmModal';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
@@ -66,7 +67,9 @@ export function OrganizationsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectAllMode, setSelectAllMode] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [filterBulkDeleteOpen, setFilterBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
   const canDeleteOrganizations = can('organizations:delete');
@@ -172,6 +175,27 @@ export function OrganizationsPage() {
 
   const organizations = listData?.data ?? [];
   const meta = listData?.meta;
+  const bulkFilter = {
+    ...(search ? { search } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(segment ? { segment } : {}),
+    ...(tag ? { tag } : {}),
+    ...(responsibleId ? { responsible_id: responsibleId } : {}),
+  };
+  const allOrganizationsSelected = organizations.length > 0
+    && organizations.every((organization) => (
+      selectAllMode ? !selectedIds.has(organization.id) : selectedIds.has(organization.id)
+    ));
+  const { data: countData, isFetching: isFetchingCount } = useQuery({
+    queryKey: ['crm-organizations-count', search, statusFilter, segment, tag, responsibleId],
+    queryFn: () => organizationsApi.count(bulkFilter),
+    enabled: allOrganizationsSelected || selectAllMode,
+    staleTime: 30_000,
+  });
+  const totalMatchingCount = countData?.count ?? 0;
+  const selectedCount = selectAllMode
+    ? Math.max(0, totalMatchingCount - selectedIds.size)
+    : selectedIds.size;
   const filters = {
     segment: segmentRaw.trim(),
     tag: tagRaw.trim(),
@@ -192,8 +216,13 @@ export function OrganizationsPage() {
   ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
   useEffect(() => {
+    setSelectAllMode(false);
     setSelectedIds(new Set());
-  }, [search, statusFilter, segment, tag, responsibleId, sortBy, sortOrder, page]);
+  }, [search, statusFilter, segment, tag, responsibleId]);
+
+  useEffect(() => {
+    if (!selectAllMode) setSelectedIds(new Set());
+  }, [page, selectAllMode, sortBy, sortOrder]);
 
   useEffect(() => {
     if (organizations.length === 0) {
@@ -348,18 +377,27 @@ export function OrganizationsPage() {
   }
 
   function toggleAllOrganizations() {
+    if (selectAllMode) {
+      setSelectAllMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
+
     const visibleIds = organizations.map((organization) => organization.id);
     const allSelected = visibleIds.every((id) => selectedIds.has(id));
     setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
   }
 
   async function handleBulkDelete() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
+    if (selectedCount === 0) return;
 
     setBulkDeleting(true);
     try {
-      const result = await organizationsApi.bulkDelete(ids);
+      const result = await organizationsApi.bulkDelete(
+        selectAllMode
+          ? { filter: bulkFilter, exclude_ids: [...selectedIds] }
+          : { ids: [...selectedIds] },
+      );
       if (result.deleted.length > 0) {
         toast.success(t('organizations.bulkDelete.success', { count: result.deleted.length }));
       }
@@ -371,8 +409,10 @@ export function OrganizationsPage() {
       }
 
       const deletedIds = new Set(result.deleted);
+      setSelectAllMode(false);
       setSelectedIds(new Set(result.blocked.map((item) => item.id)));
       setBulkDeleteOpen(false);
+      setFilterBulkDeleteOpen(false);
 
       if (selectedId && deletedIds.has(selectedId)) {
         setSelectedId(null);
@@ -389,9 +429,6 @@ export function OrganizationsPage() {
       setBulkDeleting(false);
     }
   }
-
-  const allOrganizationsSelected = organizations.length > 0
-    && organizations.every((organization) => selectedIds.has(organization.id));
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
@@ -592,15 +629,32 @@ export function OrganizationsPage() {
         <PermissionGate permission="organizations:delete">
           <CrmBulkSelectionBar
             visibleCount={organizations.length}
-            selectedCount={selectedIds.size}
-            allSelected={allOrganizationsSelected}
+            selectedCount={selectedCount}
+            allSelected={selectAllMode || allOrganizationsSelected}
             selectAllLabel={t('organizations.bulkDelete.selectPage')}
-            selectedLabel={t('organizations.bulkDelete.selected', { count: selectedIds.size })}
+            selectedLabel={t('organizations.bulkDelete.selected', { count: selectedCount })}
             clearLabel={t('organizations.bulkDelete.clear')}
             deleteLabel={t('organizations.bulkDelete.action')}
+            showSelectAllMatching={
+              !selectAllMode
+              && allOrganizationsSelected
+              && !isFetchingCount
+              && totalMatchingCount > organizations.length
+            }
+            selectAllMatchingLabel={t('bulkSelect.selectAllMatching', { count: totalMatchingCount })}
             onToggleAll={toggleAllOrganizations}
-            onClear={() => setSelectedIds(new Set())}
-            onDelete={() => setBulkDeleteOpen(true)}
+            onSelectAllMatching={() => {
+              setSelectAllMode(true);
+              setSelectedIds(new Set());
+            }}
+            onClear={() => {
+              setSelectAllMode(false);
+              setSelectedIds(new Set());
+            }}
+            onDelete={() => {
+              if (selectAllMode) setFilterBulkDeleteOpen(true);
+              else setBulkDeleteOpen(true);
+            }}
           />
         </PermissionGate>
 
@@ -627,7 +681,7 @@ export function OrganizationsPage() {
                 org={org}
                 selected={selectedId === org.id}
                 selectable={canDeleteOrganizations}
-                checked={selectedIds.has(org.id)}
+                checked={selectAllMode ? !selectedIds.has(org.id) : selectedIds.has(org.id)}
                 selectionLabel={t('organizations.bulkDelete.selectItem', { name: org.name })}
                 onToggleSelection={() => toggleOrganizationSelection(org.id)}
                 onClick={() => selectOrg(org.id)}
@@ -712,13 +766,25 @@ export function OrganizationsPage() {
         <ConfirmModal
           open={bulkDeleteOpen}
           title={t('organizations.bulkDelete.title')}
-          message={t('organizations.bulkDelete.confirm', { count: selectedIds.size })}
+          message={t('organizations.bulkDelete.confirm', { count: selectedCount })}
           confirmLabel={t('organizations.bulkDelete.confirmAction')}
           cancelLabel={t('organizations.bulkDelete.cancel')}
           confirmVariant="danger"
           loading={bulkDeleting}
           onConfirm={handleBulkDelete}
           onCancel={() => setBulkDeleteOpen(false)}
+        />
+        <CrmBulkDeleteConfirmModal
+          open={filterBulkDeleteOpen}
+          count={selectedCount}
+          title={t('bulkSelect.confirmTitle')}
+          warning={t('bulkSelect.confirmWarning', { count: selectedCount })}
+          instruction={t('bulkSelect.confirmInstruction', { count: selectedCount })}
+          confirmLabel={t('bulkSelect.confirmDelete')}
+          cancelLabel={t('organizations.bulkDelete.cancel')}
+          loading={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setFilterBulkDeleteOpen(false)}
         />
       </div>
     </PageShell>

@@ -52,11 +52,25 @@ export const listOrganizationsQuerySchema = z.object({
   sort_order:     z.enum(['asc', 'desc']).default('desc'),
 });
 
-export const bulkDeleteOrganizationsSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1).max(100),
+export const countOrganizationsQuerySchema = listOrganizationsQuerySchema.pick({
+  search: true,
+  status: true,
+  segment: true,
+  responsible_id: true,
+  tag: true,
 });
+
+export const bulkDeleteOrganizationsSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(100).optional(),
+  filter: countOrganizationsQuerySchema.optional(),
+  exclude_ids: z.array(z.string().uuid()).max(1000).optional(),
+}).refine(
+  (data) => data.ids !== undefined || data.filter !== undefined,
+  'Informe ids ou filter',
+);
 
 export type CreateOrganizationInput  = z.infer<typeof createOrganizationSchema>;
 export type UpdateOrganizationInput  = z.infer<typeof updateOrganizationSchema>;
 export type ListOrganizationsQuery   = z.infer<typeof listOrganizationsQuerySchema>;
+export type CountOrganizationsQuery  = z.infer<typeof countOrganizationsQuerySchema>;
 export type BulkDeleteOrganizationsInput = z.infer<typeof bulkDeleteOrganizationsSchema>;

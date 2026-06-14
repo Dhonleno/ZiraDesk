@@ -1,7 +1,14 @@
 import { prisma } from '../../../config/database.js';
 import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
-import type { CreateOrganizationInput, UpdateOrganizationInput, ListOrganizationsQuery } from './organizations.schema.js';
+import type {
+  BulkDeleteOrganizationsInput,
+  CountOrganizationsQuery,
+  CreateOrganizationInput,
+  ListOrganizationsQuery,
+  UpdateOrganizationInput,
+} from './organizations.schema.js';
 import { maskDocument, maskEmail, maskPhone } from '../../../utils/pii-mask.js';
+import { buildOrganizationFilterWhere } from './organization-filter.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -251,6 +258,26 @@ export async function listOrganizations(
     data: rows.map(r => ({ ...r, contacts_count: Number(r.contacts_count), conversations_count: Number(r.conversations_count), tickets_count: Number(r.tickets_count) })),
     meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
   };
+}
+
+export async function countOrganizationsByFilter(
+  filter: CountOrganizationsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<number> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => countOrganizationsByFilter(filter, undefined, tx));
+  }
+
+  const where = buildOrganizationFilterWhere({ filter });
+  const rows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count
+     FROM organizations o
+     WHERE ${where.sql}`,
+    ...where.params,
+  );
+
+  return Number(rows[0]?.count ?? 0);
 }
 
 /* ── getOrganization ─────────────────────────────────────────────────────── */
@@ -622,16 +649,33 @@ export interface BulkDeleteOrganizationsResult {
 }
 
 export async function bulkDeleteOrganizations(
-  ids: string[],
+  data: BulkDeleteOrganizationsInput,
   deletedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
 ): Promise<BulkDeleteOrganizationsResult> {
   if (schemaName) {
-    return withOptionalSchema(schemaName, (tx) => bulkDeleteOrganizations(ids, deletedBy, undefined, tx));
+    return withOptionalSchema(schemaName, (tx) => bulkDeleteOrganizations(data, deletedBy, undefined, tx));
   }
 
-  const uniqueIds = [...new Set(ids)];
+  let uniqueIds: string[];
+  if (data.ids) {
+    uniqueIds = [...new Set(data.ids)];
+  } else {
+    const where = buildOrganizationFilterWhere({
+      filter: data.filter ?? {},
+      excludeIds: data.exclude_ids,
+    });
+    const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT o.id::text
+       FROM organizations o
+       WHERE ${where.sql}
+       ORDER BY o.id`,
+      ...where.params,
+    );
+    uniqueIds = rows.map((row) => row.id);
+  }
+
   const result: BulkDeleteOrganizationsResult = {
     requested: uniqueIds.length,
     deleted: [],
@@ -654,6 +698,20 @@ export async function bulkDeleteOrganizations(
       }
       throw error;
     }
+  }
+
+  if (data.filter) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, new_data)
+       VALUES ($1::uuid, 'bulk_delete_by_filter', 'organizations', $2::jsonb)`,
+      deletedBy,
+      JSON.stringify({
+        filter: data.filter,
+        exclude_ids: data.exclude_ids ?? [],
+        affected_count: result.deleted.length,
+        blocked_count: result.blocked.length,
+      }),
+    );
   }
 
   return result;

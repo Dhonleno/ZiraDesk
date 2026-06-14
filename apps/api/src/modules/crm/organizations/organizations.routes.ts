@@ -6,12 +6,14 @@ import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js'
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
 import {
   bulkDeleteOrganizationsSchema,
+  countOrganizationsQuerySchema,
   createOrganizationSchema,
   updateOrganizationSchema,
   listOrganizationsQuerySchema,
 } from './organizations.schema.js';
 import {
   listOrganizations,
+  countOrganizationsByFilter,
   maskOrganizationContactRecords,
   maskOrganizationListRecords,
   getOrganization,
@@ -58,6 +60,20 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // GET /api/crm/organizations/count
+  app.get('/count', { preHandler: organizationsViewGuard }, async (request, reply) => {
+    const parsed = countOrganizationsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const count = await countOrganizationsByFilter(parsed.data, request.user.schemaName);
+    return reply.send({ count });
+  });
+
   // POST /api/crm/organizations
   app.post('/', { preHandler: organizationsEditGuard }, async (request, reply) => {
     const parsed = createOrganizationSchema.safeParse(request.body);
@@ -84,7 +100,7 @@ export async function organizationsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const result = await bulkDeleteOrganizations(
-      parsed.data.ids,
+      parsed.data,
       request.user.id,
       request.user.schemaName,
     );

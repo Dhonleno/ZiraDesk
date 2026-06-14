@@ -1,4 +1,11 @@
 {
+  "bulkSelect": {
+    "selectAllMatching": "Select all {{count}} results",
+    "confirmTitle": "Confirm bulk deletion",
+    "confirmWarning": "This action will permanently delete {{count}} record(s). This cannot be undone.",
+    "confirmInstruction": "Type {{count}} to confirm.",
+    "confirmDelete": "Permanently delete"
+  },
   "organizations": {
     "title": "Organizations",
     "new": "New organization",

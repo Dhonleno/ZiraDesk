@@ -1,4 +1,11 @@
 {
+  "bulkSelect": {
+    "selectAllMatching": "Selecionar todos os {{count}} resultados",
+    "confirmTitle": "Confirmar exclusão em massa",
+    "confirmWarning": "Esta ação excluirá permanentemente {{count}} registro(s). Esta ação não pode ser desfeita.",
+    "confirmInstruction": "Digite o número {{count}} para confirmar.",
+    "confirmDelete": "Excluir permanentemente"
+  },
   "organizations": {
     "title": "Organizações",
     "new": "Nova organização",

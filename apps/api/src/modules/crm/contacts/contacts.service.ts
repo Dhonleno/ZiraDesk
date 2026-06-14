@@ -12,6 +12,7 @@ import type {
   UpdateContactInput,
   ListContactsQuery,
   CountContactsQuery,
+  BulkDeleteContactsInput,
   UpdateContactLgpdConsentInput,
   AnonymizeContactLgpdInput,
   ListLgpdRequestsQuery,
@@ -478,7 +479,11 @@ export async function countContactsByFilter(
   schemaName: string,
 ): Promise<number> {
   const schema = quoteIdent(schemaName);
-  const where = buildContactFilterWhere({ schemaName, filter });
+  const where = buildContactFilterWhere({
+    schemaName,
+    filter,
+    requirePhone: !filter.include_without_phone,
+  });
   const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
     `SELECT COUNT(*) AS count
      FROM ${schema}.contacts ct
@@ -867,16 +872,34 @@ export interface BulkDeleteContactsResult {
 }
 
 export async function bulkDeleteContacts(
-  ids: string[],
+  data: BulkDeleteContactsInput,
   deletedBy: string,
   schemaName?: string,
   db: RawExecutor = prisma,
 ): Promise<BulkDeleteContactsResult> {
   if (schemaName) {
-    return withOptionalSchema(schemaName, (tx) => bulkDeleteContacts(ids, deletedBy, undefined, tx));
+    return withOptionalSchema(schemaName, (tx) => bulkDeleteContacts(data, deletedBy, undefined, tx));
   }
 
-  const uniqueIds = [...new Set(ids)];
+  let uniqueIds: string[];
+  if (data.ids) {
+    uniqueIds = [...new Set(data.ids)];
+  } else {
+    const where = buildContactFilterWhere({
+      filter: data.filter ?? {},
+      excludeIds: data.exclude_ids,
+      requirePhone: false,
+    });
+    const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT ct.id::text
+       FROM contacts ct
+       WHERE ${where.sql}
+       ORDER BY ct.id`,
+      ...where.params,
+    );
+    uniqueIds = rows.map((row) => row.id);
+  }
+
   const result: BulkDeleteContactsResult = {
     requested: uniqueIds.length,
     deleted: [],
@@ -899,6 +922,20 @@ export async function bulkDeleteContacts(
       }
       throw error;
     }
+  }
+
+  if (data.filter) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, new_data)
+       VALUES ($1::uuid, 'bulk_delete_by_filter', 'contacts', $2::jsonb)`,
+      deletedBy,
+      JSON.stringify({
+        filter: data.filter,
+        exclude_ids: data.exclude_ids ?? [],
+        affected_count: result.deleted.length,
+        blocked_count: result.blocked.length,
+      }),
+    );
   }
 
   return result;

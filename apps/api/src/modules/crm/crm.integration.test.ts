@@ -563,6 +563,60 @@ describe('CRM integration', () => {
     expect(listResponse.body.data).toHaveLength(0);
   });
 
+  it('GET /api/crm/organizations/count e bulk-delete por filtro respeitam exclusões e auditam', async () => {
+    const tenant = requireSuiteTenant();
+    const first = await createOrganization({
+      name: uniqueText('Bulk filter org'),
+      status: 'client',
+      segment: 'enterprise',
+      tags: ['vip'],
+    });
+    const excluded = await createOrganization({
+      name: uniqueText('Bulk filter org'),
+      status: 'client',
+      segment: 'enterprise',
+      tags: ['vip'],
+    });
+    await createOrganization({
+      name: uniqueText('Bulk filter org'),
+      status: 'prospect',
+      segment: 'enterprise',
+      tags: ['vip'],
+    });
+
+    const countResponse = await createTestApp()
+      .get('/api/crm/organizations/count')
+      .query({ search: 'Bulk filter org', status: 'client', segment: 'enterprise', tag: 'vip' })
+      .set(authHeader());
+
+    expect(countResponse.status).toBe(200);
+    expect(countResponse.body).toEqual({ count: 2 });
+
+    const deleteResponse = await createTestApp()
+      .post('/api/crm/organizations/bulk-delete')
+      .set(authHeader())
+      .send({
+        filter: { search: 'Bulk filter org', status: 'client', segment: 'enterprise', tag: 'vip' },
+        exclude_ids: [excluded.id],
+      });
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.data).toMatchObject({
+      requested: 1,
+      deleted: [first.id],
+      blocked: [],
+      not_found: [],
+    });
+
+    const auditRows = await prisma.$queryRawUnsafe<Array<{ new_data: { affected_count: number } }>>(
+      `SELECT new_data
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'bulk_delete_by_filter' AND entity = 'organizations'`,
+    );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]?.new_data.affected_count).toBe(1);
+  });
+
   it('POST /api/crm/contacts cria contato', async () => {
     const response = await createTestApp()
       .post('/api/crm/contacts')
@@ -620,6 +674,45 @@ describe('CRM integration', () => {
       `SELECT id FROM "${tenant.schemaName}".contacts ORDER BY id`,
     );
     expect(rows.map((row) => row.id)).toEqual([blocked.id]);
+  });
+
+  it('POST /api/crm/contacts/bulk-delete exclui por filtro, inclui sem telefone e audita', async () => {
+    const tenant = requireSuiteTenant();
+    const matchingRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${tenant.schemaName}".contacts (name, email)
+       VALUES
+         ('Bulk filtro contato', $1),
+         ('Bulk filtro contato', $2)
+       RETURNING id::text`,
+      uniqueEmail('bulk-filter-contact-1'),
+      uniqueEmail('bulk-filter-contact-2'),
+    );
+    await createContact({ name: 'Outro contato fora do filtro' });
+
+    const excludedId = matchingRows[1]!.id;
+    const response = await createTestApp()
+      .post('/api/crm/contacts/bulk-delete')
+      .set(authHeader())
+      .send({
+        filter: { search: 'Bulk filtro contato' },
+        exclude_ids: [excludedId],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      requested: 1,
+      deleted: [matchingRows[0]!.id],
+      blocked: [],
+      not_found: [],
+    });
+
+    const auditRows = await prisma.$queryRawUnsafe<Array<{ new_data: { affected_count: number } }>>(
+      `SELECT new_data
+       FROM "${tenant.schemaName}".audit_logs
+       WHERE action = 'bulk_delete_by_filter' AND entity = 'contacts'`,
+    );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]?.new_data.affected_count).toBe(1);
   });
 
   it('GET /api/crm/contacts mascara PII para role sem pii:view-full', async () => {
@@ -705,6 +798,68 @@ describe('CRM integration', () => {
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].id).toBe(matchingContact.id);
     expect(response.body.meta.total).toBe(1);
+  });
+
+  it('GET /api/crm/contacts/count conta somente contatos adicionáveis que correspondem ao filtro', async () => {
+    const matchingOrganization = await createOrganization({ status: 'client' });
+    const wrongStatusOrganization = await createOrganization({ status: 'prospect' });
+    const priorityTag = await createContactTag({ name: 'count-priority', color: '#00C9A7' });
+
+    const matchingContact = await createContact({
+      name: 'Contato Preview Correspondente',
+      organization_id: matchingOrganization.id,
+    });
+    const wrongStatusContact = await createContact({
+      name: 'Contato Preview Correspondente',
+      organization_id: wrongStatusOrganization.id,
+    });
+    const noPhoneRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${requireSuiteTenant().schemaName}".contacts
+         (name, email, organization_id)
+       VALUES ('Contato Preview Correspondente', $1, $2::uuid)
+       RETURNING id`,
+      uniqueEmail('count.no-phone'),
+      matchingOrganization.id,
+    );
+    const noPhoneContact = noPhoneRows[0]!;
+
+    for (const contactId of [matchingContact.id, wrongStatusContact.id]) {
+      await createTestApp()
+        .post(`/api/crm/contacts/${contactId}/tags`)
+        .set(authHeader())
+        .send({ tag_id: priorityTag.id });
+    }
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "${requireSuiteTenant().schemaName}".contact_tag_assignments (contact_id, tag_id)
+       VALUES ($1::uuid, $2::uuid)`,
+      noPhoneContact.id,
+      priorityTag.id,
+    );
+
+    const response = await createTestApp()
+      .get('/api/crm/contacts/count')
+      .query({
+        search: 'Preview Correspondente',
+        status: 'client',
+        tags: priorityTag.id,
+      })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 1 });
+
+    const crmCountResponse = await createTestApp()
+      .get('/api/crm/contacts/count')
+      .query({
+        search: 'Preview Correspondente',
+        status: 'client',
+        tags: priorityTag.id,
+        include_without_phone: 'true',
+      })
+      .set(authHeader());
+
+    expect(crmCountResponse.status).toBe(200);
+    expect(crmCountResponse.body).toEqual({ count: 2 });
   });
 
   it('GET /api/crm/contacts/tags lista o catálogo por ordem e nome', async () => {
