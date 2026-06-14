@@ -8,9 +8,9 @@ Antes de qualquer alteração em frontend (`apps/web/**`), o agente DEVE:
 
 1. Ler integralmente `docs/design/PADRAO_DE_TELAS.md`.
 2. Validar o layout base com uma tela de referência canônica:
-   - `Omnichannel - Modais.html`
-   - `Clientes.html`
-   - `Monitor.html`
+   - `apps/web/src/references/omnichannel_chat.html`
+   - `apps/web/src/references/Clientes.html`
+   - `apps/web/src/pages/tv/TVDashboard.tsx`
 3. Confirmar aderência aos tokens existentes (`apps/web/src/styles/tokens.css`).
 4. Seguir o checklist "Checklist para nova tela" do documento canônico.
 

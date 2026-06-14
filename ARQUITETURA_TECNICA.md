@@ -68,7 +68,8 @@ Observacao de escopo atual:
 ## 3. DESIGN SYSTEM — REFERÊNCIA OBRIGATÓRIA
 
 > Fonte de verdade oficial: [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md)
-> As telas `Omnichannel - Modais.html`, `Clientes.html` e `Monitor.html` são referências canônicas de UI.
+> Referências canônicas de UI: `apps/web/src/references/omnichannel_chat.html`,
+> `apps/web/src/references/Clientes.html` e `apps/web/src/pages/tv/TVDashboard.tsx`.
 > Toda nova página DEVE reutilizar tokens, componentes e padrões existentes. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
 
 ### 3.0 Gate Obrigatório Para Alterações de UI (Agente IA e Humanos)
@@ -361,10 +362,11 @@ window.addEventListener('storage', e => {
 
 | Arquivo | Padrões cobertos |
 |---|---|
-| `Clientes.html` | Lista com tabela densa, filtros (search + chips), segmentos (tabs), paginação, painel de detalhe lateral, hero com avatar grande, KPIs, ações rápidas (`.dact`), timeline |
-| `Omnichannel - Modais.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar, modais (Novo atendimento, Transferir, Encerrar) |
+| `apps/web/src/references/Clientes.html` | Lista com tabela densa, filtros (search + chips), segmentos (tabs), paginação, painel de detalhe lateral, hero com avatar grande, KPIs, ações rápidas (`.dact`), timeline |
+| `apps/web/src/references/omnichannel_chat.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar e modais |
+| `apps/web/src/pages/tv/TVDashboard.tsx` | Dashboard e monitor em tempo real, com KPIs, cards, listas operacionais e estados vazios |
 
-**Ao criar tela nova:** abrir as duas e copiar a estrutura mais próxima como ponto de partida. Não começar do zero.
+**Ao criar tela nova:** abrir a referência mais próxima do caso de uso e reutilizar sua estrutura como ponto de partida. Não começar do zero.
 
 ---
 

@@ -2,12 +2,12 @@
 
 Este documento é a fonte da verdade para qualquer tela do produto ZiraDesk. Use-o como referência ao criar novas páginas, modais ou componentes. **Nunca invente cores, tipografia, espaçamento ou estrutura novos** — se algo faltar, baseie-se no que já existe.
 
-Telas de referência canônicas (sempre leia antes de iniciar uma nova):
+Telas de referência canônicas, com caminhos confirmados no repositório (sempre leia antes de iniciar uma nova):
 - `apps/web/src/references/omnichannel_chat.html` — shell completo do app + caixa de atendimentos + estrutura de conversa
 - `apps/web/src/references/Clientes.html` — listagens densas (tabela + filtros + painel de detalhe)
 - `apps/web/src/pages/tv/TVDashboard.tsx` — dashboards / painéis em tempo real (cards + KPIs + listas)
 
-> Regra de ouro: ao começar uma tela nova, **abra uma das telas acima**, copie a topbar + nav rail + tokens, e construa o conteúdo dentro do mesmo container. Não recrie do zero.
+> Regra de ouro: ao começar uma tela nova, **abra o arquivo de referência mais próximo do caso de uso**, reutilize a topbar + nav rail + tokens e construa o conteúdo dentro do mesmo container. Não recrie do zero.
 
 ---
 
@@ -288,6 +288,61 @@ Estrutura:
 .detail-panel        (380px à direita, opcional)
   .detail-hero, .detail-actions, .detail-section…
 ```
+
+### Seleção em massa com filtro (Select All by Filter)
+
+#### Quando usar
+Use este padrão em listas paginadas quando uma ação em massa precisa alcançar **todos os registros que correspondem aos filtros atuais**, e não apenas os itens carregados na página ou no scroll atual. Exemplos: adicionar contatos a uma campanha, excluir registros, exportar resultados ou aplicar tags.
+
+Não trate o array renderizado no frontend como o conjunto completo. A contagem e a resolução dos IDs pertencem ao backend.
+
+#### Arquitetura do backend
+- Disponibilize `GET /.../count` com os mesmos parâmetros de filtro da listagem e resposta `{ count: number }`.
+- O endpoint da ação (`POST` ou `DELETE`, conforme o contrato do módulo) deve aceitar uma das formas:
+  - `{ ids: string[] }` para seleção manual;
+  - `{ filter: { ... }, exclude_ids: string[] }` para todos os resultados do filtro, exceto as exclusões explícitas.
+- Valide o contrato com Zod e `.refine`, exigindo `ids` ou `filter`.
+- Centralize as condições em um builder `build*FilterWhere`. A listagem, o `/count` e a ação em massa devem usar o mesmo builder para impedir divergências entre o total exibido e os registros processados.
+- Builders devem retornar SQL/condições e parâmetros separadamente; não interpolar valores recebidos do usuário.
+- Em ações destrutivas ou irreversíveis, registre um evento agregado em `audit_logs`, com `action: 'bulk_*_by_filter'`, o filtro, `exclude_ids`, a quantidade afetada e, quando aplicável, a quantidade bloqueada.
+
+> Código legado que ainda duplica predicados entre listagem e builder deve ser tratado como dívida técnica. Ao alterar esses filtros, migre a listagem para o builder antes de adicionar novos critérios.
+
+#### Fluxo de seleção dual no frontend
+- Use `Set<string>` para armazenar IDs.
+- No modo manual, o `Set` contém os IDs **incluídos**.
+- No modo "todos por filtro", o mesmo `Set` contém os IDs **excluídos**.
+- O primeiro clique no checkbox do header seleciona somente a página visível.
+- Quando toda a página estiver selecionada e `/count` indicar mais resultados, exiba a ação secundária **"Selecionar todos os N resultados"**.
+- Ao ativar essa ação, entre no modo "todos por filtro". A contagem selecionada passa a ser `count - excludedIds.size`.
+- Nesse modo, clicar em um item alterna sua exclusão do conjunto global.
+- Qualquer mudança de busca ou filtro encerra o modo "todos por filtro" e limpa a seleção. Mudanças apenas de página ou ordenação podem preservar o modo.
+- Ao executar, envie IDs concretos no modo manual ou `filter + exclude_ids` no modo global. Nunca materialize todos os IDs no navegador.
+
+#### Confirmação proporcional ao risco
+- Ações reversíveis ou de baixo impacto, como adicionar contatos a uma campanha, usam confirmação simples.
+- Ações destrutivas ou irreversíveis, como exclusão em massa, exigem modal reforçado.
+- O modal reforçado deve mostrar a quantidade afetada e exigir que o usuário digite exatamente esse número antes de habilitar a confirmação.
+- Use `var(--red)` para texto/ação destrutiva e `var(--red-dim)` para o fundo de alerta. Não introduza cores hard-coded.
+
+#### i18n obrigatório
+Inclua as chaves, ou equivalentes específicas do contexto, nos idiomas `pt-BR`, `en-US` e `es`:
+- `bulkSelect.selectAllMatching`
+- `bulkSelect.confirmTitle`
+- `bulkSelect.confirmWarning`
+- `bulkSelect.confirmInstruction`
+- `bulkSelect.confirmDelete`
+
+#### Implementações de referência
+- `apps/web/src/components/omnichannel/CampaignContactsModal.tsx` — seleção por filtro para adicionar contatos a uma campanha.
+- `apps/web/src/pages/crm/Contacts.tsx` — exclusão em massa de contatos com seleção dual e confirmação reforçada.
+- `apps/web/src/pages/crm/Organizations.tsx` — exclusão em massa de organizações com seleção dual e confirmação reforçada.
+- `apps/api/src/modules/crm/contacts/contact-filter.ts` — builder compartilhado usado pela contagem e pela ação por filtro.
+- `apps/api/src/modules/crm/contacts/contacts.schema.ts` — contrato Zod `ids` ou `filter + exclude_ids`.
+- `apps/api/src/modules/crm/contacts/contacts.routes.ts` — endpoint `/count` e rota da ação em massa.
+- `apps/api/src/modules/crm/contacts/contacts.service.ts` — contagem, resolução dos registros, exclusão e auditoria agregada.
+
+> Na implementação atual de contatos, `listContacts` ainda mantém predicados equivalentes diretamente em `contacts.service.ts`; ao evoluir os filtros, ela deve ser migrada para `buildContactFilterWhere` para cumprir integralmente o padrão.
 
 ### Dashboard / Monitor
 Estrutura:
