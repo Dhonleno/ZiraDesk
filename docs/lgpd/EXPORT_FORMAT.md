@@ -5,7 +5,7 @@ Este documento define o contrato oficial de exportação de dados pessoais para 
 
 ## Schema oficial
 - Arquivo canônico: `docs/lgpd/data-export-schema.json`
-- URL pública do schema atual: `https://ziradesk.com.br/schemas/lgpd-export-v1.json`
+- URL pública do schema atual: `https://ziradesk.com/schemas/lgpd-export-v1.json`
 - Endpoint público da API: `GET /api/legal/lgpd-export-schema`
 
 ## Estrutura de alto nível

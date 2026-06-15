@@ -3,7 +3,7 @@
 ## Termos do Sistema
 
 **Tenant**
-Empresa cliente do ZiraDesk. Cada tenant tem seu próprio ambiente isolado, acessado pelo subdomínio empresa.ziradesk.com.br.
+Empresa cliente do ZiraDesk. Cada tenant tem seu próprio ambiente isolado, acessado pelo subdomínio empresa.ziradesk.com.
 
 **Super Admin**
 Administrador global do ZiraDesk. Tem acesso a todos os tenants, planos e métricas do sistema.

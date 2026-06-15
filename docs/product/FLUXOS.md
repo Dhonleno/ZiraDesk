@@ -7,10 +7,10 @@ Super Admin acessa /super-admin/tenants
 -> Sistema cria schema isolado no PostgreSQL
 -> Sistema cria usuario owner com senha temporaria
 -> Sistema envia e-mail de boas-vindas ao owner
--> Tenant ativo e acessivel em slug.ziradesk.com.br
+-> Tenant ativo e acessivel em slug.ziradesk.com
 
 ## Fluxo 2 — Login de usuario
-Usuario acessa empresa.ziradesk.com.br
+Usuario acessa empresa.ziradesk.com
 -> Middleware identifica tenant pelo subdominio
 -> Usuario insere e-mail e senha
 -> API valida credenciais no schema do tenant
