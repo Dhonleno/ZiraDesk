@@ -49,6 +49,24 @@ vi.mock('../services/email.service.js', () => ({
 }));
 
 vi.mock('twilio', () => {
+  function escapeXml(value: unknown): string {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;');
+  }
+
+  function xmlAttributes(attributes?: unknown): string {
+    if (!attributes || typeof attributes !== 'object') return '';
+
+    return Object.entries(attributes as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => ` ${key}="${escapeXml(Array.isArray(value) ? value.join(' ') : value)}"`)
+      .join('');
+  }
+
   class AccessTokenMock {
     static VoiceGrant = class VoiceGrantMock {
       constructor(_opts?: unknown) {}
@@ -69,16 +87,50 @@ vi.mock('twilio', () => {
   }
 
   class VoiceResponseMock {
-    dial(_opts?: unknown) {
+    private readonly verbs: Array<string | (() => string)> = [];
+
+    dial(opts?: unknown) {
+      const children: string[] = [];
+      this.verbs.push(() => `<Dial${xmlAttributes(opts)}>${children.join('')}</Dial>`);
       return {
-        number: (_attrsOrNumber?: unknown, _maybeNumber?: unknown) => undefined,
+        number: (attrsOrNumber?: unknown, maybeNumber?: unknown) => {
+          const attributes = maybeNumber === undefined ? undefined : attrsOrNumber;
+          const number = maybeNumber === undefined ? attrsOrNumber : maybeNumber;
+          children.push(`<Number${xmlAttributes(attributes)}>${escapeXml(number ?? '')}</Number>`);
+        },
       };
     }
 
-    say(_text?: string) {}
+    gather(opts?: unknown) {
+      const children: string[] = [];
+      this.verbs.push(() => `<Gather${xmlAttributes(opts)}>${children.join('')}</Gather>`);
+      return {
+        say: (attrsOrText?: unknown, maybeText?: unknown) => {
+          const attributes = maybeText === undefined ? undefined : attrsOrText;
+          const text = maybeText === undefined ? attrsOrText : maybeText;
+          children.push(`<Say${xmlAttributes(attributes)}>${escapeXml(text ?? '')}</Say>`);
+        },
+      };
+    }
+
+    say(attrsOrText?: unknown, maybeText?: unknown) {
+      const attributes = maybeText === undefined ? undefined : attrsOrText;
+      const text = maybeText === undefined ? attrsOrText : maybeText;
+      this.verbs.push(`<Say${xmlAttributes(attributes)}>${escapeXml(text ?? '')}</Say>`);
+    }
+
+    redirect(url: string) {
+      this.verbs.push(`<Redirect>${escapeXml(url)}</Redirect>`);
+    }
+
+    hangup() {
+      this.verbs.push('<Hangup/>');
+    }
 
     toString(): string {
-      return '<Response />';
+      return `<Response>${this.verbs.map((verb) => (
+        typeof verb === 'function' ? verb() : verb
+      )).join('')}</Response>`;
     }
   }
 
