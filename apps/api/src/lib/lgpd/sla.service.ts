@@ -56,7 +56,7 @@ function tenantLanguage(tenant: TenantRow): Lang {
 }
 
 function dashboardUrl(tenantSlug?: string): string {
-  const base = env.APP_URL ?? 'https://app.ziradesk.com.br';
+  const base = env.APP_URL ?? 'https://app.ziradesk.com';
   return tenantSlug ? `${base}/admin/lgpd` : `${base}/admin/lgpd`;
 }
 

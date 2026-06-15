@@ -198,7 +198,7 @@ export function TenantDetail() {
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-white">{tenant.name}</h1>
           <div className="mt-2 flex items-center gap-2">
-            <span className="font-mono text-sm text-gray-500">{tenant.slug}.ziradesk.com.br</span>
+            <span className="font-mono text-sm text-gray-500">{tenant.slug}.ziradesk.com</span>
             <Badge variant={statusVariant[tenant.status]}>
               {t(`superAdmin.tenants.status.${tenant.status}`)}
             </Badge>

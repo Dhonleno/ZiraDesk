@@ -1843,7 +1843,7 @@ export async function createPortalAccess(
   });
 
   const portalUrl = process.env['NODE_ENV'] === 'production'
-    ? `https://suporte.${tenant?.slug}.ziradesk.com.br`
+    ? `https://suporte.${tenant?.slug}.ziradesk.com`
     : 'http://localhost:5173/portal';
 
   return {

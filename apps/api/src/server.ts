@@ -53,7 +53,7 @@ const app = Fastify({
 
 function corsOrigin() {
   if (env.NODE_ENV !== 'production') return '*';
-  return ['https://app.ziradesk.com.br', /\.ziradesk\.com\.br$/];
+  return ['https://app.ziradesk.com', /\.ziradesk\.com$/];
 }
 
 function rateLimitMax(requestUrl: string) {

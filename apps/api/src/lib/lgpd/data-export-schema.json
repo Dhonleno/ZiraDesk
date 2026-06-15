@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ziradesk.com.br/schemas/lgpd-export-v1.json",
+  "$id": "https://ziradesk.com/schemas/lgpd-export-v1.json",
   "title": "ZiraDesk LGPD Data Export Schema",
   "description": "Formato estruturado de exportação de dados pessoais conforme art. 18 da LGPD (direito de portabilidade)",
   "type": "object",

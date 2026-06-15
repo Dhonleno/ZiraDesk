@@ -111,7 +111,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
   }
 
   const resend = new Resend(env.RESEND_API_KEY);
-  const fromEmail = options.from?.email ?? env.RESEND_FROM_EMAIL ?? 'noreply@ziradesk.com.br';
+  const fromEmail = options.from?.email ?? env.RESEND_FROM_EMAIL ?? 'noreply@ziradesk.com';
   const fromName = options.from?.name ?? 'ZiraDesk';
 
   const response = await resend.emails.send({

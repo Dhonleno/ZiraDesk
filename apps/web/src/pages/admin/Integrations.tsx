@@ -128,7 +128,7 @@ export function Integrations() {
     onError: () => toast.error(t('tenantAdmin.integrations.redmine.testError')),
   });
 
-  const webhookUrl = `https://api.ziradesk.com.br/webhooks/redmine/${tenant?.slug ?? 'tenant-slug'}`;
+  const webhookUrl = `https://api.ziradesk.com/webhooks/redmine/${tenant?.slug ?? 'tenant-slug'}`;
 
   const canSave =
     form.redmineUrl.trim().length > 0 &&

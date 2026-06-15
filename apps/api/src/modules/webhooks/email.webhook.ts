@@ -49,10 +49,10 @@ function quoteIdent(identifier: string): string {
 
 function extractTenantFromEmail(address: string): string | null {
   const normalized = address.trim().toLowerCase();
-  const supportMatch = normalized.match(/^suporte@([^.]+)\.ziradesk\.com\.br$/);
+  const supportMatch = normalized.match(/^suporte@([^.]+)\.ziradesk\.com$/);
   if (supportMatch?.[1]) return supportMatch[1];
 
-  const plusMatch = normalized.match(/^tickets\+([^@]+)@ziradesk\.com\.br$/);
+  const plusMatch = normalized.match(/^tickets\+([^@]+)@ziradesk\.com$/);
   if (plusMatch?.[1]) return plusMatch[1];
 
   return null;
@@ -372,7 +372,7 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   if (env.RESEND_API_KEY && sendConfirmation) {
     const resend = new Resend(env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `suporte@${tenant.slug}.ziradesk.com.br`,
+      from: `suporte@${tenant.slug}.ziradesk.com`,
       to: senderEmail,
       subject: `Re: ${inbound.subject || 'Ticket recebido'}`,
       html: `

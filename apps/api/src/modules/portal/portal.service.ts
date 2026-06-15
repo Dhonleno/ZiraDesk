@@ -246,7 +246,7 @@ export async function verifyPortalToken(token: string): Promise<PortalJwtPayload
 
 function resolvePortalResetUrl(tenantSlug: string, token: string): string {
   if (env.NODE_ENV === 'production') {
-    return `https://suporte.${tenantSlug}.ziradesk.com.br/reset-password?token=${encodeURIComponent(token)}`;
+    return `https://suporte.${tenantSlug}.ziradesk.com/reset-password?token=${encodeURIComponent(token)}`;
   }
   const appUrl = env.APP_URL.replace(/\/$/, '');
   return `${appUrl}/portal/reset-password?token=${encodeURIComponent(token)}`;

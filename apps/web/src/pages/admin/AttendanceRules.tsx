@@ -128,7 +128,7 @@ export function AttendanceRules() {
   const inactivityEnabled = watch('inactivity_enabled');
   const csatEnabled = watch('csat_enabled');
   const activeOutboundMode = watch('active_outbound_validity_mode');
-  const portalAddress = `suporte@${data?.slug ?? 'demo'}.ziradesk.com.br`;
+  const portalAddress = `suporte@${data?.slug ?? 'demo'}.ziradesk.com`;
 
   const selectStyle: React.CSSProperties = {
     background: 'var(--bg-3)',

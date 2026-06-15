@@ -292,7 +292,7 @@ export function Tenants() {
         return;
       }
 
-      window.location.assign(`https://${tenantSlug}.ziradesk.com.br/omnichannel`);
+      window.location.assign(`https://${tenantSlug}.ziradesk.com/omnichannel`);
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });

@@ -33,7 +33,7 @@ describe('LGPD Export Schema API', () => {
     expect(response.headers['cache-control']).toContain('max-age=86400');
     expect(response.body).toMatchObject({
       $schema: 'https://json-schema.org/draft/2020-12/schema',
-      $id: 'https://ziradesk.com.br/schemas/lgpd-export-v1.json',
+      $id: 'https://ziradesk.com/schemas/lgpd-export-v1.json',
       title: 'ZiraDesk LGPD Data Export Schema',
       properties: {
         schema_version: {
