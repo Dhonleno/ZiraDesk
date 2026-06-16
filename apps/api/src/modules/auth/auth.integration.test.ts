@@ -120,6 +120,33 @@ describe('Auth integration', () => {
     expect(refresh.body.accessToken).toEqual(expect.any(String));
   });
 
+  it('POST /api/auth/refresh com token legado (sem iatMs) é bloqueado após novo login', async () => {
+    const legacyRefreshToken = jwt.sign(
+      {
+        sub: TEST_USER_ID,
+        email: TEST_EMAIL,
+        name: 'Integration Test User',
+        role: 'owner',
+        tenantId: globalThis.__ZIRADESK_TEST_TENANT_ID__,
+        schemaName: globalThis.__ZIRADESK_TEST_TENANT_SCHEMA__,
+        isSuperAdmin: false,
+        // sem iatMs — simula token emitido antes do deploy da feature de sessão única
+      },
+      env.JWT_REFRESH_SECRET,
+      { expiresIn: '5m' },
+    );
+
+    await createTestApp()
+      .post('/api/auth/login')
+      .send({ email: TEST_EMAIL, password: TEST_PASSWORD, tenantSlug: requiredTenantSlug() });
+
+    const response = await createTestApp()
+      .post('/api/auth/refresh')
+      .set('Cookie', `${REFRESH_COOKIE}=${legacyRefreshToken}`);
+
+    expect(response.status).toBe(401);
+  });
+
   it('POST /api/auth/refresh sincroniza o papel atual do usuário no banco', async () => {
     const staleRefreshToken = jwt.sign(
       {

@@ -183,7 +183,13 @@ export async function verifyRefreshToken(
 
   const forcedLogoutAfterRaw = await redis.get(`auth:force_logout_after:${payload.sub}`);
   const forcedLogoutAfter = forcedLogoutAfterRaw ? Number(forcedLogoutAfterRaw) : Number.NaN;
-  if (typeof payload.iatMs === 'number' && Number.isFinite(forcedLogoutAfter) && payload.iatMs < forcedLogoutAfter) {
+  const tokenIatMs =
+    typeof payload.iatMs === 'number'
+      ? payload.iatMs
+      : typeof (payload as { iat?: number }).iat === 'number'
+        ? (payload as { iat: number }).iat * 1000
+        : Number.NaN;
+  if (Number.isFinite(forcedLogoutAfter) && Number.isFinite(tokenIatMs) && tokenIatMs < forcedLogoutAfter) {
     throw new Error(msg.tokenExpired);
   }
 
