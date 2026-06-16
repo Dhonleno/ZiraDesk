@@ -226,28 +226,42 @@ export function NotificationCenter() {
 
       {open && (
         <div style={{ position: 'absolute', right: 0, top: 38, width: 360, maxHeight: 460, overflow: 'hidden', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-pop)', zIndex: 80 }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{
+            padding: '12px 14px',
+            borderBottom: '1px solid var(--line)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
             <strong style={{ fontSize: 13 }}>Notificações</strong>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button
                 onClick={handleMarkAll}
                 disabled={unreadCount === 0 || markAllBackend.isPending}
-                style={{ border: 'none', background: 'transparent', color: unreadCount ? 'var(--teal)' : 'var(--txt-3)', fontSize: 11, cursor: unreadCount ? 'pointer' : 'default' }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: unreadCount ? 'var(--teal)' : 'var(--txt-3)',
+                  fontSize: 11,
+                  cursor: unreadCount ? 'pointer' : 'default',
+                }}
               >
                 {t('notifications.markAllRead')}
               </button>
-              <span style={{ display: 'grid', justifyItems: 'end', gap: 2 }}>
-                <button
-                  onClick={handleDeleteAllRead}
-                  disabled={backendUnreadCount === backendNotifications.length || deleteAllRead.isPending}
-                  style={{ border: 'none', background: 'transparent', color: backendNotifications.some((n) => n.read) ? 'var(--txt-3)' : 'var(--txt-4, var(--txt-3))', fontSize: 11, cursor: backendNotifications.some((n) => n.read) ? 'pointer' : 'default' }}
-                >
-                  {t('notifications.clearRead')}
-                </button>
-                <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>
-                  {t('notifications.clearReadHint')}
-                </span>
-              </span>
+              <button
+                onClick={handleDeleteAllRead}
+                disabled={backendUnreadCount === backendNotifications.length || deleteAllRead.isPending}
+                title={t('notifications.clearReadHint')}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: backendNotifications.some((n) => n.read) ? 'var(--txt-3)' : 'var(--txt-4, var(--txt-3))',
+                  fontSize: 11,
+                  cursor: backendNotifications.some((n) => n.read) ? 'pointer' : 'default',
+                }}
+              >
+                {t('notifications.clearRead')}
+              </button>
             </div>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
