@@ -57,6 +57,10 @@ interface PendingContactRow {
   contact_whatsapp: string | null;
 }
 
+interface TenantSettingsRow {
+  active_outbound_validity_hours: number | null;
+}
+
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
@@ -142,6 +146,14 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
     }
 
     const BATCH_SIZE = 10;
+    const settingsRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
+      `SELECT (settings->>'active_outbound_validity_hours')::int AS active_outbound_validity_hours
+       FROM public.tenants
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      tenantId,
+    );
+    const validityHours = settingsRows[0]?.active_outbound_validity_hours ?? 24;
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -254,12 +266,14 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
           // Create conversation for this contact
           const convRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
             `INSERT INTO ${schema}.conversations
-               (contact_id, channel_id, channel_type, conversation_type, status, metadata)
-             VALUES ($1::uuid, $2::uuid, 'whatsapp', 'outbound', 'waiting', $3::jsonb)
+               (contact_id, channel_id, channel_type, conversation_type, status, metadata, waiting_expires_at)
+             VALUES ($1::uuid, $2::uuid, 'whatsapp', 'outbound', 'waiting', $3::jsonb,
+                     NOW() + ($4 || ' hours')::interval)
              RETURNING id`,
             cc.contact_id,
             campaign.channel_id,
             JSON.stringify({ campaign_id: campaignId, campaign_contact_id: cc.cc_id }),
+            validityHours,
           );
           conversationId = convRows[0]?.id ?? null;
           if (!conversationId) {
