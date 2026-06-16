@@ -160,6 +160,7 @@ describe('Auth integration', () => {
         tenantId: globalThis.__ZIRADESK_TEST_TENANT_ID__,
         schemaName: globalThis.__ZIRADESK_TEST_TENANT_SCHEMA__,
         isSuperAdmin: false,
+        iatMs: Date.now(),
       },
       env.JWT_REFRESH_SECRET,
       { expiresIn: '5m' },
