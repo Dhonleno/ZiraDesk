@@ -2,6 +2,7 @@ import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { sendEmail } from '../../services/email.service.js';
+import { getSocketServer } from '../../socket/index.js';
 import {
   renderRequestReceived,
   renderRequestProcessed,
@@ -44,6 +45,12 @@ interface TenantRow {
   settings: unknown;
 }
 
+interface LgpdNotificationSocketPayload {
+  type: 'lgpd_request_received' | 'lgpd_sla_warning' | 'lgpd_sla_breached';
+  title: string;
+  href: '/admin/lgpd';
+}
+
 function safeName(schemaName: string): string {
   return schemaName.replace(/"/g, '""');
 }
@@ -66,6 +73,34 @@ function subjectLabelFor(row: PendingRequestRow): string {
   return 'ID externo';
 }
 
+function lgpdSocketPayload(action: string): LgpdNotificationSocketPayload | null {
+  if (action === 'lgpd.request.received') {
+    return {
+      type: 'lgpd_request_received',
+      title: 'Nova solicitação LGPD recebida',
+      href: '/admin/lgpd',
+    };
+  }
+
+  if (action === 'lgpd.sla.warning') {
+    return {
+      type: 'lgpd_sla_warning',
+      title: 'Alerta de SLA LGPD',
+      href: '/admin/lgpd',
+    };
+  }
+
+  if (action === 'lgpd.sla.breached') {
+    return {
+      type: 'lgpd_sla_breached',
+      title: 'SLA LGPD violado',
+      href: '/admin/lgpd',
+    };
+  }
+
+  return null;
+}
+
 // ─── Find admins in tenant schema ────────────────────────────────────────────
 
 async function findTenantAdmins(schemaName: string): Promise<TenantAdminRow[]> {
@@ -82,6 +117,7 @@ async function findTenantAdmins(schemaName: string): Promise<TenantAdminRow[]> {
 // ─── Insert audit_log notification for in-app display ────────────────────────
 
 async function insertInAppNotification(
+  tenantId: string,
   schemaName: string,
   action: string,
   entityId: string,
@@ -96,6 +132,14 @@ async function insertInAppNotification(
     entityId,
     JSON.stringify({ assigned_to: assignedToUserId, ...data }),
   );
+
+  try {
+    const payload = lgpdSocketPayload(action);
+    if (!payload) return;
+    getSocketServer().to(`tenant:${tenantId}`).emit('notification:new', payload);
+  } catch {
+    // socket pode não estar disponível em testes/jobs isolados
+  }
 }
 
 // ─── Fetch pending requests needing processing for a tenant ──────────────────
@@ -191,7 +235,7 @@ async function notifyTenantNewRequest(
     }
 
     try {
-      await insertInAppNotification(tenant.schema_name, 'lgpd.request.received', request.id, admin.id, {
+      await insertInAppNotification(tenant.id, tenant.schema_name, 'lgpd.request.received', request.id, admin.id, {
         request_type: request.request_type,
         subject_label: subjectLabelFor(request),
         sla_deadline: request.sla_deadline?.toISOString(),
@@ -356,7 +400,7 @@ async function sendSlaReminder(tenant: TenantRow, request: PendingRequestRow, da
     }
 
     try {
-      await insertInAppNotification(tenant.schema_name, 'lgpd.sla.warning', request.id, admin.id, {
+      await insertInAppNotification(tenant.id, tenant.schema_name, 'lgpd.sla.warning', request.id, admin.id, {
         days_left: daysLeft,
         request_type: request.request_type,
         subject_label: subjectLabelFor(request),
@@ -435,7 +479,7 @@ async function alertSlaBreached(tenant: TenantRow, breachedRequests: PendingRequ
   for (const req of breachedRequests) {
     for (const admin of admins) {
       try {
-        await insertInAppNotification(tenant.schema_name, 'lgpd.sla.breached', req.id, admin.id, {
+        await insertInAppNotification(tenant.id, tenant.schema_name, 'lgpd.sla.breached', req.id, admin.id, {
           request_type: req.request_type,
           subject_label: subjectLabelFor(req),
           sla_deadline: req.sla_deadline?.toISOString(),

@@ -350,6 +350,19 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
         }),
       );
     });
+
+    try {
+      const clientName = contact.name ?? 'Cliente';
+      getSocketServer().to(`agent:${assignedUserId}`).emit('notification:new', {
+        type: 'conversation.message',
+        title: `Nova mensagem de ${clientName}`,
+        message: notificationPreview.substring(0, 80),
+        conversationId: linkedConversation.id,
+        createdAt: new Date().toISOString(),
+      });
+    } catch {
+      // socket pode não estar disponível em testes
+    }
   }
 
   try {

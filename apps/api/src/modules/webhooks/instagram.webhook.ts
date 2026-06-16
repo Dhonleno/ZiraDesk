@@ -263,6 +263,14 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
               }),
             );
           });
+
+          io.to(`agent:${result.assignedUserId}`).emit('notification:new', {
+            type: 'conversation.message',
+            title: `Nova mensagem de ${result.contactName}`,
+            message: notificationPreview.substring(0, 80),
+            conversationId: result.conversationId,
+            createdAt: new Date().toISOString(),
+          });
         }
       }
     }

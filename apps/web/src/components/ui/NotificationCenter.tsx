@@ -4,22 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { notificationsApi, type NotificationItem } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
-import { useNotificationStore, type MessageNotification } from '../../stores/notification.store';
 import { useToast } from '../../stores/toast.store';
-
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#667eea,#764ba2)',
-  'linear-gradient(135deg,#f093fb,#f5576c)',
-  'linear-gradient(135deg,#4facfe,#00f2fe)',
-  'linear-gradient(135deg,#43e97b,#38f9d7)',
-  'linear-gradient(135deg,#fa709a,#fee140)',
-  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
-];
-
-function avatarGradient(name: string): string {
-  const idx = (name.charCodeAt(0) ?? 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx] ?? AVATAR_GRADIENTS[0]!;
-}
 
 function relativeTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -50,10 +35,6 @@ function BackendNotificationIcon({ type }: { type: NotificationItem['type'] }) {
   return <path d="M5 15l-3 3V5a2 2 0 012-2h13a2 2 0 012 2v8a2 2 0 01-2 2H5zM7 8h8M7 11h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
 }
 
-type CombinedNotification =
-  | { kind: 'message'; time: number; data: MessageNotification }
-  | { kind: 'backend'; time: number; data: NotificationItem };
-
 export function NotificationCenter() {
   const { t } = useTranslation('omnichannel');
   const [open, setOpen] = useState(false);
@@ -62,8 +43,6 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-
-  const { messageNotifications, markConversationRead, markAllRead: clearMessages } = useNotificationStore();
 
   const { data: notificationsPages, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['notifications'],
@@ -91,39 +70,12 @@ export function NotificationCenter() {
     [backendNotifications],
   );
 
-  const unreadCount = backendUnreadCount + messageNotifications.length;
+  const unreadCount = backendUnreadCount;
 
-  const combined = useMemo<CombinedNotification[]>(() => {
-    // Conversations already represented by a frontend message notification.
-    const coveredIds = new Set(messageNotifications.map((n) => n.conversationId));
-
-    const extractConvId = (href: string): string | null => {
-      try {
-        return new URL(href, 'http://x').searchParams.get('conversation');
-      } catch {
-        return null;
-      }
-    };
-
-    const messageItems: CombinedNotification[] = messageNotifications.map((n) => ({
-      kind: 'message',
-      time: new Date(n.updatedAt).getTime(),
-      data: n,
-    }));
-
-    const backendItems: CombinedNotification[] = backendNotifications
-      .filter((n) => {
-        const convId = extractConvId(n.href);
-        return !(convId && coveredIds.has(convId));
-      })
-      .map((n) => ({
-        kind: 'backend',
-        time: new Date(n.created_at).getTime(),
-        data: n,
-      }));
-
-    return [...messageItems, ...backendItems].sort((a, b) => b.time - a.time);
-  }, [messageNotifications, backendNotifications]);
+  const combined = useMemo<NotificationItem[]>(
+    () => [...backendNotifications].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [backendNotifications],
+  );
 
   const markRead = useMutation({
     mutationFn: notificationsApi.markRead,
@@ -168,26 +120,8 @@ export function NotificationCenter() {
     navigate(n.href);
   }
 
-  function openMessage(n: MessageNotification) {
-    markConversationRead(n.conversationId);
-    // Mark any matching backend notifications as read so they don't resurface.
-    backendNotifications
-      .filter((bn) => {
-        try {
-          return new URL(bn.href, 'http://x').searchParams.get('conversation') === n.conversationId;
-        } catch {
-          return false;
-        }
-      })
-      .filter((bn) => !bn.read)
-      .forEach((bn) => markRead.mutate(bn.id));
-    setOpen(false);
-    navigate(`/omnichannel/conversations?conversation=${n.conversationId}`);
-  }
-
   function handleMarkAll() {
     markAllBackend.mutate();
-    clearMessages();
   }
 
   function handleDeleteAllRead() {
@@ -250,6 +184,24 @@ export function NotificationCenter() {
           iconType: 'help_requested',
         };
       }
+      case 'lgpd_request_received':
+        return {
+          title: t('notifications.lgpdRequest'),
+          preview: readDataString(notification.data, 'subject_label') || notification.message || '',
+          iconType: 'lgpd_request_received',
+        };
+      case 'lgpd_sla_warning':
+        return {
+          title: t('notifications.lgpdSlaWarning'),
+          preview: readDataString(notification.data, 'subject_label') || notification.message || '',
+          iconType: 'lgpd_sla_warning',
+        };
+      case 'lgpd_sla_breached':
+        return {
+          title: t('notifications.lgpdSlaBreached'),
+          preview: readDataString(notification.data, 'subject_label') || notification.message || '',
+          iconType: 'lgpd_sla_breached',
+        };
       default:
         return {
           title: notification.title || 'Notificação',
@@ -276,7 +228,7 @@ export function NotificationCenter() {
         <div style={{ position: 'absolute', right: 0, top: 38, width: 360, maxHeight: 460, overflow: 'hidden', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-pop)', zIndex: 80 }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <strong style={{ fontSize: 13 }}>Notificações</strong>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <button
                 onClick={handleMarkAll}
                 disabled={unreadCount === 0 || markAllBackend.isPending}
@@ -284,52 +236,24 @@ export function NotificationCenter() {
               >
                 {t('notifications.markAllRead')}
               </button>
-              <button
-                onClick={handleDeleteAllRead}
-                disabled={backendUnreadCount === backendNotifications.length || deleteAllRead.isPending}
-                style={{ border: 'none', background: 'transparent', color: backendNotifications.some((n) => n.read) ? 'var(--txt-3)' : 'var(--txt-4, var(--txt-3))', fontSize: 11, cursor: backendNotifications.some((n) => n.read) ? 'pointer' : 'default' }}
-              >
-                {t('notifications.clearRead')}
-              </button>
+              <span style={{ display: 'grid', justifyItems: 'end', gap: 2 }}>
+                <button
+                  onClick={handleDeleteAllRead}
+                  disabled={backendUnreadCount === backendNotifications.length || deleteAllRead.isPending}
+                  style={{ border: 'none', background: 'transparent', color: backendNotifications.some((n) => n.read) ? 'var(--txt-3)' : 'var(--txt-4, var(--txt-3))', fontSize: 11, cursor: backendNotifications.some((n) => n.read) ? 'pointer' : 'default' }}
+                >
+                  {t('notifications.clearRead')}
+                </button>
+                <span style={{ fontSize: 10, color: 'var(--txt-3)' }}>
+                  {t('notifications.clearReadHint')}
+                </span>
+              </span>
             </div>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {combined.length === 0 ? (
               <div style={{ padding: 28, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>{t('notifications.empty')}</div>
-            ) : combined.map((item) => {
-              if (item.kind === 'message') {
-                const n = item.data;
-                const initial = n.contactName.charAt(0).toUpperCase();
-                return (
-                  <button
-                    key={`msg-${n.conversationId}`}
-                    onClick={() => openMessage(n)}
-                    style={{ width: '100%', display: 'flex', gap: 10, padding: '12px 14px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--line)', background: 'var(--teal-dim)', cursor: 'pointer', color: 'var(--txt)' }}
-                  >
-                    <span style={{ width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: avatarGradient(n.contactName), color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                      {initial}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <strong style={{ fontSize: 12 }}>{n.contactName}</strong>
-                        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{relativeTime(n.updatedAt)}</span>
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <span style={{ flex: 1, minWidth: 0, color: 'var(--txt-2)', fontSize: 12, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {n.lastMessage}
-                        </span>
-                        {n.unreadCount > 1 && (
-                          <span style={{ flexShrink: 0, background: 'var(--teal)', color: 'var(--on-teal)', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '1px 6px', whiteSpace: 'nowrap' }}>
-                            {n.unreadCount} {t('notifications.messages')}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                  </button>
-                );
-              }
-
-              const n = item.data;
+            ) : combined.map((n) => {
               const display = getNotificationDisplay(n);
               return (
                 <div
