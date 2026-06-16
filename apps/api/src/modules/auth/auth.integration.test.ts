@@ -17,6 +17,12 @@ function requiredTenantSlug(): string {
   return slug;
 }
 
+async function waitUntilAfter(timestampMs: number): Promise<void> {
+  while (Date.now() <= timestampMs) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
 describe('Auth integration', () => {
   beforeEach(async () => {
     await redis.del(`auth:force_logout_after:${TEST_USER_ID}`);
@@ -37,6 +43,49 @@ describe('Auth integration', () => {
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining(`${REFRESH_COOKIE}=`)]),
     );
+  });
+
+  it('POST /api/auth/login invalida access token anterior do mesmo usuário', async () => {
+    const firstLogin = await createTestApp()
+      .post('/api/auth/login')
+      .send({
+        email: TEST_EMAIL,
+        password: TEST_PASSWORD,
+        tenantSlug: requiredTenantSlug(),
+      });
+
+    expect(firstLogin.status).toBe(200);
+    const firstAccessToken = firstLogin.body.accessToken as string;
+    const firstRefreshCookie = firstLogin.headers['set-cookie'];
+    expect(firstRefreshCookie).toBeDefined();
+    const firstPayload = jwt.verify(firstAccessToken, env.JWT_SECRET) as { iatMs: number };
+
+    const beforeSecondLogin = await createTestApp()
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${firstAccessToken}`);
+    expect(beforeSecondLogin.status).toBe(200);
+
+    await waitUntilAfter(firstPayload.iatMs + 1);
+
+    const secondLogin = await createTestApp()
+      .post('/api/auth/login')
+      .send({
+        email: TEST_EMAIL,
+        password: TEST_PASSWORD,
+        tenantSlug: requiredTenantSlug(),
+    });
+
+    expect(secondLogin.status).toBe(200);
+
+    const afterSecondLogin = await createTestApp()
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${firstAccessToken}`);
+    expect(afterSecondLogin.status).toBe(401);
+
+    const refreshWithOldCookie = await createTestApp()
+      .post('/api/auth/refresh')
+      .set('Cookie', firstRefreshCookie!);
+    expect(refreshWithOldCookie.status).toBe(401);
   });
 
   it('POST /api/auth/login com credenciais inválidas retorna 401', async () => {

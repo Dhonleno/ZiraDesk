@@ -1,5 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
+import i18n from '../lib/i18n';
 import { useAuthStore } from '../stores/auth.store';
+import { useToastStore } from '../stores/toast.store';
 
 let socket: Socket | null = null;
 let heartbeatInterval: number | null = null;
@@ -138,6 +140,19 @@ function attachLifecycleHandlers(): void {
 
   socket.io.on('reconnect_failed', () => {
     console.error('[Socket] reconnection failed — showing offline warning');
+  });
+
+  socket.on('auth:force_logout', () => {
+    useAuthStore.getState().logout();
+    useToastStore.getState().addToast({
+      type: 'warning',
+      message: i18n.t('session.forcedLogout', { ns: 'auth' }),
+      durationMs: 6000,
+    });
+
+    window.setTimeout(() => {
+      window.location.href = '/login';
+    }, 2000);
   });
 }
 

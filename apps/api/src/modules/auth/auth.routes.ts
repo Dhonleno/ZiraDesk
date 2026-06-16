@@ -69,6 +69,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { tokens, user } = await loginWithEmailPassword(email, password, lang, tenantSchemaName, tenantId);
+      const forcedLogoutAt = (tokens.issuedAtMs - 1).toString();
+      await redis.set(`auth:force_logout_after:${user.id}`, forcedLogoutAt, 'EX', 60 * 60 * 24 * 30);
+
+      try {
+        const io = getSocketServer();
+        io.to(`agent:${user.id}`).emit('auth:force_logout', { reason: 'new_login' });
+      } catch {
+        // socket server not available during startup/shutdown
+      }
 
       reply.setCookie(REFRESH_COOKIE, tokens.refreshToken, {
         httpOnly: true,

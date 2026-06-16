@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { redis } from '../../config/redis.js';
 import type { SupportedLanguage } from '../../middleware/language.js';
 
 const BCRYPT_COST = 12;
@@ -58,6 +59,7 @@ export function getAuthMessages(lang: SupportedLanguage) {
 interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  issuedAtMs: number;
 }
 
 interface UserPayload {
@@ -87,7 +89,7 @@ function signTokens(payload: UserPayload): TokenPair {
   const accessToken = jwt.sign(base, env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
   const refreshToken = jwt.sign(base, env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_TTL });
 
-  return { accessToken, refreshToken };
+  return { accessToken, refreshToken, issuedAtMs };
 }
 
 export async function loginWithEmailPassword(
@@ -161,6 +163,7 @@ export async function verifyRefreshToken(
     tenantId?: string;
     schemaName?: string;
     isSuperAdmin: boolean;
+    iatMs?: number;
   };
 
   try {
@@ -172,8 +175,15 @@ export async function verifyRefreshToken(
       tenantId?: string;
       schemaName?: string;
       isSuperAdmin: boolean;
+      iatMs?: number;
     };
   } catch {
+    throw new Error(msg.tokenExpired);
+  }
+
+  const forcedLogoutAfterRaw = await redis.get(`auth:force_logout_after:${payload.sub}`);
+  const forcedLogoutAfter = forcedLogoutAfterRaw ? Number(forcedLogoutAfterRaw) : Number.NaN;
+  if (typeof payload.iatMs === 'number' && Number.isFinite(forcedLogoutAfter) && payload.iatMs < forcedLogoutAfter) {
     throw new Error(msg.tokenExpired);
   }
 
