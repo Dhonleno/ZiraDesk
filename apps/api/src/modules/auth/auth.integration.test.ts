@@ -136,9 +136,8 @@ describe('Auth integration', () => {
       { expiresIn: '5m' },
     );
 
-    await createTestApp()
-      .post('/api/auth/login')
-      .send({ email: TEST_EMAIL, password: TEST_PASSWORD, tenantSlug: requiredTenantSlug() });
+    // Simula novo login ocorrido após a emissão do token legado
+    await redis.set(`auth:force_logout_after:${TEST_USER_ID}`, (Date.now() + 1).toString(), 'EX', 60);
 
     const response = await createTestApp()
       .post('/api/auth/refresh')
