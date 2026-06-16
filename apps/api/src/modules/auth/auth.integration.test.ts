@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { env } from '../../config/env.js';
 import { redis } from '../../config/redis.js';
 import { createTestApp } from '../../test/setup.js';
@@ -25,6 +25,10 @@ async function waitUntilAfter(timestampMs: number): Promise<void> {
 
 describe('Auth integration', () => {
   beforeEach(async () => {
+    await redis.del(`auth:force_logout_after:${TEST_USER_ID}`);
+  });
+
+  afterEach(async () => {
     await redis.del(`auth:force_logout_after:${TEST_USER_ID}`);
   });
 
