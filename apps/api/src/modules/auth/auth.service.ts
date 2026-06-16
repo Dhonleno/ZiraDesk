@@ -186,8 +186,8 @@ export async function verifyRefreshToken(
   const tokenIatMs =
     typeof payload.iatMs === 'number'
       ? payload.iatMs
-      : typeof (payload as { iat?: number }).iat === 'number'
-        ? (payload as { iat: number }).iat * 1000
+      : typeof (payload as unknown as { iat?: number }).iat === 'number'
+        ? (payload as unknown as { iat: number }).iat * 1000
         : Number.NaN;
   if (Number.isFinite(forcedLogoutAfter) && Number.isFinite(tokenIatMs) && tokenIatMs < forcedLogoutAfter) {
     throw new Error(msg.tokenExpired);
