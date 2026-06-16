@@ -46,7 +46,7 @@ function resolveSchemaName(request: FastifyRequest): string | null {
 }
 
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', { preHandler: usersManageGuard }, async (request, reply) => {
+  app.get('/', { preHandler: guard }, async (request, reply) => {
     const schemaName = resolveSchemaName(request);
     if (!schemaName) {
       return reply.code(500).send({
