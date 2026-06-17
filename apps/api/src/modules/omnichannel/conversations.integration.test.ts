@@ -203,6 +203,10 @@ describe('Novo atendimento integration', () => {
     const emit = vi.fn();
     vi.spyOn(getSocketServer(), 'to').mockReturnValue({ emit } as never);
 
+    await prisma.$executeRawUnsafe(
+      `SET search_path TO "${tenant.schemaName}", public`,
+    );
+
     const response = await app.inject({
       method: 'POST',
       url: '/api/omnichannel/conversations',
