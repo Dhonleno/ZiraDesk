@@ -2472,13 +2472,16 @@ export function ChatArea({ conversationId, onClosed }: Props) {
               background: 'var(--bg-3)',
               boxShadow: '0 12px 30px rgba(0,0,0,.35)',
               zIndex: 25,
+              maxHeight: 'min(420px, calc(100vh - 220px))',
+              display: 'flex',
+              flexDirection: 'column',
               overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)' }}>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)', flexShrink: 0 }}>
               ⚡ {tAdmin('tenantAdmin.quickReplies.chat.title')}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column', overflowY: 'auto' }}>
               {quickReplies.length > 0 ? quickReplies.map((reply) => (
                 <button
                   key={reply.id}
