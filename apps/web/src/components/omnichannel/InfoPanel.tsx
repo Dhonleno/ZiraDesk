@@ -275,13 +275,23 @@ export function InfoPanel({ conversationId }: Props) {
   const { data: contactConversations = [], isLoading: contactConversationsLoading } = useQuery({
     queryKey: ['omnichannel-contact-conversations', contactId],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: Conversation[] }>('/omnichannel/conversations', {
-        params: {
-          contact_id: contactId!,
-          perPage: 50,
-        },
-      });
-      return res.data.data ?? [];
+      const [closed, open, waiting] = await Promise.all([
+        api.get<{ success: boolean; data: Conversation[] }>('/omnichannel/conversations', {
+          params: { contact_id: contactId!, status: 'closed', perPage: 50 },
+        }),
+        api.get<{ success: boolean; data: Conversation[] }>('/omnichannel/conversations', {
+          params: { contact_id: contactId!, status: 'open', perPage: 10 },
+        }),
+        api.get<{ success: boolean; data: Conversation[] }>('/omnichannel/conversations', {
+          params: { contact_id: contactId!, status: 'waiting', perPage: 10 },
+        }),
+      ]);
+
+      return [
+        ...(closed.data.data ?? []),
+        ...(open.data.data ?? []),
+        ...(waiting.data.data ?? []),
+      ];
     },
     enabled: !!contactId,
   });
