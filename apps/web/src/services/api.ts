@@ -437,7 +437,7 @@ export interface AgentSkill {
   name: string;
   tag: string | null;
   parent_label: string | null;
-  level: 'junior' | 'intermediate' | 'senior';
+  level?: 'junior' | 'intermediate' | 'senior';
 }
 
 export interface AgentWithSkills {
@@ -1951,9 +1951,9 @@ export const adminApi = {
 
     assignSkill: async (
       userId: string,
-      payload: { bot_option_id: string; level: 'junior' | 'intermediate' | 'senior' },
+      payload: { bot_option_id: string },
     ) => {
-      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string; level: string } }>(
+      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string } }>(
         `/admin/skills/agents/${userId}`,
         payload,
       );

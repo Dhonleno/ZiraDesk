@@ -356,6 +356,9 @@
       "saved": "Skill saved successfully",
       "deleted": "Skill removed successfully",
       "agents": "Agents",
+      "searchAgent": "Search agent...",
+      "noAgentsFound": "No agents found",
+      "noAgents": "No active agents",
       "close": "Close",
       "save": "Save",
       "saving": "Saving..."
