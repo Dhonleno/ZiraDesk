@@ -3318,17 +3318,6 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  updateConversationGroup: async (
-    conversationId: string,
-    bot_option_id: string | null,
-  ): Promise<{ id: string; bot_option_id: string | null; bot_department: string | null }> => {
-    const res = await api.patch<{
-      success: boolean;
-      data: { id: string; bot_option_id: string | null; bot_department: string | null };
-    }>(`/omnichannel/conversations/${conversationId}/group`, { bot_option_id });
-    return res.data.data;
-  },
-
   setAvailability: async (data: { is_available: boolean }): Promise<AutoAssignAgent> => {
     const res = await api.put<{ success: boolean; data: AutoAssignAgent }>('/omnichannel/availability', data);
     return res.data.data;

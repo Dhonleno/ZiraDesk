@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { api, contactsApi, conversationTags, omnichannelApi, type CrmContact, type TransferSkill } from '../../services/api';
+import { api, contactsApi, conversationTags, type CrmContact } from '../../services/api';
 import { LinkOrganizationModal } from '../crm/LinkOrganizationModal';
 import { EditContactModal } from '../crm/EditContactModal';
 import { ContactTagPicker } from '../crm/ContactTagPicker';
@@ -210,10 +210,6 @@ export function InfoPanel({ conversationId }: Props) {
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [contactTagPickerOpen, setContactTagPickerOpen] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
-  const [editingGroup, setEditingGroup] = useState(false);
-  const [groupSaving, setGroupSaving] = useState(false);
-  const [localBotOptionId, setLocalBotOptionId] = useState<string | null | undefined>(undefined);
-  const groupSelectRef = useRef<HTMLSelectElement>(null);
   const [createTicketData, setCreateTicketData] = useState<{
     contact_id?: string;
     contact_name?: string;
@@ -360,30 +356,6 @@ export function InfoPanel({ conversationId }: Props) {
     },
     onError: () => toast.error(t('contacts.tagsSection.error', { ns: 'crm' })),
   });
-
-  const { data: transferSkills = [] } = useQuery<TransferSkill[]>({
-    queryKey: ['transfer-skills'],
-    queryFn: omnichannelApi.getTransferSkills,
-    staleTime: 60_000,
-  });
-
-  const activeBotOptionId = localBotOptionId !== undefined ? localBotOptionId : (conv?.bot_option_id ?? null);
-  const activeBotDepartment = transferSkills.find((s) => s.id === activeBotOptionId)?.name
-    ?? conv?.bot_department
-    ?? null;
-
-  async function handleSaveGroup(newBotOptionId: string | null) {
-    setGroupSaving(true);
-    try {
-      await omnichannelApi.updateConversationGroup(conversationId, newBotOptionId);
-      setLocalBotOptionId(newBotOptionId);
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    } finally {
-      setGroupSaving(false);
-      setEditingGroup(false);
-    }
-  }
 
   const contactPhone =
     contactData?.whatsapp?.trim()
@@ -749,74 +721,6 @@ export function InfoPanel({ conversationId }: Props) {
                   conversationId={conversationId}
                   onClose={() => setShowTagDropdown(false)}
                 />
-              )}
-            </div>
-
-            {/* Grupo / Departamento */}
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-              <SectionTitle
-                action={
-                  !editingGroup ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditingGroup(true)}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 10 }}
-                      title={t('conversations.changeGroup')}
-                    >
-                      {t('info.edit')}
-                    </button>
-                  ) : null
-                }
-              >
-                {t('conversations.group')}
-              </SectionTitle>
-
-              {editingGroup ? (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <select
-                    ref={groupSelectRef}
-                    defaultValue={activeBotOptionId ?? ''}
-                    style={{
-                      flex: 1, fontSize: 12, padding: '5px 8px',
-                      background: 'var(--bg-3)', border: '1px solid var(--line-2)',
-                      borderRadius: 'var(--r)', color: 'var(--txt)', fontFamily: 'var(--font)',
-                    }}
-                    disabled={groupSaving}
-                  >
-                    <option value="">{t('conversations.noGroup')}</option>
-                    {transferSkills.map((skill) => (
-                      <option key={skill.id} value={skill.id}>{skill.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveGroup(groupSelectRef.current?.value || null)}
-                    disabled={groupSaving}
-                    style={{
-                      padding: '5px 10px', borderRadius: 'var(--r)', border: 'none',
-                      background: 'var(--teal)', color: '#fff', fontSize: 11, fontWeight: 600,
-                      cursor: groupSaving ? 'wait' : 'pointer', fontFamily: 'var(--font)',
-                    }}
-                  >
-                    OK
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingGroup(false)}
-                    disabled={groupSaving}
-                    style={{
-                      padding: '5px 8px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)',
-                      background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 11,
-                      cursor: 'pointer', fontFamily: 'var(--font)',
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: activeBotDepartment ? 'var(--txt)' : 'var(--txt-3)', fontStyle: activeBotDepartment ? 'normal' : 'italic' }}>
-                  {activeBotDepartment ?? t('conversations.noGroup')}
-                </div>
               )}
             </div>
 
