@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
+import { useFaviconBadge } from '../hooks/useFaviconBadge';
 import { adminApi, omnichannelApi, profileApi } from '../services/api';
 import { connectSocket, disconnectSocket, setPresenceStatus, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
@@ -17,6 +18,7 @@ import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
+import { playNotificationSound } from '../utils/notificationSound';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
 import { PermissionGate } from '../components/ui/PermissionGate';
 
@@ -75,6 +77,15 @@ const LANGUAGE_OPTIONS: Array<{
   { value: 'en-US', labelKey: 'language.enUS', flag: '🇺🇸' },
   { value: 'es', labelKey: 'language.es', flag: '🇪🇸' },
 ];
+
+const TITLE_UNREAD_PREFIX_RE = /^\(\d+\)\s*/;
+
+function getCurrentZiraDeskTitle(): string {
+  if (typeof document === 'undefined') return 'ZiraDesk';
+
+  const cleanTitle = document.title.replace(TITLE_UNREAD_PREFIX_RE, '').trim();
+  return cleanTitle.startsWith('ZiraDesk') ? cleanTitle : 'ZiraDesk';
+}
 
 function normalizeLanguage(value: string | undefined): SupportedLanguage {
   if (value === 'en-US' || value?.startsWith('en')) return 'en-US';
@@ -338,6 +349,7 @@ export function TenantLayout() {
   const showFloatingBubble = !pathname.startsWith('/omnichannel');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const unreadConversationNotifications = useNotificationStore((state) => state.messageNotifications.length);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -375,6 +387,14 @@ export function TenantLayout() {
     hasLoadedStatus,
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
+  useFaviconBadge(unreadConversationNotifications > 0);
+
+  useEffect(() => {
+    const baseTitle = getCurrentZiraDeskTitle();
+    document.title = unreadConversationNotifications > 0
+      ? `(${unreadConversationNotifications}) ${baseTitle}`
+      : baseTitle;
+  }, [pathname, unreadConversationNotifications]);
 
   useEffect(() => {
     const tenantName = sessionStorage.getItem('impersonated_tenant_name');
@@ -451,23 +471,6 @@ export function TenantLayout() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const playNotificationSound = () => {
-      try {
-        const ctx = new AudioContext();
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.06;
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.start();
-        oscillator.stop(ctx.currentTime + 0.12);
-      } catch {
-        // sem suporte de audio no navegador
-      }
-    };
-
     const unsubHelpRequested = subscribeToEvent<{
       conversationId: string;
       requestedBy: { id: string; name: string };
@@ -497,7 +500,7 @@ export function TenantLayout() {
           });
         },
       });
-      playNotificationSound();
+      playNotificationSound('help');
     });
 
     return () => {
@@ -550,6 +553,38 @@ export function TenantLayout() {
       unsubActiveOutboundReplied();
     };
   }, [queryClient, t, toast]);
+
+  useEffect(() => {
+    if (!['owner', 'admin', 'supervisor'].includes(user?.role ?? '')) return;
+
+    const unsubCreated = subscribeToEvent<{
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      conversation?: {
+        assigned_to?: string | null;
+        assignedTo?: string | null;
+        assignedAgentId?: string | null;
+      };
+    }>('conversation:created', (data) => {
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+
+      if (!assignedTo) {
+        playNotificationSound('message');
+      }
+    });
+
+    return () => {
+      unsubCreated();
+    };
+  }, [user?.role]);
 
   useEffect(() => {
     if (!user?.id || pathname.startsWith('/omnichannel')) return;

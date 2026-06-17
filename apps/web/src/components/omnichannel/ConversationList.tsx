@@ -11,6 +11,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
 import { avatarClass } from '../../utils/avatar';
+import { playNotificationSound } from '../../utils/notificationSound';
 
 interface ConversationItem {
   id: string;
@@ -238,28 +239,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
     onSelect(conversationId);
   }, [clearConversationHighlight, onSelect]);
 
-  const playNotificationSound = useCallback(() => {
-    try {
-      const ctx = new window.AudioContext();
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(800, ctx.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.1);
-      gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-
-      oscillator.start(ctx.currentTime);
-      oscillator.stop(ctx.currentTime + 0.25);
-      window.setTimeout(() => void ctx.close(), 350);
-    } catch {
-      // Browser may block audio until a user interaction happens.
-    }
-  }, []);
-
   const markConversationActivity = useCallback((conversationId: string) => {
     if (selectedId === conversationId) {
       clearConversationHighlight(conversationId);
@@ -422,7 +401,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       // - conversa atribuída a mim OU em fila
       // - aba em foco (document.hidden === false)
       if (isClientMessage && shouldNotifyByAssignee && !isBrowserTabHidden()) {
-        playNotificationSound();
+        playNotificationSound('message');
       }
 
       // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
@@ -506,6 +485,8 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
           `${contactName} ${t('notifications.assignedBody')}`,
           '/icon-192.png',
         );
+      } else {
+        playNotificationSound('assignment');
       }
     };
 
@@ -601,7 +582,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
     markConversationActivity,
     markNewConversation,
     notifyPermissionDeniedOnce,
-    playNotificationSound,
     qc,
     selectedId,
     showNotification,
