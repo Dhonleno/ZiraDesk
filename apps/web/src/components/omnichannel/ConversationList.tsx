@@ -25,7 +25,7 @@ interface ConversationItem {
   created_at: string;
   csat_score?: number | null;
   csat_comment?: string | null;
-  csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
+  csat_stage?: 'none' | 'sent' | 'waiting_comment' | 'done' | null;
   contact_name?: string | null;
   contact_email?: string | null;
   organization_name?: string | null;
@@ -378,9 +378,24 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
         ?? data.conversation?.assignedAgentId
         ?? cachedConversation?.assigned_to
         ?? null;
+      const conversationStatus =
+        data.conversation?.status
+        ?? cachedConversation?.status
+        ?? null;
+      const csatStage = cachedConversation?.csat_stage ?? null;
 
       if (conversationId) {
         markConversationActivity(conversationId);
+      }
+
+      // Não tocar som/notificação se a conversa ainda está no bot.
+      if (conversationStatus === 'bot') {
+        return;
+      }
+
+      // Não tocar som/notificação durante interação de CSAT.
+      if (csatStage && csatStage !== 'none') {
+        return;
       }
 
       if (!currentUserId || assignedAgentId !== currentUserId) {
