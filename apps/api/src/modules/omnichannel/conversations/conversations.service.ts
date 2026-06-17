@@ -14,8 +14,8 @@ import type {
 } from './conversations.schema.js';
 import {
   buildProtocolMessage,
+  callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
-  generateConversationProtocol,
   quoteIdent,
 } from './protocols.js';
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
@@ -74,6 +74,18 @@ function validateSchemaName(schemaName: string): string {
   }
 
   return schemaName;
+}
+
+async function withTenantSchema<T>(
+  schemaName: string,
+  runner: (tx: typeof prisma) => Promise<T>,
+): Promise<T> {
+  const safeSchemaName = validateSchemaName(schemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+    return runner(tx as typeof prisma);
+  });
 }
 
 async function getSchemaName(tenantId?: string): Promise<string | null> {
@@ -1219,246 +1231,249 @@ export async function createConversation(
   actorIp?: string,
 ): Promise<CreateConversationResult> {
   const schemaName = await getSchemaName(tenantId);
+  if (!schemaName) throw new NotFoundError('Schema do tenant não encontrado');
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
 
-  const contactCheck = await prisma.$queryRawUnsafe<
-    [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
-  >(
-    `SELECT id, phone, whatsapp, email FROM contacts WHERE id = $1::uuid LIMIT 1`,
-    data.contact_id,
-  );
-  if (!contactCheck[0]) throw new NotFoundError('Contato não encontrado');
+  return withTenantSchema(schemaName, async (tx) => {
+    const contactCheck = await tx.$queryRawUnsafe<
+      [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
+    >(
+      `SELECT id, phone, whatsapp, email FROM contacts WHERE id = $1::uuid LIMIT 1`,
+      data.contact_id,
+    );
+    if (!contactCheck[0]) throw new NotFoundError('Contato não encontrado');
 
-  const channelCheck = await prisma.$queryRawUnsafe<
-    [{ id: string; type: string; credentials: string | object | null }]
-  >(
-    `SELECT id, type, credentials FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
-    data.channel_id,
-  );
-  if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
+    const channelCheck = await tx.$queryRawUnsafe<
+      [{ id: string; type: string; credentials: string | object | null }]
+    >(
+      `SELECT id, type, credentials FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+      data.channel_id,
+    );
+    if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
 
-  const duplicateRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id
-     FROM conversations
-     WHERE contact_id = $1::uuid
-       AND channel_id = $2::uuid
-       AND status = 'open'
-     LIMIT 1`,
-    data.contact_id,
-    data.channel_id,
-  );
-  if (duplicateRows[0]) {
-    throw new DuplicateOpenConversationError(duplicateRows[0].id);
-  }
-
-  const conversationType = data.type ?? 'inbound';
-  const initialMessage = data.initial_message?.trim() ?? '';
-  const initialTemplateName = data.initial_template?.name?.trim() ?? '';
-  const initialTemplateLanguage = data.initial_template?.language?.trim() || 'pt_BR';
-  const initialTemplateComponents = (data.initial_template?.components ?? [])
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
-  const hasInitialTemplate = Boolean(initialTemplateName);
-  const initialStatus = conversationType === 'outbound' ? 'waiting' : 'open';
-  const tenantRows = tenantId
-    ? await prisma.$queryRawUnsafe<Array<{ settings: unknown }>>(
-      `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
-      tenantId,
-    )
-    : [];
-  const tenantSettings =
-    typeof tenantRows[0]?.settings === 'object' && tenantRows[0]?.settings !== null
-      ? (tenantRows[0].settings as Record<string, unknown>)
-      : {};
-  const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
-    ? tenantSettings.timezone.trim()
-    : 'America/Sao_Paulo';
-  const waitingExpiresAt = conversationType === 'outbound'
-    ? calculateWaitingExpiresAt(tenantSettings)
-    : null;
-
-  const metadata: Record<string, unknown> = {
-    type: conversationType,
-  };
-  if (conversationType === 'outbound') {
-    metadata.origin = 'outbound';
-    metadata.outbound_started_at = new Date().toISOString();
-    metadata.outbound_origin_agent_id = userId;
-    metadata.outbound_timezone = tenantTimezone;
-  }
-
-  if (channelCheck[0].type === 'whatsapp' && conversationType !== 'outbound' && schemaName) {
-    const lastClientMsgRows = await prisma.$queryRawUnsafe<Array<{ created_at: Date }>>(
-      `SELECT m.created_at
-       FROM ${quoteIdent(schemaName)}.messages m
-       JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
-       WHERE c.contact_id = $1::uuid
-         AND c.channel_id = $2::uuid
-         AND m.sender_type = 'client'
-       ORDER BY m.created_at DESC
+    const duplicateRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM conversations
+       WHERE contact_id = $1::uuid
+         AND channel_id = $2::uuid
+         AND status = 'open'
        LIMIT 1`,
       data.contact_id,
       data.channel_id,
     );
-    const lastClientMsg = lastClientMsgRows[0];
-    const withinWindow = lastClientMsg !== undefined &&
-      (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
-    if (!withinWindow) {
-      throw new WhatsappWindowExpiredError();
+    if (duplicateRows[0]) {
+      throw new DuplicateOpenConversationError(duplicateRows[0].id);
     }
-  }
 
-  const protocolNumber = await generateConversationProtocol(prisma, schemaName);
-  const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (
-       contact_id,
-       organization_id,
-       channel_id,
-       channel_type,
-       conversation_type,
-       status,
-       protocol_number,
-       assigned_to,
-       subject,
-       bot_option_id,
-       metadata,
-       waiting_expires_at,
-       queue_entered_at
-     )
-     VALUES (
-       $1::uuid,
-       $2::uuid,
-       $3::uuid,
-       $4,
-       $5,
-       $6::conversation_status,
-       $7,
-       $8::uuid,
-       $9,
-       $12::uuid,
-       $10::jsonb,
-       $11::timestamptz,
-       CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
-     )
-     RETURNING *`,
-    data.contact_id,
-    data.organization_id ?? null,
-    data.channel_id,
-    channelCheck[0].type,
-    conversationType,
-    initialStatus,
-    protocolNumber,
-    userId,
-    data.subject ?? null,
-    JSON.stringify(metadata),
-    waitingExpiresAt,
-    data.bot_option_id ?? null,
-  );
-  const conversation = convRows[0]!;
-  const protocolMessage = buildProtocolMessage(protocolNumber, {
-    context: 'agent_initiated',
-    startedAt: new Date(),
-    timeZone: tenantTimezone,
-  });
-  const protocolMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
-     VALUES ($1::uuid, 'system', $2, 'text', false)
-     RETURNING id`,
-    conversation.id,
-    protocolMessage,
-  );
-  let lastMessagePreview = protocolMessage.slice(0, 255);
-  let initialMessageRows: Array<{ id: string }> = [];
-  const initialAgentContent = hasInitialTemplate
-    ? `[Template WhatsApp: ${initialTemplateName}]`
-    : initialMessage;
-  const initialAgentMetadata = hasInitialTemplate
-    ? JSON.stringify({
-      whatsapp_template: {
-        name: initialTemplateName,
-        language: initialTemplateLanguage,
-        ...(initialTemplateComponents.length ? { components: initialTemplateComponents } : {}),
-      },
-    })
-    : JSON.stringify({});
+    const conversationType = data.type ?? 'inbound';
+    const initialMessage = data.initial_message?.trim() ?? '';
+    const initialTemplateName = data.initial_template?.name?.trim() ?? '';
+    const initialTemplateLanguage = data.initial_template?.language?.trim() || 'pt_BR';
+    const initialTemplateComponents = (data.initial_template?.components ?? [])
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+    const hasInitialTemplate = Boolean(initialTemplateName);
+    const initialStatus = conversationType === 'outbound' ? 'waiting' : 'open';
+    const tenantRows = tenantId
+      ? await tx.$queryRawUnsafe<Array<{ settings: unknown }>>(
+        `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
+        tenantId,
+      )
+      : [];
+    const tenantSettings =
+      typeof tenantRows[0]?.settings === 'object' && tenantRows[0]?.settings !== null
+        ? (tenantRows[0].settings as Record<string, unknown>)
+        : {};
+    const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
+      ? tenantSettings.timezone.trim()
+      : 'America/Sao_Paulo';
+    const waitingExpiresAt = conversationType === 'outbound'
+      ? calculateWaitingExpiresAt(tenantSettings)
+      : null;
 
-  if (initialAgentContent) {
-    initialMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, metadata)
-       VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5::jsonb)
+    const metadata: Record<string, unknown> = {
+      type: conversationType,
+    };
+    if (conversationType === 'outbound') {
+      metadata.origin = 'outbound';
+      metadata.outbound_started_at = new Date().toISOString();
+      metadata.outbound_origin_agent_id = userId;
+      metadata.outbound_timezone = tenantTimezone;
+    }
+
+    if (channelCheck[0].type === 'whatsapp' && conversationType !== 'outbound' && schemaName) {
+      const lastClientMsgRows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
+        `SELECT m.created_at
+         FROM ${quoteIdent(schemaName)}.messages m
+         JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
+         WHERE c.contact_id = $1::uuid
+           AND c.channel_id = $2::uuid
+           AND m.sender_type = 'client'
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        data.contact_id,
+        data.channel_id,
+      );
+      const lastClientMsg = lastClientMsgRows[0];
+      const withinWindow = lastClientMsg !== undefined &&
+        (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
+      if (!withinWindow) {
+        throw new WhatsappWindowExpiredError();
+      }
+    }
+
+    const protocolNumber = await callGenerateProtocol(tx, schemaName);
+    const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
+      `INSERT INTO conversations (
+         contact_id,
+         organization_id,
+         channel_id,
+         channel_type,
+         conversation_type,
+         status,
+         protocol_number,
+         assigned_to,
+         subject,
+         bot_option_id,
+         metadata,
+         waiting_expires_at,
+         queue_entered_at
+       )
+       VALUES (
+         $1::uuid,
+         $2::uuid,
+         $3::uuid,
+         $4,
+         $5,
+         $6::conversation_status,
+         $7,
+         $8::uuid,
+         $9,
+         $12::uuid,
+         $10::jsonb,
+         $11::timestamptz,
+         CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
+       )
+       RETURNING *`,
+      data.contact_id,
+      data.organization_id ?? null,
+      data.channel_id,
+      channelCheck[0].type,
+      conversationType,
+      initialStatus,
+      protocolNumber,
+      userId,
+      data.subject ?? null,
+      JSON.stringify(metadata),
+      waitingExpiresAt,
+      data.bot_option_id ?? null,
+    );
+    const conversation = convRows[0]!;
+    const protocolMessage = buildProtocolMessage(protocolNumber, {
+      context: 'agent_initiated',
+      startedAt: new Date(),
+      timeZone: tenantTimezone,
+    });
+    const protocolMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+       VALUES ($1::uuid, 'system', $2, 'text', false)
        RETURNING id`,
       conversation.id,
-      userId,
-      initialAgentContent,
-      hasInitialTemplate ? 'template' : 'text',
-      initialAgentMetadata,
+      protocolMessage,
     );
-    lastMessagePreview = initialAgentContent.slice(0, 255);
-  }
+    let lastMessagePreview = protocolMessage.slice(0, 255);
+    let initialMessageRows: Array<{ id: string }> = [];
+    const initialAgentContent = hasInitialTemplate
+      ? `[Template WhatsApp: ${initialTemplateName}]`
+      : initialMessage;
+    const initialAgentMetadata = hasInitialTemplate
+      ? JSON.stringify({
+        whatsapp_template: {
+          name: initialTemplateName,
+          language: initialTemplateLanguage,
+          ...(initialTemplateComponents.length ? { components: initialTemplateComponents } : {}),
+        },
+      })
+      : JSON.stringify({});
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
-    lastMessagePreview,
-    conversation.id,
-  );
+    if (initialAgentContent) {
+      initialMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, metadata)
+         VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5::jsonb)
+         RETURNING id`,
+        conversation.id,
+        userId,
+        initialAgentContent,
+        hasInitialTemplate ? 'template' : 'text',
+        initialAgentMetadata,
+      );
+      lastMessagePreview = initialAgentContent.slice(0, 255);
+    }
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
-     VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
-    userId,
-    conversation.id,
-    JSON.stringify({
-      contact_id: data.contact_id,
-      channel_id: data.channel_id,
-      channel_type: channelCheck[0].type,
-      conversation_type: conversationType,
-      initial_message: initialAgentContent.slice(0, 100),
-      created_by: userId,
-    }),
-    actorIp ?? null,
-  );
+    await tx.$executeRawUnsafe(
+      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
+      lastMessagePreview,
+      conversation.id,
+    );
 
-  const protocolDispatches: MessageDispatchPayload[] = [];
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
+       VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
+      userId,
+      conversation.id,
+      JSON.stringify({
+        contact_id: data.contact_id,
+        channel_id: data.channel_id,
+        channel_type: channelCheck[0].type,
+        conversation_type: conversationType,
+        initial_message: initialAgentContent.slice(0, 100),
+        created_by: userId,
+      }),
+      actorIp ?? null,
+    );
 
-  if (channelCheck[0].type === 'whatsapp') {
-    const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
-    const shouldDispatchProtocol = conversationType !== 'outbound';
+    const protocolDispatches: MessageDispatchPayload[] = [];
 
-    if (shouldDispatchProtocol) {
-      protocolDispatches.push({
-        messageId: protocolMessageRows[0]!.id,
-        protocolNumber,
-        content: protocolMessage,
-        channelType: channelCheck[0].type,
-        channelCredentials,
-        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
-        contactEmail: contactCheck[0].email,
+    if (channelCheck[0].type === 'whatsapp') {
+      const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
+      const shouldDispatchProtocol = conversationType !== 'outbound';
+
+      if (shouldDispatchProtocol) {
+        protocolDispatches.push({
+          messageId: protocolMessageRows[0]!.id,
+          protocolNumber,
+          content: protocolMessage,
+          channelType: channelCheck[0].type,
+          channelCredentials,
+          contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+          contactEmail: contactCheck[0].email,
+        });
+      }
+
+      if (initialMessageRows[0]) {
+        protocolDispatches.push({
+          messageId: initialMessageRows[0].id,
+          content: initialAgentContent,
+          channelType: channelCheck[0].type,
+          channelCredentials,
+          contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+          contactEmail: contactCheck[0].email,
+          templateName: hasInitialTemplate ? initialTemplateName : null,
+          templateLanguage: hasInitialTemplate ? initialTemplateLanguage : null,
+          templateComponents: hasInitialTemplate
+            ? (initialTemplateComponents.length ? initialTemplateComponents : null)
+            : null,
+        });
+      }
+    }
+
+    if (tenantId) {
+      void dispatchWebhook(tenantId, 'conversation.created', {
+        conversation: { id: conversation.id, status: conversation.status, channelType: conversation.channel_type, contactId: conversation.contact_id },
       });
     }
 
-    if (initialMessageRows[0]) {
-      protocolDispatches.push({
-        messageId: initialMessageRows[0].id,
-        content: initialAgentContent,
-        channelType: channelCheck[0].type,
-        channelCredentials,
-        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
-        contactEmail: contactCheck[0].email,
-        templateName: hasInitialTemplate ? initialTemplateName : null,
-        templateLanguage: hasInitialTemplate ? initialTemplateLanguage : null,
-        templateComponents: hasInitialTemplate
-          ? (initialTemplateComponents.length ? initialTemplateComponents : null)
-          : null,
-      });
-    }
-  }
-
-  if (tenantId) {
-    void dispatchWebhook(tenantId, 'conversation.created', {
-      conversation: { id: conversation.id, status: conversation.status, channelType: conversation.channel_type, contactId: conversation.contact_id },
-    });
-  }
-
-  return { conversation, protocolDispatches };
+    return { conversation, protocolDispatches };
+  });
 }
 
 export async function assignConversation(
