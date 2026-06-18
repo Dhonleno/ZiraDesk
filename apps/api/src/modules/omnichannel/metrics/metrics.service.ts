@@ -323,18 +323,18 @@ export async function getByAgent(filters: MetricsFilters, schemaName: string, db
          u.id AS agent_id,
          COUNT(c.id) AS total,
          COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved,
-         ROUND(AVG(EXTRACT(EPOCH FROM (
-           c.resolved_at - COALESCE(
-             CASE
-               WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
-               ELSE NULL
-             END,
-             c.created_at
-           )
-         )) / 60))::integer AS avg_minutes,
+         ROUND(AVG(
+           EXTRACT(EPOCH FROM (ca.released_at - ca.assigned_at)) / 60
+         ) FILTER (
+           WHERE ca.released_at IS NOT NULL
+         ))::integer AS avg_minutes,
          ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat
        FROM conversations c
        JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN conversation_assignments ca
+         ON ca.conversation_id = c.id
+         AND ca.agent_id = u.id
+         AND ca.release_reason = 'closed'
        ${whereSql}
        GROUP BY u.id, u.name
        ORDER BY total DESC`,

@@ -246,7 +246,7 @@ function getPerformanceBaseFilters(
   conditions.push(`c.created_at < ((((${dateToToken}::date + INTERVAL '1 day')::timestamp) AT TIME ZONE ${timezoneToken}::text))`);
 
   if (query.bot_option_id) {
-    conditions.push(`c.metadata->>'bot_option_id' = ${pushParam(query.bot_option_id)}::text`);
+    conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
   }
 
   const usersFilterParts: string[] = [
@@ -293,6 +293,7 @@ export async function listPerformance(
   }
 
   const safeSchema = quoteIdent(schemaName);
+  const assignRef = `${safeSchema}.conversation_assignments`;
   const { conversationWhereSql, usersWhereSql, params } = getPerformanceBaseFilters(
     query,
     dateRange.dateFromLocal,
@@ -356,13 +357,10 @@ export async function listPerformance(
       u.avatar_url,
       COUNT(fc.id)::bigint AS total_conversations,
       AVG(
-        EXTRACT(EPOCH FROM (
-          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
-        )) / 60
+        EXTRACT(EPOCH FROM (ca.released_at - ca.assigned_at)) / 60
       ) FILTER (
-        WHERE fc.status = 'closed'
-          AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
-          AND fc.performance_start_at IS NOT NULL
+        WHERE ca.released_at IS NOT NULL
+          AND ca.release_reason = 'closed'
       ) AS avg_tma_minutes,
       AVG(
         GREATEST(
@@ -394,6 +392,10 @@ export async function listPerformance(
       )::bigint AS sla_breach
     FROM ${safeSchema}.users u
     LEFT JOIN filtered_conversations fc ON fc.assigned_to = u.id
+    LEFT JOIN ${assignRef} ca
+      ON ca.conversation_id = fc.id
+      AND ca.agent_id = u.id
+      AND ca.release_reason = 'closed'
     WHERE ${usersWhereSql}
     GROUP BY u.id, u.name, u.avatar_url
     ORDER BY total_conversations DESC, u.name ASC
