@@ -7,6 +7,7 @@ import { sendEmail } from '../services/email.service.js';
 import { getSocketServer } from '../socket/index.js';
 import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
 import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
+import { normalizePhoneForStorage } from '../utils/phone.js';
 import {
   buildFinalMetaFailureReason,
   getProcessorAttemptLimit,
@@ -98,6 +99,24 @@ function normalizeWhatsappText(content: string): string {
   return content
     .replace(/\r\n/g, '\n')
     .replace(/\\n/g, '\n');
+}
+
+function sanitizeWhatsAppRecipientForMeta(to: string): string {
+  if (env.NODE_ENV !== 'development') {
+    return to.replace(/\D/g, '');
+  }
+
+  const digits = to.replace(/\D/g, '');
+  const normalizationInput =
+    digits.startsWith('55') && (digits.length === 12 || digits.length === 13)
+      ? digits
+      : to;
+
+  try {
+    return (normalizePhoneForStorage(normalizationInput) ?? to).replace(/\D/g, '');
+  } catch {
+    return digits;
+  }
 }
 
 function quoteIdent(identifier: string): string {
@@ -544,8 +563,8 @@ const worker = new Worker<SendMessageJob>(
           }, reason);
           return { ok: false, permanent: true };
         }
-        // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses
-        const sanitizedPhone = (job.data.to ?? '').replace(/\D/g, '');
+        // Meta Cloud API requires digits only: no +, spaces, hyphens or parentheses.
+        const sanitizedPhone = sanitizeWhatsAppRecipientForMeta(job.data.to ?? '');
         const replyExternalId = await resolveReplyExternalId(job.data);
         const sendToMeta = async (payload: ReturnType<typeof buildWhatsAppBody>) => {
           const response = await fetch(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePhoneForStorage } from './phone.js';
+import { normalizePhoneForStorage, normalizeWhatsAppSenderPhone } from './phone.js';
 
 describe('normalizePhoneForStorage', () => {
   it('adiciona o nono dígito para celular BR de 12 dígitos (com 55)', () => {
@@ -12,5 +12,11 @@ describe('normalizePhoneForStorage', () => {
 
   it('mantém fixo BR sem adicionar 9 (10 dígitos nacionais)', () => {
     expect(normalizePhoneForStorage('6233334444')).toBe('+556233334444');
+  });
+});
+
+describe('normalizeWhatsAppSenderPhone', () => {
+  it('mantém o número enviado pela Meta sem inserir nono dígito', () => {
+    expect(normalizeWhatsAppSenderPhone('556296689991')).toBe('+556296689991');
   });
 });
