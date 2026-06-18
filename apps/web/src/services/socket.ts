@@ -74,7 +74,7 @@ function syncPresenceAfterForegroundResume(): void {
   }
 
   emitPresenceOnline();
-  emitHeartbeat();
+  startHeartbeat();
   // Alguns navegadores retomam timers/socket com atraso ao restaurar janela minimizada.
   // Reforçamos o anúncio de presença em seguida para evitar exigir refresh manual.
   window.setTimeout(() => {
@@ -84,11 +84,25 @@ function syncPresenceAfterForegroundResume(): void {
 }
 
 function onVisibilityChange(): void {
+  if (document.visibilityState === 'hidden') {
+    // Para o heartbeat quando minimizado: browsers throttleiam timers em background.
+    stopHeartbeat();
+    return;
+  }
+
   syncPresenceAfterForegroundResume();
 }
 
 function onWindowFocus(): void {
+  // Fallback para janelas minimizadas onde visibilitychange pode não disparar consistentemente.
+  if (document.visibilityState !== 'visible') return;
+
   syncPresenceAfterForegroundResume();
+}
+
+function onWindowBlur(): void {
+  // Para o heartbeat quando a janela perde foco completamente.
+  stopHeartbeat();
 }
 
 function onPageShow(): void {
@@ -103,6 +117,7 @@ function attachLifecycleListeners(): void {
   if (lifecycleListenersAttached) return;
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('focus', onWindowFocus);
+  window.addEventListener('blur', onWindowBlur);
   window.addEventListener('pageshow', onPageShow);
   window.addEventListener('online', onNetworkOnline);
   lifecycleListenersAttached = true;
@@ -112,6 +127,7 @@ function detachLifecycleListeners(): void {
   if (!lifecycleListenersAttached) return;
   document.removeEventListener('visibilitychange', onVisibilityChange);
   window.removeEventListener('focus', onWindowFocus);
+  window.removeEventListener('blur', onWindowBlur);
   window.removeEventListener('pageshow', onPageShow);
   window.removeEventListener('online', onNetworkOnline);
   lifecycleListenersAttached = false;
