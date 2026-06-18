@@ -577,7 +577,6 @@ export async function listPerformance(
 }
 
 interface PerformanceByGroupRowDb {
-  bot_option_id: string | null;
   group_name: string | null;
   total_conversations: number | bigint | null;
   avg_tma_minutes: number | null;
@@ -665,7 +664,6 @@ export async function listPerformanceByGroup(
       WHERE ${whereClause}
     )
     SELECT
-      fc.bot_option_id,
       fc.group_name,
       COUNT(DISTINCT fc.id)::bigint AS total_conversations,
       AVG(
@@ -697,13 +695,12 @@ export async function listPerformanceByGroup(
         )
       ) AS sla_percent
     FROM filtered_conversations fc
-    GROUP BY fc.bot_option_id, fc.group_name
+    GROUP BY fc.group_name
     ORDER BY total_conversations DESC
   `, ...params);
 
   return {
     data: rows.map((row) => ({
-      bot_option_id: row.bot_option_id,
       group_name: row.group_name ?? '—',
       total_conversations: toNumber(row.total_conversations),
       avg_tma_minutes: toNullableNumber(row.avg_tma_minutes),

@@ -507,7 +507,7 @@ export function PerformancePage() {
                 </thead>
                 <tbody>
                   {(performanceByGroupData?.data ?? []).map((row, idx) => (
-                    <tr key={row.bot_option_id ?? `__no_group_${idx}`}>
+                    <tr key={row.group_name ?? `__no_group_${idx}`}>
                       <td>
                         <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
                           {row.group_name}

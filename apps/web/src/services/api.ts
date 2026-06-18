@@ -2862,7 +2862,6 @@ export interface OmnichannelPerformanceResponse {
 }
 
 export interface PerformanceByGroupRow {
-  bot_option_id: string | null;
   group_name: string;
   total_conversations: number;
   avg_tma_minutes: number | null;
