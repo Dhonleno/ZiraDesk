@@ -21,6 +21,7 @@ import {
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
 import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
+import { ensureConversationAssignmentsInfrastructure } from './assignments.infrastructure.js';
 import { calculateWaitingExpiresAt } from '../../../lib/omnichannel/calculate-waiting-expires.js';
 
 export class NotFoundError extends Error {
@@ -748,7 +749,8 @@ export async function assignQueuedConversationToMe(
   userId: string,
   tenantId?: string,
 ): Promise<{ conversation: ConversationRow }> {
-  const schemaPrefix = await getSchemaPrefix(tenantId);
+  const schemaName = await getSchemaName(tenantId);
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
   const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id
      FROM ${schemaPrefix}conversations
@@ -783,6 +785,17 @@ export async function assignQueuedConversationToMe(
 
   const conversation = rows[0];
   if (!conversation) throw new ConflictError('Conversa não está disponível na fila');
+
+  const assignRef = `${schemaPrefix}conversation_assignments`;
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${assignRef}
+    SET released_at = NOW(), release_reason = 'auto'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, userId);
 
   await syncActiveConversationCounters(prisma, [userId]);
   return { conversation };
@@ -1332,6 +1345,7 @@ export async function createConversation(
          status,
          protocol_number,
          assigned_to,
+         assigned_at,
          subject,
          bot_option_id,
          metadata,
@@ -1347,6 +1361,7 @@ export async function createConversation(
          $6::conversation_status,
          $7,
          $8::uuid,
+         CASE WHEN $8::uuid IS NOT NULL THEN NOW() ELSE NULL END,
          $9,
          $12::uuid,
          $10::jsonb,
@@ -1368,6 +1383,16 @@ export async function createConversation(
       data.bot_option_id ?? null,
     );
     const conversation = convRows[0]!;
+
+    if (conversation.assigned_to) {
+      await ensureConversationAssignmentsInfrastructure(tx, schemaName);
+      const assignRef = `${quoteIdent(schemaName)}.conversation_assignments`;
+      await tx.$executeRawUnsafe(`
+        INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+        VALUES ($1::uuid, $2::uuid, NOW())
+      `, conversation.id, conversation.assigned_to);
+    }
+
     const protocolMessage = buildProtocolMessage(protocolNumber, {
       context: 'agent_initiated',
       startedAt: new Date(),
@@ -1679,6 +1704,16 @@ export async function transferConversation(
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
 
+  await prisma.$executeRawUnsafe(`
+    UPDATE conversation_assignments
+    SET released_at = NOW(), release_reason = 'transferred'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO conversation_assignments (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, assignToUserId);
+
   await prisma.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
      VALUES ($1::uuid, 'conversation.transferred', 'conversation', $2::uuid, $3::jsonb)`,
@@ -1723,6 +1758,7 @@ export async function updateConversation(
      SET
        status = COALESCE($1::conversation_status, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
+       assigned_at = CASE WHEN $2 THEN NOW() ELSE assigned_at END,
        csat_score = CASE WHEN $5::boolean THEN $6::integer ELSE csat_score END,
        csat_comment = CASE WHEN $7::boolean THEN $8::text ELSE csat_comment END,
        resolved_at = CASE WHEN $1 = 'closed' THEN NOW() ELSE resolved_at END,
@@ -1738,6 +1774,20 @@ export async function updateConversation(
     hasCsatComment,
     body.csat_comment ?? null,
   );
+
+  if (hasAssignedTo) {
+    await prisma.$executeRawUnsafe(`
+      UPDATE conversation_assignments
+      SET released_at = NOW(), release_reason = 'reassigned'
+      WHERE conversation_id = $1::uuid AND released_at IS NULL
+    `, conversationId);
+    if (assignedToValue !== null) {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO conversation_assignments (conversation_id, agent_id, assigned_at)
+        VALUES ($1::uuid, $2::uuid, NOW())
+      `, conversationId, assignedToValue);
+    }
+  }
 
   if (body.status === 'closed') {
     await prisma.$executeRawUnsafe(
@@ -1851,6 +1901,13 @@ export async function closeConversation(
 
     const conversation = rows[0];
     if (!conversation) throw new NotFoundError('Conversa não encontrada');
+
+    const assignRef = `${quoteIdent(safeSchemaName)}.conversation_assignments`;
+    await tx.$executeRawUnsafe(`
+      UPDATE ${assignRef}
+      SET released_at = $1, release_reason = 'closed'
+      WHERE conversation_id = $2::uuid AND released_at IS NULL
+    `, closedAt, conversationId);
 
     await tx.$executeRawUnsafe(
       `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)

@@ -1512,6 +1512,19 @@ async function processIncomingMessage(
           resolvedAssignedTo,
           conversationId,
         );
+
+        const assignRef = `${quoteIdent(schemaName)}.conversation_assignments`;
+        await tx.$executeRawUnsafe(`
+          UPDATE ${assignRef}
+          SET released_at = NOW(), release_reason = 'auto'
+          WHERE conversation_id = $1::uuid AND released_at IS NULL
+        `, conversationId);
+        if (resolvedAssignedTo) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+            VALUES ($1::uuid, $2::uuid, NOW())
+          `, conversationId, resolvedAssignedTo);
+        }
       }
 
       await tx.$executeRawUnsafe(

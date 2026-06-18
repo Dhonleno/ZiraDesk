@@ -387,6 +387,17 @@ async function persistAutoAssignment(
 
   if (!updatedRows[0]) return false;
 
+  const convAssignRef = tableRef(schemaName, 'conversation_assignments');
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${convAssignRef}
+    SET released_at = NOW(), release_reason = 'auto'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, agentId);
+
   await prisma.$executeRawUnsafe(
     `UPDATE ${assignmentsRef}
      SET last_assigned_at = NOW(),
