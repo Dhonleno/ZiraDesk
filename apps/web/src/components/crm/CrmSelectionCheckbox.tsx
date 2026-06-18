@@ -1,5 +1,6 @@
 interface CrmSelectionCheckboxProps {
   checked: boolean;
+  disabled?: boolean;
   indeterminate?: boolean;
   label: string;
   onChange: () => void;
@@ -7,6 +8,7 @@ interface CrmSelectionCheckboxProps {
 
 export function CrmSelectionCheckbox({
   checked,
+  disabled = false,
   indeterminate = false,
   label,
   onChange,
@@ -19,9 +21,11 @@ export function CrmSelectionCheckbox({
       role="checkbox"
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={label}
+      disabled={disabled}
       className={`crm-selection-checkbox${active ? ' is-active' : ''}`}
       onClick={(event) => {
         event.stopPropagation();
+        if (disabled) return;
         onChange();
       }}
     >

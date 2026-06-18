@@ -689,6 +689,25 @@
   outline-offset: 2px;
 }
 
+.crm-selection-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.crm-selection-checkbox:disabled .crm-selection-checkbox-box {
+  border-color: var(--line);
+  background: var(--bg-2);
+}
+
+.crm-selection-checkbox.is-active:disabled {
+  color: var(--teal);
+}
+
+.crm-selection-checkbox.is-active:disabled .crm-selection-checkbox-box {
+  border-color: rgba(0, 201, 167, 0.25);
+  background: var(--teal-dim);
+}
+
 .tb-icon-btn {
   display: flex;
   align-items: center;

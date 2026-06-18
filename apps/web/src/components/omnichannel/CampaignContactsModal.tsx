@@ -8,6 +8,7 @@ import {
   type Campaign,
   type CrmContact,
 } from '../../services/api';
+import { CrmSelectionCheckbox } from '../crm/CrmSelectionCheckbox';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 
@@ -172,6 +173,16 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
     boxSizing: 'border-box',
   };
 
+  const selectStyle: React.CSSProperties = {
+    height: 34,
+    flexShrink: 0,
+    minWidth: 132,
+    background: 'var(--bg-3)',
+    color: 'var(--txt-2)',
+    fontSize: 12,
+    cursor: 'pointer',
+  };
+
   return (
     <div
       ref={overlayRef}
@@ -226,7 +237,8 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
               placeholder={t('contacts.search')}
             />
             <select
-              className="fchip"
+              className="filter-select"
+              style={selectStyle}
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as ContactStatusFilter)}
             >
@@ -237,7 +249,8 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
               <option value="inactive">{t('organizations.status.inactive', { ns: 'crm' })}</option>
             </select>
             <select
-              className="fchip"
+              className="filter-select"
+              style={{ ...selectStyle, minWidth: 124 }}
               value={tagFilter}
               onChange={(event) => setTagFilter(event.target.value)}
             >
@@ -277,12 +290,16 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
             fontSize: 12,
             color: 'var(--txt-2)',
           }}>
-            <input
-              type="checkbox"
+            <CrmSelectionCheckbox
               checked={selectAllMode}
               disabled={!isDraft || isFetchingCount || totalCount === 0}
-              onChange={(event) => {
-                setSelectAllMode(event.target.checked);
+              label={
+                selectAllMode
+                  ? t('contactsModal.selectAllMatching', { count: totalCount })
+                  : t('contactsModal.selectAll')
+              }
+              onChange={() => {
+                setSelectAllMode(!selectAllMode);
                 setSelected(new Set());
               }}
             />
@@ -330,19 +347,11 @@ export function CampaignContactsModal({ campaign, onClose }: Props) {
                 }}
               >
                 {/* Checkbox */}
-                <input
-                  type="checkbox"
+                <CrmSelectionCheckbox
                   checked={isChecked}
                   disabled={disabled}
-                  onClick={(event) => event.stopPropagation()}
+                  label={contact.name}
                   onChange={() => toggleSelect(contact.id, contact)}
-                  style={{
-                    width: 16,
-                    height: 16,
-                    flexShrink: 0,
-                    accentColor: 'var(--teal)',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                  }}
                 />
 
                 {/* Avatar */}
