@@ -442,8 +442,16 @@
     "byAgent": "By Agent",
     "byDepartment": "By Department",
     "table": {
-      "department": "Department"
-    }
+      "department": "Department",
+      "viewMode": "Performance view mode"
+    },
+    "loadingAgents": "Loading agent performance...",
+    "loadingDepartments": "Loading department performance...",
+    "emptyAgentsTitle": "No agent performance found",
+    "emptyAgentsHint": "Adjust the period, agent, or group to review the indicators.",
+    "emptyDepartmentsTitle": "No department performance found",
+    "emptyDepartmentsHint": "Adjust the filters to compare department results.",
+    "invalidRange": "Enter a valid custom period before exporting."
   },
   "composer": {
     "pasteRemove": "Remove file",

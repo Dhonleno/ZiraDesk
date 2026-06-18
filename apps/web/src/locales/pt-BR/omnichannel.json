@@ -442,8 +442,16 @@
     "byAgent": "Por Agente",
     "byDepartment": "Por Departamento",
     "table": {
-      "department": "Departamento"
-    }
+      "department": "Departamento",
+      "viewMode": "Modo de visualização da performance"
+    },
+    "loadingAgents": "Carregando performance dos agentes...",
+    "loadingDepartments": "Carregando performance por departamento...",
+    "emptyAgentsTitle": "Nenhuma performance de agente encontrada",
+    "emptyAgentsHint": "Ajuste o período, agente ou grupo para revisar os indicadores.",
+    "emptyDepartmentsTitle": "Nenhuma performance por departamento encontrada",
+    "emptyDepartmentsHint": "Ajuste os filtros para comparar os resultados por departamento.",
+    "invalidRange": "Informe um período personalizado válido para exportar."
   },
   "composer": {
     "pasteRemove": "Remover arquivo",

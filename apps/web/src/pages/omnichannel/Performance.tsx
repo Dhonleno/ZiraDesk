@@ -99,14 +99,8 @@ function checkGoal(value: unknown, goal: unknown, type: 'max' | 'min'): Performa
   return 'breach';
 }
 
-function statusColor(status: PerformanceMetricStatus): string {
-  const statusMap: Record<PerformanceMetricStatus, string> = {
-    ok: 'var(--green)',
-    warning: 'var(--amber)',
-    breach: 'var(--red)',
-    no_goal: 'var(--txt-2)',
-  };
-  return statusMap[status];
+function statusClass(status: PerformanceMetricStatus): string {
+  return `is-${status.replace('_', '-')}`;
 }
 
 function getProgressPercent(value: unknown, goal: unknown, type: 'max' | 'min'): number | null {
@@ -157,42 +151,28 @@ function MetricCell({
   format: 'minutes' | 'percent' | 'csat' | 'number';
   type: 'max' | 'min';
 }) {
-  const color = statusColor(status);
   const progress = getProgressPercent(value, goal, type);
 
   const formattedValue = formatMetric(value, format);
   const formattedGoal = formatMetric(goal, format);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ color, fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 13 }}>
+    <div className="performance-metric-cell">
+      <span className={`performance-metric-value ${statusClass(status)}`}>
         {formattedValue ?? '—'}
       </span>
 
       {progress !== null ? (
-        <div
-          style={{
-            height: 3,
-            width: 60,
-            background: 'var(--bg-5)',
-            borderRadius: 'var(--r-pill)',
-            overflow: 'hidden',
-          }}
-        >
+        <div className="performance-progress">
           <div
-            style={{
-              height: '100%',
-              width: `${progress}%`,
-              background: color,
-              borderRadius: 'var(--r-pill)',
-              transition: 'width 0.3s ease',
-            }}
+            className={`performance-progress-fill ${statusClass(status)}`}
+            style={{ width: `${progress}%` }}
           />
         </div>
       ) : null}
 
       {goal !== null && formattedGoal ? (
-        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+        <span className="performance-goal-hint">
           meta: {formattedGoal}
         </span>
       ) : null}
@@ -201,11 +181,11 @@ function MetricCell({
 }
 
 function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labels: Record<PerformanceMetricStatus, string> }) {
-  const config: Record<PerformanceMetricStatus, { color: string; bg: string; label: string; border?: string }> = {
-    ok: { label: labels.ok, color: 'var(--green)', bg: 'var(--green-dim)' },
-    warning: { label: labels.warning, color: 'var(--amber)', bg: 'var(--amber-dim)' },
-    breach: { label: labels.breach, color: 'var(--red)', bg: 'var(--red-dim)' },
-    no_goal: { label: labels.no_goal, color: 'var(--txt-3)', bg: 'var(--bg-4)', border: '1px solid var(--line-2)' },
+  const config: Record<PerformanceMetricStatus, { label: string }> = {
+    ok: { label: labels.ok },
+    warning: { label: labels.warning },
+    breach: { label: labels.breach },
+    no_goal: { label: labels.no_goal },
   };
   const current = config[status];
   const icon = status === 'ok' ? (
@@ -228,22 +208,63 @@ function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labe
   );
 
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '3px 8px',
-        borderRadius: 'var(--r-pill)',
-        background: current.bg,
-        color: current.color,
-        border: current.border,
-        fontSize: 11,
-        fontWeight: status === 'no_goal' ? 500 : 600,
-      }}
-    >
+    <span className={`performance-status-badge ${statusClass(status)}`}>
       {icon} {current.label}
     </span>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  status,
+  labels,
+}: {
+  label: string;
+  value: string;
+  status: PerformanceMetricStatus;
+  labels: Record<PerformanceMetricStatus, string>;
+}) {
+  return (
+    <div className={`performance-kpi-card ${statusClass(status)}`}>
+      <div className="performance-kpi-card-head">
+        <span>{label}</span>
+        <StatusBadge status={status} labels={labels} />
+      </div>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function LoadingState({ label }: { label: string }) {
+  return (
+    <div className="performance-state" role="status" aria-live="polite">
+      <div className="performance-loading-spinner" aria-hidden />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  hint,
+  variant = 'teal',
+}: {
+  title: string;
+  hint: string;
+  variant?: 'teal' | 'blue';
+}) {
+  return (
+    <div className="zd-empty-state history-empty performance-empty">
+      <div className={`zd-empty-icon performance-empty-icon ${variant}`} aria-hidden>
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M4 17V6M9 17V9M14 17V4M19 17V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M3 17.5h16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div>{title}</div>
+      <div className="history-empty-hint">{hint}</div>
+    </div>
   );
 }
 
@@ -325,7 +346,7 @@ export function PerformancePage() {
 
   const handleExport = async () => {
     if (!canQueryPerformance) {
-      toast.error(t('history.noResultsHint'));
+      toast.error(t('performance.invalidRange'));
       return;
     }
 
@@ -374,11 +395,15 @@ export function PerformancePage() {
             <p>{t('performance.subtitle')}</p>
           </div>
           <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+              <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             {t('performance.exportCsv')}
           </button>
         </div>
 
-        <div className="history-filters-grid">
+        <div className="performance-filter-bar">
           <select
             className="filter-select"
             value={filters.period ?? '7d'}
@@ -437,54 +462,47 @@ export function PerformancePage() {
         </div>
 
         <div className="performance-kpis-grid">
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.tma')}</span>
-            <strong style={{ color: teamKpiStatus.tma === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.tma) }}>
-              {formatMetric(performanceData?.team_kpis.avg_tma_minutes ?? null, 'minutes') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.tme')}</span>
-            <strong style={{ color: teamKpiStatus.tme === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.tme) }}>
-              {formatMetric(performanceData?.team_kpis.avg_tme_minutes ?? null, 'minutes') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.csat')}</span>
-            <strong style={{ color: teamKpiStatus.csat === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.csat) }}>
-              {formatMetric(performanceData?.team_kpis.avg_csat ?? null, 'csat') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.sla')}</span>
-            <strong style={{ color: teamKpiStatus.sla === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.sla) }}>
-              {formatMetric(performanceData?.team_kpis.sla_percent ?? null, 'percent') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.volume')}</span>
-            <strong style={{ color: teamKpiStatus.volume === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.volume) }}>
-              {formatMetric(performanceData?.team_kpis.total_volume ?? 0, 'number') ?? '0'}
-            </strong>
-          </div>
+          <KpiCard
+            label={t('performance.columns.tma')}
+            value={formatMetric(performanceData?.team_kpis.avg_tma_minutes ?? null, 'minutes') ?? '—'}
+            status={teamKpiStatus.tma}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.tme')}
+            value={formatMetric(performanceData?.team_kpis.avg_tme_minutes ?? null, 'minutes') ?? '—'}
+            status={teamKpiStatus.tme}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.csat')}
+            value={formatMetric(performanceData?.team_kpis.avg_csat ?? null, 'csat') ?? '—'}
+            status={teamKpiStatus.csat}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.sla')}
+            value={formatMetric(performanceData?.team_kpis.sla_percent ?? null, 'percent') ?? '—'}
+            status={teamKpiStatus.sla}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.volume')}
+            value={formatMetric(performanceData?.team_kpis.total_volume ?? 0, 'number') ?? '0'}
+            status={teamKpiStatus.volume}
+            labels={statusLabels}
+          />
         </div>
 
-        {/* Abas Por Agente / Por Departamento */}
-        <div style={{ display: 'flex', gap: 2, padding: '0 0 0 0', borderBottom: '1px solid var(--line)', marginBottom: 0 }}>
+        <div className="history-tabs performance-tabs" role="tablist" aria-label={t('performance.table.viewMode')}>
           {(['agent', 'department'] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              style={{
-                padding: '8px 16px',
-                fontSize: 12, fontWeight: 500,
-                border: 'none', background: 'transparent',
-                borderBottom: activeTab === tab ? '2px solid var(--teal)' : '2px solid transparent',
-                color: activeTab === tab ? 'var(--teal)' : 'var(--txt-3)',
-                cursor: 'pointer', fontFamily: 'var(--font)',
-                transition: 'all .15s',
-              }}
+              className={activeTab === tab ? 'active' : undefined}
+              role="tab"
+              aria-selected={activeTab === tab}
             >
               {tab === 'agent' ? t('performance.byAgent') : t('performance.byDepartment')}
             </button>
@@ -494,70 +512,95 @@ export function PerformancePage() {
         <div className="history-table-wrap">
           {activeTab === 'department' ? (
             <>
-              <table className="history-table performance-table" role="grid">
-                <thead>
-                  <tr>
-                    <th>{t('performance.table.department')}</th>
-                    <th>{t('performance.columns.volume')}</th>
-                    <th>{t('performance.columns.tma')}</th>
-                    <th>{t('performance.columns.tme')}</th>
-                    <th>{t('performance.columns.sla')}</th>
-                    <th>{t('performance.columns.csat')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(performanceByGroupData?.data ?? []).map((row, idx) => (
-                    <tr key={row.group_name ?? `__no_group_${idx}`}>
-                      <td>
-                        <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                          {row.group_name}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--txt)' }}>
-                          {row.total_conversations}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_tma_minutes !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
-                          {formatMetric(row.avg_tma_minutes, 'minutes') ?? '—'}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_tme_minutes !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
-                          {formatMetric(row.avg_tme_minutes, 'minutes') ?? '—'}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.sla_percent !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
-                          {formatMetric(row.sla_percent, 'percent') ?? '—'}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: row.avg_csat !== null ? 'var(--txt)' : 'var(--txt-3)' }}>
-                          {formatMetric(row.avg_csat, 'csat') ?? '—'}
-                        </span>
-                      </td>
+              {isLoadingByGroup ? (
+                <LoadingState label={t('performance.loadingDepartments')} />
+              ) : (performanceByGroupData?.data.length ?? 0) === 0 ? (
+                <EmptyState
+                  title={t('performance.emptyDepartmentsTitle')}
+                  hint={t('performance.emptyDepartmentsHint')}
+                  variant="blue"
+                />
+              ) : (
+                <table className="history-table performance-table" role="grid">
+                  <thead>
+                    <tr>
+                      <th>{t('performance.table.department')}</th>
+                      <th>{t('performance.columns.volume')}</th>
+                      <th>{t('performance.columns.tma')}</th>
+                      <th>{t('performance.columns.tme')}</th>
+                      <th>{t('performance.columns.sla')}</th>
+                      <th>{t('performance.columns.csat')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {!isLoadingByGroup && (performanceByGroupData?.data.length ?? 0) === 0 ? (
-                <div className="zd-empty-state history-empty">
-                  <div className="zd-empty-icon" aria-hidden>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                      <rect x="3" y="3" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                      <path d="M3 8h16M8 8v11" stroke="currentColor" strokeWidth="1.3" />
-                    </svg>
-                  </div>
-                  <div>{t('history.noResults')}</div>
-                  <div className="history-empty-hint">{t('history.noResultsHint')}</div>
-                </div>
-              ) : null}
+                  </thead>
+                  <tbody>
+                    {(performanceByGroupData?.data ?? []).map((row, idx) => (
+                      <tr key={row.group_name ?? `__no_group_${idx}`}>
+                        <td>
+                          <span className="performance-entity-name">
+                            {row.group_name}
+                          </span>
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.total_conversations}
+                            status="no_goal"
+                            goal={null}
+                            format="number"
+                            type="min"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_tma_minutes}
+                            status="no_goal"
+                            goal={null}
+                            format="minutes"
+                            type="max"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_tme_minutes}
+                            status="no_goal"
+                            goal={null}
+                            format="minutes"
+                            type="max"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.sla_percent}
+                            status="no_goal"
+                            goal={null}
+                            format="percent"
+                            type="min"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_csat}
+                            status="no_goal"
+                            goal={null}
+                            format="csat"
+                            type="min"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </>
           ) : (
           <>
+          {isLoading ? (
+            <LoadingState label={t('performance.loadingAgents')} />
+          ) : (performanceData?.data.length ?? 0) === 0 ? (
+            <EmptyState
+              title={t('performance.emptyAgentsTitle')}
+              hint={t('performance.emptyAgentsHint')}
+            />
+          ) : (
           <table className="history-table performance-table" role="grid">
             <thead>
               <tr>
@@ -583,22 +626,9 @@ export function PerformancePage() {
                 return (
                   <tr
                     key={agent.agent_id}
-                    style={{
-                      boxShadow: agent.total_conversations === 0
-                        ? 'none'
-                        : overallStatus === 'breach'
-                          ? 'inset 3px 0 0 var(--red)'
-                          : overallStatus === 'warning'
-                            ? 'inset 3px 0 0 var(--amber)'
-                            : 'none',
-                      background: agent.total_conversations === 0
-                        ? 'transparent'
-                        : overallStatus === 'breach'
-                          ? 'var(--red-dim)'
-                          : overallStatus === 'warning'
-                            ? 'var(--amber-dim)'
-                            : 'transparent',
-                    }}
+                    className={agent.total_conversations > 0 && ['breach', 'warning'].includes(overallStatus)
+                      ? `performance-row-alert ${statusClass(overallStatus)}`
+                      : undefined}
                   >
                     <td>
                       <div className="history-agent-cell">
@@ -661,18 +691,7 @@ export function PerformancePage() {
               })}
             </tbody>
           </table>
-
-          {!isLoading && (performanceData?.data.length ?? 0) === 0 ? (
-            <div className="zd-empty-state history-empty">
-              <div className="zd-empty-icon" aria-hidden>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <path d="M5 4.5h12v10H9l-4 3v-3H5v-10Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div>{t('history.noResults')}</div>
-              <div className="history-empty-hint">{t('history.noResultsHint')}</div>
-            </div>
-          ) : null}
+          )}
           </>
           )}
         </div>

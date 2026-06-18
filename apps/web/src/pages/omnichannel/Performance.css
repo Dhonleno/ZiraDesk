@@ -1,42 +1,280 @@
 /* ── Performance page — overrides escopados ─────────────────────────────── */
 
-/* Layout: gap entre seções e scroll interno na tabela */
 .performance-page {
-  gap: 20px;
+  gap: 12px;
   overflow: hidden;
-  grid-template-rows: auto auto auto 1fr auto;
+  grid-template-rows: auto auto auto auto 1fr auto;
+}
+
+.performance-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.performance-filter-bar .filter-select {
+  min-width: 164px;
+  height: 32px;
+  background: var(--bg-2);
+}
+
+.performance-filter-bar input.filter-select {
+  min-width: 148px;
+}
+
+.performance-page .performance-kpis-grid {
+  gap: 10px;
+}
+
+.performance-page .performance-kpi-card {
+  min-width: 0;
+  gap: 8px;
+}
+
+.performance-kpi-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.performance-kpi-card-head > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.performance-kpi-card strong {
+  color: var(--txt);
+}
+
+.performance-kpi-card.is-breach {
+  box-shadow: inset 2px 0 0 var(--red);
+}
+
+.performance-kpi-card.is-warning {
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
+.performance-kpi-card.is-ok {
+  box-shadow: inset 2px 0 0 var(--green);
+}
+
+.performance-tabs {
+  margin: 0;
+}
+
+.performance-tabs button {
+  padding: 9px 16px;
+}
+
+.performance-tabs button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
 }
 
 .performance-page .history-table-wrap {
-  overflow-y: auto;
+  overflow: auto;
   min-height: 0;
 }
 
-/* Cabeçalho da tabela — padrão denso */
 .performance-table thead th {
   padding: 10px 14px;
   background: var(--bg-2);
   letter-spacing: 0.08em;
 }
 
-/* Células — altura ~44px e padding canônico */
 .performance-table tbody td {
   padding: 10px 14px;
-  height: 44px;
+  height: 46px;
 }
 
-/* Mantém borda na última linha (sobrescreve history-table) */
 .performance-table tbody tr:last-child td {
   border-bottom: 1px solid var(--line);
 }
 
-/* Avatar 28×28 com gradiente canônico */
 .performance-table .history-agent-avatar {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, var(--purple), #8B5CF6);
-  border: none;
-  color: #fff;
+  background: var(--purple-dim);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  color: var(--purple);
   font-size: 11px;
   font-weight: 600;
+}
+
+.performance-row-alert.is-breach td:first-child {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
+.performance-row-alert.is-warning td:first-child {
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.performance-row-alert.is-breach:hover td,
+.performance-row-alert.is-warning:hover td {
+  background: var(--bg-3);
+}
+
+.performance-entity-name {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--txt);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.performance-metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 76px;
+}
+
+.performance-metric-value {
+  color: var(--txt);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.performance-metric-value.is-ok {
+  color: var(--green);
+}
+
+.performance-metric-value.is-warning {
+  color: var(--amber);
+}
+
+.performance-metric-value.is-breach {
+  color: var(--red);
+}
+
+.performance-metric-value.is-no-goal {
+  color: var(--txt);
+}
+
+.performance-progress {
+  width: 60px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--bg-5);
+}
+
+.performance-progress-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--txt-3);
+  transition: width 0.3s ease;
+}
+
+.performance-progress-fill.is-ok {
+  background: var(--green);
+}
+
+.performance-progress-fill.is-warning {
+  background: var(--amber);
+}
+
+.performance-progress-fill.is-breach {
+  background: var(--red);
+}
+
+.performance-goal-hint {
+  color: var(--txt-3);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.performance-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--bg-4);
+  color: var(--txt-3);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.performance-status-badge.is-ok {
+  border-color: rgba(62, 207, 142, 0.25);
+  background: var(--green-dim);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.performance-status-badge.is-warning {
+  border-color: rgba(245, 158, 11, 0.25);
+  background: var(--amber-dim);
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.performance-status-badge.is-breach {
+  border-color: rgba(248, 113, 113, 0.25);
+  background: var(--red-dim);
+  color: var(--red);
+  font-weight: 600;
+}
+
+.performance-state {
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--txt-2);
+  font-size: 12px;
+}
+
+.performance-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: performance-spin 0.75s linear infinite;
+}
+
+.performance-empty {
+  min-height: 300px;
+}
+
+.performance-empty-icon.teal {
+  background: var(--teal-dim);
+  border-color: rgba(0, 201, 167, 0.25);
+  color: var(--teal);
+}
+
+.performance-empty-icon.blue {
+  background: var(--blue-dim);
+  border-color: rgba(96, 165, 250, 0.25);
+  color: var(--blue);
+}
+
+@keyframes performance-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .performance-filter-bar .filter-select,
+  .performance-filter-bar input.filter-select {
+    min-width: min(100%, 220px);
+    flex: 1 1 180px;
+  }
 }
