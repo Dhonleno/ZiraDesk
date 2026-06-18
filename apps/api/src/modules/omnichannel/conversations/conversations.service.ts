@@ -1709,6 +1709,9 @@ export async function transferConversation(
   const convAssignRef = schemaName
     ? `${quoteIdent(schemaName)}.conversation_assignments`
     : 'conversation_assignments';
+  if (schemaName) {
+    await ensureConversationAssignmentsInfrastructure(prisma, schemaName);
+  }
   await prisma.$executeRawUnsafe(`
     UPDATE ${convAssignRef}
     SET released_at = NOW(), release_reason = 'transferred'
@@ -1786,6 +1789,9 @@ export async function updateConversation(
     const convAssignRef = schemaName
       ? `${quoteIdent(schemaName)}.conversation_assignments`
       : 'conversation_assignments';
+    if (schemaName) {
+      await ensureConversationAssignmentsInfrastructure(prisma, schemaName);
+    }
     await prisma.$executeRawUnsafe(`
       UPDATE ${convAssignRef}
       SET released_at = NOW(), release_reason = 'reassigned'
