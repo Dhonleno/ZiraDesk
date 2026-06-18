@@ -318,6 +318,7 @@
     "title": "Conversation History",
     "subtitle": "Browse and analyze completed conversations",
     "tabs": {
+      "label": "Conversation history sections",
       "history": "History",
       "goals": "Goals"
     },
@@ -356,6 +357,7 @@
     },
     "found": "{{count}} conversations found",
     "exportCsv": "Export CSV",
+    "exportError": "Could not export the CSV right now.",
     "noResults": "No conversations found",
     "noResultsHint": "Try adjusting the filters",
     "detail": {

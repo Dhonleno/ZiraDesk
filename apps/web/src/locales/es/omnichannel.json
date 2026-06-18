@@ -318,6 +318,7 @@
     "title": "Historial de Atenciones",
     "subtitle": "Consulta y analiza atenciones realizadas",
     "tabs": {
+      "label": "Secciones del historial de atenciones",
       "history": "Historial",
       "goals": "Metas"
     },
@@ -356,6 +357,7 @@
     },
     "found": "{{count}} atenciones encontradas",
     "exportCsv": "Exportar CSV",
+    "exportError": "No se pudo exportar el CSV ahora.",
     "noResults": "No se encontraron atenciones",
     "noResultsHint": "Intenta ajustar los filtros",
     "detail": {

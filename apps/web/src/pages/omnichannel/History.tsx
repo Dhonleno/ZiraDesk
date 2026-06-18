@@ -131,7 +131,7 @@ function ContactCell({ conversation }: { conversation: OmnichannelHistoryConvers
 function AgentCell({ conversation }: { conversation: OmnichannelHistoryConversation }) {
   const agentName = conversation.assigned_name?.trim();
   if (!agentName) {
-    return <span style={{ color: 'var(--txt-3)' }}>—</span>;
+    return <span className="history-muted">—</span>;
   }
 
   const initial = agentName.slice(0, 1).toUpperCase();
@@ -281,7 +281,7 @@ export function HistoryPage() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error('Não foi possível exportar o CSV agora.');
+      toast.error(t('history.exportError'));
     }
   };
 
@@ -298,16 +298,22 @@ export function HistoryPage() {
           </div>
           {activeTab === 'history' ? (
             <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
               {t('history.exportCsv')}
             </button>
           ) : null}
         </div>
 
-        <div className="history-tabs">
+        <div className="history-tabs" role="tablist" aria-label={t('history.tabs.label')}>
           <button
             type="button"
             className={activeTab === 'history' ? 'active' : ''}
             onClick={() => setActiveTab('history')}
+            role="tab"
+            aria-selected={activeTab === 'history'}
           >
             {t('history.tabs.history')}
           </button>
@@ -318,6 +324,8 @@ export function HistoryPage() {
               setSelectedConversationId(null);
               setActiveTab('goals');
             }}
+            role="tab"
+            aria-selected={activeTab === 'goals'}
           >
             {t('history.tabs.goals')}
           </button>
@@ -436,60 +444,12 @@ export function HistoryPage() {
             <div className="history-result-count">{t('history.found', { count: historyResult?.meta.total ?? 0 })}</div>
 
             <div className="history-table-wrap">
-              <table className="history-table" role="grid">
-                <thead>
-                  <tr>
-                    <th>{t('history.columns.protocol')}</th>
-                    <th>{t('history.columns.contact')}</th>
-                    <th>{t('history.columns.agent')}</th>
-                    <th>{t('history.columns.channel')}</th>
-                    <th>{t('history.columns.group')}</th>
-                    <th>{t('history.columns.status')}</th>
-                    <th>{t('history.columns.duration')}</th>
-                    <th>{t('history.columns.waitTime')}</th>
-                    <th>{t('history.columns.csat')}</th>
-                    <th>{t('history.columns.date')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(historyResult?.data ?? []).map((conversation) => (
-                    <tr key={conversation.id}>
-                      <td>
-                        <button
-                          type="button"
-                          className="history-protocol-btn"
-                          onClick={(event) => {
-                            returnFocusRef.current = event.currentTarget;
-                            setSelectedConversationId(conversation.id);
-                          }}
-                        >
-                          {conversation.protocol_number ?? '—'}
-                        </button>
-                      </td>
-                      <td><ContactCell conversation={conversation} /></td>
-                      <td><AgentCell conversation={conversation} /></td>
-                      <td>
-                        <span className="history-channel-chip">
-                          {channelIcon(conversation.channel_type)}
-                          <span>{conversation.channel_type}</span>
-                        </span>
-                      </td>
-                      <td>{conversation.bot_department ?? '—'}</td>
-                      <td>
-                        <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-open'}`}>
-                          {t(`status.${conversation.status}`)}
-                        </span>
-                      </td>
-                      <td>{formatDuration(conversation.duration_seconds)}</td>
-                      <td>{formatDuration(conversation.wait_seconds)}</td>
-                      <td><CSATCell score={conversation.csat_score} /></td>
-                      <td>{formatRelativeDate(conversation.created_at, i18n.language)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {!isLoading && (historyResult?.data.length ?? 0) === 0 ? (
+              {isLoading ? (
+                <div className="history-loading-state" role="status" aria-live="polite">
+                  <div className="history-loading-spinner" aria-hidden />
+                  <span>{t('history.loading')}</span>
+                </div>
+              ) : (historyResult?.data.length ?? 0) === 0 ? (
                 <div className="zd-empty-state history-empty">
                   <div className="zd-empty-icon" aria-hidden>
                     <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
@@ -499,7 +459,60 @@ export function HistoryPage() {
                   <div>{t('history.noResults')}</div>
                   <div className="history-empty-hint">{t('history.noResultsHint')}</div>
                 </div>
-              ) : null}
+              ) : (
+                <table className="history-table" role="grid">
+                  <thead>
+                    <tr>
+                      <th>{t('history.columns.protocol')}</th>
+                      <th>{t('history.columns.contact')}</th>
+                      <th>{t('history.columns.agent')}</th>
+                      <th>{t('history.columns.channel')}</th>
+                      <th>{t('history.columns.group')}</th>
+                      <th>{t('history.columns.status')}</th>
+                      <th>{t('history.columns.duration')}</th>
+                      <th>{t('history.columns.waitTime')}</th>
+                      <th>{t('history.columns.csat')}</th>
+                      <th>{t('history.columns.date')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(historyResult?.data ?? []).map((conversation) => (
+                      <tr key={conversation.id}>
+                        <td>
+                          <button
+                            type="button"
+                            className="history-protocol-btn"
+                            onClick={(event) => {
+                              returnFocusRef.current = event.currentTarget;
+                              setSelectedConversationId(conversation.id);
+                            }}
+                          >
+                            {conversation.protocol_number ?? '—'}
+                          </button>
+                        </td>
+                        <td><ContactCell conversation={conversation} /></td>
+                        <td><AgentCell conversation={conversation} /></td>
+                        <td>
+                          <span className="history-channel-chip">
+                            {channelIcon(conversation.channel_type)}
+                            <span>{conversation.channel_type}</span>
+                          </span>
+                        </td>
+                        <td>{conversation.bot_department ?? '—'}</td>
+                        <td>
+                          <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-open'}`}>
+                            {t(`status.${conversation.status}`)}
+                          </span>
+                        </td>
+                        <td>{formatDuration(conversation.duration_seconds)}</td>
+                        <td>{formatDuration(conversation.wait_seconds)}</td>
+                        <td><CSATCell score={conversation.csat_score} /></td>
+                        <td>{formatRelativeDate(conversation.created_at, i18n.language)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             <div className="history-pagination">

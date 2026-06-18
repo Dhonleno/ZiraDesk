@@ -155,16 +155,14 @@ function mapGoalToForm(goal: OmnichannelGoal): GoalFormState {
 function GoalMetricPill({
   label,
   value,
-  color,
-  background,
+  variant,
 }: {
   label: string;
   value: string;
-  color: string;
-  background: string;
+  variant: 'blue' | 'teal' | 'green' | 'amber' | 'purple';
 }) {
   return (
-    <div className="history-goal-pill" style={{ color, background }}>
+    <div className={`history-goal-pill ${variant}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -289,36 +287,31 @@ export function GoalsConfig() {
     {
       key: 'goalTmaMinutes',
       label: 'TMA',
-      color: 'var(--blue)',
-      background: 'var(--blue-dim)',
+      variant: 'blue',
       value: (goal: OmnichannelGoal) => `<= ${goal.goalTmaMinutes}${t('metrics.tmaUnit')}`,
     },
     {
       key: 'goalTmeMinutes',
       label: 'TME',
-      color: 'var(--teal)',
-      background: 'var(--teal-dim)',
+      variant: 'teal',
       value: (goal: OmnichannelGoal) => `<= ${goal.goalTmeMinutes}${t('metrics.tmaUnit')}`,
     },
     {
       key: 'goalSlaPercent',
       label: 'SLA',
-      color: 'var(--green)',
-      background: 'var(--green-dim)',
+      variant: 'green',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalSlaPercent}%`,
     },
     {
       key: 'goalCsatMin',
       label: 'CSAT',
-      color: 'var(--amber)',
-      background: 'var(--amber-dim)',
+      variant: 'amber',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalCsatMin}★`,
     },
     {
       key: 'goalVolumeMin',
       label: t('performance.columns.volume'),
-      color: 'var(--purple)',
-      background: 'var(--purple-dim)',
+      variant: 'purple',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalVolumeMin}`,
     },
   ] as const;
@@ -338,8 +331,11 @@ export function GoalsConfig() {
   return (
     <div className="history-goals-wrap">
       <div className="history-goals-head">
-        <button className="tb-btn-primary" type="button" onClick={openForCreate}>
-          + {t('goals.new')}
+        <button className="zd-btn zd-btn-primary" type="button" onClick={openForCreate}>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+            <path d="M6.5 2.5v8M2.5 6.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          {t('goals.new')}
         </button>
       </div>
 
@@ -368,12 +364,11 @@ export function GoalsConfig() {
                   </svg>
                 </button>
                 <button
-                  className="tb-icon-btn"
+                  className="tb-icon-btn history-goal-delete-btn"
                   type="button"
                   title={t('tenantAdmin.common.remove', { ns: 'admin' })}
                   aria-label={t('tenantAdmin.common.remove', { ns: 'admin' })}
                   onClick={() => handleDelete(goal.id)}
-                  style={{ color: 'var(--red)' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <path d="M2 4h10M5 4V2.5h4V4M5.5 6.5v4M8.5 6.5v4M3 4l.8 7.5h6.4L11 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -394,8 +389,7 @@ export function GoalsConfig() {
                     key={metric.key}
                     label={metric.label}
                     value={metric.value(goal)}
-                    color={metric.color}
-                    background={metric.background}
+                    variant={metric.variant}
                   />
                 );
               })}
@@ -415,8 +409,11 @@ export function GoalsConfig() {
               <strong>{t('goals.empty')}</strong>
               <p>{t('goals.emptyHint')}</p>
             </div>
-            <button className="tb-btn-primary" type="button" onClick={openForCreate}>
-              + {t('goals.new')}
+            <button className="zd-btn zd-btn-primary" type="button" onClick={openForCreate}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M6.5 2.5v8M2.5 6.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              {t('goals.new')}
             </button>
           </div>
         ) : null}
@@ -606,13 +603,37 @@ export function GoalsConfig() {
       ) : null}
 
       {confirmState.open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
-          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header"><span>{confirmState.title}</span><button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></button></div>
-            <div className="modal-body"><p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p></div>
+        <div
+          className="history-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-goal-confirm-title"
+          onClick={() => setConfirmState((s) => ({ ...s, open: false }))}
+        >
+          <div className="modal-panel history-confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span id="history-goal-confirm-title">{confirmState.title}</span>
+              <button
+                className="tb-icon-btn"
+                type="button"
+                aria-label={t('tenantAdmin.common.close', { ns: 'admin' })}
+                onClick={() => setConfirmState((s) => ({ ...s, open: false }))}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body"><p className="history-confirm-message">{confirmState.message}</p></div>
             <div className="modal-footer">
-              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
-              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('common.confirm')}</button>
+              <button className="tb-btn" type="button" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
+              <button
+                className="tb-btn history-confirm-danger-btn"
+                type="button"
+                onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}
+              >
+                {t('common.confirm')}
+              </button>
             </div>
           </div>
         </div>

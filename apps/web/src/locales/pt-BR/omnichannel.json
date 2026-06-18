@@ -318,6 +318,7 @@
     "title": "Histórico de Atendimentos",
     "subtitle": "Consulte e analise atendimentos realizados",
     "tabs": {
+      "label": "Seções do histórico de atendimentos",
       "history": "Histórico",
       "goals": "Metas"
     },
@@ -356,6 +357,7 @@
     },
     "found": "{{count}} atendimentos encontrados",
     "exportCsv": "Exportar CSV",
+    "exportError": "Não foi possível exportar o CSV agora.",
     "noResults": "Nenhum atendimento encontrado",
     "noResultsHint": "Tente ajustar os filtros",
     "detail": {
