@@ -1,13 +1,20 @@
 # ZiraDesk — Padrão de Telas (Design System)
 
-Este documento é a fonte da verdade para qualquer tela do produto ZiraDesk. Use-o como referência ao criar novas páginas, modais ou componentes. **Nunca invente cores, tipografia, espaçamento ou estrutura novos** — se algo faltar, baseie-se no que já existe.
+Este documento é a fonte da verdade visual global para o produto ZiraDesk. Use-o ao criar páginas, modais ou componentes. **Nunca invente cores, tipografia, espaçamento ou estrutura novos** — se algo faltar, documente o padrão antes de implementar.
 
-Telas de referência canônicas, com caminhos confirmados no repositório (sempre leia antes de iniciar uma nova):
-- `apps/web/src/references/omnichannel_chat.html` — shell completo do app + caixa de atendimentos + estrutura de conversa
-- `apps/web/src/references/Clientes.html` — listagens densas (tabela + filtros + painel de detalhe)
-- `apps/web/src/pages/tv/TVDashboard.tsx` — dashboards / painéis em tempo real (cards + KPIs + listas)
+O padrão específico de cada tela fica em `docs/design/telas/*.md`. Ao começar uma tela nova, leia o PRD correspondente; se ele não existir, crie a especificação a partir de `docs/design/templates/TEMPLATE_REQUISITOS_TELA.md` antes de implementar.
 
-> Regra de ouro: ao começar uma tela nova, **abra o arquivo de referência mais próximo do caso de uso**, reutilize a topbar + nav rail + tokens e construa o conteúdo dentro do mesmo container. Não recrie do zero.
+Arquivos de tela existentes podem ser consultados para entender comportamento legado, mas não definem o padrão visual.
+
+Documentos complementares de produto/UX:
+- `docs/design/00_PLAYBOOK_AGENTE.md` — processo obrigatório para construir telas.
+- `docs/design/01_CATALOGO_LAYOUTS.md` — arquétipos de página e proporções.
+- `docs/design/02_ESTADOS_INTERACOES.md` — loading, vazio, erro, foco, seleção e feedback.
+- `docs/design/03_CONTEUDO_VOZ.md` — microcópia PT-BR e vocabulário canônico.
+- `docs/design/04_NAVEGACAO_FLUXOS.md` — navegação, breadcrumbs, rotas e permissões.
+- `docs/design/telas/` — PRDs de telas específicas.
+
+Em caso de divergência, este arquivo continua prevalecendo.
 
 ---
 
@@ -35,7 +42,7 @@ SVG inline, sempre na topbar à esquerda, separado do conteúdo por um divisor v
 
 ## 2. Tokens (CSS variables)
 
-Cole **na íntegra** o bloco `:root, [data-theme="dark"]` + `[data-theme="light"]` de qualquer tela de referência. Não altere os valores. Resumo:
+Use os tokens definidos em `apps/web/src/styles/tokens.css`. Não altere os valores sem atualizar este documento e revisar o impacto visual. Resumo:
 
 ### Cores neutras
 | Token | Dark | Light | Uso |
@@ -192,7 +199,7 @@ Cores por estado:
 Pills com **pulso** usam `.pulse` (7×7 verde com aura). Para indicadores menores embutidos use `.live-dot` (6×6).
 
 ### Tags / chips
-- **Tag de segmento** (`.tag-pill`): pill colorida, 10px, weight 500, padding `2px 8px`. Vide variantes em `apps/web/src/references/Clientes.html` (`tag-cliente`, `tag-vip`, `tag-lead`...).
+- **Tag de segmento** (`.tag-pill`): pill colorida, 10px, weight 500, padding `2px 8px`. Variantes devem usar apenas tokens semânticos existentes (`--green`, `--blue`, `--purple`, `--amber`, `--red`, `--pink`, `--teal`) e seus pares `-dim`.
 - **Tag de fila/categoria hierárquica** (`.q-tag`): pill em `var(--bg-3)`, fonte mono, `›` como separador (em `var(--txt-3)`), folha em `var(--txt)` peso 500.
 - **Filter chip** (`.fchip`): borda `var(--line-2)`, ícone de chevron à direita; estado `has-val` usa `var(--teal)` na borda + `var(--teal-dim)` no fundo.
 
@@ -239,7 +246,7 @@ Linha vertical 1px `var(--line-2)` à esquerda, dots 9×9 com borda 2px da cor d
 ### Modais
 - Overlay `rgba(0,0,0,.5)`, modal centralizado em `var(--bg-2)`, raio `var(--r-lg)`, `box-shadow: var(--shadow-pop)`.
 - Header: 14–16px peso 600 + botão de fechar à direita.
-- Footer: alinhado à direita, botão secundário `tb-btn` + primário `tb-btn-primary`. Veja `apps/web/src/references/omnichannel_chat.html`.
+- Footer: alinhado à direita, botão secundário `tb-btn` + primário `tb-btn-primary`.
 
 ---
 
@@ -333,7 +340,7 @@ Inclua as chaves, ou equivalentes específicas do contexto, nos idiomas `pt-BR`,
 - `bulkSelect.confirmInstruction`
 - `bulkSelect.confirmDelete`
 
-#### Implementações de referência
+#### Implementações existentes
 - `apps/web/src/components/omnichannel/CampaignContactsModal.tsx` — seleção por filtro para adicionar contatos a uma campanha.
 - `apps/web/src/pages/crm/Contacts.tsx` — exclusão em massa de contatos com seleção dual e confirmação reforçada.
 - `apps/web/src/pages/crm/Organizations.tsx` — exclusão em massa de organizações com seleção dual e confirmação reforçada.
@@ -364,7 +371,7 @@ Estrutura:
 fila/lista | conversa | painel do contato
    320px   |   1fr    |        360px
 ```
-Cabeçalho da conversa fixo, área de mensagens rolável, composer fixo no rodapé. Veja `apps/web/src/references/omnichannel_chat.html`.
+Cabeçalho da conversa fixo, área de mensagens rolável, composer fixo no rodapé. O comportamento específico deve ser definido no PRD da tela de atendimento.
 
 ### Configurações / Formulários longos
 - Cabeçalho de página padrão.
@@ -379,7 +386,7 @@ Sempre que uma lista, tabela ou painel não tem dados:
 - Subtítulo 11px em `--txt-3`.
 - (Opcional) botão `tb-btn` ou CTA teal abaixo.
 
-Exemplo: estado vazio no monitor em `apps/web/src/pages/tv/TVDashboard.tsx`.
+O texto e o CTA do estado vazio devem vir do PRD da tela ou do guia de conteúdo.
 
 ---
 
@@ -428,9 +435,9 @@ Exemplo: estado vazio no monitor em `apps/web/src/pages/tv/TVDashboard.tsx`.
 
 Antes de entregar, confirme:
 
-- [ ] Topbar idêntica às telas de referência (logo + breadcrumb + status + toggle tema + ações + avatar)
+- [ ] Topbar no padrão do shell autenticado (logo + breadcrumb + status + toggle tema + ações + avatar)
 - [ ] Nav rail com 68px, item ativo em teal-dim, link para outras páginas
-- [ ] Tokens CSS copiados na íntegra (dark + light)
+- [ ] Tokens CSS usados a partir de `apps/web/src/styles/tokens.css`
 - [ ] Script anti-flash de tema no `<head>`
 - [ ] `lang="pt-BR"`, título da aba `ZiraDesk — Nome da página`
 - [ ] Fontes IBM Plex Sans + IBM Plex Mono carregadas

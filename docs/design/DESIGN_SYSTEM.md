@@ -11,11 +11,11 @@
 - Não invente tokens, cores, tipografia, espaçamento ou estrutura fora do padrão canônico.
 - Se houver divergência entre este arquivo e o padrão canônico, prevalece [PADRAO_DE_TELAS.md](./PADRAO_DE_TELAS.md).
 
-## Referências Canônicas de Tela
+## Padrões por Tela
 
-- `apps/web/src/references/omnichannel_chat.html`
-- `apps/web/src/references/Clientes.html`
-- `apps/web/src/pages/tv/TVDashboard.tsx`
+O padrão visual global está em [PADRAO_DE_TELAS.md](./PADRAO_DE_TELAS.md).
+O padrão específico de cada tela deve estar em `docs/design/telas/*.md`.
+Arquivos de tela existentes não são fonte de padrão visual; use-os apenas para entender implementação legada.
 
 ## Compatibilidade
 
@@ -118,7 +118,7 @@ fontFamily: {
 
 ---
 
-## Layout da Tela de Atendimento (referência)
+## Layout Base da Tela de Atendimento
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -288,8 +288,7 @@ colors: {
 
 ---
 
-## Referências
+## Documentos Relacionados
 
-- `omnichannel_chat.html` — protótipo completo da tela de atendimento
 - `ziradesk_logo_final.html` — padrões visuais do logotipo
 - `docs/design/LOGO.md` — guia de uso do logo

@@ -68,9 +68,16 @@ Observacao de escopo atual:
 ## 3. DESIGN SYSTEM — REFERÊNCIA OBRIGATÓRIA
 
 > Fonte de verdade oficial: [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md)
-> Referências canônicas de UI: `apps/web/src/references/omnichannel_chat.html`,
-> `apps/web/src/references/Clientes.html` e `apps/web/src/pages/tv/TVDashboard.tsx`.
-> Toda nova página DEVE reutilizar tokens, componentes e padrões existentes. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
+> Padrões específicos de tela: [docs/design/telas/](docs/design/telas/).
+> Toda nova página DEVE seguir os tokens globais e o PRD da própria tela. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
+
+Documentação complementar de produto/UX:
+- [docs/design/00_PLAYBOOK_AGENTE.md](docs/design/00_PLAYBOOK_AGENTE.md) — processo obrigatório para construir telas.
+- [docs/design/01_CATALOGO_LAYOUTS.md](docs/design/01_CATALOGO_LAYOUTS.md) — arquétipos de layout.
+- [docs/design/02_ESTADOS_INTERACOES.md](docs/design/02_ESTADOS_INTERACOES.md) — estados, loading, vazio, erro e feedback.
+- [docs/design/03_CONTEUDO_VOZ.md](docs/design/03_CONTEUDO_VOZ.md) — microcópia e vocabulário canônico.
+- [docs/design/04_NAVEGACAO_FLUXOS.md](docs/design/04_NAVEGACAO_FLUXOS.md) — navegação, fluxos, breadcrumbs e permissões.
+- [docs/design/telas/](docs/design/telas/) — PRDs de telas específicas.
 
 ### 3.0 Gate Obrigatório Para Alterações de UI (Agente IA e Humanos)
 
@@ -78,7 +85,7 @@ Antes de qualquer alteração em UI (`apps/web/**`), executar este pre-check:
 
 - Ler [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md) por completo.
 - Confirmar conformidade com topbar, nav rail, tokens de tema, tipografia IBM Plex e padrão de rolagem interna.
-- Escolher uma tela de referência canônica para espelhar estrutura base (não começar do zero).
+- Identificar o PRD da tela em `docs/design/telas/`; se não existir, criar a especificação antes da implementação.
 - Validar checklist final do padrão de telas (seção "Checklist para nova tela").
 
 ### 3.1 Marca
@@ -358,15 +365,17 @@ window.addEventListener('storage', e => {
 - [ ] Theme toggle funcional + testado em light e dark
 - [ ] `html, body { overflow: hidden; height: 100% }` — apenas áreas internas rolam
 
-### 3.12 Telas de referência
+### 3.12 Padrões por tela
 
-| Arquivo | Padrões cobertos |
-|---|---|
-| `apps/web/src/references/Clientes.html` | Lista com tabela densa, filtros (search + chips), segmentos (tabs), paginação, painel de detalhe lateral, hero com avatar grande, KPIs, ações rápidas (`.dact`), timeline |
-| `apps/web/src/references/omnichannel_chat.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar e modais |
-| `apps/web/src/pages/tv/TVDashboard.tsx` | Dashboard e monitor em tempo real, com KPIs, cards, listas operacionais e estados vazios |
+Os padrões específicos de tela ficam em `docs/design/telas/*.md`. Cada PRD deve definir:
+- arquétipo e rota;
+- layout e áreas de rolagem;
+- dados exibidos;
+- ações e permissões;
+- estados de loading, vazio, erro e sem permissão;
+- microcópia e regras de negócio.
 
-**Ao criar tela nova:** abrir a referência mais próxima do caso de uso e reutilizar sua estrutura como ponto de partida. Não começar do zero.
+**Ao criar tela nova:** localizar o PRD correspondente. Se não existir, criar a especificação a partir de `docs/design/templates/TEMPLATE_REQUISITOS_TELA.md` antes da implementação.
 
 ---
 
@@ -1073,7 +1082,7 @@ ziradesk/
 │       │   │   ├── tickets/         (CreateTicket, TicketDetail, Tickets)
 │       │   │   ├── tv/              (TVDashboard)
 │       │   │   └── NotFound.tsx
-│       │   ├── references/          ← telas HTML canônicas de UI
+│       │   ├── references/          ← protótipos HTML legados; não são fonte de padrão visual
 │       │   │   ├── Clientes.html
 │       │   │   └── omnichannel_chat.html
 │       │   ├── router/
