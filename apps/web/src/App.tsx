@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 import { useAuthStore } from './stores/auth.store';
 import { profileApi } from './services/api';
 import { Login } from './pages/auth/Login';
@@ -67,15 +68,6 @@ import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { PrivacyPolicyPage, TermsOfUsePage } from './pages/legal/LegalDocuments';
 import i18n from './lib/i18n';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
-    },
-  },
-});
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);

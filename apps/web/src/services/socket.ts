@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import i18n from '../lib/i18n';
+import { queryClient } from '../lib/queryClient';
 import { useAuthStore } from '../stores/auth.store';
 import { useToastStore } from '../stores/toast.store';
 
@@ -17,6 +18,11 @@ interface PresencePayload {
 
 interface HeartbeatPayload {
   userId: string;
+}
+
+function invalidateConversationQueries(): void {
+  void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+  void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
 }
 
 function getCurrentUserId(): string | null {
@@ -75,6 +81,7 @@ function syncPresenceAfterForegroundResume(): void {
 
   emitPresenceOnline();
   startHeartbeat();
+  invalidateConversationQueries();
   // Alguns navegadores retomam timers/socket com atraso ao restaurar janela minimizada.
   // Reforçamos o anúncio de presença em seguida para evitar exigir refresh manual.
   window.setTimeout(() => {
@@ -139,6 +146,7 @@ function attachLifecycleHandlers(): void {
   socket.on('connect', () => {
     emitPresenceOnline();
     startHeartbeat();
+    invalidateConversationQueries();
   });
 
   socket.on('disconnect', (reason) => {
@@ -152,6 +160,7 @@ function attachLifecycleHandlers(): void {
     void attemptNumber;
     emitPresenceOnline();
     startHeartbeat();
+    invalidateConversationQueries();
   });
 
   socket.io.on('reconnect_failed', () => {
