@@ -56,6 +56,14 @@ interface ChannelRowPublic {
   created_at: Date;
 }
 
+interface NgrokTunnel {
+  public_url?: unknown;
+  proto?: unknown;
+  config?: {
+    addr?: unknown;
+  };
+}
+
 function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -166,7 +174,45 @@ async function resolveTokenAppId(
   return resolvedAppId;
 }
 
-function whatsappWebhookUrl(): string {
+function isNgrokTunnelForApi(tunnel: NgrokTunnel): boolean {
+  const publicUrl = asTrimmedString(tunnel.public_url);
+  const proto = asTrimmedString(tunnel.proto);
+  const addr = asTrimmedString(tunnel.config?.addr).toLowerCase();
+  const port = String(env.PORT);
+
+  return (
+    proto === 'https'
+    && publicUrl.startsWith('https://')
+    && (
+      addr === `http://localhost:${port}`
+      || addr === `https://localhost:${port}`
+      || addr === `http://127.0.0.1:${port}`
+      || addr === `https://127.0.0.1:${port}`
+    )
+  );
+}
+
+async function detectDevelopmentNgrokUrl(): Promise<string | null> {
+  if (env.NODE_ENV !== 'development') return null;
+
+  try {
+    const response = await fetchWithTimeout('http://127.0.0.1:4040/api/tunnels', {}, 2_000);
+    if (!response.ok) return null;
+
+    const payload = await response.json() as { tunnels?: NgrokTunnel[] };
+    const tunnel = payload.tunnels?.find(isNgrokTunnelForApi);
+    return asTrimmedString(tunnel?.public_url) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function whatsappWebhookUrl(): Promise<string> {
+  const detectedNgrokUrl = await detectDevelopmentNgrokUrl();
+  if (detectedNgrokUrl) {
+    return `${detectedNgrokUrl.replace(/\/+$/, '')}/api/webhooks/whatsapp`;
+  }
+
   const apiUrl = asTrimmedString(env.API_URL);
   if (!apiUrl) {
     throw new ChannelConfigurationError(
@@ -213,7 +259,7 @@ async function validateAndConfigureWhatsAppChannel(
     );
   }
 
-  const callbackUrl = whatsappWebhookUrl();
+  const callbackUrl = await whatsappWebhookUrl();
   const subscribedFields = [
     'messages',
     'message_template_components_update',
