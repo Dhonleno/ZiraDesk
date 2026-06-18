@@ -2503,16 +2503,23 @@ async function processStatusUpdate(
   );
 
   for (const tenant of tenants) {
-    const result = await prisma.$queryRawUnsafe<MessageRow[]>(
-      `UPDATE "${tenant.schema_name}".messages
-       SET status = $1,
-           metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
-       WHERE external_id = $2
-       RETURNING id, conversation_id`,
-      mappedStatus,
-      status.id,
-      JSON.stringify(statusMetadata),
-    );
+    let result: MessageRow[];
+    try {
+      result = await prisma.$queryRawUnsafe<MessageRow[]>(
+        `UPDATE "${tenant.schema_name}".messages
+         SET status = $1,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+         WHERE external_id = $2
+         RETURNING id, conversation_id`,
+        mappedStatus,
+        status.id,
+        JSON.stringify(statusMetadata),
+      );
+    } catch (err: unknown) {
+      const meta = (err as { code?: string; meta?: { code?: string } }).meta;
+      if ((err as { code?: string }).code === 'P2010' && meta?.code === '42P01') continue;
+      throw err;
+    }
 
     if (result[0]) {
       if (requiresReengagementTemplate) {
