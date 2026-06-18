@@ -653,6 +653,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           target,
           request.user.id,
           parsed.data.reason,
+          request.user.tenantId,
         );
         const tenantUser = request.user as AuthUser;
         const tenantId = tenantUser.tenantId ?? null;
@@ -812,7 +813,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const conversation = await updateConversation(request.params.id, parsed.data, request.user.id);
+      const conversation = await updateConversation(
+        request.params.id,
+        parsed.data,
+        request.user.id,
+        request.user.tenantId,
+      );
       const tenantUser = request.user as AuthUser;
       const patchSchemaName = tenantUser.schemaName ?? null;
       const patchTenantId = tenantUser.tenantId ?? null;

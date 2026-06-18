@@ -1640,7 +1640,9 @@ export async function transferConversation(
   target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
   transferredBy: string,
   reason?: string,
+  tenantId?: string,
 ): Promise<{ data: ConversationRow; targetUserId: string; previousAssignedTo: string | null }> {
+  const schemaName = await getSchemaName(tenantId);
   const currentConversationRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations
@@ -1704,13 +1706,16 @@ export async function transferConversation(
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
 
+  const convAssignRef = schemaName
+    ? `${quoteIdent(schemaName)}.conversation_assignments`
+    : 'conversation_assignments';
   await prisma.$executeRawUnsafe(`
-    UPDATE conversation_assignments
+    UPDATE ${convAssignRef}
     SET released_at = NOW(), release_reason = 'transferred'
     WHERE conversation_id = $1::uuid AND released_at IS NULL
   `, conversationId);
   await prisma.$executeRawUnsafe(`
-    INSERT INTO conversation_assignments (conversation_id, agent_id, assigned_at)
+    INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
     VALUES ($1::uuid, $2::uuid, NOW())
   `, conversationId, assignToUserId);
 
@@ -1735,7 +1740,9 @@ export async function updateConversation(
   conversationId: string,
   body: UpdateConversationBody,
   actorUserId: string,
+  tenantId?: string,
 ) {
+  const schemaName = await getSchemaName(tenantId);
   await ensureConversationCsatInfrastructure(prisma);
 
   const convCheck = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
@@ -1776,14 +1783,17 @@ export async function updateConversation(
   );
 
   if (hasAssignedTo) {
+    const convAssignRef = schemaName
+      ? `${quoteIdent(schemaName)}.conversation_assignments`
+      : 'conversation_assignments';
     await prisma.$executeRawUnsafe(`
-      UPDATE conversation_assignments
+      UPDATE ${convAssignRef}
       SET released_at = NOW(), release_reason = 'reassigned'
       WHERE conversation_id = $1::uuid AND released_at IS NULL
     `, conversationId);
     if (assignedToValue !== null) {
       await prisma.$executeRawUnsafe(`
-        INSERT INTO conversation_assignments (conversation_id, agent_id, assigned_at)
+        INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
         VALUES ($1::uuid, $2::uuid, NOW())
       `, conversationId, assignedToValue);
     }
