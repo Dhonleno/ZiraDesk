@@ -474,6 +474,34 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".conversation_assignments (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID NOT NULL REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      agent_id        UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      released_at     TIMESTAMPTZ,
+      release_reason  VARCHAR(30),
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_conversation"
+      ON "${schemaName}".conversation_assignments(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_agent"
+      ON "${schemaName}".conversation_assignments(agent_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_agent_released"
+      ON "${schemaName}".conversation_assignments(agent_id, released_at)
+      WHERE released_at IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE OR REPLACE FUNCTION "${schemaName}".generate_protocol()
     RETURNS VARCHAR AS $$
     DECLARE
