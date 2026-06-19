@@ -59,6 +59,43 @@
       "noData": "Sem dados no período"
     }
   },
+  "agentHome": {
+    "subtitle": "Seu workspace de hoje",
+    "conversations": {
+      "title": "Meus atendimentos",
+      "open": "Abertos",
+      "waiting": "Aguardando",
+      "cta": "Ver atendimentos"
+    },
+    "tickets": {
+      "title": "Meus tickets",
+      "open": "Abertos",
+      "inProgress": "Em andamento",
+      "waiting": "Aguardando",
+      "dueToday": "Vencem hoje",
+      "overdue": "Vencidos",
+      "cta": "Ver tickets"
+    },
+    "metrics": {
+      "title": "Minhas métricas",
+      "cta": "Ver performance"
+    },
+    "kpi": {
+      "total": "Atendimentos",
+      "resolved": "resolvidos",
+      "tma": "TMA",
+      "tme": "TME",
+      "csat": "CSAT",
+      "sla": "SLA"
+    },
+    "goals": {
+      "title": "Progresso das metas",
+      "noGoal": "Nenhuma meta configurada"
+    },
+    "charts": {
+      "volumeByDay": "Meu volume por dia"
+    }
+  },
   "phone": {
     "invalid": "Número de telefone inválido",
     "invalidBR": "Celular brasileiro deve ter 9 após o DDD: (XX) 9XXXX-XXXX",

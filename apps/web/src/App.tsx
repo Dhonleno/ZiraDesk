@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
+import { useAuth } from './hooks/useAuth';
 import { useAuthStore } from './stores/auth.store';
 import { profileApi } from './services/api';
 import { Login } from './pages/auth/Login';
@@ -66,6 +67,7 @@ import { TVDashboard } from './pages/tv/TVDashboard';
 import { CampaignsPage } from './pages/omnichannel/Campaigns';
 import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
 import { HomePage } from './pages/home/Home';
+import AgentHome from './pages/home/AgentHome';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { PrivacyPolicyPage, TermsOfUsePage } from './pages/legal/LegalDocuments';
 import i18n from './lib/i18n';
@@ -124,11 +126,10 @@ function RequireTenantUser({ children }: { children: ReactNode }) {
 }
 
 function HomeRedirect() {
-  const user = useAuthStore((s) => s.user);
-  const to = ['owner', 'admin', 'supervisor'].includes(user?.role ?? '')
-    ? '/home'
-    : '/omnichannel/conversations';
-  return <Navigate to={to} replace />;
+  const { user } = useAuth();
+  if (['owner', 'admin', 'supervisor'].includes(user?.role ?? '')) return <Navigate to="/home" replace />;
+  if (['agent'].includes(user?.role ?? '')) return <Navigate to="/agent-home" replace />;
+  return <Navigate to="/omnichannel/conversations" replace />;
 }
 
 export function App() {
@@ -210,6 +211,7 @@ export function App() {
           >
             <Route index element={<HomeRedirect />} />
             <Route path="home" element={<HomePage />} />
+            <Route path="agent-home" element={<AgentHome />} />
             <Route path="monitor" element={<TVDashboard />} />
             <Route path="omnichannel" element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />

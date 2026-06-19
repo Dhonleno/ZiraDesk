@@ -59,6 +59,43 @@
       "noData": "No data for this period"
     }
   },
+  "agentHome": {
+    "subtitle": "Your workspace for today",
+    "conversations": {
+      "title": "My conversations",
+      "open": "Open",
+      "waiting": "Waiting",
+      "cta": "View conversations"
+    },
+    "tickets": {
+      "title": "My tickets",
+      "open": "Open",
+      "inProgress": "In progress",
+      "waiting": "Waiting",
+      "dueToday": "Due today",
+      "overdue": "Overdue",
+      "cta": "View tickets"
+    },
+    "metrics": {
+      "title": "My metrics",
+      "cta": "View performance"
+    },
+    "kpi": {
+      "total": "Conversations",
+      "resolved": "resolved",
+      "tma": "AHT",
+      "tme": "FRT",
+      "csat": "CSAT",
+      "sla": "SLA"
+    },
+    "goals": {
+      "title": "Goal progress",
+      "noGoal": "No goal configured"
+    },
+    "charts": {
+      "volumeByDay": "My volume by day"
+    }
+  },
   "phone": {
     "invalid": "Invalid phone number",
     "invalidBR": "Brazilian mobile numbers must include 9 after area code: (XX) 9XXXX-XXXX",

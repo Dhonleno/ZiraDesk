@@ -1060,6 +1060,14 @@ export function TenantLayout() {
               </svg>
             </NavItem>
           )}
+          {!isManager && user?.role === 'agent' && (
+            <NavItem to="/agent-home" title={tCommon('home.navLabel')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
 
           {/* Atendimentos */}
           <NavItem to="/omnichannel/conversations" title="Atendimentos">

@@ -59,6 +59,43 @@
       "noData": "Sin datos en el período"
     }
   },
+  "agentHome": {
+    "subtitle": "Tu espacio de trabajo de hoy",
+    "conversations": {
+      "title": "Mis atenciones",
+      "open": "Abiertas",
+      "waiting": "En espera",
+      "cta": "Ver atenciones"
+    },
+    "tickets": {
+      "title": "Mis tickets",
+      "open": "Abiertos",
+      "inProgress": "En progreso",
+      "waiting": "En espera",
+      "dueToday": "Vencen hoy",
+      "overdue": "Vencidos",
+      "cta": "Ver tickets"
+    },
+    "metrics": {
+      "title": "Mis métricas",
+      "cta": "Ver rendimiento"
+    },
+    "kpi": {
+      "total": "Atenciones",
+      "resolved": "resueltas",
+      "tma": "TMA",
+      "tme": "TME",
+      "csat": "CSAT",
+      "sla": "SLA"
+    },
+    "goals": {
+      "title": "Progreso de metas",
+      "noGoal": "Ninguna meta configurada"
+    },
+    "charts": {
+      "volumeByDay": "Mi volumen por día"
+    }
+  },
   "phone": {
     "invalid": "Número de teléfono inválido",
     "invalidBR": "El móvil brasileño debe tener 9 después del DDD: (XX) 9XXXX-XXXX",
