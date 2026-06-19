@@ -2,12 +2,8 @@ import { Queue, Worker } from 'bullmq';
 import { bullmqConnection } from '../config/redis.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
+import { hasFeature } from '../middleware/entitlement.js';
 import { campaignSendQueue } from './queue.js';
-
-interface TenantRow {
-  id: string;
-  schema_name: string;
-}
 
 interface ScheduledCampaignRow {
   id: string;
@@ -39,12 +35,25 @@ export const campaignSchedulerWorker = new Worker(
   async () => {
     logger.info('[CampaignScheduler] Checking for scheduled and resumable campaigns');
 
-    const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
-      `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
-    );
+    const tenants = await prisma.tenant.findMany({
+      where: { status: { in: ['active', 'trial'] } },
+      select: {
+        id: true,
+        schemaName: true,
+        status: true,
+        plan: { select: { features: true } },
+      },
+    });
 
     for (const tenant of tenants) {
-      const schemaName = tenant.schema_name;
+      if (!['active', 'trial'].includes(tenant.status)) continue;
+
+      if (!hasFeature(tenant.plan?.features as Record<string, boolean> | undefined, 'whatsapp')) {
+        logger.warn({ tenantId: tenant.id }, 'campaign-scheduler: skipped — whatsapp feature not in plan');
+        continue;
+      }
+
+      const schemaName = tenant.schemaName;
 
       let campaigns: ScheduledCampaignRow[];
       try {
