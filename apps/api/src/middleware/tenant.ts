@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/database.js';
-import type { Tenant } from '@ziradesk/shared';
+import type { Tenant, PlanFeature } from '@ziradesk/shared';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -22,6 +22,11 @@ export async function tenantMiddleware(
 
   const tenant = await prisma.tenant.findUnique({
     where: { slug: subdomain },
+    include: {
+      plan: {
+        select: { features: true },
+      },
+    },
   });
 
   if (!tenant) {
@@ -46,5 +51,8 @@ export async function tenantMiddleware(
     trialEndsAt: tenant.trialEndsAt,
     settings: tenant.settings as Record<string, unknown>,
     createdAt: tenant.createdAt,
+    ...(tenant.plan && {
+      plan: { features: (tenant.plan.features ?? {}) as Partial<Record<PlanFeature, boolean>> },
+    }),
   };
 }

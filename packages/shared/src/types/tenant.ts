@@ -1,5 +1,18 @@
 export type TenantStatus = 'active' | 'suspended' | 'trial' | 'cancelled';
 
+export const PLAN_FEATURES = [
+  'whatsapp',
+  'email',
+  'live_chat',
+  'reports',
+  'api_access',
+  'custom_domain',
+  'sla',
+  'webhooks',
+] as const;
+
+export type PlanFeature = typeof PLAN_FEATURES[number];
+
 export interface Tenant {
   id: string;
   name: string;
@@ -10,6 +23,9 @@ export interface Tenant {
   trialEndsAt: Date | null;
   settings: Record<string, unknown>;
   createdAt: Date;
+  plan?: {
+    features: Partial<Record<PlanFeature, boolean>>;
+  };
 }
 
 export interface Plan {
