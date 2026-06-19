@@ -24,7 +24,7 @@ export async function tenantMiddleware(
     where: { slug: subdomain },
     include: {
       plan: {
-        select: { features: true },
+        select: { features: true, maxMessages: true },
       },
     },
   });
@@ -52,7 +52,10 @@ export async function tenantMiddleware(
     settings: tenant.settings as Record<string, unknown>,
     createdAt: tenant.createdAt,
     ...(tenant.plan && {
-      plan: { features: (tenant.plan.features ?? {}) as Partial<Record<PlanFeature, boolean>> },
+      plan: {
+        features: (tenant.plan.features ?? {}) as Partial<Record<PlanFeature, boolean>>,
+        maxMessages: tenant.plan.maxMessages ?? -1,
+      },
     }),
   };
 }

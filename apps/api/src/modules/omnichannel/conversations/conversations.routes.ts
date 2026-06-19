@@ -51,6 +51,7 @@ import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
+import { checkMessageQuota } from '../../../services/usage.service.js';
 import { maskEmail, maskPhone } from '../../../utils/pii-mask.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
@@ -130,6 +131,15 @@ async function insertPiiAuditLog(schemaName: string, userId: string, entity: str
       }),
     ),
   );
+}
+
+async function canSendWithinMessageQuota(tenantId: string): Promise<boolean> {
+  const tenantPlan = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { plan: { select: { maxMessages: true } } },
+  });
+  const maxMessages = tenantPlan?.plan?.maxMessages ?? -1;
+  return checkMessageQuota(tenantId, maxMessages);
 }
 
 async function sendConversationWhatsAppText(
@@ -458,6 +468,28 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
+        if (!parsed.data.isInternal) {
+          const tenantId = request.user.tenantId;
+          if (!tenantId) {
+            return reply.code(401).send({ success: false, error: { message: 'Token inválido: tenantId ausente' } });
+          }
+
+          const withinQuota = await canSendWithinMessageQuota(tenantId);
+          if (!withinQuota) {
+            request.log.warn(
+              { tenantId, conversationId: request.params.id },
+              'conversations: monthly message quota exceeded, blocking manual send',
+            );
+            return reply.status(402).send({
+              success: false,
+              error: {
+                code: 'QUOTA_EXCEEDED',
+                message: 'Limite mensal de mensagens atingido. Faça upgrade do seu plano.',
+              },
+            });
+          }
+        }
+
         const result = await sendMessage(request.params.id, request.user.id, parsed.data);
         const tenantUser = request.user as AuthUser;
 

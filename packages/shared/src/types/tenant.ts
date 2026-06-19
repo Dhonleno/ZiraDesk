@@ -25,6 +25,7 @@ export interface Tenant {
   createdAt: Date;
   plan?: {
     features: Partial<Record<PlanFeature, boolean>>;
+    maxMessages: number;
   };
 }
 
@@ -36,6 +37,7 @@ export interface Plan {
   priceYear: number;
   maxUsers: number;
   maxContacts: number;
+  maxMessages: number;
   features: Record<string, unknown>;
   isActive: boolean;
   createdAt: Date;

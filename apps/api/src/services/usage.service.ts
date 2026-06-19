@@ -125,3 +125,23 @@ export async function getUsageSummary(
     },
   };
 }
+
+/**
+ * Verifica se o tenant ainda tem cota de mensagens disponível no mês corrente.
+ * Retorna true se pode enviar, false se cota esgotada.
+ * Fail-open: se Redis estiver indisponível, permite o envio e loga warning.
+ * maxMessages = -1 significa ilimitado.
+ */
+export async function checkMessageQuota(
+  tenantId: string,
+  maxMessages: number,
+): Promise<boolean> {
+  if (maxMessages === -1) return true;
+  try {
+    const used = await getCurrentUsage(tenantId, 'messages_sent');
+    return used < maxMessages;
+  } catch (err) {
+    logger.warn({ err, tenantId }, 'usage: quota check failed, fail-open');
+    return true;
+  }
+}

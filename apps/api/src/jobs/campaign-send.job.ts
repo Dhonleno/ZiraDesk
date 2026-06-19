@@ -5,6 +5,7 @@ import { logger } from '../config/logger.js';
 import { decryptCredentials } from '../utils/crypto.js';
 import { messageQueue } from './queue.js';
 import { buildTemplateComponentsForCampaign } from './campaign-template-components.js';
+import { checkMessageQuota } from '../services/usage.service.js';
 import {
   CAMPAIGN_MESSAGE_ATTEMPTS,
   CAMPAIGN_MESSAGE_BACKOFF_DELAY_MS,
@@ -91,6 +92,21 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
       logger.warn({ campaignId }, '[CampaignSend] Campaign not found, aborting');
       return;
     }
+
+    const tenantPlan = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { plan: { select: { maxMessages: true } } },
+    });
+    const maxMessages = tenantPlan?.plan?.maxMessages ?? -1;
+    const withinQuota = await checkMessageQuota(tenantId, maxMessages);
+    if (!withinQuota) {
+      logger.warn(
+        { tenantId, campaignId, maxMessages },
+        'campaign-send: monthly message quota exceeded, skipping campaign',
+      );
+      return;
+    }
+
     if (campaign.status !== 'running') {
       logger.info({ campaignId, status: campaign.status }, '[CampaignSend] Campaign not running, aborting');
       return;
