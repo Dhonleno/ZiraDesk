@@ -3,7 +3,7 @@ import { settingsRoutes } from './settings/settings.routes.js';
 import { usersRoutes } from './users/users.routes.js';
 import { channelsRoutes } from './channels/channels.routes.js';
 import { quickRepliesRoutes } from './quick-replies/quick-replies.routes.js';
-import { statsRoutes } from './stats/stats.routes.js';
+import { registerUsageRoute, statsRoutes } from './stats/stats.routes.js';
 import { onboardingRoutes } from './onboarding/onboarding.routes.js';
 import { businessHoursRoutes } from './business-hours/business-hours.routes.js';
 import { botRoutes } from './bot/bot.routes.js';
@@ -40,6 +40,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(conversationTagsAdminRoutes, { prefix: '/conversation-tags' });
   await app.register(contactTagsRoutes, { prefix: '/contact-tags' });
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
+  await app.register(registerUsageRoute);
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);
   await app.register(aiAdminRoutes, { prefix: '/ai' });

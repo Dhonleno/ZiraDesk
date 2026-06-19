@@ -14,6 +14,10 @@ function redisKey(tenantId: string, metric: UsageMetric, period?: string): strin
   return `usage:${tenantId}:${metric}:${p}`;
 }
 
+function quoteIdent(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
 /** Incrementa contador no Redis. Seta TTL de 35 dias na primeira vez. */
 export async function incrementUsage(
   tenantId: string,
@@ -76,4 +80,48 @@ export async function flushAllTenantsUsage(): Promise<void> {
       );
     }
   }
+}
+
+export interface UsageSummary {
+  period: string;
+  metrics: {
+    messages_sent: { used: number; limit: number };
+    storage_bytes: { used: number; limit: number };
+    active_users: { used: number; limit: number };
+  };
+}
+
+export async function getUsageSummary(
+  tenantId: string,
+  plan: { maxMessages: number; maxUsers: number; maxContacts: number },
+  period?: string,
+): Promise<UsageSummary> {
+  const p = period ?? currentPeriod();
+
+  const [messagesSent, storageBytes, tenant] = await Promise.all([
+    getCurrentUsage(tenantId, 'messages_sent', p),
+    getCurrentUsage(tenantId, 'storage_bytes', p),
+    prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { schemaName: true },
+    }),
+  ]);
+
+  let activeUsers = 0;
+  if (tenant?.schemaName) {
+    const schemaRef = quoteIdent(tenant.schemaName);
+    const activeUsersResult = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+      `SELECT COUNT(*)::bigint AS count FROM ${schemaRef}.users WHERE status = 'active'`,
+    );
+    activeUsers = Number(activeUsersResult[0]?.count ?? 0);
+  }
+
+  return {
+    period: p,
+    metrics: {
+      messages_sent: { used: messagesSent, limit: plan.maxMessages },
+      storage_bytes: { used: storageBytes, limit: -1 },
+      active_users: { used: activeUsers, limit: plan.maxUsers },
+    },
+  };
 }

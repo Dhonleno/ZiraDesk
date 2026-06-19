@@ -20,6 +20,7 @@ model Plan {
   priceYear   Decimal  @map("price_year") @db.Decimal(10, 2)
   maxUsers    Int      @map("max_users")
   maxContacts Int      @map("max_contacts")
+  maxMessages Int      @default(-1) @map("max_messages")
   /// JSON com flags de features habilitadas no plano
   features    Json     @default("{}")
   isActive    Boolean  @default(true) @map("is_active")

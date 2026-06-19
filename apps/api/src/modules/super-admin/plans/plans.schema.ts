@@ -11,6 +11,7 @@ export const createPlanSchema = z.object({
   priceYear: z.number().positive().optional(),
   maxUsers: z.number().int(), // -1 = ilimitado
   maxContacts: z.number().int(), // -1 = ilimitado
+  maxMessages: z.number().int().default(-1), // -1 = ilimitado
   features: z.record(z.unknown()).default({}),
   isActive: z.boolean().default(true),
 });

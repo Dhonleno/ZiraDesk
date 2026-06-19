@@ -39,6 +39,7 @@ export async function createPlan(data: CreatePlanInput) {
       priceYear: data.priceYear ?? data.priceMonth * 10,
       maxUsers: data.maxUsers,
       maxContacts: data.maxContacts,
+      maxMessages: data.maxMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       features: data.features as any,
       isActive: data.isActive,

@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import { prisma } from '../../../config/database.js';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
+import { getUsageSummary } from '../../../services/usage.service.js';
 import {
   createTenantSchema,
   updateTenantSchema,
@@ -49,6 +51,26 @@ export async function tenantsRoutes(app: FastifyInstance): Promise<void> {
     const stats = await getSuperAdminTenantStats();
     return reply.send({ success: true, data: stats });
   });
+
+  app.get<{ Params: { id: string }; Querystring: { period?: string } }>(
+    '/:id/usage',
+    { preHandler: guard },
+    async (request, reply) => {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: request.params.id },
+        select: { plan: { select: { maxMessages: true, maxUsers: true, maxContacts: true } } },
+      });
+      if (!tenant) {
+        return reply.code(404).send({ success: false, error: { message: 'Tenant não encontrado' } });
+      }
+      if (!tenant.plan) {
+        return reply.code(422).send({ success: false, error: { message: 'Tenant sem plano' } });
+      }
+
+      const data = await getUsageSummary(request.params.id, tenant.plan, request.query.period);
+      return reply.send({ success: true, data });
+    },
+  );
 
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const parsed = listTenantsQuerySchema.safeParse(request.query);
