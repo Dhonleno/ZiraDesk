@@ -6,6 +6,7 @@ import {
   deleteNotification,
   listNotifications,
   markAllNotificationsRead,
+  markConversationNotificationsRead,
   markNotificationRead,
 } from './notifications.service.js';
 
@@ -40,6 +41,26 @@ export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
       const perPage = parsePositiveInt(request.query.per_page, 20);
       const result = await listNotifications(request.user.id, schemaName, page, perPage);
       return reply.send({ success: true, data: result.data, meta: result.meta });
+    },
+  );
+
+  app.patch<{ Params: { conversationId: string } }>(
+    '/conversations/:conversationId/read',
+    { preHandler: guard },
+    async (request, reply) => {
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      if (!schemaName) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Schema do tenant nao identificado' },
+        });
+      }
+      const data = await markConversationNotificationsRead(
+        request.user.id,
+        request.params.conversationId,
+        schemaName,
+      );
+      return reply.send({ success: true, data });
     },
   );
 

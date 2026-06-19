@@ -3625,6 +3625,13 @@ export const notificationsApi = {
     return res.data.data;
   },
 
+  markConversationRead: async (conversationId: string) => {
+    const res = await api.patch<{ success: boolean; data: { read: number } }>(
+      `/notifications/conversations/${conversationId}/read`,
+    );
+    return res.data.data;
+  },
+
   markAllRead: async () => {
     const res = await api.patch<{ success: boolean; data: { read: number } }>('/notifications/read-all');
     return res.data.data;

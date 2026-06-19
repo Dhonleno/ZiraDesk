@@ -350,6 +350,28 @@ export async function markNotificationRead(userId: string, notificationId: strin
   return { read: true };
 }
 
+export async function markConversationNotificationsRead(userId: string, conversationId: string, schemaName: string) {
+  await ensureAuditLogsTable(schemaName);
+  await ensureNotificationReadsTable(schemaName);
+  const auditLogsRef = tableRef(schemaName, 'audit_logs');
+  const notificationReadsRef = tableRef(schemaName, 'notification_reads');
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ notification_id: string }>>(
+    `INSERT INTO ${notificationReadsRef} (user_id, notification_id)
+     SELECT $1::uuid, al.id
+     FROM ${auditLogsRef} al
+     WHERE al.entity_id = $2::uuid
+       AND al.action IN ('conversation.message', 'conversation.assigned')
+       AND al.new_data->>'assigned_to' = $1
+     ON CONFLICT (user_id, notification_id) DO NOTHING
+     RETURNING notification_id`,
+    userId,
+    conversationId,
+  );
+
+  return { read: rows.length };
+}
+
 export async function markAllNotificationsRead(userId: string, schemaName: string) {
   await ensureAuditLogsTable(schemaName);
   await ensureNotificationReadsTable(schemaName);
