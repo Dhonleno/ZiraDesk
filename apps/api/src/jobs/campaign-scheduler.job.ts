@@ -11,6 +11,7 @@ interface TenantRow {
 
 interface ScheduledCampaignRow {
   id: string;
+  kind: 'scheduled' | 'running';
 }
 
 export const campaignSchedulerQueue = new Queue('ziradesk-campaign-scheduler', {
@@ -36,7 +37,7 @@ void campaignSchedulerQueue
 export const campaignSchedulerWorker = new Worker(
   'ziradesk-campaign-scheduler',
   async () => {
-    logger.info('[CampaignScheduler] Checking for scheduled campaigns');
+    logger.info('[CampaignScheduler] Checking for scheduled and resumable campaigns');
 
     const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
       `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
@@ -48,11 +49,32 @@ export const campaignSchedulerWorker = new Worker(
       let campaigns: ScheduledCampaignRow[];
       try {
         campaigns = await prisma.$queryRawUnsafe<ScheduledCampaignRow[]>(
-          `SELECT id::text
+          `SELECT id::text, 'scheduled'::text AS kind
            FROM "${schemaName}".campaigns
            WHERE status = 'scheduled'
              AND scheduled_at IS NOT NULL
-             AND scheduled_at <= NOW()`,
+             AND scheduled_at <= NOW()
+
+           UNION
+
+           SELECT DISTINCT c.id::text, 'running'::text AS kind
+           FROM "${schemaName}".campaigns c
+           INNER JOIN "${schemaName}".campaign_contacts cc ON cc.campaign_id = c.id
+           WHERE c.status = 'running'
+             AND cc.status = 'pending'
+             AND NOT EXISTS (
+               SELECT 1
+               FROM "${schemaName}".campaign_contacts cc2
+               WHERE cc2.campaign_id = c.id
+                 AND cc2.sent_at >= CURRENT_DATE
+                 AND cc2.sent_at < CURRENT_DATE + INTERVAL '1 day'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM "${schemaName}".campaign_contacts cc3
+               WHERE cc3.campaign_id = c.id
+                 AND cc3.status = 'queued'
+             )`,
         );
       } catch {
         // Schema might not have campaigns table yet
@@ -61,6 +83,21 @@ export const campaignSchedulerWorker = new Worker(
 
       for (const campaign of campaigns) {
         try {
+          if (campaign.kind === 'running') {
+            const today = new Date().toISOString().slice(0, 10);
+            await campaignSendQueue.add('send', {
+              campaignId: campaign.id,
+              tenantId: tenant.id,
+              schemaName,
+            }, { jobId: `campaign-send-${campaign.id}-resume-${today}` });
+
+            logger.info(
+              { campaignId: campaign.id, tenantId: tenant.id },
+              '[CampaignScheduler] Running campaign resumed from daily limit',
+            );
+            continue;
+          }
+
           const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
             `UPDATE "${schemaName}".campaigns
              SET status = 'running', started_at = NOW(), updated_at = NOW()
