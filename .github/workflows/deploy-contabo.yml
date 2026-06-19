@@ -60,13 +60,27 @@ jobs:
           git checkout main
           git pull --ff-only origin main
 
-          if docker compose --env-file .env.production -f docker-compose.production.yml ps -q nginx >/dev/null 2>&1; then
-            docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
+          compose_cmd=(docker compose --env-file .env.production -f docker-compose.production.yml)
+
+          is_compose_service_running() {
+            local service="$1"
+            local container_id
+            container_id="$("${compose_cmd[@]}" ps -q "${service}" 2>/dev/null || true)"
+            [ -n "${container_id}" ] \
+              && [ "$(docker inspect -f '{{.State.Running}}' "${container_id}" 2>/dev/null || true)" = "true" ]
+          }
+
+          if is_compose_service_running nginx \
+            && is_compose_service_running web \
+            && is_compose_service_running api; then
+            "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
+          else
+            echo "Skipping pre-deploy nginx config test until api/web/nginx are running."
           fi
 
-          docker compose --env-file .env.production -f docker-compose.production.yml build
-          docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
-          docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate </dev/null
+          "${compose_cmd[@]}" build
+          "${compose_cmd[@]}" up -d postgres redis
+          "${compose_cmd[@]}" run --rm api-migrate </dev/null
 
           stale_recreate_containers="$(
             docker ps -a --format '{{.ID}} {{.Names}}' \
@@ -76,10 +90,10 @@ jobs:
             docker rm -f ${stale_recreate_containers}
           fi
 
-          docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web nginx
+          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web nginx
 
-          docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
-          docker compose --env-file .env.production -f docker-compose.production.yml exec -T nginx nginx -s reload </dev/null
-          docker compose --env-file .env.production -f docker-compose.production.yml exec -T api wget -q -O - http://127.0.0.1:3333/health </dev/null
-          docker compose --env-file .env.production -f docker-compose.production.yml ps
+          "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
+          "${compose_cmd[@]}" exec -T nginx nginx -s reload </dev/null
+          "${compose_cmd[@]}" exec -T api wget -q -O - http://127.0.0.1:3333/health </dev/null
+          "${compose_cmd[@]}" ps
           REMOTE
