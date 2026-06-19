@@ -4,7 +4,7 @@ import { Link, Outlet, NavLink, useLocation, useNavigate } from 'react-router-do
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { useFaviconBadge } from '../hooks/useFaviconBadge';
-import { adminApi, omnichannelApi, profileApi } from '../services/api';
+import { adminApi, api, omnichannelApi, profileApi } from '../services/api';
 import { connectSocket, disconnectSocket, setPresenceStatus, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
@@ -289,9 +289,17 @@ function Breadcrumb() {
 }
 
 /* ── Nav items ────────────────────────────────────────────────────────────── */
-type NavItemProps = { to: string; end?: true; title: string; children: React.ReactNode };
+type NavItemProps = {
+  to: string;
+  end?: boolean;
+  title: string;
+  badge?: number;
+  children: React.ReactNode;
+};
 
-function NavItem({ to, end, title, children }: NavItemProps) {
+function NavItem({ to, end, title, badge, children }: NavItemProps) {
+  const badgeValue = badge ?? 0;
+
   return (
     <NavLink
       to={to}
@@ -301,6 +309,11 @@ function NavItem({ to, end, title, children }: NavItemProps) {
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
       {children}
+      {badgeValue > 0 && (
+        <span className="nav-badge-dot" aria-hidden>
+          {badgeValue > 1 ? (badgeValue > 99 ? '99+' : badgeValue) : null}
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -345,7 +358,7 @@ export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { t: tCommon } = useTranslation('common');
   const { canAny } = usePermission();
-  const { user, token, logout, isLoggingOut } = useAuth();
+  const { user, token, isAuthenticated, logout, isLoggingOut } = useAuth();
   const setAuth = useAuthStore((state) => state.setAuth);
   const toast = useToast();
   const { pathname } = useLocation();
@@ -442,13 +455,42 @@ export function TenantLayout() {
     enabled: canAccessAdminData,
   });
 
-  const { data: queueCountData } = useQuery({
-    queryKey: ['queue-count'],
-    queryFn: () => omnichannelApi.getQueueCount(),
+  const { data: convCounts } = useQuery({
+    queryKey: ['conversation-counts'],
+    queryFn: () => api.get('/omnichannel/conversations/counts')
+      .then((r) => r.data.data as {
+        open: number;
+        waiting: number;
+        mine: number;
+        queue: number;
+        active: number;
+        closed: number;
+        return?: number;
+      }),
     refetchInterval: 30_000,
-    enabled: canViewQueue,
+    staleTime: 15_000,
+    enabled: isAuthenticated,
   });
-  const queueCount = queueCountData?.total ?? 0;
+  const queueCount = convCounts?.queue ?? 0;
+
+  const { data: backendNotifications = [] } = useQuery({
+    queryKey: ['notifications', 'nav-badge'],
+    queryFn: () => api.get('/notifications')
+      .then((r) => r.data.data as Array<{
+        id: string;
+        type: string;
+        read: boolean;
+      }>),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    enabled: isAuthenticated,
+  });
+
+  const ticketUnreadCount = backendNotifications.filter(
+    (n) => !n.read && (
+      n.type === 'ticket_assigned' || n.type === 'ticket_comment'
+    ),
+  ).length;
 
   const setAvailabilityMutation = useMutation({
     mutationFn: (nextAvailability: boolean) =>
@@ -1070,7 +1112,11 @@ export function TenantLayout() {
           )}
 
           {/* Atendimentos */}
-          <NavItem to="/omnichannel/conversations" title="Atendimentos">
+          <NavItem
+            to="/omnichannel/conversations"
+            title={t('nav.conversations', { defaultValue: 'Atendimentos' })}
+            badge={unreadConversationNotifications}
+          >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 4.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H8l-3.5 2v-2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"
@@ -1084,15 +1130,12 @@ export function TenantLayout() {
 
           {/* Fila */}
           {canViewQueue && (
-            <NavItem to="/omnichannel/queue" title={t('nav.queue')}>
+            <NavItem to="/omnichannel/queue" title={t('nav.queue')} badge={queueCount}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M2 5h14M2 9h10M2 13h7"
                   stroke="currentColor" strokeWidth="1.4"
                   strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {queueCount > 0 && (
-                <span className="nav-badge">{queueCount > 99 ? '99+' : queueCount}</span>
-              )}
             </NavItem>
           )}
 
@@ -1153,7 +1196,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Tickets */}
-          <NavItem to="/tickets" title="Tickets">
+          <NavItem to="/tickets" title={t('nav.tickets', { defaultValue: 'Tickets' })} badge={ticketUnreadCount}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 5h10a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z"
