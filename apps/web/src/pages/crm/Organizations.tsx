@@ -226,11 +226,10 @@ export function OrganizationsPage() {
 
   useEffect(() => {
     if (organizations.length === 0) {
-      setSelectedId((current) => {
-        if (!current) return current;
+      if (selectedId) {
+        setSelectedId(null);
         updateParams({ id: null });
-        return null;
-      });
+      }
       return;
     }
 
