@@ -14,7 +14,7 @@ const PLANS = [
     priceYear: 970,
     maxUsers: 3,
     maxContacts: 500,
-    features: { crm: true, tickets: true, omnichannel: false },
+    features: { whatsapp: false, email: false, live_chat: false, reports: false, api_access: false, custom_domain: false, sla: false, webhooks: false },
     isActive: true,
   },
   {
@@ -24,7 +24,7 @@ const PLANS = [
     priceYear: 1970,
     maxUsers: 10,
     maxContacts: 5000,
-    features: { crm: true, tickets: true, omnichannel: true, whatsapp: true },
+    features: { whatsapp: true, email: true, live_chat: false, reports: true, api_access: false, custom_domain: false, sla: false, webhooks: true },
     isActive: true,
   },
   {
@@ -34,7 +34,7 @@ const PLANS = [
     priceYear: 4970,
     maxUsers: -1,
     maxContacts: -1,
-    features: { crm: true, tickets: true, omnichannel: true, whatsapp: true, instagram: true, api: true },
+    features: { whatsapp: true, email: true, live_chat: true, reports: true, api_access: true, custom_domain: true, sla: true, webhooks: true },
     isActive: true,
   },
 ];

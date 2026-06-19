@@ -2,6 +2,7 @@ import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../../config/database.js';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
@@ -26,7 +27,7 @@ import {
   validateTemplateMedia,
 } from './templates.media.service.js';
 
-const adminGuard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin')];
+const adminGuard = [authMiddleware, requireFeature('whatsapp'), tenantSchemaFromJwt, hasRole('owner', 'admin')];
 const MAX_TEMPLATE_MEDIA_SIZE = 100 * 1024 * 1024;
 
 function getSchemaName(request: { user: { schemaName?: string } }): string {

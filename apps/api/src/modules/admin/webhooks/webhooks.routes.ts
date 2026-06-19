@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { createWebhookSchema, updateWebhookSchema } from './webhooks.schema.js';
@@ -13,7 +14,7 @@ import {
 } from './webhooks.service.js';
 import { fireWebhook } from '../../../services/webhook-dispatcher.js';
 
-const adminGuard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin')];
+const adminGuard = [authMiddleware, requireFeature('webhooks'), tenantSchemaFromJwt, hasRole('owner', 'admin')];
 
 function getSchemaName(request: { user: { schemaName?: string } }): string {
   const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;

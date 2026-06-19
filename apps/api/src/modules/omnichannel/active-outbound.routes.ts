@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthUser } from '@ziradesk/shared';
+import type { AuthUser, PlanFeature } from '@ziradesk/shared';
 import { z } from 'zod';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
@@ -13,6 +13,7 @@ import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
 import { calculateWaitingExpiresAt } from '../../lib/omnichannel/calculate-waiting-expires.js';
+import { hasFeature } from '../../middleware/entitlement.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -235,12 +236,13 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     );
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { settings: true },
+      select: { settings: true, plan: { select: { features: true } } },
     });
     const tenantSettings = typeof tenant?.settings === 'object' && tenant.settings !== null
       ? tenant.settings as Record<string, unknown>
       : {};
     const waitingExpiresAt = calculateWaitingExpiresAt(tenantSettings);
+    const planFeatures = (tenant?.plan?.features ?? {}) as Partial<Record<PlanFeature, boolean>>;
 
     const result = await withTenantSchema(schemaName, async (tx) => {
       const contacts = await tx.$queryRawUnsafe<ContactRow[]>(
@@ -269,6 +271,13 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
 
       if (channel.type !== 'whatsapp' && channel.type !== 'email') {
         return { statusCode: 400 as const, payload: { success: false, error: { message: 'Canal não suporta envio ativo' } } };
+      }
+
+      if (channel.type === 'whatsapp' && !hasFeature(planFeatures, 'whatsapp')) {
+        return { statusCode: 403 as const, payload: { success: false, error: { code: 'FEATURE_NOT_AVAILABLE', message: 'Esta funcionalidade não está disponível no seu plano atual.', feature: 'whatsapp' } } };
+      }
+      if (channel.type === 'email' && !hasFeature(planFeatures, 'email')) {
+        return { statusCode: 403 as const, payload: { success: false, error: { code: 'FEATURE_NOT_AVAILABLE', message: 'Esta funcionalidade não está disponível no seu plano atual.', feature: 'email' } } };
       }
 
       const duplicateRows = await tx.$queryRawUnsafe<DuplicateConversationRow[]>(

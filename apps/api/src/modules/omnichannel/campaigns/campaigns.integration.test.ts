@@ -27,8 +27,8 @@ async function createTempTenant(): Promise<TempTenant> {
   const schemaName = `campaigns_${suffix}`.toLowerCase();
   const plan = await prisma.plan.upsert({
     where: { slug: 'test-plan' },
-    update: { name: 'Plano Teste', priceMonth: new Prisma.Decimal('0'), priceYear: new Prisma.Decimal('0'), maxUsers: 50, maxContacts: 500, isActive: true, features: {} },
-    create: { name: 'Plano Teste', slug: 'test-plan', priceMonth: new Prisma.Decimal('0'), priceYear: new Prisma.Decimal('0'), maxUsers: 50, maxContacts: 500, isActive: true, features: {} },
+    update: { name: 'Plano Teste', priceMonth: new Prisma.Decimal('0'), priceYear: new Prisma.Decimal('0'), maxUsers: 50, maxContacts: 500, isActive: true, features: { whatsapp: true, email: true, live_chat: true, reports: true, api_access: true, custom_domain: true, sla: true, webhooks: true } },
+    create: { name: 'Plano Teste', slug: 'test-plan', priceMonth: new Prisma.Decimal('0'), priceYear: new Prisma.Decimal('0'), maxUsers: 50, maxContacts: 500, isActive: true, features: { whatsapp: true, email: true, live_chat: true, reports: true, api_access: true, custom_domain: true, sla: true, webhooks: true } },
   });
   const tenant = await prisma.tenant.create({
     data: { name: `Tenant Campaigns ${suffix}`, slug, schemaName, planId: plan.id, status: 'active', trialEndsAt: null, settings: {} },

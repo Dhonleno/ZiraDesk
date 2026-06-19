@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
@@ -32,7 +33,7 @@ import {
 import { ensureCampaignsInfrastructure } from './campaigns.infrastructure.js';
 import { campaignSendQueue } from '../../../jobs/queue.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt];
+const guard = [authMiddleware, requireFeature('whatsapp'), tenantSchemaFromJwt];
 async function ensureCampaignsInfrastructureMiddleware(request: FastifyRequest): Promise<void> {
   const schemaName = request.user?.schemaName;
   if (schemaName) {

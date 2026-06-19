@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { smtpSchema, smtpTestSchema, smtpUpdateSchema } from './smtp.schema.js';
@@ -14,7 +15,7 @@ import {
   updateSmtpConfig,
 } from './smtp.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('settings:manage')];
+const guard = [authMiddleware, requireFeature('email'), tenantSchemaFromJwt, requirePermission('settings:manage')];
 
 function resolveSchemaName(request: FastifyRequest): string | null {
   const authUser = request.user as AuthUser;

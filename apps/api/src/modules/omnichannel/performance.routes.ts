@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { hasPermission, type Role } from '@ziradesk/shared';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireFeature } from '../../middleware/entitlement.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { resolveTenantTimezone } from './history/history.service.js';
@@ -13,7 +14,7 @@ import {
 } from './performance.service.js';
 
 export async function omnichannelPerformanceRoutes(app: FastifyInstance): Promise<void> {
-  const baseGuard = [authMiddleware, tenantSchemaFromJwt];
+  const baseGuard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt];
   const managerGuard = [...baseGuard, requirePermission('metrics:view')];
 
   app.get('/performance', { preHandler: baseGuard }, async (request, reply) => {

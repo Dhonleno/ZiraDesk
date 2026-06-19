@@ -92,7 +92,7 @@ async function createTempTenant(track = true): Promise<TempTenant> {
       maxUsers: 50,
       maxContacts: 500,
       isActive: true,
-      features: {},
+      features: { whatsapp: true, email: true, live_chat: true, reports: true, api_access: true, custom_domain: true, sla: true, webhooks: true },
     },
     create: {
       name: 'Plano Teste',
@@ -102,7 +102,7 @@ async function createTempTenant(track = true): Promise<TempTenant> {
       maxUsers: 50,
       maxContacts: 500,
       isActive: true,
-      features: {},
+      features: { whatsapp: true, email: true, live_chat: true, reports: true, api_access: true, custom_domain: true, sla: true, webhooks: true },
     },
   });
 

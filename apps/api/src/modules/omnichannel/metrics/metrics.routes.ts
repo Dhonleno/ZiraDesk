@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { prisma } from '../../../config/database.js';
@@ -18,6 +19,7 @@ import {
 } from './metrics.service.js';
 
 const guard = [authMiddleware, hasRole('owner', 'admin', 'agent'), tenantSchemaFromJwt];
+const reportsGuard = [authMiddleware, requireFeature('reports'), hasRole('owner', 'admin', 'agent'), tenantSchemaFromJwt];
 
 const metricsQuerySchema = z.object({
   date_from: z.string().optional(),
@@ -182,7 +184,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/overview', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/overview', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -202,7 +204,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/volume', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/volume', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -222,7 +224,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/by-agent', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/by-agent', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -242,7 +244,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/by-channel', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/by-channel', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -262,7 +264,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/by-department', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/by-department', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -282,7 +284,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/by-organization', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/by-organization', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -302,7 +304,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/peak-hours', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/peak-hours', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -322,7 +324,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/csat', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/csat', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -342,7 +344,7 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
-  app.get('/metrics/csat-over-time', { preHandler: guard }, async (request, reply) => {
+  app.get('/metrics/csat-over-time', { preHandler: reportsGuard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({

@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireFeature } from '../../middleware/entitlement.js';
 import { hasRole } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { prisma } from '../../config/database.js';
 import { getTicketsMetrics } from './tickets-metrics.service.js';
 
-const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
+const guard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
 
 const ticketsMetricsQuerySchema = z.object({
   date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato esperado: YYYY-MM-DD'),

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
+import { requireFeature } from '../../../middleware/entitlement.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../../crm/crm.infrastructure.js';
@@ -7,6 +8,7 @@ import { getOverview } from './stats.service.js';
 
 const guard = [
   authMiddleware,
+  requireFeature('reports'),
   tenantSchemaFromJwt,
   ensureCrmInfrastructureMiddleware,
   requirePermission('metrics:view'),

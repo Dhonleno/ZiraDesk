@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
+import { requireFeature } from '../../middleware/entitlement.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import {
@@ -19,7 +20,7 @@ import {
 } from './goals.service.js';
 
 export async function omnichannelGoalsRoutes(app: FastifyInstance): Promise<void> {
-  const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('metrics:view')];
+  const guard = [authMiddleware, requireFeature('sla'), tenantSchemaFromJwt, requirePermission('metrics:view')];
 
   app.get('/goals', { preHandler: guard }, async (request, reply) => {
     const parsed = goalsQuerySchema.safeParse(request.query);
