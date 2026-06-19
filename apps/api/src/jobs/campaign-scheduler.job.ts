@@ -3,6 +3,7 @@ import { bullmqConnection } from '../config/redis.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { hasFeature } from '../middleware/entitlement.js';
+import { checkMessageQuota } from '../services/usage.service.js';
 import { campaignSendQueue } from './queue.js';
 
 interface ScheduledCampaignRow {
@@ -41,7 +42,7 @@ export const campaignSchedulerWorker = new Worker(
         id: true,
         schemaName: true,
         status: true,
-        plan: { select: { features: true } },
+        plan: { select: { features: true, maxMessages: true } },
       },
     });
 
@@ -50,6 +51,16 @@ export const campaignSchedulerWorker = new Worker(
 
       if (!hasFeature(tenant.plan?.features as Record<string, boolean> | undefined, 'whatsapp')) {
         logger.warn({ tenantId: tenant.id }, 'campaign-scheduler: skipped — whatsapp feature not in plan');
+        continue;
+      }
+
+      const maxMessages = tenant.plan?.maxMessages ?? -1;
+      const withinQuota = await checkMessageQuota(tenant.id, maxMessages);
+      if (!withinQuota) {
+        logger.warn(
+          { tenantId: tenant.id, maxMessages },
+          'campaign-scheduler: skipped — monthly message quota exceeded',
+        );
         continue;
       }
 
