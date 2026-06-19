@@ -44,10 +44,25 @@ model Tenant {
   settings    Json         @default("{}")
   createdAt   DateTime     @default(now()) @map("created_at")
 
-  plan          Plan           @relation(fields: [planId], references: [id])
-  subscriptions Subscription[]
+  plan           Plan            @relation(fields: [planId], references: [id])
+  subscriptions  Subscription[]
+  usageSnapshots UsageSnapshot[]
 
   @@map("tenants")
+}
+
+model UsageSnapshot {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  metric    String
+  period    String
+  value     BigInt   @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, metric, period])
+  @@map("usage_snapshots")
 }
 
 model Subscription {

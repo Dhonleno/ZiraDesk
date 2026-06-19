@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { bullmqConnection } from '../config/redis.js';
+import { logger } from '../config/logger.js';
 
 export interface ContactImportJobData {
   importId: string;
@@ -45,5 +46,23 @@ export const contactImportQueue = new Queue<ContactImportJobData>('ziradesk-cont
     removeOnFail: 50,
   },
 });
+
+export const usageSnapshotQueue = new Queue('usage-snapshot', {
+  connection: bullmqConnection,
+  defaultJobOptions: {
+    attempts: 2,
+    removeOnComplete: 50,
+    removeOnFail: 20,
+  },
+});
+
+void usageSnapshotQueue
+  .add('daily-flush', {}, {
+    repeat: { pattern: '5 0 * * *' },
+    jobId: 'usage-snapshot-daily-flush',
+  })
+  .catch((err: unknown) => {
+    logger.error({ err }, '[UsageSnapshot] Failed to register repeatable job');
+  });
 
 export { knowledgeIndexQueue } from './knowledge-index.job.js';

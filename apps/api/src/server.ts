@@ -13,6 +13,7 @@ import './jobs/queue-expire-24h.job.js'; // encerra conversas sem atendimento ap
 import './jobs/campaign-send.job.js'; // processa disparos de campanhas
 import './jobs/campaign-scheduler.job.js'; // agenda campanhas programadas
 import './jobs/contact-import.job.js'; // processa importação assíncrona de contatos
+import './jobs/usage-snapshot.job.js'; // persiste snapshots diarios de uso
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';

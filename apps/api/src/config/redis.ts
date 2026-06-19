@@ -4,6 +4,7 @@ import { env } from './env.js';
 
 interface RedisClientLike {
   get(key: string): Promise<string | null>;
+  incrby(key: string, increment: number): Promise<number>;
   set(key: string, value: string, ...args: unknown[]): Promise<string>;
   setex(key: string, seconds: number, value: string): Promise<string>;
   expire(key: string, seconds: number): Promise<number>;
@@ -31,6 +32,14 @@ class InMemoryRedisClient implements RedisClientLike {
   async get(key: string): Promise<string | null> {
     this.purgeIfExpired(key);
     return this.store.get(key)?.value ?? null;
+  }
+
+  async incrby(key: string, increment: number): Promise<number> {
+    this.purgeIfExpired(key);
+    const current = Number.parseInt(this.store.get(key)?.value ?? '0', 10);
+    const next = current + increment;
+    this.store.set(key, { value: String(next), expiresAt: this.store.get(key)?.expiresAt ?? null });
+    return next;
   }
 
   async set(key: string, value: string, ...args: unknown[]): Promise<string> {
