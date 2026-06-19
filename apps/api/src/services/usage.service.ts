@@ -63,22 +63,42 @@ export async function flushUsageToDb(
   logger.debug({ tenantId, metric, period: p, value: val }, 'usage flushed to db');
 }
 
+async function flushActiveUsers(tenantId: string, schemaName: string, period: string): Promise<void> {
+  const schemaRef = quoteIdent(schemaName);
+  const result = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+    `SELECT COUNT(*)::bigint AS count FROM ${schemaRef}.users WHERE status = 'active'`,
+  );
+  const value = BigInt(result[0]?.count ?? 0);
+
+  await prisma.usageSnapshot.upsert({
+    where: { tenantId_metric_period: { tenantId, metric: 'active_users', period } },
+    update: { value, updatedAt: new Date() },
+    create: { tenantId, metric: 'active_users', period, value },
+  });
+
+  logger.debug({ tenantId, schemaName, value: value.toString() }, 'active_users flushed to db');
+}
+
 /** Flush de todas as metricas de todos os tenants ativos (usado pelo job diario). */
 export async function flushAllTenantsUsage(): Promise<void> {
   const tenants = await prisma.tenant.findMany({
     where: { status: { in: ['active', 'trial'] } },
-    select: { id: true },
+    select: { id: true, schemaName: true },
   });
 
   const period = currentPeriod();
-  const metrics: UsageMetric[] = ['messages_sent', 'storage_bytes', 'active_users'];
+  const redisMetrics: UsageMetric[] = ['messages_sent', 'storage_bytes'];
 
   for (const tenant of tenants) {
-    for (const metric of metrics) {
+    for (const metric of redisMetrics) {
       await flushUsageToDb(tenant.id, metric, period).catch((err: unknown) =>
         logger.error({ err, tenantId: tenant.id, metric }, 'usage flush error'),
       );
     }
+
+    await flushActiveUsers(tenant.id, tenant.schemaName, period).catch((err: unknown) =>
+      logger.error({ err, tenantId: tenant.id, metric: 'active_users' }, 'active_users flush error'),
+    );
   }
 }
 
