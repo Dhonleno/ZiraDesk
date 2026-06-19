@@ -2929,6 +2929,19 @@ export interface MetricsCsatPoint {
   total: number;
 }
 
+export interface MetricsCsatOverTimePoint {
+  date: string;
+  avg_score: number;
+  total: number;
+}
+
+export interface MetricsByOrganizationPoint {
+  organization_id: string;
+  organization_name: string;
+  total: number;
+  resolved: number;
+}
+
 export interface MetricsByTypePoint {
   typeId: string;
   label: string;
@@ -3053,6 +3066,14 @@ export const omnichannelApi = {
     },
     getCsat: async (params?: MetricsFiltersParams): Promise<MetricsCsatPoint[]> => {
       const res = await api.get<{ success: boolean; data: MetricsCsatPoint[] }>('/omnichannel/metrics/csat', { params });
+      return res.data.data;
+    },
+    getCsatOverTime: async (params?: MetricsFiltersParams): Promise<MetricsCsatOverTimePoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsCsatOverTimePoint[] }>('/omnichannel/metrics/csat-over-time', { params });
+      return res.data.data;
+    },
+    getByOrganization: async (params?: MetricsFiltersParams): Promise<MetricsByOrganizationPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsByOrganizationPoint[] }>('/omnichannel/metrics/by-organization', { params });
       return res.data.data;
     },
   },

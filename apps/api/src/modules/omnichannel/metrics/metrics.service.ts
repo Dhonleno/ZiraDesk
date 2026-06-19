@@ -402,6 +402,56 @@ export async function getByDepartment(filters: MetricsFilters, schemaName: strin
   });
 }
 
+export async function getByOrganization(
+  filters: MetricsFilters,
+  schemaName: string,
+  db: MetricsDbClient = prisma,
+  limit = 10,
+): Promise<Array<{
+  organization_id: string;
+  organization_name: string;
+  total: number;
+  resolved: number;
+}>> {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const where: string[] = ['c.organization_id IS NOT NULL'];
+    const params: unknown[] = [];
+    addCommonFilters(where, params, filters, 'c');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const limitParam = Math.max(1, Math.min(100, Math.trunc(limit)));
+
+    const rows = await tx.$queryRawUnsafe<Array<{
+      organization_id: string;
+      organization_name: string;
+      total: bigint;
+      resolved: bigint;
+    }>>(
+      `SELECT
+         o.id AS organization_id,
+         o.name AS organization_name,
+         COUNT(c.id) AS total,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved
+       FROM conversations c
+       INNER JOIN organizations o ON o.id = c.organization_id
+       ${whereSql}
+       GROUP BY o.id, o.name
+       ORDER BY total DESC
+       LIMIT $${params.length + 1}::integer`,
+      ...params,
+      limitParam,
+    );
+
+    return rows.map((row) => ({
+      organization_id: row.organization_id,
+      organization_name: row.organization_name,
+      total: toNumber(row.total),
+      resolved: toNumber(row.resolved),
+    }));
+  });
+}
+
 export async function getPeakHours(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
   await ensureMetricsInfrastructure(schemaName);
 
@@ -533,6 +583,46 @@ export async function getCsatDistribution(filters: MetricsFilters, schemaName: s
 
     return rows.map((row) => ({
       score: row.score,
+      total: toNumber(row.total),
+    }));
+  });
+}
+
+export async function getCsatOverTime(
+  filters: MetricsFilters,
+  schemaName: string,
+  db: MetricsDbClient = prisma,
+  timezone = 'UTC',
+): Promise<Array<{ date: string; avg_score: number; total: number }>> {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const where: string[] = ['c.csat_score IS NOT NULL'];
+    const params: unknown[] = [];
+    addCommonFilters(where, params, filters, 'c');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const timezoneParam = params.length + 1;
+
+    const rows = await tx.$queryRawUnsafe<Array<{
+      date: Date | string;
+      avg_score: number | null;
+      total: bigint;
+    }>>(
+      `SELECT
+         DATE(c.created_at AT TIME ZONE $${timezoneParam}::text) AS date,
+         ROUND(AVG(c.csat_score)::numeric, 2)::float AS avg_score,
+         COUNT(*) AS total
+       FROM conversations c
+       ${whereSql}
+       GROUP BY DATE(c.created_at AT TIME ZONE $${timezoneParam}::text)
+       ORDER BY date ASC`,
+      ...params,
+      timezone,
+    );
+
+    return rows.map((row) => ({
+      date: row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10),
+      avg_score: row.avg_score === null ? 0 : Number(row.avg_score),
       total: toNumber(row.total),
     }));
   });

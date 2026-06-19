@@ -8,7 +8,9 @@ import {
   getByAgent,
   getByChannel,
   getByDepartment,
+  getByOrganization,
   getCsatDistribution,
+  getCsatOverTime,
   getMyStats,
   getOverview,
   getPeakHours,
@@ -280,6 +282,26 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
+  app.get('/metrics/by-organization', { preHandler: guard }, async (request, reply) => {
+    const parsed = metricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = await resolveSchemaNameFromRequest(request)();
+      const data = await getByOrganization(getFilters(parsed.data), schemaName, prisma, 10);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar métricas' },
+      });
+    }
+  });
+
   app.get('/metrics/peak-hours', { preHandler: guard }, async (request, reply) => {
     const parsed = metricsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -311,6 +333,27 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     try {
       const schemaName = await resolveSchemaNameFromRequest(request)();
       const data = await getCsatDistribution(getFilters(parsed.data), schemaName);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar métricas' },
+      });
+    }
+  });
+
+  app.get('/metrics/csat-over-time', { preHandler: guard }, async (request, reply) => {
+    const parsed = metricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = await resolveSchemaNameFromRequest(request)();
+      const tenantTimezone = await resolveTimezoneFromRequest(request)();
+      const data = await getCsatOverTime(getFilters(parsed.data), schemaName, prisma, tenantTimezone);
       return reply.send({ success: true, data });
     } catch (error) {
       return reply.code(400).send({
