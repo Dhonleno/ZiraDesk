@@ -378,9 +378,19 @@ async function syncActiveConversationCounters(
   }
 }
 
+const CHANNEL_CACHE_TTL_S = 60;
+
 async function findChannelByPhoneNumberId(
   phoneNumberId: string,
 ): Promise<ChannelMatch | null> {
+  const cacheKey = `whatsapp:channel:${phoneNumberId}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached) as ChannelMatch;
+  } catch {
+    // cache miss or Redis unavailable — continue with DB scan
+  }
+
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
   );
@@ -415,12 +425,18 @@ async function findChannelByPhoneNumberId(
       }
       const channelPhoneNumberId = getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id');
       if (channelPhoneNumberId === phoneNumberId) {
-        return {
+        const match: ChannelMatch = {
           tenantId: tenant.id,
           schemaName: tenant.schema_name,
           channelId: channel.id,
           channelCredentials: withWhatsappEnvFallback(credentials as Record<string, string>),
         };
+        try {
+          await redis.set(cacheKey, JSON.stringify(match), 'EX', CHANNEL_CACHE_TTL_S);
+        } catch {
+          // silent
+        }
+        return match;
       }
 
       if (!channelPhoneNumberId && env.WHATSAPP_PHONE_NUMBER_ID === phoneNumberId) {
@@ -436,7 +452,13 @@ async function findChannelByPhoneNumberId(
 
   if (envFallbackMatches.length === 1) {
     logger.warn({ phoneNumberId }, '[WhatsApp] Using .env fallback — channel credentials are missing phoneNumberId');
-    return envFallbackMatches[0]!;
+    const match = envFallbackMatches[0]!;
+    try {
+      await redis.set(cacheKey, JSON.stringify(match), 'EX', CHANNEL_CACHE_TTL_S);
+    } catch {
+      // silent
+    }
+    return match;
   }
 
   if (envFallbackMatches.length > 1) {

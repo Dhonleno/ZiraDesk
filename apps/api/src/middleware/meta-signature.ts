@@ -2,7 +2,28 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
+import { redis } from '../config/redis.js';
 import { decryptCredentials } from '../utils/crypto.js';
+
+const APP_SECRETS_CACHE_TTL_S = 60;
+const CHANNEL_CACHE_TTL_S = 60;
+
+function applyWhatsAppEnvFallback(credentials: Record<string, string>): Record<string, string> {
+  const get = (...keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = credentials[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return undefined;
+  };
+  return {
+    ...credentials,
+    phoneNumberId: get('phoneNumberId', 'phone_number_id') ?? env.WHATSAPP_PHONE_NUMBER_ID,
+    wabaId: get('wabaId', 'waba_id') ?? env.WHATSAPP_WABA_ID,
+    accessToken: get('accessToken', 'access_token') ?? env.WHATSAPP_ACCESS_TOKEN,
+    verifyToken: get('verifyToken', 'verify_token') ?? env.WHATSAPP_VERIFY_TOKEN,
+  };
+}
 
 type FastifyRequestWithRawBody = FastifyRequest & {
   rawBody?: Buffer;
@@ -56,17 +77,28 @@ async function resolveWhatsAppAppSecrets(body: unknown): Promise<string[]> {
   const { phoneNumberIds, wabaIds } = extractWhatsAppIdentifiers(body);
   if (phoneNumberIds.size === 0 && wabaIds.size === 0) return [];
 
-  const tenants = await prisma.$queryRawUnsafe<Array<{ schema_name: string }>>(
-    `SELECT schema_name FROM tenants WHERE status IN ('active', 'trial')`,
+  // Per-phoneNumberId cache: safe across tests (each test uses a unique phoneId)
+  const firstPhoneId = [...phoneNumberIds][0];
+  if (firstPhoneId) {
+    try {
+      const cached = await redis.get(`whatsapp:app-secrets:${firstPhoneId}`);
+      if (cached) return JSON.parse(cached) as string[];
+    } catch {
+      // cache miss or Redis unavailable — continue with DB scan
+    }
+  }
+
+  const tenants = await prisma.$queryRawUnsafe<Array<{ id: string; schema_name: string }>>(
+    `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
   );
   const secrets = new Set<string>();
 
   for (const tenant of tenants) {
     if (!/^[a-z0-9_]+$/.test(tenant.schema_name)) continue;
-    let channels: Array<{ credentials: string | object }>;
+    let channels: Array<{ id: string; credentials: string | object }>;
     try {
-      channels = await prisma.$queryRawUnsafe<Array<{ credentials: string | object }>>(
-        `SELECT credentials
+      channels = await prisma.$queryRawUnsafe<Array<{ id: string; credentials: string | object }>>(
+        `SELECT id, credentials
            FROM "${tenant.schema_name}".channels
           WHERE type = 'whatsapp' AND status = 'active'`,
       );
@@ -81,20 +113,53 @@ async function resolveWhatsAppAppSecrets(body: unknown): Promise<string[]> {
       } catch {
         continue;
       }
-      const phoneNumberId = credentials.phoneNumberId ?? credentials.phone_number_id;
-      const wabaId = credentials.wabaId ?? credentials.waba_id;
+      const phoneId = (credentials.phoneNumberId ?? credentials.phone_number_id ?? '').trim();
+      const wabaId = (credentials.wabaId ?? credentials.waba_id ?? '').trim();
       const matches = (
-        Boolean(phoneNumberId && phoneNumberIds.has(phoneNumberId))
+        Boolean(phoneId && phoneNumberIds.has(phoneId))
         || Boolean(wabaId && wabaIds.has(wabaId))
       );
       if (!matches) continue;
 
       const appSecret = credentials.appSecret ?? credentials.app_secret ?? env.META_APP_SECRET;
       if (appSecret) secrets.add(appSecret);
+
+      // Populate channel cache so findChannelByPhoneNumberId gets a cache hit on the same request
+      if (phoneId && phoneNumberIds.has(phoneId)) {
+        const channelMatch = {
+          tenantId: tenant.id,
+          schemaName: tenant.schema_name,
+          channelId: channel.id,
+          channelCredentials: applyWhatsAppEnvFallback(credentials),
+        };
+        try {
+          await redis.set(
+            `whatsapp:channel:${phoneId}`,
+            JSON.stringify(channelMatch),
+            'EX',
+            CHANNEL_CACHE_TTL_S,
+          );
+        } catch {
+          // silent
+        }
+      }
     }
   }
 
-  return Array.from(secrets);
+  const result = Array.from(secrets);
+  if (firstPhoneId && result.length > 0) {
+    try {
+      await redis.set(
+        `whatsapp:app-secrets:${firstPhoneId}`,
+        JSON.stringify(result),
+        'EX',
+        APP_SECRETS_CACHE_TTL_S,
+      );
+    } catch {
+      // silent
+    }
+  }
+  return result;
 }
 
 export async function verifyMetaSignature(

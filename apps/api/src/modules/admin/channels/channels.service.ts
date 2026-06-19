@@ -1,5 +1,6 @@
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
+import { redis } from '../../../config/redis.js';
 import { decryptCredentials, encryptCredentials } from '../../../utils/crypto.js';
 import { hasTenantEmailProvider } from '../../../services/email.service.js';
 import type { CreateChannelInput, UpdateChannelInput } from './channels.schema.js';
@@ -477,6 +478,17 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
     await validateAndConfigureWhatsAppChannel(mergedCredentials);
   }
 
+  if (existingRows[0].type === 'whatsapp') {
+    const oldPhoneId = (currentCredentials.phoneNumberId ?? currentCredentials.phone_number_id ?? '').trim();
+    try {
+      if (oldPhoneId) {
+        await redis.del(`whatsapp:channel:${oldPhoneId}`, `whatsapp:app-secrets:${oldPhoneId}`);
+      }
+    } catch {
+      // silent — cache invalidation is best-effort
+    }
+  }
+
   const encryptedCredentials = encryptCredentials(mergedCredentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
 
@@ -503,6 +515,14 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
 export async function deleteChannel(id: string, schemaName: string) {
   const tableRef = channelsTable(schemaName);
   await ensureChannelsInfrastructure(schemaName);
+  try {
+    const channelKeys = await redis.keys('whatsapp:channel:*');
+    const secretsKeys = await redis.keys('whatsapp:app-secrets:*');
+    const allKeys = [...channelKeys, ...secretsKeys];
+    if (allKeys.length > 0) await redis.del(...allKeys);
+  } catch {
+    // silent — cache invalidation is best-effort
+  }
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
     `UPDATE ${tableRef}
         SET status = 'inactive',
