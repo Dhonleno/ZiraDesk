@@ -18,6 +18,47 @@
     "enUS": "Inglês",
     "es": "Espanhol"
   },
+  "home": {
+    "title": "Início",
+    "subtitle": "Visão geral da operação",
+    "refresh": "Atualizar",
+    "navLabel": "Início",
+    "greeting": {
+      "morning": "Bom dia",
+      "afternoon": "Boa tarde",
+      "evening": "Boa noite"
+    },
+    "period": {
+      "today": "Hoje",
+      "7d": "7 dias",
+      "30d": "30 dias",
+      "month": "Mês"
+    },
+    "kpi": {
+      "total": "Atendimentos",
+      "resolved": "resolvidos",
+      "open": "Em aberto",
+      "tma": "TMA",
+      "firstResponse": "1ª Resposta",
+      "csat": "CSAT"
+    },
+    "charts": {
+      "volumeByDay": "Volume por dia",
+      "total": "Total",
+      "resolved": "Resolvidos",
+      "byChannel": "Por canal",
+      "peakHours": "Mapa de calor",
+      "peakHoursSub": "conversas por dia da semana e hora",
+      "byDept": "Por departamento",
+      "csatDist": "Distribuição CSAT",
+      "csatOverTime": "CSAT ao longo do tempo",
+      "csatAvg": "Média CSAT",
+      "byOrg": "Top organizações",
+      "byOrgSub": "por volume de atendimentos",
+      "topAgents": "Top agentes",
+      "noData": "Sem dados no período"
+    }
+  },
   "phone": {
     "invalid": "Número de telefone inválido",
     "invalidBR": "Celular brasileiro deve ter 9 após o DDD: (XX) 9XXXX-XXXX",

@@ -18,6 +18,47 @@
     "enUS": "English",
     "es": "Spanish"
   },
+  "home": {
+    "title": "Home",
+    "subtitle": "Operation overview",
+    "refresh": "Refresh",
+    "navLabel": "Home",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "period": {
+      "today": "Today",
+      "7d": "7 days",
+      "30d": "30 days",
+      "month": "Month"
+    },
+    "kpi": {
+      "total": "Conversations",
+      "resolved": "resolved",
+      "open": "Open",
+      "tma": "AHT",
+      "firstResponse": "1st Response",
+      "csat": "CSAT"
+    },
+    "charts": {
+      "volumeByDay": "Volume by day",
+      "total": "Total",
+      "resolved": "Resolved",
+      "byChannel": "By channel",
+      "peakHours": "Heat map",
+      "peakHoursSub": "conversations by weekday and hour",
+      "byDept": "By department",
+      "csatDist": "CSAT distribution",
+      "csatOverTime": "CSAT over time",
+      "csatAvg": "Avg CSAT",
+      "byOrg": "Top organizations",
+      "byOrgSub": "by conversation volume",
+      "topAgents": "Top agents",
+      "noData": "No data for this period"
+    }
+  },
   "phone": {
     "invalid": "Invalid phone number",
     "invalidBR": "Brazilian mobile numbers must include 9 after area code: (XX) 9XXXX-XXXX",

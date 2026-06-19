@@ -185,6 +185,7 @@ function LanguageSelector() {
 /* ── Breadcrumb ───────────────────────────────────────────────────────────── */
 function Breadcrumb() {
   const { t } = useTranslation('admin');
+  const { t: tCommon } = useTranslation('common');
   const { pathname } = useLocation();
 
   const isCRM     = pathname.startsWith('/crm');
@@ -194,6 +195,7 @@ function Breadcrumb() {
   const isProfile = pathname.startsWith('/profile');
 
   const routeLabels: Record<string, string> = {
+    '/home': tCommon('home.navLabel'),
     '/monitor': 'Monitor',
     '/omnichannel/monitor': 'Monitor',
     '/omnichannel/campaigns': 'Campanhas',
@@ -341,6 +343,7 @@ function usePauseDuration(startedAt: string | null): string {
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
   const { t } = useTranslation('admin');
+  const { t: tCommon } = useTranslation('common');
   const { canAny } = usePermission();
   const { user, token, logout, isLoggingOut } = useAuth();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -1048,6 +1051,16 @@ export function TenantLayout() {
             boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
           }}
         >
+          {/* Início */}
+          {isManager && (
+            <NavItem to="/home" title={tCommon('home.navLabel')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
+
           {/* Atendimentos */}
           <NavItem to="/omnichannel/conversations" title="Atendimentos">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>

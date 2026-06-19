@@ -18,6 +18,47 @@
     "enUS": "Inglés",
     "es": "Español"
   },
+  "home": {
+    "title": "Inicio",
+    "subtitle": "Resumen de la operación",
+    "refresh": "Actualizar",
+    "navLabel": "Inicio",
+    "greeting": {
+      "morning": "Buenos días",
+      "afternoon": "Buenas tardes",
+      "evening": "Buenas noches"
+    },
+    "period": {
+      "today": "Hoy",
+      "7d": "7 días",
+      "30d": "30 días",
+      "month": "Mes"
+    },
+    "kpi": {
+      "total": "Atenciones",
+      "resolved": "resueltas",
+      "open": "Abiertas",
+      "tma": "TMA",
+      "firstResponse": "1ª Respuesta",
+      "csat": "CSAT"
+    },
+    "charts": {
+      "volumeByDay": "Volumen por día",
+      "total": "Total",
+      "resolved": "Resueltos",
+      "byChannel": "Por canal",
+      "peakHours": "Mapa de calor",
+      "peakHoursSub": "conversaciones por día y hora",
+      "byDept": "Por departamento",
+      "csatDist": "Distribución CSAT",
+      "csatOverTime": "CSAT en el tiempo",
+      "csatAvg": "CSAT promedio",
+      "byOrg": "Top organizaciones",
+      "byOrgSub": "por volumen de atenciones",
+      "topAgents": "Top agentes",
+      "noData": "Sin datos en el período"
+    }
+  },
   "phone": {
     "invalid": "Número de teléfono inválido",
     "invalidBR": "El móvil brasileño debe tener 9 después del DDD: (XX) 9XXXX-XXXX",

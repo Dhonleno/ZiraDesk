@@ -65,6 +65,7 @@ import { PortalLgpd } from './pages/portal/PortalLgpd';
 import { TVDashboard } from './pages/tv/TVDashboard';
 import { CampaignsPage } from './pages/omnichannel/Campaigns';
 import { CampaignDetail } from './pages/omnichannel/CampaignDetail';
+import { HomePage } from './pages/home/Home';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { PrivacyPolicyPage, TermsOfUsePage } from './pages/legal/LegalDocuments';
 import i18n from './lib/i18n';
@@ -120,6 +121,14 @@ function RequireTenantUser({ children }: { children: ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+function HomeRedirect() {
+  const user = useAuthStore((s) => s.user);
+  const to = ['owner', 'admin', 'supervisor'].includes(user?.role ?? '')
+    ? '/home'
+    : '/omnichannel/conversations';
+  return <Navigate to={to} replace />;
 }
 
 export function App() {
@@ -199,7 +208,8 @@ export function App() {
               </RequireAuth>
             }
           >
-            <Route index element={<Navigate to="/omnichannel/conversations" replace />} />
+            <Route index element={<HomeRedirect />} />
+            <Route path="home" element={<HomePage />} />
             <Route path="monitor" element={<TVDashboard />} />
             <Route path="omnichannel" element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />

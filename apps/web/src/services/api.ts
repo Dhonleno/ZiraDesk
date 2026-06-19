@@ -3048,6 +3048,10 @@ export const omnichannelApi = {
       const res = await api.get<{ success: boolean; data: MetricsVolumePoint[] }>('/omnichannel/metrics/volume', { params });
       return res.data.data;
     },
+    getVolumeByPeriod: async (params?: MetricsFiltersParams): Promise<MetricsVolumePoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsVolumePoint[] }>('/omnichannel/metrics/volume', { params });
+      return res.data.data;
+    },
     getByAgent: async (params?: MetricsFiltersParams): Promise<MetricsByAgentPoint[]> => {
       const res = await api.get<{ success: boolean; data: MetricsByAgentPoint[] }>('/omnichannel/metrics/by-agent', { params });
       return res.data.data;
