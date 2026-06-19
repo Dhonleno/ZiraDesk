@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { PageShell } from '../../components/layout/PageShell';
 import { useAuth } from '../../hooks/useAuth';
-import { api, omnichannelApi, ticketsApi, type PerformanceMetricStatus } from '../../services/api';
+import { api, omnichannelApi, ticketsApi, type PerformanceMetricStatus, type Ticket } from '../../services/api';
 
 type Period = 'today' | '7d' | '30d' | 'month';
 type TokenColor = 'teal' | 'blue' | 'green' | 'amber' | 'purple' | 'red';
 
 const PERIODS: Period[] = ['today', '7d', '30d', 'month'];
+const TICKETS_PAGE_SIZE = 100;
 
 function getPeriodDates(period: Period): { date_from: string; date_to: string } {
   const today = new Date();
@@ -51,6 +52,26 @@ function getSaudacao(t: (key: string) => string): string {
   if (h < 12) return t('home.greeting.morning');
   if (h < 18) return t('home.greeting.afternoon');
   return t('home.greeting.evening');
+}
+
+async function listAssignedTickets(agentId: string): Promise<Ticket[]> {
+  const firstPage = await ticketsApi.list({
+    assigned_to: agentId,
+    per_page: TICKETS_PAGE_SIZE,
+    page: 1,
+  });
+  const tickets = [...firstPage.data];
+
+  for (let page = 2; page <= firstPage.meta.total_pages; page += 1) {
+    const nextPage = await ticketsApi.list({
+      assigned_to: agentId,
+      per_page: TICKETS_PAGE_SIZE,
+      page,
+    });
+    tickets.push(...nextPage.data);
+  }
+
+  return tickets;
 }
 
 export default function AgentHome() {
@@ -115,33 +136,9 @@ export default function AgentHome() {
     staleTime: 30_000,
   });
 
-  const { data: ticketsDueToday } = useQuery({
-    queryKey: ['agent-tickets-due', agentId, todayStr],
-    queryFn: async () => {
-      const res = await ticketsApi.list({ assigned_to: agentId, per_page: 200 });
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-      return res.data.filter((ticket) => {
-        if (!ticket.due_date) return false;
-        const d = new Date(ticket.due_date);
-        return d >= today && d < tomorrow && !['resolved', 'closed'].includes(ticket.status);
-      }).length;
-    },
-    enabled: Boolean(agentId),
-    refetchInterval: 300_000,
-    staleTime: 60_000,
-  });
-
-  const { data: ticketsOverdue } = useQuery({
-    queryKey: ['agent-tickets-overdue', agentId, todayStr],
-    queryFn: async () => {
-      const res = await ticketsApi.list({ assigned_to: agentId, per_page: 200 });
-      const now = new Date();
-      return res.data.filter((ticket) => {
-        if (!ticket.due_date) return false;
-        return new Date(ticket.due_date) < now && !['resolved', 'closed'].includes(ticket.status);
-      }).length;
-    },
+  const { data: assignedTickets = [] } = useQuery({
+    queryKey: ['agent-tickets-assigned', agentId, todayStr],
+    queryFn: () => listAssignedTickets(agentId),
     enabled: Boolean(agentId),
     refetchInterval: 300_000,
     staleTime: 60_000,
@@ -167,7 +164,11 @@ export default function AgentHome() {
     staleTime: 60_000,
   });
 
-  // Performance + metas do período
+  const tma = toNumber(myStats?.avg_minutes);
+  const csat = toNumber(myStats?.avg_csat);
+  const sla = toNumber(myStats?.sla_pct);
+
+  // Performance pessoal: a API restringe agentes ao próprio agent_id.
   const { data: perfData } = useQuery({
     queryKey: ['agent-perf', period, agentId],
     queryFn: () =>
@@ -186,9 +187,22 @@ export default function AgentHome() {
   const goal = agentPerf?.goal ?? null;
   const goalStatus = agentPerf?.goal_status ?? null;
 
-  const tma = toNumber(myStats?.avg_minutes);
-  const csat = toNumber(myStats?.avg_csat);
-  const sla = toNumber(myStats?.sla_pct);
+  const ticketsDueToday = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    return assignedTickets.filter((ticket) => {
+      if (!ticket.due_date) return false;
+      const dueDate = new Date(ticket.due_date);
+      return dueDate >= today && dueDate < tomorrow && !['resolved', 'closed'].includes(ticket.status);
+    }).length;
+  }, [assignedTickets]);
+  const ticketsOverdue = useMemo(() => {
+    const now = new Date();
+    return assignedTickets.filter((ticket) => {
+      if (!ticket.due_date) return false;
+      return new Date(ticket.due_date) < now && !['resolved', 'closed'].includes(ticket.status);
+    }).length;
+  }, [assignedTickets]);
 
   const slaColor: TokenColor =
     sla !== null && sla < 70 ? 'red' : sla !== null && sla < 90 ? 'amber' : 'green';
@@ -279,19 +293,19 @@ export default function AgentHome() {
                   value={ticketsWaiting ?? 0}
                   onClick={() => navigate('/tickets?status=waiting')}
                 />
-                {(ticketsDueToday ?? 0) > 0 && (
+                {ticketsDueToday > 0 && (
                   <WorkspaceRow
                     color="amber"
                     label={t('agentHome.tickets.dueToday')}
-                    value={ticketsDueToday ?? 0}
+                    value={ticketsDueToday}
                     onClick={() => navigate('/tickets')}
                   />
                 )}
-                {(ticketsOverdue ?? 0) > 0 && (
+                {ticketsOverdue > 0 && (
                   <WorkspaceRow
                     color="red"
                     label={t('agentHome.tickets.overdue')}
-                    value={ticketsOverdue ?? 0}
+                    value={ticketsOverdue}
                     onClick={() => navigate('/tickets')}
                   />
                 )}
@@ -340,8 +354,6 @@ export default function AgentHome() {
                   ))}
                 </div>
               }
-              cta={t('agentHome.metrics.cta')}
-              onCta={() => navigate('/omnichannel/performance')}
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <MetricBlock
