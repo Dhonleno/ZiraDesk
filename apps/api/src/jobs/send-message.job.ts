@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { sendEmail } from '../services/email.service.js';
+import { incrementUsage } from '../services/usage.service.js';
 import { getSocketServer } from '../socket/index.js';
 import { completeCampaignIfSettled } from '../modules/omnichannel/campaigns/campaign-delivery.service.js';
 import { closeFailedInitialOutbound } from '../modules/omnichannel/outbound-failure.service.js';
@@ -644,6 +645,11 @@ const worker = new Worker<SendMessageJob>(
           const wamid = result.messages?.[0]?.id;
           if (wamid) {
             await persistExternalId(job.data, wamid);
+            if (job.data.tenantId) {
+              incrementUsage(job.data.tenantId, 'messages_sent').catch((err: unknown) =>
+                logger.warn({ err, tenantId: job.data.tenantId }, 'usage: failed to increment messages_sent'),
+              );
+            }
             logger.info({ jobId: job.id, messageId: job.data.messageId, externalId: wamid }, '[WhatsApp Worker] Message sent');
           } else {
             await persistSentStatus(job.data);

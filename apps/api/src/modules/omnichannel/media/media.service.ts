@@ -1,5 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
+import { logger } from '../../../config/logger.js';
+import { incrementUsage } from '../../../services/usage.service.js';
 import { decryptCredentials } from '../../../utils/crypto.js';
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -146,6 +148,9 @@ export async function uploadConversationMedia(params: {
     params.filename,
     creds.phoneNumberId,
     creds.accessToken,
+  );
+  incrementUsage(params.tenantId, 'storage_bytes', params.sizeBytes).catch((err: unknown) =>
+    logger.warn({ err, tenantId: params.tenantId }, 'usage: failed to increment storage_bytes'),
   );
 
   return {
