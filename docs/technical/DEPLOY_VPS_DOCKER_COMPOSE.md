@@ -91,6 +91,73 @@ Detalhes importantes do fluxo atual:
 - a migration nao depende de `pnpm dlx` nem de download em runtime
 - a imagem final da API ja carrega o Prisma Client gerado no build
 
+## Backup e Recuperação
+
+### Configuração
+
+O backup automático é executado diariamente às 03h00 via cron
+no usuário `deploy` da VPS.
+
+**Destino:** Cloudflare R2 — bucket `ziradesk-backups`
+**Ferramenta:** rclone v1.74+ (instalado em `/usr/bin/rclone`)
+**Config rclone:** `/home/deploy/.config/rclone/rclone.conf`
+
+### O que é salvo
+
+| Item | Formato | Retenção |
+|------|---------|----------|
+| PostgreSQL (dump completo) | `.dump` (pg_dump -Fc) | 7 dias diários + 4 mensais |
+| Uploads (anexos e arquivos) | `.tar.gz` | 7 dias diários + 4 mensais |
+
+### Estrutura no R2
+
+```text
+ziradesk-backups/
+├── daily/
+│   ├── postgres/   ← retém 7 dias
+│   └── uploads/    ← retém 7 dias
+└── monthly/
+    └── YYYY-MM/    ← retém 28 dias (criado dia 1 de cada mês)
+```
+
+### Executar backup manual
+
+**Via GitHub Actions (recomendado):**
+1. Actions → "Backup Manual" → Run workflow
+2. Digite "backup" no campo de confirmação
+
+**Via SSH:**
+```bash
+ssh deploy@85.239.245.8
+/home/deploy/scripts/backup.sh
+tail -50 /home/deploy/ziradesk-backup.log
+```
+
+### Verificar backups no R2
+
+```bash
+ssh deploy@85.239.245.8
+rclone ls r2:ziradesk-backups \
+  --config /home/deploy/.config/rclone/rclone.conf
+```
+
+### Restaurar um backup
+
+```bash
+# 1. Baixar o dump do R2
+rclone copy r2:ziradesk-backups/daily/postgres/postgres_YYYY-MM-DD_HH-MM-SS.dump \
+  /tmp/ --config /home/deploy/.config/rclone/rclone.conf
+
+# 2. Executar restore (interativo, pede confirmação)
+/home/deploy/scripts/restore.sh /tmp/postgres_YYYY-MM-DD_HH-MM-SS.dump
+```
+
+### Log de backups
+
+```bash
+tail -100 /home/deploy/ziradesk-backup.log
+```
+
 ## Observações de segurança aplicadas
 
 - Apenas `nginx` publica portas externas (`80` e `443`).
