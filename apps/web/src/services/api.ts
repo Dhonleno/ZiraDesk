@@ -157,6 +157,15 @@ interface AdminStats {
   total_messages: number;
 }
 
+interface UsageSummary {
+  period: string;
+  metrics: {
+    messages_sent: { used: number; limit: number };
+    storage_bytes: { used: number; limit: number };
+    active_users: { used: number; limit: number };
+  };
+}
+
 interface PaginatedUsers {
   data: TenantUser[];
   meta: { total: number; page: number; per_page: number; total_pages: number };
@@ -1383,6 +1392,11 @@ export const adminApi = {
 
   getSettings: async (): Promise<TenantSettings> => {
     const res = await api.get<{ success: boolean; data: TenantSettings }>('/admin/settings');
+    return res.data.data;
+  },
+
+  getUsage: async (): Promise<UsageSummary> => {
+    const res = await api.get<{ success: boolean; data: UsageSummary }>('/admin/usage');
     return res.data.data;
   },
 

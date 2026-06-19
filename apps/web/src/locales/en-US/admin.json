@@ -1311,6 +1311,16 @@
       }
     }
   },
+  "usage": {
+    "title": "Plan usage",
+    "period": "Period: {{period}}",
+    "messages_sent": "Messages sent",
+    "storage_bytes": "Storage",
+    "active_users": "Active users",
+    "unlimited": "Unlimited",
+    "of": "of",
+    "used": "used"
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

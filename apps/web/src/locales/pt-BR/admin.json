@@ -1305,6 +1305,16 @@
       }
     }
   },
+  "usage": {
+    "title": "Uso do plano",
+    "period": "Período: {{period}}",
+    "messages_sent": "Mensagens enviadas",
+    "storage_bytes": "Armazenamento",
+    "active_users": "Usuários ativos",
+    "unlimited": "Ilimitado",
+    "of": "de",
+    "used": "usado"
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

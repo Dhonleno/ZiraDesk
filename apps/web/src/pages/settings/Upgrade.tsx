@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { adminApi, api } from '../../services/api';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { PageShell } from '../../components/layout/PageShell';
@@ -37,12 +38,95 @@ function featureList(plan: Plan) {
   ];
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function pct(used: number, limit: number): number {
+  if (limit === -1) return 0;
+  return Math.min(100, Math.round((used / limit) * 100));
+}
+
+function barColor(p: number): string {
+  if (p >= 90) return 'var(--red)';
+  if (p >= 75) return 'var(--amber)';
+  return 'var(--teal)';
+}
+
+interface UsageRowProps {
+  label: string;
+  used: number;
+  limit: number;
+  format?: (n: number) => string;
+}
+
+function UsageRow({ label, used, limit, format }: UsageRowProps) {
+  const { t } = useTranslation('admin');
+  const fmt = format ?? ((n: number) => n.toLocaleString('pt-BR'));
+  const p = pct(used, limit);
+  const color = barColor(p);
+  const isUnlimited = limit === -1;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{label}</span>
+        <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--txt)' }}>
+          {isUnlimited
+            ? `${fmt(used)} · ${t('usage.unlimited')}`
+            : `${fmt(used)} ${t('usage.of')} ${fmt(limit)}`}
+        </span>
+      </div>
+      <div
+        style={{
+          height: 4,
+          borderRadius: 'var(--r-pill)',
+          background: 'var(--bg-4)',
+          overflow: 'hidden',
+        }}
+      >
+        {!isUnlimited && (
+          <div
+            style={{
+              height: '100%',
+              width: `${p}%`,
+              background: color,
+              borderRadius: 'var(--r-pill)',
+              transition: 'width .4s ease',
+            }}
+          />
+        )}
+        {isUnlimited && (
+          <div
+            style={{
+              height: '100%',
+              width: '100%',
+              background: 'var(--teal)',
+              opacity: 0.25,
+              borderRadius: 'var(--r-pill)',
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Upgrade() {
+  const { t } = useTranslation('admin');
   const [annual, setAnnual] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
+  });
+
+  const { data: usage, isLoading: usageLoading } = useQuery({
+    queryKey: ['admin', 'usage'],
+    queryFn: adminApi.getUsage,
   });
 
   const { data: plans = [], isLoading } = useQuery({
@@ -72,6 +156,65 @@ export function Upgrade() {
           <button onClick={() => setAnnual(false)} style={{ border: 'none', borderRadius: 'var(--r-pill)', padding: '7px 12px', background: !annual ? 'var(--teal)' : 'transparent', color: !annual ? 'var(--on-teal)' : 'var(--txt-2)', fontWeight: 700, cursor: 'pointer' }}>Mensal</button>
           <button onClick={() => setAnnual(true)} style={{ border: 'none', borderRadius: 'var(--r-pill)', padding: '7px 12px', background: annual ? 'var(--teal)' : 'transparent', color: annual ? 'var(--on-teal)' : 'var(--txt-2)', fontWeight: 700, cursor: 'pointer' }}>Anual {discount > 0 ? `-${discount}%` : ''}</button>
         </div>
+      </div>
+
+      <div
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--r-lg)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: 'var(--txt-3)',
+            }}
+          >
+            {t('usage.title')}
+          </span>
+          {usage && (
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+              {t('usage.period', { period: usage.period })}
+            </span>
+          )}
+        </div>
+
+        {usageLoading ? (
+          <>
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+          </>
+        ) : usage ? (
+          <>
+            <UsageRow
+              label={t('usage.messages_sent')}
+              used={usage.metrics.messages_sent.used}
+              limit={usage.metrics.messages_sent.limit}
+            />
+            <UsageRow
+              label={t('usage.storage_bytes')}
+              used={usage.metrics.storage_bytes.used}
+              limit={usage.metrics.storage_bytes.limit}
+              format={formatBytes}
+            />
+            <UsageRow
+              label={t('usage.active_users')}
+              used={usage.metrics.active_users.used}
+              limit={usage.metrics.active_users.limit}
+            />
+          </>
+        ) : null}
       </div>
 
       {isLoading ? (
