@@ -40,7 +40,11 @@ function StatusPill({ status, failedCount = 0 }: { status: CampaignStatus; faile
       whiteSpace: 'nowrap',
       letterSpacing: '0.03em',
     }}>
-      {completedWithFailures ? t('status.completedWithFailures') : t(`status.${status}` as any)}
+      {completedWithFailures ? (
+        <span title={t('status.completedWithFailuresDetail', { count: failedCount })}>
+          {t('status.completedWithFailuresShort')}
+        </span>
+      ) : t(`status.${status}` as any)}
     </span>
   );
 }
@@ -48,11 +52,6 @@ function StatusPill({ status, failedCount = 0 }: { status: CampaignStatus; faile
 function formatDate(str: string | null | undefined): string {
   if (!str) return '—';
   return new Date(str).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function pct(num: number, denom: number): string {
-  if (!denom) return '0%';
-  return `${Math.round((num / denom) * 100)}%`;
 }
 
 const FILTERS: { value: StatusFilter; labelKey: string }[] = [
@@ -65,7 +64,7 @@ const FILTERS: { value: StatusFilter; labelKey: string }[] = [
   { value: 'cancelled', labelKey: 'status.cancelled' },
 ];
 
-const COL = 'minmax(0,2fr) 130px 72px 70px 70px 62px 68px minmax(120px,1fr) 80px';
+const COL = 'minmax(0,2fr) 130px 72px 70px 70px 62px 68px 110px minmax(120px,1fr) 80px';
 
 export function CampaignsPage() {
   const { t } = useTranslation('campaigns');
@@ -220,9 +219,18 @@ export function CampaignsPage() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {/* Column headers */}
         <div style={{ display: 'grid', gridTemplateColumns: COL, gap: 0, padding: '0 20px', background: 'var(--bg-3)', borderBottom: '1px solid var(--line)', position: 'sticky', top: 0, zIndex: 2 }}>
-          {[t('table.name'), t('table.status'), t('table.contacts'), t('table.sent'), t('table.delivered'), t('table.read'), t('table.replied'), t('table.scheduled'), t('table.actions')].map((col) => (
-            <div key={col} style={{ ...headerCell, padding: '8px 6px' }}>{col}</div>
-          ))}
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.name')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.status')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.contacts')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.sent')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.delivered')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.read')}</div>
+          <div title={t('table.replied')} style={{ ...headerCell, padding: '8px 6px' }}>
+            {t('table.repliedShort')}
+          </div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.createdBy')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.scheduled')}</div>
+          <div style={{ ...headerCell, padding: '8px 6px' }}>{t('table.actions')}</div>
         </div>
 
         {isLoading && (
@@ -267,10 +275,32 @@ export function CampaignsPage() {
             >
               {/* Name */}
               <div
-                style={{ ...dataCell, color: 'var(--txt)', fontWeight: 500, cursor: 'pointer', padding: '10px 6px 10px 0' }}
+                style={{ ...dataCell, color: 'var(--txt)', fontWeight: 500, cursor: 'pointer', padding: '10px 6px 10px 0', display: 'flex', alignItems: 'center' }}
                 onClick={() => navigate(`/omnichannel/campaigns/${campaign.id}`)}
               >
-                {campaign.name}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {campaign.name}
+                </span>
+                {campaign.failed_count > 0 && (
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="var(--amber)"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ flexShrink: 0, marginLeft: 6 }}
+                    role="img"
+                    aria-label={t('failedContacts', { count: campaign.failed_count })}
+                  >
+                    <title>{t('failedContacts', { count: campaign.failed_count })}</title>
+                    <path d="M8 2L14 13H2L8 2z" />
+                    <line x1="8" y1="7" x2="8" y2="9.5" />
+                    <line x1="8" y1="11" x2="8.01" y2="11" />
+                  </svg>
+                )}
               </div>
 
               {/* Status */}
@@ -287,9 +317,17 @@ export function CampaignsPage() {
               </div>
 
               {/* Delivered */}
-              <div style={{ ...dataCell, padding: '0 6px', fontFamily: 'var(--mono)', color: 'var(--green)' }}>
-                {campaign.delivered_count}
-                {campaign.sent_count > 0 && <span style={{ fontSize: 10, color: 'var(--txt-3)', marginLeft: 3 }}>{pct(campaign.delivered_count, campaign.sent_count)}</span>}
+              <div style={{ ...dataCell, padding: '0 6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--txt)' }}>
+                    {campaign.delivered_count}
+                  </span>
+                  {campaign.sent_count > 0 && (
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--txt-3)' }}>
+                      {Math.round((campaign.delivered_count / campaign.sent_count) * 100)}%
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Read */}
@@ -300,6 +338,14 @@ export function CampaignsPage() {
               {/* Replied */}
               <div style={{ ...dataCell, padding: '0 6px', fontFamily: 'var(--mono)', color: 'var(--teal)' }}>
                 {campaign.replied_count}
+              </div>
+
+              {/* Created by */}
+              <div
+                style={{ ...dataCell, padding: '0 6px' }}
+                title={campaign.created_by_name ?? '—'}
+              >
+                {campaign.created_by_name ?? '—'}
               </div>
 
               {/* Date */}

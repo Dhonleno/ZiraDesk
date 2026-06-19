@@ -15,6 +15,8 @@
     "paused": "Paused",
     "completed": "Completed",
     "completedWithFailures": "Completed with failures",
+    "completedWithFailuresShort": "w/ failures",
+    "completedWithFailuresDetail": "Completed with {{count}} failure(s)",
     "cancelled": "Cancelled",
     "all": "All"
   },
@@ -32,9 +34,12 @@
     "delivered": "Delivered",
     "read": "Read",
     "replied": "Replied",
+    "repliedShort": "Replies",
+    "createdBy": "Created by",
     "scheduled": "Scheduled/Started",
     "actions": "Actions"
   },
+  "failedContacts": "{{count}} contact(s) failed to send",
   "actions": {
     "view": "View details",
     "duplicate": "Duplicate",
