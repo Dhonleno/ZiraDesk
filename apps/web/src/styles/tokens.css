@@ -1039,6 +1039,12 @@
   display: grid;
 }
 
+.agent-home-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 12px;
+}
+
 .home-org-chart {
   display: flex;
   gap: 16px;
@@ -1461,6 +1467,7 @@
 }
 
 @media (max-width: 1024px) {
+  .agent-home-grid,
   .home-grid {
     grid-template-columns: 1fr !important;
   }
