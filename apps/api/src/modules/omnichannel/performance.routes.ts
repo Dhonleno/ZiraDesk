@@ -14,8 +14,8 @@ import {
 } from './performance.service.js';
 
 export async function omnichannelPerformanceRoutes(app: FastifyInstance): Promise<void> {
-  const baseGuard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt];
-  const managerGuard = [...baseGuard, requirePermission('metrics:view')];
+  const baseGuard = [authMiddleware, tenantSchemaFromJwt];
+  const managerGuard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt, requirePermission('metrics:view')];
 
   app.get('/performance', { preHandler: baseGuard }, async (request, reply) => {
     const parsed = performanceQuerySchema.safeParse(request.query);
@@ -41,6 +41,15 @@ export async function omnichannelPerformanceRoutes(app: FastifyInstance): Promis
           error: { code: 'FORBIDDEN', message: 'Permissão insuficiente' },
         });
       }
+    }
+
+    const isAgentOwnView =
+      request.user.role === 'agent'
+      && !parsed.data.export
+      && (!parsed.data.agent_id || parsed.data.agent_id === request.user.id);
+    if (!isAgentOwnView) {
+      await requireFeature('reports')(request, reply);
+      if (reply.sent) return;
     }
 
     const query = canViewMetrics
