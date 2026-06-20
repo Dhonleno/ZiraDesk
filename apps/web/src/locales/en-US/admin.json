@@ -1321,6 +1321,20 @@
     "of": "of",
     "used": "used"
   },
+  "tenantDetail": {
+    "usage": {
+      "title": "Plan usage",
+      "subtitle": "Current tenant consumption for the active period.",
+      "period": "Period: {{period}}",
+      "messages_sent": "Messages sent",
+      "storage_bytes": "Storage",
+      "active_users": "Active users",
+      "unlimited": "Unlimited",
+      "of": "of",
+      "used": "used",
+      "error": "Unable to load plan usage."
+    }
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

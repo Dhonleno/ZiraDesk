@@ -1315,6 +1315,20 @@
     "of": "de",
     "used": "usado"
   },
+  "tenantDetail": {
+    "usage": {
+      "title": "Uso do plano",
+      "subtitle": "Consumo atual do tenant no período vigente.",
+      "period": "Período: {{period}}",
+      "messages_sent": "Mensagens enviadas",
+      "storage_bytes": "Armazenamento",
+      "active_users": "Usuários ativos",
+      "unlimited": "Ilimitado",
+      "of": "de",
+      "used": "usado",
+      "error": "Não foi possível carregar o uso do plano."
+    }
+  },
   "superAdmin": {
     "title": "Super Admin",
     "tenants": {

@@ -157,7 +157,7 @@ interface AdminStats {
   total_messages: number;
 }
 
-interface UsageSummary {
+export interface UsageSummary {
   period: string;
   metrics: {
     messages_sent: { used: number; limit: number };
@@ -2184,6 +2184,11 @@ interface TenantLgpdMetrics {
 }
 
 export const superAdminApi = {
+  getTenantUsage: async (tenantId: string): Promise<UsageSummary> => {
+    const res = await api.get<{ success: boolean; data: UsageSummary }>(`/super-admin/tenants/${tenantId}/usage`);
+    return res.data.data;
+  },
+
   getLgpdMetrics: async (): Promise<{
     tenants: TenantLgpdMetrics[];
     summary: {
