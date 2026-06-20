@@ -683,7 +683,8 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
         ? conv.metadata.bot_department
         : null;
     const isAwaitingBotChoice = conv.metadata?.bot_stage === 'waiting_choice';
-    const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice;
+    const isAiAgentActive = conv.metadata?.ai_agent_active === true;
+    const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice && !isAiAgentActive;
     const itemClassName = [
       hasNewActivity ? 'zd-flash' : '',
       isNewConversation ? 'zd-slide-down' : '',

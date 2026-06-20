@@ -1478,6 +1478,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const isClosedForComposer = isClosed || isConversationClosed;
   const isUnassigned = !conv?.assigned_to;
   const isAwaitingBotChoice = conv?.metadata?.['bot_stage'] === 'waiting_choice';
+  const isAiAgentActive = conv?.metadata?.['ai_agent_active'] === true;
   const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
   const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
   const acceptedHelpers = helpers.filter((helper) => helper.status === 'accepted');
@@ -1486,7 +1487,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const canManageConversation = can('conversations:manage');
   const canReplyConversation = can('conversations:reply');
   const canSendMessage = canReplyConversation && (isAssignedToMe || isHelper) && !isClosedForComposer;
-  const canAssume = isUnassigned && !isAwaitingBotChoice && !isClosedForComposer;
+  const canAssume = conv?.status === 'open' && isUnassigned && !isAwaitingBotChoice && !isAiAgentActive && !isClosedForComposer;
   const canTransfer = canManageConversation && (isAssignedToMe || canManageConversation) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
   const displayName = conv?.contact_name ?? t('visitor');
