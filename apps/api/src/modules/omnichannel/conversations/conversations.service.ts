@@ -327,6 +327,7 @@ function buildListConversationSqlContext(
       break;
     case 'closed':
       conditions.push("c.status = 'closed'");
+      conditions.push(`c.closed_by_user_id = ${pushParam(userId ?? null)}::uuid`);
       break;
     default:
       conditions.push('c.assigned_to IS NOT NULL');
@@ -644,6 +645,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
        ) AS queue,
        COUNT(*) FILTER (
          WHERE status = 'closed'
+           AND closed_by_user_id = $1::uuid
        ) AS closed
      FROM ${conversationRef}`,
     userId ?? null,
@@ -1904,6 +1906,7 @@ export async function closeConversation(
            close_outcome_id = $3,
            closed_at = $4,
            resolved_at = $4,
+           closed_by_user_id = $6::uuid,
            waiting_expires_at = NULL,
            queue_entered_at = NULL
        WHERE id = $5::uuid
@@ -1913,6 +1916,7 @@ export async function closeConversation(
       body.closeOutcomeId ?? null,
       closedAt,
       conversationId,
+      actorUserId,
     );
 
     const conversation = rows[0];

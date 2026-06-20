@@ -445,6 +445,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
       close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
       closed_at       TIMESTAMPTZ,
+      closed_by_user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       closure_reason  JSONB,
       waiting_expires_at TIMESTAMPTZ,
       queue_entered_at TIMESTAMPTZ,
@@ -471,6 +472,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "idx_conversations_close_outcome"
     ON "${schemaName}".conversations(close_outcome_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_closed_by_status"
+    ON "${schemaName}".conversations(closed_by_user_id, status)
+    WHERE status = 'closed'
   `);
 
   await prisma.$executeRawUnsafe(`
