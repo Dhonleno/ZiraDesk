@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, organizationsApi } from '../../services/api';
 import type { CrmOrganization } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -54,6 +54,7 @@ export function OrganizationsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermission();
+  const { id: routeId } = useParams<{ id?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
   const [segmentRaw, setSegmentRaw] = useState(searchParams.get('segment') ?? '');
@@ -63,7 +64,7 @@ export function OrganizationsPage() {
   const [sortBy, setSortBy] = useState<SortBy>(parseSortBy(searchParams.get('sort_by')));
   const [sortOrder, setSortOrder] = useState<SortOrder>(parseSortOrder(searchParams.get('sort_order')));
   const [page, setPage] = useState<number>(parsePage(searchParams.get('page')));
-  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id'));
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id') ?? routeId ?? null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -90,7 +91,7 @@ export function OrganizationsPage() {
   }, []);
 
   useEffect(() => {
-    const id = searchParams.get('id');
+    const id = searchParams.get('id') ?? routeId ?? null;
     const q = searchParams.get('q') ?? '';
     const nextSegment = searchParams.get('segment') ?? '';
     const nextTag = searchParams.get('tag') ?? '';
@@ -109,7 +110,7 @@ export function OrganizationsPage() {
     setSortBy((prev) => (prev === nextSortBy ? prev : nextSortBy));
     setSortOrder((prev) => (prev === nextSortOrder ? prev : nextSortOrder));
     setPage((prev) => (prev === nextPage ? prev : nextPage));
-  }, [searchParams]);
+  }, [routeId, searchParams]);
 
   function updateParams(next: {
     id?: string | null;

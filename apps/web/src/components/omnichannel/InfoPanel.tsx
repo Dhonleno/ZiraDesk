@@ -492,7 +492,7 @@ export function InfoPanel({ conversationId }: Props) {
 
                   {organizationId ? (
                     <button
-                      onClick={() => navigate(`/crm/organizations?id=${organizationId}`)}
+                      onClick={() => navigate(`/crm/organizations/${organizationId}`)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 11, fontFamily: 'var(--font)', cursor: 'pointer', transition: 'all .15s' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-4)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-3)'; }}
