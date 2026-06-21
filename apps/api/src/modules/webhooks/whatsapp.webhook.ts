@@ -1820,6 +1820,16 @@ async function processIncomingMessage(
       conversationId: result.conversationId,
       status: 'open',
     });
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:assigned', {
+      conversationId: result.conversationId,
+    });
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('notification:new', {
+      type: 'conversation.assigned',
+      title: 'Conversa atribuída',
+      message: 'Um atendimento foi atribuído a você',
+      conversationId: result.conversationId,
+      createdAt: new Date().toISOString(),
+    });
   }
 
   if (result.isNewConversation) {

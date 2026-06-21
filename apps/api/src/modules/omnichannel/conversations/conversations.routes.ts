@@ -741,6 +741,13 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           conversationId,
           agentId: result.targetUserId,
         });
+        io.to(`agent:${result.targetUserId}`).emit('notification:new', {
+          type: 'conversation.assigned',
+          title: 'Conversa transferida',
+          message: 'Um atendimento foi transferido para você',
+          conversationId,
+          createdAt: new Date().toISOString(),
+        });
         io.to(`tenant:${tenantId}`).emit('conversation:updated', {
           conversationId,
           assignedTo: result.targetUserId,
@@ -845,7 +852,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const conversation = await updateConversation(
+      const { conversation, previousAssignedTo } = await updateConversation(
         request.params.id,
         parsed.data,
         request.user.id,
@@ -893,6 +900,19 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation: responseConversation });
+
+      if (parsed.data.assignedTo && parsed.data.assignedTo !== previousAssignedTo) {
+        io.to(`agent:${parsed.data.assignedTo}`).emit('conversation:assigned', {
+          conversationId: request.params.id,
+        });
+        io.to(`agent:${parsed.data.assignedTo}`).emit('notification:new', {
+          type: 'conversation.assigned',
+          title: 'Conversa atribuída',
+          message: 'Um atendimento foi atribuído a você',
+          conversationId: request.params.id,
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       return reply.send({ success: true, data: responseConversation });
     } catch (err) {

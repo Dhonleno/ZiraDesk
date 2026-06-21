@@ -1823,7 +1823,7 @@ export async function updateConversation(
 
   await syncActiveConversationCounters(prisma, [previousAssignedTo, rows[0]?.assigned_to ?? null]);
 
-  return rows[0]!;
+  return { conversation: rows[0]!, previousAssignedTo };
 }
 
 export async function closeConversation(
