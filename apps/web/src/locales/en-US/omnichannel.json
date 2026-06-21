@@ -724,6 +724,7 @@
     "cancel": "Cancel"
   },
   "conversations": {
-    "changeGroup": "Change group"
+    "changeGroup": "Change group",
+    "loadMore": "Load more"
   }
 }

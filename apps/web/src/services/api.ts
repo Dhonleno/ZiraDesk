@@ -2621,6 +2621,18 @@ export interface ListConversationsParams {
   tag_id?: string;
 }
 
+export interface OmnichannelConversationsMeta {
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export interface OmnichannelConversationsPage {
+  data: OmnichannelConversation[];
+  meta: OmnichannelConversationsMeta;
+}
+
 export interface CreateConversationPayload {
   contact_id: string;
   organization_id?: string;
@@ -2633,6 +2645,18 @@ export interface CreateConversationPayload {
     language?: string;
     components?: Array<Record<string, unknown>>;
   };
+}
+
+async function listOmnichannelConversationsPage(
+  params?: ListConversationsParams,
+): Promise<OmnichannelConversationsPage> {
+  const res = await api.get<{
+    success: boolean;
+    data: OmnichannelConversation[];
+    meta: OmnichannelConversationsMeta;
+  }>('/omnichannel/conversations', { params });
+
+  return { data: res.data.data, meta: res.data.meta };
 }
 
 export interface ActiveOutboundTemplate extends WhatsAppTemplate {}
@@ -3169,12 +3193,11 @@ export const omnichannelApi = {
     return res.data;
   },
 
+  listConversationsPage: listOmnichannelConversationsPage,
+
   listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {
-    const res = await api.get<{ success: boolean; data: OmnichannelConversation[] }>(
-      '/omnichannel/conversations',
-      { params },
-    );
-    return res.data.data;
+    const page = await listOmnichannelConversationsPage(params);
+    return page.data;
   },
 
   listConversationChannels: async (): Promise<Array<Pick<Channel, 'id' | 'type' | 'name' | 'status'>>> => {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
-import { api, conversationTags, type ConversationTag } from '../../services/api';
+import { api, conversationTags, omnichannelApi, type ConversationTag, type ListConversationsParams } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useNotification } from '../../hooks/useNotification';
 import { subscribeToEvent } from '../../services/socket';
@@ -90,6 +90,20 @@ interface ConversationCounts {
   closed: number;
 }
 
+interface ConversationListMeta {
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+interface ConversationListPage {
+  data: ConversationItem[];
+  meta: ConversationListMeta;
+}
+
+type ConversationCacheEntry = ConversationItem[] | { pages?: ConversationListPage[] };
+
 function relativeTime(dateStr: string | null, nowLabel: string): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -162,7 +176,7 @@ interface Props {
 }
 
 export function ConversationList({ selectedId, onSelect, initialAgentId }: Props) {
-  const { t } = useTranslation('omnichannel');
+  const { t } = useTranslation(['omnichannel', 'common']);
   const toast = useToast();
   const { showNotification } = useNotification();
   const currentUserId = useAuthStore((state) => state.user?.id);
@@ -297,9 +311,12 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
 
   const getConversationFromCache = useCallback((conversationId?: string): ConversationItem | null => {
     if (!conversationId) return null;
-    const cached = qc.getQueriesData<ConversationItem[]>({ queryKey: ['conversations'] });
-    for (const [, conversations] of cached) {
-      if (!conversations) continue;
+    const cached = qc.getQueriesData<ConversationCacheEntry>({ queryKey: ['conversations'] });
+    for (const [, cachedConversations] of cached) {
+      if (!cachedConversations) continue;
+      const conversations = Array.isArray(cachedConversations)
+        ? cachedConversations
+        : cachedConversations.pages?.flatMap((page) => page.data) ?? [];
       const found = conversations.find((item) => item.id === conversationId);
       if (found) return found;
     }
@@ -621,27 +638,44 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
 
   const selectedTag = allTags.find((tag) => tag.id === filterTagId) ?? null;
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteQuery({
     queryKey: ['conversations', activeTab, assignedToMe, debouncedSearch, filterTagId, filterAgentId],
-    queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: ConversationItem[] }>(
-        '/omnichannel/conversations',
-        {
-          params: {
-            perPage: 50,
-            tab: activeTab,
-            assigned_to_me:
-              activeTab === 'open' && !filterAgentId
-                ? assignedToMe
-                : undefined,
-            agent_id: filterAgentId || undefined,
-            search: debouncedSearch || undefined,
-            tag_id: filterTagId ?? undefined,
-          },
-        },
-      );
-      return res.data.data;
+    queryFn: async ({ pageParam }) => {
+      const page = typeof pageParam === 'number' ? pageParam : 1;
+      const params: ListConversationsParams = {
+        page,
+        perPage: 50,
+        tab: activeTab,
+      };
+
+      if (activeTab === 'open' && !filterAgentId) {
+        params.assigned_to_me = assignedToMe;
+      }
+      if (filterAgentId) {
+        params.agent_id = filterAgentId;
+      }
+      if (debouncedSearch) {
+        params.search = debouncedSearch;
+      }
+      if (filterTagId) {
+        params.tag_id = filterTagId;
+      }
+
+      const result = await omnichannelApi.listConversationsPage(params);
+
+      return result as ConversationListPage;
     },
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.meta;
+      return page < totalPages ? page + 1 : undefined;
+    },
+    initialPageParam: 1,
     staleTime: 30_000,
   });
 
@@ -659,8 +693,8 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
     onError: () => toast.error(t('chat.assumeError')),
   });
 
-  const count = data?.length ?? 0;
-  const conversations = data ?? [];
+  const conversations = data?.pages.flatMap((page) => page.data) ?? [];
+  const count = conversations.length;
   const shouldVirtualizeConversations = !isLoading && conversations.length >= 50;
   const conversationVirtualizer = useVirtualizer({
     count: shouldVirtualizeConversations ? conversations.length : 0,
@@ -1351,6 +1385,25 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                     {renderConversationItem(conv)}
                   </div>
                 ))}
+        {hasNextPage && (
+          <button
+            type="button"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
+            style={{
+              width: '100%',
+              padding: '10px',
+              fontSize: '12px',
+              color: 'var(--teal)',
+              background: 'none',
+              border: 'none',
+              borderTop: '1px solid var(--line)',
+              cursor: isFetchingNextPage ? 'default' : 'pointer',
+            }}
+          >
+            {isFetchingNextPage ? t('loading', { ns: 'common' }) : t('conversations.loadMore')}
+          </button>
+        )}
       </div>
 
       <AgentStatsModal open={showStats} onClose={() => setShowStats(false)} />
