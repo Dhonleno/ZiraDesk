@@ -19,7 +19,7 @@ import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
-import { playNotificationSound } from '../utils/notificationSound';
+import { notifySound, shouldShowDesktopNotification } from '../utils/notify';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
 import { PermissionGate } from '../components/ui/PermissionGate';
 
@@ -450,6 +450,13 @@ export function TenantLayout() {
     };
   }, [canToggleAvailability, queryClient, user?.id]);
 
+  useQuery({
+    queryKey: ['my-profile'],
+    queryFn: profileApi.get,
+    staleTime: 5 * 60_000,
+    enabled: isAuthenticated,
+  });
+
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
@@ -547,7 +554,7 @@ export function TenantLayout() {
           });
         },
       });
-      playNotificationSound('help');
+      notifySound('help');
     });
 
     return () => {
@@ -624,7 +631,7 @@ export function TenantLayout() {
         ?? null;
 
       if (!assignedTo) {
-        playNotificationSound('message');
+        notifySound('message');
       }
     });
 
@@ -738,13 +745,15 @@ export function TenantLayout() {
 
       const hidden = typeof document !== 'undefined' && document.hidden === true;
       if (hidden) {
-        showNotification(
-          t('notifications.assigned', { ns: 'omnichannel' }),
-          t('notifications.assignedBody', { ns: 'omnichannel' }),
-          '/icon-192.png',
-        );
+        if (shouldShowDesktopNotification()) {
+          showNotification(
+            t('notifications.assigned', { ns: 'omnichannel' }),
+            t('notifications.assignedBody', { ns: 'omnichannel' }),
+            '/icon-192.png',
+          );
+        }
       } else {
-        playNotificationSound('assignment');
+        notifySound('assignment');
       }
     };
 

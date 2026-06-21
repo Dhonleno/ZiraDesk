@@ -5,6 +5,7 @@ import { profileApi, type MyProfile } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
+import { playNotificationSound, type SoundVariant } from '../../utils/notificationSound';
 import './Profile.css';
 
 type ProfileTabKey = 'profile' | 'password' | 'notifications';
@@ -277,12 +278,14 @@ function NotificationsTab({ profile, isSaving, onSave }: NotificationsTabProps) 
   const [form, setForm] = useState({
     notification_sound: profile.notification_sound ?? true,
     notification_desktop: profile.notification_desktop ?? true,
+    notification_sound_variant: (profile.notification_sound_variant ?? 'default') as SoundVariant,
   });
 
   useEffect(() => {
     setForm({
       notification_sound: profile.notification_sound ?? true,
       notification_desktop: profile.notification_desktop ?? true,
+      notification_sound_variant: (profile.notification_sound_variant ?? 'default') as SoundVariant,
     });
   }, [profile]);
 
@@ -322,6 +325,31 @@ function NotificationsTab({ profile, isSaving, onSave }: NotificationsTabProps) 
             checked={form.notification_sound}
             onChange={(e) => setForm((prev) => ({ ...prev, notification_sound: e.target.checked }))}
           />
+        </div>
+
+        <div className="toggle-row">
+          <div className="toggle-copy">
+            <strong>Variante de som</strong>
+            <span>Estilo do som de notificação</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              value={form.notification_sound_variant}
+              disabled={!form.notification_sound}
+              onChange={(e) => setForm((prev) => ({ ...prev, notification_sound_variant: e.target.value as SoundVariant }))}
+            >
+              <option value="default">Padrão</option>
+              <option value="soft">Suave</option>
+              <option value="sharp">Agudo</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => playNotificationSound('assignment', form.notification_sound_variant)}
+              disabled={!form.notification_sound}
+            >
+              Testar
+            </button>
+          </div>
         </div>
 
         <div className="toggle-row">

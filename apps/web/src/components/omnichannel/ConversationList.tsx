@@ -11,7 +11,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
 import { avatarClass } from '../../utils/avatar';
-import { playNotificationSound } from '../../utils/notificationSound';
+import { notifySound, shouldShowDesktopNotification } from '../../utils/notify';
 
 interface ConversationItem {
   id: string;
@@ -433,7 +433,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       // - conversa atribuída a mim OU em fila
       // - aba em foco (document.hidden === false)
       if (isClientMessage && shouldNotifyByAssignee && !isBrowserTabHidden()) {
-        playNotificationSound('message');
+        notifySound('message');
       }
 
       // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
@@ -455,7 +455,9 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
           ?? t('notifications.newMessage');
         const content = message?.content?.trim() || t('notifications.newMessage');
 
-        showNotification(contactName, content, '/icon-192.png');
+        if (shouldShowDesktopNotification()) {
+          showNotification(contactName, content, '/icon-192.png');
+        }
       }
 
       // Bell notification: group by conversation; skip if conversation is currently open.
@@ -515,13 +517,15 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
         const contactName =
           cachedConversation?.contact_name
           ?? t('notifications.newMessage');
-        showNotification(
-          t('notifications.assigned'),
-          `${contactName} ${t('notifications.assignedBody')}`,
-          '/icon-192.png',
-        );
+        if (shouldShowDesktopNotification()) {
+          showNotification(
+            t('notifications.assigned'),
+            `${contactName} ${t('notifications.assignedBody')}`,
+            '/icon-192.png',
+          );
+        }
       } else {
-        playNotificationSound('assignment');
+        notifySound('assignment');
       }
     };
 
