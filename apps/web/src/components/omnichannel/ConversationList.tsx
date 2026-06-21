@@ -500,6 +500,9 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       }
       syncToActiveTabForCurrentUser(conversationId);
 
+      const alreadyViewing = conversationId && conversationId === selectedId;
+      if (alreadyViewing) return;
+
       if (isBrowserTabHidden()) {
         if (typeof Notification === 'undefined') return;
         if (Notification.permission !== 'granted') {
