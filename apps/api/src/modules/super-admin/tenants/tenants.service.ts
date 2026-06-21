@@ -107,6 +107,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       language    VARCHAR(10)   NOT NULL DEFAULT 'pt-BR',
       notification_sound BOOLEAN NOT NULL DEFAULT true,
       notification_desktop BOOLEAN NOT NULL DEFAULT true,
+      notification_sound_variant VARCHAR(20) NOT NULL DEFAULT 'default',
       settings    JSONB         NOT NULL DEFAULT '{}',
       created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()

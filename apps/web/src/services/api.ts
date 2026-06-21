@@ -49,6 +49,7 @@ export interface MyProfile {
   language: 'pt-BR' | 'en-US' | 'es' | string;
   notification_sound: boolean;
   notification_desktop: boolean;
+  notification_sound_variant: 'default' | 'soft' | 'sharp';
   must_change_password: boolean;
   status: string;
   created_at: string;
@@ -3703,6 +3704,7 @@ export const profileApi = {
     language: 'pt-BR' | 'en-US' | 'es';
     notification_sound: boolean;
     notification_desktop: boolean;
+    notification_sound_variant: 'default' | 'soft' | 'sharp';
   }>): Promise<MyProfile> => {
     const res = await api.patch<{ success: boolean; data: MyProfile }>('/auth/me', payload);
     return res.data.data;

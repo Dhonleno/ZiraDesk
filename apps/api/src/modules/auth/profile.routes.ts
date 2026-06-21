@@ -28,6 +28,7 @@ const profileUpdateSchema = z.object({
   language: z.enum(['pt-BR', 'en-US', 'es']).optional(),
   notification_sound: z.boolean().optional(),
   notification_desktop: z.boolean().optional(),
+  notification_sound_variant: z.enum(['default', 'soft', 'sharp']).optional(),
 });
 
 const passwordUpdateSchema = z
@@ -66,6 +67,7 @@ async function ensureUserProfileColumns(schemaName: string): Promise<void> {
     ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'pt-BR',
     ADD COLUMN IF NOT EXISTS notification_sound BOOLEAN DEFAULT true,
     ADD COLUMN IF NOT EXISTS notification_desktop BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS notification_sound_variant VARCHAR(20) NOT NULL DEFAULT 'default',
     ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
@@ -119,13 +121,15 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      notification_sound_variant: string | null;
       must_change_password: boolean;
       status: string;
       created_at: Date;
     }>>(
       `SELECT
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, must_change_password, status, created_at
+         notification_sound, notification_desktop, notification_sound_variant,
+         must_change_password, status, created_at
        FROM ${quoteIdent(schemaName)}.users
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -172,6 +176,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      notification_sound_variant: string | null;
       must_change_password: boolean;
       status: string;
       created_at: Date;
@@ -184,17 +189,20 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
          language = COALESCE($4::text, language),
          notification_sound = COALESCE($5::boolean, notification_sound),
          notification_desktop = COALESCE($6::boolean, notification_desktop),
+         notification_sound_variant = COALESCE($7::varchar, notification_sound_variant),
          updated_at = NOW()
-       WHERE id = $7::uuid
+       WHERE id = $8::uuid
        RETURNING
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, must_change_password, status, created_at`,
+         notification_sound, notification_desktop, notification_sound_variant,
+         must_change_password, status, created_at`,
       payload.name ?? null,
       payload.bio ?? null,
       payload.phone ?? null,
       payload.language ?? null,
       payload.notification_sound ?? null,
       payload.notification_desktop ?? null,
+      payload.notification_sound_variant ?? null,
       request.user.id,
     );
 
