@@ -13,6 +13,7 @@ import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklis
 import { BrandLogo } from '../components/layout/BrandLogo';
 import { LegalDpoLink } from '../components/legal/LegalDpoLink';
 import { useAgentStatus } from '../hooks/useAgentStatus';
+import { useNotification } from '../hooks/useNotification';
 import { PauseModal } from '../components/omnichannel/PauseModal';
 import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
@@ -357,6 +358,7 @@ function usePauseDuration(startedAt: string | null): string {
 export function TenantLayout() {
   const { t } = useTranslation('admin');
   const { t: tCommon } = useTranslation('common');
+  const { showNotification } = useNotification();
   const { canAny } = usePermission();
   const { user, token, isAuthenticated, logout, isLoggingOut } = useAuth();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -730,16 +732,34 @@ export function TenantLayout() {
       }
     };
 
+    const handleAssigned = (_data: { conversationId?: string }) => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+
+      const hidden = typeof document !== 'undefined' && document.hidden === true;
+      if (hidden) {
+        showNotification(
+          t('notifications.assigned', { ns: 'omnichannel' }),
+          t('notifications.assignedBody', { ns: 'omnichannel' }),
+          '/icon-192.png',
+        );
+      } else {
+        playNotificationSound('assignment');
+      }
+    };
+
     const unsubA = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleIncomingMessage);
     const unsubB = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleIncomingMessage);
     const unsubUpdated = subscribeToEvent<ConversationUpdatedEventPayload>('conversation:updated', handleConversationUpdated);
+    const unsubAssigned = subscribeToEvent<{ conversationId?: string }>('conversation:assigned', handleAssigned);
 
     return () => {
       unsubA();
       unsubB();
       unsubUpdated();
+      unsubAssigned();
     };
-  }, [pathname, t, user?.id, user?.role]);
+  }, [pathname, queryClient, showNotification, t, user?.id, user?.role]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
