@@ -206,7 +206,7 @@ function AddAgentModal({
 
   const { data: usersPage, isLoading } = useQuery({
     queryKey: ['admin', 'users-for-dept'],
-    queryFn: () => adminApi.listUsers({ per_page: 200, status: 'active' }),
+    queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
     enabled: open,
     staleTime: 30_000,
   });
