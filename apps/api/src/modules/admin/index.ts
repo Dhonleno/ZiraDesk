@@ -24,6 +24,7 @@ import { omnichannelLgpdRoutes } from './omnichannel-lgpd/omnichannel-lgpd.route
 import { adminLgpdRoutes } from './lgpd/lgpd.routes.js';
 import { queueConfigRoutes } from './queue-config/queue-config.routes.js';
 import { voiceConfigRoutes } from './voice-config/voice-config.routes.js';
+import { adminDepartmentsRoutes } from './departments/index.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -52,4 +53,5 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(adminLgpdRoutes, { prefix: '/lgpd' });
   await app.register(queueConfigRoutes, { prefix: '/queue-config' });
   await app.register(voiceConfigRoutes, { prefix: '/voice-config' });
+  await app.register(adminDepartmentsRoutes);
 }

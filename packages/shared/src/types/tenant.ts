@@ -43,6 +43,15 @@ export interface Plan {
   createdAt: Date;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  agentCount: number;
+  createdAt: string;
+}
+
 export interface Subscription {
   id: string;
   tenantId: string;
