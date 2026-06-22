@@ -1018,6 +1018,7 @@ export async function sendMessage(
       status: string;
       contact_id: string | null;
       contact_phone: string | null;
+      contact_whatsapp: string | null;
       contact_email: string | null;
       instagram_psid: string | null;
       channel_credentials: string | null;
@@ -1025,7 +1026,7 @@ export async function sendMessage(
     }]
   >(
     `SELECT c.id, c.channel_id, c.channel_type, c.status, c.contact_id,
-            ct.phone AS contact_phone, ct.email AS contact_email,
+            ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp, ct.email AS contact_email,
             ct.custom_fields->>'instagram_id' AS instagram_psid,
             ch.credentials AS channel_credentials,
             c.metadata
@@ -1225,7 +1226,9 @@ export async function sendMessage(
     channelId: conv.channel_id,
     contactPhone: conv.channel_type === 'instagram'
       ? (conv.instagram_psid ?? null)
-      : conv.contact_phone,
+      : conv.channel_type === 'whatsapp'
+        ? (conv.contact_whatsapp ?? conv.contact_phone)
+        : conv.contact_phone,
     contactEmail: conv.contact_email,
     channelCredentials: (body.isInternal ?? false) ? null : conv.channel_credentials,
     mediaId,
