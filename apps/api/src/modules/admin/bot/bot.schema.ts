@@ -9,6 +9,7 @@ const botOptionBaseSchema = z.object({
   submenu_greeting: z.string().optional().nullable(),
   parent_option_id: z.string().uuid().optional().nullable(),
   sort_order: z.coerce.number().int().default(0),
+  department_id: z.string().uuid().nullable().optional(),
 });
 
 export const createBotOptionSchema = botOptionBaseSchema.refine((data) => data.has_submenu || Boolean(data.response?.trim()), {

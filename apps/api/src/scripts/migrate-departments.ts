@@ -4,6 +4,7 @@ import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 type MigrationResult = {
   schemaName: string;
   migrated: boolean;
+  backfilled: number;
 };
 
 async function migrateSchema(schemaName: string): Promise<MigrationResult> {
@@ -16,7 +17,7 @@ async function migrateSchema(schemaName: string): Promise<MigrationResult> {
 
   if (!tableRows[0]?.exists) {
     console.log(`IGNORADO ${schemaName} (tabela conversations ausente)`);
-    return { schemaName, migrated: false };
+    return { schemaName, migrated: false, backfilled: 0 };
   }
 
   const usersRows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
@@ -26,7 +27,7 @@ async function migrateSchema(schemaName: string): Promise<MigrationResult> {
 
   if (!usersRows[0]?.exists) {
     console.log(`IGNORADO ${schemaName} (tabela users ausente)`);
-    return { schemaName, migrated: false };
+    return { schemaName, migrated: false, backfilled: 0 };
   }
 
   await prisma.$executeRawUnsafe(`
@@ -84,7 +85,20 @@ async function migrateSchema(schemaName: string): Promise<MigrationResult> {
       WHERE department_id IS NOT NULL
   `);
 
-  return { schemaName, migrated: true };
+  const backfilledRows = await prisma.$queryRawUnsafe<Array<{ updated_count: bigint }>>(`
+    WITH updated AS (
+      UPDATE ${schema}.conversations c
+      SET department_id = bo.department_id
+      FROM ${schema}.bot_options bo
+      WHERE c.bot_option_id = bo.id
+        AND c.department_id IS NULL
+        AND bo.department_id IS NOT NULL
+      RETURNING 1
+    )
+    SELECT COUNT(*) AS updated_count FROM updated
+  `);
+
+  return { schemaName, migrated: true, backfilled: Number(backfilledRows[0]?.updated_count ?? 0n) };
 }
 
 async function main(): Promise<void> {
@@ -103,13 +117,15 @@ async function main(): Promise<void> {
 
   let failures = 0;
   let migrated = 0;
+  const results: MigrationResult[] = [];
 
   for (const tenant of tenants) {
     try {
       const result = await migrateSchema(tenant.schema_name);
+      results.push(result);
       if (result.migrated) {
         migrated += 1;
-        console.log(`OK ${tenant.schema_name}`);
+        console.log(`OK ${tenant.schema_name}: backfill=${result.backfilled}`);
       }
     } catch (err) {
       failures += 1;
@@ -117,7 +133,8 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`Concluído. Migrados=${migrated} Erros=${failures}.`);
+  const totalBackfilled = results.filter((r) => r.migrated).reduce((sum, r) => sum + r.backfilled, 0);
+  console.log(`Concluído. Migrados=${migrated} Backfill=${totalBackfilled} Erros=${failures}.`);
 
   if (failures > 0) {
     process.exitCode = 1;

@@ -2007,6 +2007,21 @@ async function processIncomingMessage(
         });
       }
     } else {
+      if (result.botOptionId) {
+        void prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
+          `SELECT department_id FROM "${schemaName}".bot_options WHERE id = $1::uuid LIMIT 1`,
+          result.botOptionId,
+        )
+          .then((rows) =>
+            prisma.$executeRawUnsafe(
+              `UPDATE "${schemaName}".conversations SET department_id = $1::uuid WHERE id = $2::uuid`,
+              rows[0]?.department_id ?? null,
+              result.conversationId,
+            ),
+          )
+          .catch((err) => logger.warn({ err }, '[Webhook] Failed to propagate department_id from bot_option'));
+      }
+
       const assignedAgentId = await autoAssignConversation(
         result.conversationId,
         tenantId,
