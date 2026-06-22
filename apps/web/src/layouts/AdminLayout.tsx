@@ -45,6 +45,18 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.departments',
+        path: '/admin/departments',
+        permission: 'users:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="1.5" y="5" width="5" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="9.5" y="1.5" width="5" height="12.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M6.5 9H9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.permissions',
         path: '/admin/roles',
         permission: 'users:manage',

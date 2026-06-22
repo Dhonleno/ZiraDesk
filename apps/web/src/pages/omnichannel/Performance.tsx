@@ -294,7 +294,7 @@ export function PerformancePage() {
 
   const { data: departments = [] } = useQuery({
     queryKey: ['admin-departments'],
-    queryFn: adminApi.listDepartments,
+    queryFn: adminApi.departments.list,
     staleTime: 60_000,
   });
 

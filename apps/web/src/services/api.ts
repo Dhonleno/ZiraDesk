@@ -1426,9 +1426,38 @@ export const adminApi = {
     return res.data.data;
   },
 
-  listDepartments: async (): Promise<DepartmentFilterOption[]> => {
-    const res = await api.get<{ success: boolean; data: DepartmentFilterOption[] }>('/admin/departments');
-    return res.data.data;
+  departments: {
+    list: async (): Promise<Department[]> => {
+      const res = await api.get<{ success: boolean; data: Department[] }>('/admin/departments');
+      return res.data.data;
+    },
+
+    create: async (data: { name: string; description?: string }): Promise<Department> => {
+      const res = await api.post<{ success: boolean; data: Department }>('/admin/departments', data);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: Partial<{ name: string; description: string; isActive: boolean }>): Promise<Department> => {
+      const res = await api.patch<{ success: boolean; data: Department }>(`/admin/departments/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<void> => {
+      await api.delete(`/admin/departments/${id}`);
+    },
+
+    listAgents: async (departmentId: string): Promise<DepartmentAgent[]> => {
+      const res = await api.get<{ success: boolean; data: DepartmentAgent[] }>(`/admin/departments/${departmentId}/agents`);
+      return res.data.data;
+    },
+
+    addAgent: async (departmentId: string, userId: string): Promise<void> => {
+      await api.post(`/admin/departments/${departmentId}/agents`, { userId });
+    },
+
+    removeAgent: async (departmentId: string, userId: string): Promise<void> => {
+      await api.delete(`/admin/departments/${departmentId}/agents/${userId}`);
+    },
   },
 
   autoAssign: {
@@ -2890,6 +2919,22 @@ export interface DepartmentFilterOption {
   name: string;
   isActive: boolean;
   agentCount: number;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  agentCount: number;
+  createdAt: string;
+}
+
+export interface DepartmentAgent {
+  id: string;
+  name: string;
+  role: string;
+  avatar_url: string | null;
 }
 
 export interface OmnichannelPerformanceGoal {
