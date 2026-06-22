@@ -327,6 +327,8 @@
         "tagHint": "Usado para filtrar conversas por departamento",
         "response": "Resposta ao selecionar"
       },
+      "departmentLabel": "Departamento",
+      "noDepartment": "Sem departamento",
       "messages": {
         "saved": "Bot configurado com sucesso",
         "optionAdded": "Opção adicionada",

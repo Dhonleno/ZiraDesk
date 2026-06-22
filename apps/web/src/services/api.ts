@@ -306,6 +306,8 @@ export interface BotOption {
   submenu_greeting: string | null;
   parent_option_id: string | null;
   sort_order: number;
+  department_id: string | null;
+  department_name: string | null;
   created_at: string;
   children?: BotOption[];
 }
@@ -330,6 +332,7 @@ export interface BotOptionPayload {
   submenu_greeting?: string | null;
   parent_option_id?: string | null;
   sort_order?: number;
+  department_id?: string | null;
 }
 
 export interface AutoAssignAgent {
