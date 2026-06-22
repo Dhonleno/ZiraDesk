@@ -213,11 +213,13 @@ async function resolveAgentForAssignment(
   preferredAgentId?: string,
   requiredBotOptionId?: string,
   globalLimit?: number | null,
+  requiredDepartmentId?: string | null,
 ): Promise<AgentCandidateRow | null> {
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
   const botOptionsRef = tableRef(schemaName, 'bot_options');
   const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
+  const agentDepartmentsRef = tableRef(schemaName, 'agent_departments');
 
   const pickConnectedCandidate = async (
     candidates: AgentCandidateRow[],
@@ -259,6 +261,30 @@ async function resolveAgentForAssignment(
 
     const preferredConnected = await pickConnectedCandidate(preferredRows);
     if (preferredConnected) return preferredConnected;
+  }
+
+  if (requiredDepartmentId?.trim()) {
+    const rowsByDept = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM ${agentDepartmentsRef} ad
+       JOIN ${assignmentsRef} aa ON aa.user_id = ad.user_id
+       JOIN ${usersRef} u ON u.id = ad.user_id
+       WHERE ad.department_id = $1::uuid
+         AND aa.is_available = true
+         AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+         AND u.status = 'active'
+         AND u.role IN ('agent')
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
+       ORDER BY aa.last_assigned_at ASC
+       LIMIT 15`,
+      requiredDepartmentId.trim(),
+      globalLimit ?? null,
+    );
+
+    const connectedByDept = await pickConnectedCandidate(rowsByDept);
+    if (connectedByDept) return connectedByDept;
+    return null;
   }
 
   if (requiredBotOptionId?.trim()) {
@@ -352,6 +378,7 @@ async function persistAutoAssignment(
   agentId: string,
   agentName: string,
   requiredBotOptionId?: string,
+  departmentId?: string | null,
 ): Promise<boolean> {
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
@@ -364,6 +391,7 @@ async function persistAutoAssignment(
          assigned_at = NOW(),
          status = 'open',
          bot_option_id = COALESCE($3::uuid, bot_option_id),
+         department_id = COALESCE(department_id, $4::uuid),
          metadata = CASE
            WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
              'queue_wait_started_at', queue_entered_at,
@@ -383,6 +411,7 @@ async function persistAutoAssignment(
     agentId,
     conversationId,
     requiredBotOptionId ?? null,
+    departmentId ?? null,
   );
 
   if (!updatedRows[0]) return false;
@@ -609,6 +638,12 @@ export async function autoAssignConversation(
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
   await syncAllActiveConversationCounters(prisma, schemaName);
 
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
+    `SELECT department_id FROM ${tableRef(schemaName, 'conversations')} WHERE id = $1::uuid LIMIT 1`,
+    conversationId,
+  );
+  const departmentId = conversationRows[0]?.department_id ?? null;
+
   const nextAgent = await resolveAgentForAssignment(
     prisma,
     schemaName,
@@ -616,9 +651,12 @@ export async function autoAssignConversation(
     preferredAgentId,
     requiredBotOptionId,
     settings.max_conversations_per_agent,
+    departmentId,
   );
   if (!nextAgent) {
-    if (requiredBotOptionId) {
+    if (departmentId) {
+      logger.info({ departmentId }, '[AutoAssign] No agent for department, keeping in queue');
+    } else if (requiredBotOptionId) {
       logger.info({ optionId: requiredBotOptionId }, '[AutoAssign] No agent with skill for option, keeping in queue');
     }
     return null;
@@ -632,6 +670,7 @@ export async function autoAssignConversation(
     nextAgent.user_id,
     nextAgent.name,
     requiredBotOptionId,
+    departmentId,
   );
 
   if (!assigned) return null;
