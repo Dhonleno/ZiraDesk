@@ -10,6 +10,26 @@ export interface DepartmentRow {
   created_at: Date;
 }
 
+export interface DepartmentOut {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  agentCount: number;
+  createdAt: Date;
+}
+
+function mapDept(r: DepartmentRow): DepartmentOut {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    isActive: r.is_active,
+    agentCount: r.agent_count,
+    createdAt: r.created_at,
+  };
+}
+
 export interface AgentRow {
   id: string;
   name: string;
@@ -49,12 +69,12 @@ async function resolveSchemaName(tenantId: string, schemaName?: string): Promise
   return tenant.schemaName;
 }
 
-export async function listDepartments(tenantId: string, schemaName?: string): Promise<DepartmentRow[]> {
+export async function listDepartments(tenantId: string, schemaName?: string): Promise<DepartmentOut[]> {
   const resolved = await resolveSchemaName(tenantId, schemaName);
   const deptRef = tableRef(resolved, 'departments');
   const adRef = tableRef(resolved, 'agent_departments');
 
-  return prisma.$queryRawUnsafe<DepartmentRow[]>(
+  const rows = await prisma.$queryRawUnsafe<DepartmentRow[]>(
     `SELECT
        d.id,
        d.name,
@@ -67,6 +87,7 @@ export async function listDepartments(tenantId: string, schemaName?: string): Pr
      GROUP BY d.id, d.name, d.description, d.is_active, d.created_at
      ORDER BY d.name ASC`,
   );
+  return rows.map(mapDept);
 }
 
 export async function createDepartment(
