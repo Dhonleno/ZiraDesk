@@ -2185,6 +2185,21 @@ interface TenantLgpdMetrics {
 }
 
 export const superAdminApi = {
+  updatePlan: async (
+    id: string,
+    data: Partial<{
+      name: string;
+      priceMonth: number;
+      priceYear: number;
+      maxUsers: number;
+      maxContacts: number;
+      maxMessages: number;
+      features: Record<string, boolean>;
+    }>,
+  ): Promise<void> => {
+    await api.patch(`/super-admin/plans/${id}`, data);
+  },
+
   getTenantUsage: async (tenantId: string): Promise<UsageSummary> => {
     const res = await api.get<{ success: boolean; data: UsageSummary }>(`/super-admin/tenants/${tenantId}/usage`);
     return res.data.data;

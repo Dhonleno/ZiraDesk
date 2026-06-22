@@ -1460,6 +1460,8 @@
     "plans": {
       "title": "Planos",
       "new": "Novo Plano",
+      "edit": "Editar",
+      "editPlan": "Editar plano",
       "fields": {
         "name": "Nome",
         "slug": "Slug",
@@ -1467,6 +1469,7 @@
         "priceYear": "Preço anual",
         "maxUsers": "Máx. usuários",
         "maxContacts": "Máx. contatos",
+        "maxMessages": "Limite de mensagens/mês",
         "features": "Recursos",
         "isActive": "Ativo"
       },
