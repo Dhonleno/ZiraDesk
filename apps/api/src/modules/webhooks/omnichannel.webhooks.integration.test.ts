@@ -256,6 +256,100 @@ describe('Omnichannel webhooks integration', () => {
     expect(response.status).toBe(401);
   });
 
+  it('Webhook de contato compartilhado salva os dados como mensagem legível', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const phoneNumberId = `1555666${Math.floor(Math.random() * 100000)}`;
+    const waId = `5511998${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`;
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    await insertChannel(schemaName, 'whatsapp', {
+      phoneNumberId,
+      accessToken: 'EAAD_TEST_TOKEN',
+      verifyToken: 'VERIFY_TOKEN',
+      wabaId: '1234567890',
+    });
+
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: '102290129340398',
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: '+1 555 078 3881',
+                  phone_number_id: phoneNumberId,
+                },
+                contacts: [
+                  {
+                    profile: { name: 'Cliente Origem' },
+                    wa_id: waId,
+                  },
+                ],
+                messages: [
+                  {
+                    from: waId,
+                    id: externalId,
+                    timestamp: '1697040127',
+                    type: 'contacts',
+                    contacts: [
+                      {
+                        name: { formatted_name: 'Douglas Contato' },
+                        phones: [
+                          { phone: '+55 77 99999-9105', type: 'CELL', wa_id: '5577999999105' },
+                        ],
+                        emails: [{ email: 'douglas@example.com', type: 'WORK' }],
+                        org: { company: 'Fazenda Teste', title: 'Gerente' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const rawBody = JSON.stringify(payload);
+    const response = await createTestApp()
+      .post('/api/webhooks/whatsapp')
+      .set('Content-Type', 'application/json')
+      .set('x-hub-signature-256', createMetaSignature(rawBody))
+      .send(payload);
+
+    expect(response.status).toBe(200);
+
+    const saved = await waitFor(async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ content: string; metadata: unknown }>>(
+        `SELECT content, metadata
+         FROM "${schemaName}".messages
+         WHERE external_id = $1
+         LIMIT 1`,
+        externalId,
+      );
+      return rows[0] ?? null;
+    });
+
+    expect(saved.content).toContain('Contato compartilhado: Douglas Contato');
+    expect(saved.content).toContain('Telefone (CELL): +55 77 99999-9105');
+    expect(saved.content).toContain('E-mail (WORK): douglas@example.com');
+    expect(saved.content).not.toBe('📎 Anexo');
+    expect(saved.metadata).toMatchObject({
+      message_type: 'contacts',
+      shared_contacts: [
+        {
+          name: 'Douglas Contato',
+        },
+      ],
+    });
+  });
+
   it('Webhook de status de template atualiza o status persistido pela Meta', async () => {
     const { schemaName } = requireGlobalTenant();
     const wabaId = `waba_${Date.now()}_${Math.floor(Math.random() * 100000)}`;

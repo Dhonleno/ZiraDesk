@@ -53,7 +53,7 @@ interface MetaMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction' | 'button';
+  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction' | 'button' | 'contacts';
   context?: {
     id?: string;
     from?: string;
@@ -85,6 +85,37 @@ interface MetaMessage {
   video?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; filename: string; mime_type: string };
   button?: { text?: string; payload?: string };
+  contacts?: MetaSharedContact[];
+}
+
+interface MetaSharedContact {
+  name?: {
+    formatted_name?: string;
+    first_name?: string;
+    last_name?: string;
+    middle_name?: string;
+    suffix?: string;
+    prefix?: string;
+  };
+  phones?: Array<{
+    phone?: string;
+    type?: string;
+    wa_id?: string;
+  }>;
+  emails?: Array<{
+    email?: string;
+    type?: string;
+  }>;
+  org?: {
+    company?: string;
+    department?: string;
+    title?: string;
+  };
+  urls?: Array<{
+    url?: string;
+    type?: string;
+  }>;
+  birthday?: string;
 }
 
 interface InteractiveMenuOption {
@@ -280,6 +311,94 @@ function withWhatsappEnvFallback(credentials: Record<string, string>): Record<st
 function withCloseHint(messageText: string): string {
   if (messageText.toLowerCase().includes(CLOSE_KEYWORD)) return messageText;
   return `${messageText}${CLOSE_HINT}`;
+}
+
+function cleanText(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
+function buildSharedContactName(contact: MetaSharedContact): string {
+  const formatted = cleanText(contact.name?.formatted_name);
+  if (formatted) return formatted;
+
+  const nameParts = [
+    contact.name?.prefix,
+    contact.name?.first_name,
+    contact.name?.middle_name,
+    contact.name?.last_name,
+    contact.name?.suffix,
+  ]
+    .map((part) => cleanText(part))
+    .filter((part): part is string => Boolean(part));
+
+  return nameParts.join(' ') || 'Sem nome';
+}
+
+function buildSharedContactsMessage(contacts: MetaSharedContact[] | undefined): {
+  content: string;
+  metadata: Array<Record<string, unknown>>;
+} {
+  const normalizedContacts = (contacts ?? []).map((contact) => {
+    const name = buildSharedContactName(contact);
+    const phones = (contact.phones ?? [])
+      .map((phone) => ({
+        phone: cleanText(phone.phone),
+        type: cleanText(phone.type),
+        wa_id: cleanText(phone.wa_id),
+      }))
+      .filter((phone) => phone.phone || phone.wa_id);
+    const emails = (contact.emails ?? [])
+      .map((email) => ({
+        email: cleanText(email.email),
+        type: cleanText(email.type),
+      }))
+      .filter((email) => email.email);
+    const urls = (contact.urls ?? [])
+      .map((url) => ({
+        url: cleanText(url.url),
+        type: cleanText(url.type),
+      }))
+      .filter((url) => url.url);
+    const org = {
+      company: cleanText(contact.org?.company),
+      department: cleanText(contact.org?.department),
+      title: cleanText(contact.org?.title),
+    };
+
+    return {
+      name,
+      phones,
+      emails,
+      urls,
+      birthday: cleanText(contact.birthday),
+      org,
+    };
+  });
+
+  const sections = normalizedContacts.map((contact) => {
+    const lines = [`Contato compartilhado: ${contact.name}`];
+    for (const phone of contact.phones) {
+      if (phone.phone) lines.push(`Telefone${phone.type ? ` (${phone.type})` : ''}: ${phone.phone}`);
+      if (phone.wa_id && phone.wa_id !== phone.phone?.replace(/\D/g, '')) lines.push(`WhatsApp ID: ${phone.wa_id}`);
+    }
+    for (const email of contact.emails) {
+      if (email.email) lines.push(`E-mail${email.type ? ` (${email.type})` : ''}: ${email.email}`);
+    }
+    if (contact.org.company) lines.push(`Empresa: ${contact.org.company}`);
+    if (contact.org.department) lines.push(`Departamento: ${contact.org.department}`);
+    if (contact.org.title) lines.push(`Cargo: ${contact.org.title}`);
+    for (const url of contact.urls) {
+      if (url.url) lines.push(`Link${url.type ? ` (${url.type})` : ''}: ${url.url}`);
+    }
+    if (contact.birthday) lines.push(`Aniversario: ${contact.birthday}`);
+    return lines.join('\n');
+  });
+
+  return {
+    content: sections.join('\n\n') || 'Contato compartilhado',
+    metadata: normalizedContacts,
+  };
 }
 
 function buildMentionPreview(content: string | null | undefined, contentType: string): string {
@@ -1032,6 +1151,14 @@ async function processIncomingMessage(
       content = message.button?.text?.trim() || message.button?.payload?.trim() || '[Resposta de botão]';
       contentType = 'text';
       templateButtonPayload = message.button?.payload?.trim() || null;
+      break;
+    }
+    case 'contacts': {
+      const sharedContacts = buildSharedContactsMessage(message.contacts);
+      content = sharedContacts.content;
+      contentType = 'text';
+      mediaMetadata.message_type = 'contacts';
+      mediaMetadata.shared_contacts = sharedContacts.metadata;
       break;
     }
     default:
