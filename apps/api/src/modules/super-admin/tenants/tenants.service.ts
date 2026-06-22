@@ -396,6 +396,49 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".departments (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_departments (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      department_id UUID NOT NULL REFERENCES "${schemaName}".departments(id) ON DELETE CASCADE,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, department_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_departments_user"
+    ON "${schemaName}".agent_departments(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_departments_department"
+    ON "${schemaName}".agent_departments(department_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "${schemaName}".bot_options
+      ADD COLUMN IF NOT EXISTS department_id UUID
+      REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_options_department"
+    ON "${schemaName}".bot_options(department_id)
+    WHERE department_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
     INSERT INTO "${schemaName}".bot_menus (is_active, greeting, footer)
     SELECT false,
            'Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo?',
@@ -479,6 +522,18 @@ async function createTenantTables(schemaName: string): Promise<void> {
     CREATE INDEX IF NOT EXISTS "idx_conversations_closed_by_status"
     ON "${schemaName}".conversations(closed_by_user_id, status)
     WHERE status = 'closed'
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "${schemaName}".conversations
+      ADD COLUMN IF NOT EXISTS department_id UUID
+      REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_department"
+    ON "${schemaName}".conversations(department_id)
+    WHERE department_id IS NOT NULL
   `);
 
   await prisma.$executeRawUnsafe(`
