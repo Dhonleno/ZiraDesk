@@ -107,11 +107,15 @@ export const transferConversationBodySchema = z
   .object({
     user_id: z.string().uuid().optional(),
     skill_id: z.string().uuid().optional(),
+    department_id: z.string().uuid().optional(),
     reason: z.string().optional(),
   })
   .refine(
-    (data) => Boolean(data.user_id) !== Boolean(data.skill_id),
-    { message: 'Forneça user_id OU skill_id (não ambos, não nenhum)' },
+    (data) => {
+      const provided = [data.user_id, data.skill_id, data.department_id].filter(Boolean).length;
+      return provided === 1;
+    },
+    { message: 'Forneça exatamente um de: user_id, skill_id, department_id' },
   );
 
 export const requestHelpBodySchema = z.object({

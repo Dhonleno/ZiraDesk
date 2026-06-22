@@ -312,6 +312,9 @@
     "systemMessage": "Atendimento transferido para {{name}}",
     "agentOffline": "Este agente está offline",
     "noAgentsForSkill": "Nenhum agente disponível para este grupo",
+    "byDepartment": "Por departamento",
+    "noDepartmentsAvailable": "Nenhum departamento disponível no momento",
+    "noAgentsForDepartment": "Nenhum agente disponível para este departamento",
     "error": "Erro ao transferir conversa"
   },
   "history": {

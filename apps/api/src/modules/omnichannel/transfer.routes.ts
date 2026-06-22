@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
-import { listTransferAgents, listTransferSkills } from './conversations/conversations.service.js';
+import { listTransferAgents, listTransferSkills, listTransferDepartments } from './conversations/conversations.service.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,5 +21,11 @@ export async function omnichannelTransferRoutes(app: FastifyInstance): Promise<v
   app.get('/skills', { preHandler: guard }, async (_request, reply) => {
     const skills = await listTransferSkills();
     return reply.send({ success: true, data: skills });
+  });
+
+  // GET /api/omnichannel/transfer/departments
+  app.get('/departments', { preHandler: guard }, async (_request, reply) => {
+    const departments = await listTransferDepartments();
+    return reply.send({ success: true, data: departments });
   });
 }

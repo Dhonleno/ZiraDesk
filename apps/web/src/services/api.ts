@@ -2556,6 +2556,12 @@ export interface TransferSkill {
   online_agents_count: number;
 }
 
+export interface TransferDepartment {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
 export interface OmnichannelConversation {
   id: string;
   status: string;
@@ -3376,12 +3382,17 @@ export const omnichannelApi = {
 
   transfer: async (
     conversationId: string,
-    target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
+    target:
+      | { userId: string; skillId?: undefined; departmentId?: undefined }
+      | { userId?: undefined; skillId: string; departmentId?: undefined }
+      | { userId?: undefined; skillId?: undefined; departmentId: string },
     reason?: string,
   ): Promise<OmnichannelConversation> => {
     const body = target.userId
       ? { user_id: target.userId, reason }
-      : { skill_id: target.skillId, reason };
+      : target.skillId
+        ? { skill_id: target.skillId, reason }
+        : { department_id: target.departmentId, reason };
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       `/omnichannel/conversations/${conversationId}/transfer`,
       body,
@@ -3397,6 +3408,11 @@ export const omnichannelApi = {
 
   getTransferSkills: async (): Promise<TransferSkill[]> => {
     const res = await api.get<{ success: boolean; data: TransferSkill[] }>('/omnichannel/transfer/skills');
+    return res.data.data;
+  },
+
+  getTransferDepartments: async (): Promise<TransferDepartment[]> => {
+    const res = await api.get<{ success: boolean; data: TransferDepartment[] }>('/omnichannel/transfer/departments');
     return res.data.data;
   },
 

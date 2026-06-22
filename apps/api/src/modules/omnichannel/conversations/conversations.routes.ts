@@ -678,7 +678,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const target = parsed.data.user_id
           ? { userId: parsed.data.user_id }
-          : { skillId: parsed.data.skill_id! };
+          : parsed.data.skill_id
+            ? { skillId: parsed.data.skill_id }
+            : { departmentId: parsed.data.department_id! };
 
         const result = await transferConversation(
           request.params.id,

@@ -61,7 +61,7 @@ export class ForbiddenError extends Error {
 
 export class TransferError extends Error {
   constructor(
-    public readonly code: 'AGENT_OFFLINE' | 'NO_AGENTS_AVAILABLE_FOR_SKILL',
+    public readonly code: 'AGENT_OFFLINE' | 'NO_AGENTS_AVAILABLE_FOR_SKILL' | 'NO_AGENTS_AVAILABLE_FOR_DEPARTMENT',
     message: string,
   ) {
     super(message);
@@ -1596,6 +1596,28 @@ export interface TransferSkillRow {
   online_agents_count: number;
 }
 
+export interface TransferDepartmentRow {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
+export async function listTransferDepartments(): Promise<TransferDepartmentRow[]> {
+  return prisma.$queryRawUnsafe<TransferDepartmentRow[]>(
+    `SELECT d.id, d.name,
+            COUNT(DISTINCT aa.user_id)::integer AS online_agents_count
+     FROM departments d
+     JOIN agent_departments ad ON ad.department_id = d.id
+     JOIN agent_assignments aa ON aa.user_id = ad.user_id
+     WHERE aa.status = 'online'
+       AND aa.is_available = true
+       AND d.is_active = true
+     GROUP BY d.id, d.name
+     HAVING COUNT(DISTINCT aa.user_id) > 0
+     ORDER BY d.name ASC`,
+  );
+}
+
 export async function listTransferAgents(currentAgentId?: string): Promise<TransferAgentRow[]> {
   const excludeClause = currentAgentId ? `AND u.id != $1::uuid` : '';
   const params: string[] = currentAgentId ? [currentAgentId] : [];
@@ -1639,7 +1661,10 @@ export async function listTransferSkills(): Promise<TransferSkillRow[]> {
 
 export async function transferConversation(
   conversationId: string,
-  target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
+  target:
+    | { userId: string; skillId?: undefined; departmentId?: undefined }
+    | { userId?: undefined; skillId: string; departmentId?: undefined }
+    | { userId?: undefined; skillId?: undefined; departmentId: string },
   transferredBy: string,
   reason?: string,
   tenantId?: string,
@@ -1673,7 +1698,7 @@ export async function transferConversation(
     }
 
     assignToUserId = target.userId;
-  } else {
+  } else if (target.skillId) {
     const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT u.id
        FROM agent_bot_skills abs
@@ -1695,6 +1720,29 @@ export async function transferConversation(
     }
 
     assignToUserId = eligibleAgents[0].id;
+  } else {
+    const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT u.id
+       FROM users u
+       JOIN agent_departments ad ON ad.user_id = u.id
+       JOIN agent_assignments aa ON aa.user_id = u.id
+       WHERE ad.department_id = $1::uuid
+         AND aa.status = 'online'
+         AND aa.is_available = true
+         AND u.role = 'agent'
+         AND u.status = 'active'
+         AND u.id != $2::uuid
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
+       LIMIT 1`,
+      target.departmentId,
+      currentAgentId,
+    );
+
+    if (!eligibleAgents[0]) {
+      throw new TransferError('NO_AGENTS_AVAILABLE_FOR_DEPARTMENT', 'Nenhum agente disponível para este departamento');
+    }
+
+    assignToUserId = eligibleAgents[0].id;
   }
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
@@ -1707,6 +1755,14 @@ export async function transferConversation(
     conversationId,
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
+
+  if (target.departmentId) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE conversations SET department_id = $1::uuid WHERE id = $2::uuid`,
+      target.departmentId,
+      conversationId,
+    );
+  }
 
   const convAssignRef = schemaName
     ? `${quoteIdent(schemaName)}.conversation_assignments`
