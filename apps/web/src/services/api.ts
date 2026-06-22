@@ -1426,6 +1426,11 @@ export const adminApi = {
     return res.data.data;
   },
 
+  listDepartments: async (): Promise<DepartmentFilterOption[]> => {
+    const res = await api.get<{ success: boolean; data: DepartmentFilterOption[] }>('/admin/departments');
+    return res.data.data;
+  },
+
   autoAssign: {
     getConfig: async (): Promise<AutoAssignConfig> => {
       const res = await api.get<{ success: boolean; data: AutoAssignConfig }>('/admin/auto-assign');
@@ -2875,8 +2880,16 @@ export interface PerformanceFiltersParams {
   date_to?: string;
   agent_id?: string;
   bot_option_id?: string;
+  department_id?: string;
   page?: number;
   per_page?: number;
+}
+
+export interface DepartmentFilterOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  agentCount: number;
 }
 
 export interface OmnichannelPerformanceGoal {

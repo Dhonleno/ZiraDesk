@@ -12,6 +12,7 @@ export const performanceQuerySchema = z.object({
   date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   agent_id: z.string().uuid().optional(),
   bot_option_id: z.string().uuid().optional(),
+  department_id: z.string().uuid().optional(),
   export: z.enum(['csv']).optional(),
   page: numberParam(1, 1, 100000).optional().default(1),
   per_page: numberParam(25, 1, 200).optional().default(25),

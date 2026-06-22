@@ -456,7 +456,8 @@
     "emptyAgentsHint": "Ajuste o período, agente ou grupo para revisar os indicadores.",
     "emptyDepartmentsTitle": "Nenhuma performance por departamento encontrada",
     "emptyDepartmentsHint": "Ajuste os filtros para comparar os resultados por departamento.",
-    "invalidRange": "Informe um período personalizado válido para exportar."
+    "invalidRange": "Informe um período personalizado válido para exportar.",
+    "filterByDepartment": "Departamento"
   },
   "composer": {
     "pasteRemove": "Remover arquivo",

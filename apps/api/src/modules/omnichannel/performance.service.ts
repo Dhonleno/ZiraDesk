@@ -249,6 +249,10 @@ function getPerformanceBaseFilters(
     conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
   }
 
+  if (query.department_id) {
+    conditions.push(`c.department_id = ${pushParam(query.department_id)}::uuid`);
+  }
+
   const usersFilterParts: string[] = [
     `u.status = 'active'`,
     `u.role IN ('agent', 'supervisor', 'admin', 'owner')`,
@@ -623,6 +627,10 @@ export async function listPerformanceByGroup(
     conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
   }
 
+  if (query.department_id) {
+    conditions.push(`c.department_id = ${pushParam(query.department_id)}::uuid`);
+  }
+
   const whereClause = conditions.join(' AND ');
 
   const rows = await prisma.$queryRawUnsafe<PerformanceByGroupRowDb[]>(`
@@ -630,7 +638,7 @@ export async function listPerformanceByGroup(
       SELECT
         c.id,
         c.bot_option_id,
-        COALESCE(NULLIF(c.metadata->>'bot_department', ''), '—') AS group_name,
+        COALESCE(d.name, NULLIF(c.metadata->>'bot_department', ''), '—') AS group_name,
         c.created_at,
         c.conversation_type,
         c.outbound_returned_at,
@@ -646,6 +654,7 @@ export async function listPerformanceByGroup(
         c.csat_score,
         fr.first_response_seconds
       FROM ${safeSchema}.conversations c
+      LEFT JOIN ${safeSchema}.departments d ON d.id = c.department_id
       LEFT JOIN LATERAL (
         SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
         FROM ${safeSchema}.messages m

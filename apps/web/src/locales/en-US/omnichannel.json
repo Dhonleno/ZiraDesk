@@ -456,7 +456,8 @@
     "emptyAgentsHint": "Adjust the period, agent, or group to review the indicators.",
     "emptyDepartmentsTitle": "No department performance found",
     "emptyDepartmentsHint": "Adjust the filters to compare department results.",
-    "invalidRange": "Enter a valid custom period before exporting."
+    "invalidRange": "Enter a valid custom period before exporting.",
+    "filterByDepartment": "Department"
   },
   "composer": {
     "pasteRemove": "Remove file",

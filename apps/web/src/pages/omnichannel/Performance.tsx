@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import './Performance.css';
 import { PageShell } from '../../components/layout/PageShell';
 import {
+  adminApi,
   omnichannelApi,
   type GoalPeriod,
   type HistoryPeriodPreset,
@@ -41,6 +42,9 @@ function parseFilters(searchParams: URLSearchParams): PerformanceFiltersParams {
 
   const botOptionId = toNonEmpty(searchParams.get('bot_option_id'));
   if (botOptionId) parsed.bot_option_id = botOptionId;
+
+  const departmentId = toNonEmpty(searchParams.get('department_id'));
+  if (departmentId) parsed.department_id = departmentId;
 
   const dateFrom = toNonEmpty(searchParams.get('date_from'));
   if (dateFrom) parsed.date_from = dateFrom;
@@ -288,10 +292,10 @@ export function PerformancePage() {
     staleTime: 30_000,
   });
 
-  const { data: transferSkills = [] } = useQuery({
-    queryKey: ['transfer-skills'],
-    queryFn: omnichannelApi.getTransferSkills,
-    staleTime: 30_000,
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin-departments'],
+    queryFn: adminApi.listDepartments,
+    staleTime: 60_000,
   });
 
   const { data: goals = [] } = useQuery({
@@ -431,13 +435,13 @@ export function PerformancePage() {
 
           <select
             className="filter-select"
-            value={filters.bot_option_id ?? ''}
-            onChange={(event) => updateFilterParams({ bot_option_id: event.target.value || null })}
-            aria-label={t('history.filters.group')}
+            value={filters.department_id ?? ''}
+            onChange={(event) => updateFilterParams({ department_id: event.target.value || null })}
+            aria-label={t('performance.filterByDepartment')}
           >
-            <option value="">{t('history.filters.group')}</option>
-            {transferSkills.map((skill) => (
-              <option key={skill.id} value={skill.id}>{skill.name}</option>
+            <option value="">{t('performance.filterByDepartment')}</option>
+            {departments.filter((d) => d.isActive).map((dept) => (
+              <option key={dept.id} value={dept.id}>{dept.name}</option>
             ))}
           </select>
 
