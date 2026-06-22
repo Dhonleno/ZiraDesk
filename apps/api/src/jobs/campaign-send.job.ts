@@ -165,7 +165,7 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
     const settingsRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
       `SELECT (settings->>'active_outbound_validity_hours')::int AS active_outbound_validity_hours
        FROM public.tenants
-       WHERE id = $1::uuid
+       WHERE id = $1
        LIMIT 1`,
       tenantId,
     );
