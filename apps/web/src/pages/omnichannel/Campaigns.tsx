@@ -138,6 +138,20 @@ export function CampaignsPage() {
     onError: () => toast.error('Erro ao duplicar campanha.'),
   });
 
+  const handleExportCsvFromList = async (id: string, name: string) => {
+    try {
+      const blob = await campaignsApi.exportCsv(id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `campanha-${name}-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(t('exportError'));
+    }
+  };
+
   const headerCell: React.CSSProperties = {
     fontSize: 10,
     fontWeight: 600,
@@ -375,6 +389,18 @@ export function CampaignsPage() {
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
                     <rect x="4" y="4" width="7.5" height="7.5" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
                     <path d="M2 9V2.5A1.5 1.5 0 013.5 1H9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                </button>
+
+                {/* Export CSV */}
+                <button
+                  className="tb-icon-btn"
+                  title={t('exportCsv')}
+                  onClick={() => void handleExportCsvFromList(campaign.id, campaign.name)}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                    <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
 

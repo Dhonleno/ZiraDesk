@@ -3721,6 +3721,13 @@ export const campaignsApi = {
     const res = await api.get<{ success: boolean; data: { total: number; running: number; completed: number; avg_delivery_rate: number } }>('/omnichannel/campaigns/stats');
     return res.data.data;
   },
+
+  exportCsv: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/campaigns/${id}/export/csv`, {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
 };
 
 // ── Agent status API ──────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ import {
   duplicateCampaign,
   duplicateFailedCampaign,
   getCampaignReport,
+  exportCampaignCsv,
   NotFoundError,
   ValidationError,
 } from './campaigns.service.js';
@@ -160,6 +161,25 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
       }
     },
   );
+
+  // GET /api/omnichannel/campaigns/:id/export/csv
+  app.get<{ Params: { id: string } }>('/:id/export/csv', { preHandler: replyGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema não resolvido' } });
+
+    try {
+      const csv = await exportCampaignCsv(request.params.id, schemaName);
+      const date = new Date().toISOString().slice(0, 10);
+      const filename = `campanha-${request.params.id.slice(0, 8)}-${date}.csv`;
+      return reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send('﻿' + csv);
+    } catch (err) {
+      if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
 
   // GET /api/omnichannel/campaigns/:id/contacts
   app.get<{ Params: { id: string }; Querystring: { page?: string; limit?: string } }>(

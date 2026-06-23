@@ -149,6 +149,10 @@
     "confirm": "Launch campaign",
     "launching": "Launching..."
   },
+  "exportCsv": "Export CSV",
+  "exportPdf": "Export PDF",
+  "exporting": "Exporting...",
+  "exportError": "Export failed. Please try again.",
   "detail": {
     "breadcrumb": "Campaigns",
     "refresh": "Refresh",

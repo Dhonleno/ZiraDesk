@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { PageShell } from '../../components/layout/PageShell';
 import { campaignsApi, type Campaign, type CampaignContact, type CampaignContactStatus, type CampaignStatus } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -151,6 +153,8 @@ export function CampaignDetail() {
   const [showLaunch, setShowLaunch] = useState(false);
   const [showRetryFailed, setShowRetryFailed] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleRefreshAll = async () => {
     setIsRefreshingAll(true);
@@ -235,6 +239,60 @@ export function CampaignDetail() {
     onError: () => toast.error('Erro ao duplicar.'),
   });
 
+  const handleExportCsv = async () => {
+    if (!campaign) return;
+    setIsExportingCsv(true);
+    try {
+      const blob = await campaignsApi.exportCsv(campaign.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `campanha-${campaign.name}-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(t('exportError'));
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!campaign) return;
+    setIsExportingPdf(true);
+    try {
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      let yOffset = 10;
+
+      const sectionIds = ['campaign-info', 'campaign-metrics', 'campaign-funnel', 'campaign-breakdown'];
+
+      for (const sectionId of sectionIds) {
+        const element = document.getElementById(sectionId);
+        if (!element) continue;
+
+        const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = pageWidth - 20;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (yOffset + imgHeight > pdf.internal.pageSize.getHeight() - 10) {
+          pdf.addPage();
+          yOffset = 10;
+        }
+
+        pdf.addImage(imgData, 'PNG', 10, yOffset, imgWidth, imgHeight);
+        yOffset += imgHeight + 6;
+      }
+
+      pdf.save(`campanha-${campaign.name}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch {
+      toast.error(t('exportError'));
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <PageShell padding={24}>
@@ -291,6 +349,32 @@ export function CampaignDetail() {
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button
               type="button"
+              className="tb-btn"
+              onClick={() => void handleExportCsv()}
+              disabled={isExportingCsv}
+              title={t('exportCsv')}
+            >
+              <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {isExportingCsv ? t('exporting') : t('exportCsv')}
+            </button>
+            <button
+              type="button"
+              className="tb-btn"
+              onClick={() => void handleExportPdf()}
+              disabled={isExportingPdf}
+              title={t('exportPdf')}
+            >
+              <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M2 2.5h9M2 5h9M2 7.5h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                <path d="M9 8l2 2m0-2l-2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {isExportingPdf ? t('exporting') : t('exportPdf')}
+            </button>
+            <button
+              type="button"
               onClick={() => void handleRefreshAll()}
               disabled={isRefreshingAll}
               style={{
@@ -344,7 +428,7 @@ export function CampaignDetail() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* ── Campaign details ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
+          <div id="campaign-info" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {tOmni('campaigns.detail.info')}
             </div>
@@ -364,7 +448,7 @@ export function CampaignDetail() {
           </div>
 
           {/* ── Real-time metrics ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
+          <div id="campaign-metrics" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.metrics.title')}
             </div>
@@ -392,7 +476,7 @@ export function CampaignDetail() {
           </div>
 
           {/* ── Delivery funnel ── */}
-          <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
+          <div id="campaign-funnel" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'visible', flexShrink: 0 }}>
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {t('detail.funnel.title')}
             </div>
@@ -406,7 +490,7 @@ export function CampaignDetail() {
 
           {/* Breakdown by day (if report exists) */}
           {reportData?.breakdown && reportData.breakdown.length > 1 && (
-            <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
+            <div id="campaign-breakdown" style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', flexShrink: 0 }}>
               <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Breakdown por dia
               </div>

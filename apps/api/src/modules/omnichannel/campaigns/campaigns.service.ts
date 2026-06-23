@@ -879,6 +879,139 @@ export async function getCampaignReport(
   };
 }
 
+function csvField(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '""';
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function formatDatePtBr(value: Date | string | null | undefined): string {
+  if (!value) return '';
+  try {
+    return new Date(value as string).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  } catch {
+    return '';
+  }
+}
+
+export async function exportCampaignCsv(
+  campaignId: string,
+  schemaName: string,
+): Promise<string> {
+  const schema = quoteIdent(schemaName);
+
+  const campaignRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT
+       c.name, c.status,
+       c.total_contacts, c.sent_count, c.delivered_count,
+       c.read_count, c.replied_count, c.failed_count,
+       c.daily_limit, c.scheduled_at, c.started_at, c.completed_at, c.notes,
+       ch.name AS channel_name,
+       wt.name AS template_name,
+       u.name AS created_by_name
+     FROM ${schema}.campaigns c
+     LEFT JOIN ${schema}.channels ch ON ch.id = c.channel_id
+     LEFT JOIN ${schema}.whatsapp_templates wt ON wt.id = c.template_id
+     LEFT JOIN ${schema}.users u ON u.id = c.created_by
+     WHERE c.id = $1::uuid`,
+    campaignId,
+  );
+  const camp = campaignRows[0];
+  if (!camp) throw new NotFoundError('Campanha');
+
+  const breakdownRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT
+       DATE(COALESCE(sent_at, failed_at, created_at) AT TIME ZONE 'America/Sao_Paulo')::text AS date,
+       COUNT(*) FILTER (WHERE sent_at IS NOT NULL)::int AS sent,
+       COUNT(*) FILTER (WHERE status IN ('delivered','read','replied'))::int AS delivered,
+       COUNT(*) FILTER (WHERE status IN ('read','replied'))::int AS read,
+       COUNT(*) FILTER (WHERE status = 'replied')::int AS replied,
+       COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+     FROM ${schema}.campaign_contacts
+     WHERE campaign_id = $1::uuid
+       AND (sent_at IS NOT NULL OR failed_at IS NOT NULL)
+     GROUP BY 1
+     ORDER BY 1`,
+    campaignId,
+  );
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT
+       c.name AS contact_name,
+       COALESCE(c.whatsapp, c.phone) AS contact_phone,
+       cc.status,
+       cc.sent_at, cc.delivered_at,
+       cc.read_at, cc.replied_at, cc.failed_at,
+       cc.error_message
+     FROM ${schema}.campaign_contacts cc
+     JOIN ${schema}.contacts c ON c.id = cc.contact_id
+     WHERE cc.campaign_id = $1::uuid
+     ORDER BY cc.created_at ASC`,
+    campaignId,
+  );
+
+  const lines: string[] = [];
+
+  lines.push('INFORMAÇÕES DA CAMPANHA');
+  lines.push(`"Nome";${csvField(camp.name as string)}`);
+  lines.push(`"Status";${csvField(camp.status as string)}`);
+  lines.push(`"Canal";${csvField(camp.channel_name as string)}`);
+  lines.push(`"Template";${csvField(camp.template_name as string)}`);
+  lines.push(`"Criado por";${csvField(camp.created_by_name as string)}`);
+  lines.push(`"Limite diário";"${camp.daily_limit as number}"`);
+  lines.push(`"Agendado para";${csvField(formatDatePtBr(camp.scheduled_at as string))}`);
+  lines.push(`"Iniciado em";${csvField(formatDatePtBr(camp.started_at as string))}`);
+  lines.push(`"Concluído em";${csvField(formatDatePtBr(camp.completed_at as string))}`);
+  lines.push(`"Notas";${csvField(camp.notes as string)}`);
+  lines.push('');
+
+  lines.push('MÉTRICAS GERAIS');
+  lines.push(`"Total de contatos";"${camp.total_contacts as number}"`);
+  lines.push(`"Enviados";"${camp.sent_count as number}"`);
+  lines.push(`"Entregues";"${camp.delivered_count as number}"`);
+  lines.push(`"Lidos";"${camp.read_count as number}"`);
+  lines.push(`"Respondidos";"${camp.replied_count as number}"`);
+  lines.push(`"Falhos";"${camp.failed_count as number}"`);
+  lines.push('');
+
+  if (breakdownRows.length > 0) {
+    lines.push('BREAKDOWN POR DIA');
+    lines.push('"Data";"Enviados";"Entregues";"Lidos";"Respondidos";"Falhos"');
+    for (const row of breakdownRows) {
+      lines.push(
+        [
+          csvField(row.date as string),
+          `"${row.sent as number}"`,
+          `"${row.delivered as number}"`,
+          `"${row.read as number}"`,
+          `"${row.replied as number}"`,
+          `"${row.failed as number}"`,
+        ].join(';'),
+      );
+    }
+    lines.push('');
+  }
+
+  lines.push('CONTATOS');
+  lines.push('"Nome";"Telefone";"Status";"Enviado em";"Entregue em";"Lido em";"Respondido em";"Falhou em";"Erro"');
+  for (const row of contactRows) {
+    lines.push(
+      [
+        csvField(row.contact_name as string),
+        csvField(row.contact_phone as string),
+        csvField(row.status as string),
+        csvField(formatDatePtBr(row.sent_at as string)),
+        csvField(formatDatePtBr(row.delivered_at as string)),
+        csvField(formatDatePtBr(row.read_at as string)),
+        csvField(formatDatePtBr(row.replied_at as string)),
+        csvField(formatDatePtBr(row.failed_at as string)),
+        csvField(row.error_message as string),
+      ].join(';'),
+    );
+  }
+
+  return lines.join('\n');
+}
+
 export async function handleCampaignOptOut(
   schemaName: string,
   _conversationId: string,
