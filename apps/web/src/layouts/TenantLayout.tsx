@@ -960,7 +960,7 @@ export function TenantLayout() {
           <NotificationCenter />
 
           {/* Conversations-specific topbar actions */}
-          {pathname.startsWith('/omnichannel') && (
+          {pathname === '/omnichannel/conversations' && (
             <PermissionGate permission="conversations:reply">
               <>
                 <button
