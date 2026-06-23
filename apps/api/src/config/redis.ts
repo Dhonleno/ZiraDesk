@@ -129,3 +129,9 @@ function createRedisClient(): RedisClientLike {
 
 export const redis = createRedisClient();
 export const bullmqConnection = redis as unknown as ConnectionOptions;
+
+export function createRedisAdapterClients() {
+  const pub = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
+  const sub = pub.duplicate();
+  return { pub, sub };
+}

@@ -1,10 +1,11 @@
 import type { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
-import { redis } from '../config/redis.js';
+import { redis, createRedisAdapterClients } from '../config/redis.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 import { autoAssignNextQueuedConversation } from '../modules/omnichannel/conversations/auto-assign.service.js';
 
@@ -329,6 +330,12 @@ export function createSocketServer(httpServer: HttpServer): SocketServer {
     pingInterval: 25_000,
     allowEIO3: true,
   });
+
+  if (process.env.NODE_ENV !== 'test') {
+    const { pub, sub } = createRedisAdapterClients();
+    io.adapter(createAdapter(pub, sub));
+  }
+
   const socketServer = io;
 
   // Valida JWT antes de aceitar a conexão
