@@ -82,17 +82,14 @@ function toNonEmpty(value: string | null): string {
 }
 
 function formatRelativeDate(isoDate: string, locale: string): string {
-  const target = new Date(isoDate).getTime();
-  const now = Date.now();
-  const diffInSeconds = Math.round((target - now) / 1000);
-  const abs = Math.abs(diffInSeconds);
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-
-  if (abs < 60) return rtf.format(diffInSeconds, 'second');
-  if (abs < 3600) return rtf.format(Math.round(diffInSeconds / 60), 'minute');
-  if (abs < 86400) return rtf.format(Math.round(diffInSeconds / 3600), 'hour');
-  if (abs < 604800) return rtf.format(Math.round(diffInSeconds / 86400), 'day');
-  return new Date(isoDate).toLocaleDateString(locale);
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(isoDate))
 }
 
 function parseFilters(searchParams: URLSearchParams): HistoryFiltersParams {
