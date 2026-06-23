@@ -128,7 +128,18 @@ function createRedisClient(): RedisClientLike {
 }
 
 export const redis = createRedisClient();
-export const bullmqConnection = redis as unknown as ConnectionOptions;
+
+function createBullMQConnection() {
+  if (env.NODE_ENV === 'test') {
+    return createRedisClient();
+  }
+  return new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  });
+}
+
+export const bullmqConnection = createBullMQConnection() as unknown as ConnectionOptions;
 
 export function createRedisAdapterClients() {
   const pub = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, enableReadyCheck: false });
