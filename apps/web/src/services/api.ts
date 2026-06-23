@@ -3728,6 +3728,13 @@ export const campaignsApi = {
     });
     return res.data;
   },
+
+  exportPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/campaigns/${id}/export/pdf`, {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
 };
 
 // ── Agent status API ──────────────────────────────────────────────────────────

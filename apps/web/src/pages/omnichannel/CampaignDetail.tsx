@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { PageShell } from '../../components/layout/PageShell';
 import { campaignsApi, type Campaign, type CampaignContact, type CampaignContactStatus, type CampaignStatus } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -261,31 +259,13 @@ export function CampaignDetail() {
     if (!campaign) return;
     setIsExportingPdf(true);
     try {
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      let yOffset = 10;
-
-      const sectionIds = ['campaign-info', 'campaign-metrics', 'campaign-funnel', 'campaign-breakdown'];
-
-      for (const sectionId of sectionIds) {
-        const element = document.getElementById(sectionId);
-        if (!element) continue;
-
-        const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
-        const imgData = canvas.toDataURL('image/png');
-        const imgWidth = pageWidth - 20;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        if (yOffset + imgHeight > pdf.internal.pageSize.getHeight() - 10) {
-          pdf.addPage();
-          yOffset = 10;
-        }
-
-        pdf.addImage(imgData, 'PNG', 10, yOffset, imgWidth, imgHeight);
-        yOffset += imgHeight + 6;
-      }
-
-      pdf.save(`campanha-${campaign.name}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      const blob = await campaignsApi.exportPdf(campaign.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `campanha-${campaign.name}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
     } catch {
       toast.error(t('exportError'));
     } finally {

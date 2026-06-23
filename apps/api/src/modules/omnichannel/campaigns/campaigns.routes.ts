@@ -31,6 +31,7 @@ import {
   NotFoundError,
   ValidationError,
 } from './campaigns.service.js';
+import { exportCampaignPdf } from './campaign-pdf.service.js';
 import { ensureCampaignsInfrastructure } from './campaigns.infrastructure.js';
 import { campaignSendQueue } from '../../../jobs/queue.js';
 
@@ -177,6 +178,28 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
         .send('﻿' + csv);
     } catch (err) {
       if (err instanceof NotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // GET /api/omnichannel/campaigns/:id/export/pdf
+  app.get<{ Params: { id: string } }>('/:id/export/pdf', { preHandler: replyGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    const tenantId   = request.user.tenantId;
+    if (!schemaName || !tenantId) return reply.code(500).send({ success: false, error: { message: 'Schema não resolvido' } });
+
+    try {
+      const buffer = await exportCampaignPdf(request.params.id, schemaName, tenantId);
+      const date   = new Date().toISOString().slice(0, 10);
+      const filename = `campanha-${request.params.id.slice(0, 8)}-${date}.pdf`;
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(buffer);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Campaign not found') {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
       throw err;
     }
   });
