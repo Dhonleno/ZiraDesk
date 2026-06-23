@@ -695,8 +695,8 @@
   "queue": {
     "title": "Fila de atendimentos",
     "waiting": "aguardando",
-    "assume": "Assumir",
-    "assignMe": "Assumir",
+    "assume": "Atender",
+    "assignMe": "Atender",
     "assigning": "Assumindo...",
     "unknownContact": "Contato sem nome",
     "unclassified": "Sem grupo",
