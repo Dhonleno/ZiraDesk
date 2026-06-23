@@ -108,6 +108,8 @@ export async function omnichannelHistoryRoutes(app: FastifyInstance): Promise<vo
       dateFromLocal,
       dateToLocal,
       timezone,
+      sortBy: parsed.data.sort_by,
+      sortOrder: parsed.data.sort_order,
     };
 
     if (parsed.data.export === 'csv') {

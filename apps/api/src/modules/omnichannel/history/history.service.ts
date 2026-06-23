@@ -15,6 +15,8 @@ interface HistoryFilters {
   dateFromLocal: string;
   dateToLocal: string;
   timezone: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 interface HistoryRow {
@@ -271,6 +273,18 @@ function buildHistoryWhereClause(filters: Omit<HistoryFilters, 'page' | 'perPage
   return { whereSql, params };
 }
 
+const SORT_COLUMN_MAP: Record<string, string> = {
+  created_at:       'c.created_at',
+  protocol_number:  'c.protocol_number',
+  contact_name:     'ct.name',
+  assigned_name:    'u.name',
+  channel_type:     'c.channel_type',
+  status:           'c.status',
+  duration_seconds: 'duration_seconds',
+  wait_seconds:     'wait_seconds',
+  csat_score:       'c.csat_score',
+};
+
 export async function listHistory(filters: HistoryFilters, tenantId?: string) {
   const schemaName = await resolveSchemaName(tenantId);
   if (!schemaName) {
@@ -287,6 +301,10 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
   const usersRef = `${safeSchema}.users`;
 
   const { whereSql, params } = buildHistoryWhereClause(filters);
+
+  const sortCol = SORT_COLUMN_MAP[filters.sortBy ?? 'created_at'] ?? 'c.created_at';
+  const sortDir = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const nullsClause = sortDir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
 
   const limitToken = `$${params.length + 1}`;
   const offsetToken = `$${params.length + 2}`;
@@ -316,7 +334,7 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
      ${whereSql}
-     ORDER BY c.created_at DESC
+     ORDER BY ${sortCol} ${sortDir} ${nullsClause}
      LIMIT ${limitToken}::integer OFFSET ${offsetToken}::integer`,
     ...params,
     filters.perPage,

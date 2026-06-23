@@ -379,7 +379,10 @@
     "loadMore": "Load previous messages",
     "loading": "Loading...",
     "noMore": "Start of the conversation",
-    "error": "Error loading messages"
+    "error": "Error loading messages",
+    "sortAsc": "Sort ascending",
+    "sortDesc": "Sort descending",
+    "sortNone": "No sort"
   },
   "goals": {
     "title": "Goals",

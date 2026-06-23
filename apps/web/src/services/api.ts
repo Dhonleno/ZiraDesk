@@ -2786,6 +2786,9 @@ export interface HistoryFiltersParams {
   period?: HistoryPeriodPreset;
   date_from?: string;
   date_to?: string;
+  sort_by?: 'created_at' | 'protocol_number' | 'contact_name' | 'assigned_name'
+          | 'channel_type' | 'status' | 'duration_seconds' | 'wait_seconds' | 'csat_score';
+  sort_order?: 'asc' | 'desc';
 }
 
 export interface OmnichannelHistoryConversation {

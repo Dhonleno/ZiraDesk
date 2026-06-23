@@ -12,6 +12,11 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { GoalsConfig } from './GoalsConfig';
 
+type SortBy =
+  | 'created_at' | 'protocol_number' | 'contact_name' | 'assigned_name'
+  | 'channel_type' | 'status' | 'duration_seconds' | 'wait_seconds' | 'csat_score';
+type SortOrder = 'asc' | 'desc';
+
 const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = [
   { labelKey: 'history.periods.today', value: 'today' },
   { labelKey: 'history.periods.yesterday', value: 'yesterday' },
@@ -175,6 +180,47 @@ function HistoryDetailEmpty({ title, hint }: { title: string; hint: string }) {
   );
 }
 
+function SortableHeader({
+  column,
+  label,
+  currentSort,
+  currentOrder,
+  onSort,
+}: {
+  column: SortBy;
+  label: string;
+  currentSort: SortBy;
+  currentOrder: SortOrder;
+  onSort: (col: SortBy) => void;
+}) {
+  const isActive = currentSort === column;
+  return (
+    <th
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+      onClick={() => onSort(column)}
+      aria-sort={isActive ? (currentOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          aria-hidden
+          style={{ opacity: isActive ? 1 : 0.3, flexShrink: 0 }}
+        >
+          {isActive && currentOrder === 'asc' ? (
+            <path d="M5 2L8.5 7H1.5L5 2Z" fill="currentColor" />
+          ) : (
+            <path d="M5 8L1.5 3H8.5L5 8Z" fill="currentColor" />
+          )}
+        </svg>
+      </span>
+    </th>
+  );
+}
+
 export function HistoryPage() {
   const { t, i18n } = useTranslation('omnichannel');
   const toast = useToast();
@@ -186,14 +232,16 @@ export function HistoryPage() {
 
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const [searchDraft, setSearchDraft] = useState(filters.search ?? '');
+  const [sortBy, setSortBy] = useState<SortBy>('created_at');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   useEffect(() => {
     setSearchDraft(filters.search ?? '');
   }, [filters.search]);
 
   const { data: historyResult, isLoading } = useQuery({
-    queryKey: ['omnichannel-history', filters],
-    queryFn: () => omnichannelApi.listHistory(filters),
+    queryKey: ['omnichannel-history', filters, sortBy, sortOrder],
+    queryFn: () => omnichannelApi.listHistory({ ...filters, sort_by: sortBy, sort_order: sortOrder }),
   });
 
   const { data: detailData, isLoading: isDetailLoading } = useQuery({
@@ -270,6 +318,18 @@ export function HistoryPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [filters.search, searchDraft, updateFilterParams]);
+
+  const handleSort = useCallback((column: SortBy) => {
+    setSortBy((prev) => {
+      if (prev === column) {
+        setSortOrder((prevOrder) => (prevOrder === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortOrder('desc');
+      return column;
+    });
+    updateFilterParams({ page: '1' }, false);
+  }, [updateFilterParams]);
 
   const handleExport = async () => {
     try {
@@ -463,16 +523,16 @@ export function HistoryPage() {
                 <table className="history-table" role="grid">
                   <thead>
                     <tr>
-                      <th>{t('history.columns.protocol')}</th>
-                      <th>{t('history.columns.contact')}</th>
-                      <th>{t('history.columns.agent')}</th>
-                      <th>{t('history.columns.channel')}</th>
+                      <SortableHeader column="protocol_number"  label={t('history.columns.protocol')}  currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="contact_name"     label={t('history.columns.contact')}    currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="assigned_name"    label={t('history.columns.agent')}      currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="channel_type"     label={t('history.columns.channel')}    currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                       <th>{t('history.columns.group')}</th>
-                      <th>{t('history.columns.status')}</th>
-                      <th>{t('history.columns.duration')}</th>
-                      <th>{t('history.columns.waitTime')}</th>
-                      <th>{t('history.columns.csat')}</th>
-                      <th>{t('history.columns.date')}</th>
+                      <SortableHeader column="status"           label={t('history.columns.status')}     currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="duration_seconds" label={t('history.columns.duration')}   currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="wait_seconds"     label={t('history.columns.waitTime')}   currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="csat_score"       label={t('history.columns.csat')}       currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                      <SortableHeader column="created_at"       label={t('history.columns.date')}       currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody>
