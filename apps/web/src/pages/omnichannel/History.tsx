@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '../../components/layout/PageShell';
@@ -242,6 +242,7 @@ export function HistoryPage() {
   const { data: historyResult, isLoading } = useQuery({
     queryKey: ['omnichannel-history', filters, sortBy, sortOrder],
     queryFn: () => omnichannelApi.listHistory({ ...filters, sort_by: sortBy, sort_order: sortOrder }),
+    placeholderData: keepPreviousData,
   });
 
   const { data: detailData, isLoading: isDetailLoading } = useQuery({
