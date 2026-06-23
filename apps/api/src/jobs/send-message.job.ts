@@ -840,7 +840,12 @@ const worker = new Worker<SendMessageJob>(
       }
     }
   },
-  { connection: bullmqConnection },
+  {
+    connection: bullmqConnection,
+    concurrency: 10,
+    removeOnComplete: { count: 500 },
+    removeOnFail: { count: 200 },
+  },
 );
 
 worker.on('failed', (job, err) => {
