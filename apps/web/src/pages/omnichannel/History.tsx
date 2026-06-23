@@ -3,6 +3,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '../../components/layout/PageShell';
+import { AudioPlayer } from '../../components/omnichannel/AudioPlayer';
 import {
   omnichannelApi,
   type HistoryFiltersParams,
@@ -225,7 +226,7 @@ export function HistoryPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'history' | 'goals'>('history');
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
-  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const [searchDraft, setSearchDraft] = useState(filters.search ?? '');
@@ -535,18 +536,18 @@ export function HistoryPage() {
                   </thead>
                   <tbody>
                     {(historyResult?.data ?? []).map((conversation) => (
-                      <tr key={conversation.id}>
+                      <tr
+                        key={conversation.id}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(event) => {
+                          returnFocusRef.current = event.currentTarget;
+                          setSelectedConversationId(conversation.id);
+                        }}
+                      >
                         <td>
-                          <button
-                            type="button"
-                            className="history-protocol-btn"
-                            onClick={(event) => {
-                              returnFocusRef.current = event.currentTarget;
-                              setSelectedConversationId(conversation.id);
-                            }}
-                          >
+                          <span className="history-protocol-btn">
                             {conversation.protocol_number ?? '—'}
-                          </button>
+                          </span>
                         </td>
                         <td><ContactCell conversation={conversation} /></td>
                         <td><AgentCell conversation={conversation} /></td>
@@ -671,7 +672,32 @@ export function HistoryPage() {
                                   <strong>{message.sender_name || message.sender_type}</strong>
                                   <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>
                                 </header>
-                                <p>{message.content || `(${message.content_type})`}</p>
+                                {message.content_type === 'audio' && message.media_url ? (
+                                  <AudioPlayer src={message.media_url} />
+                                ) : message.content_type === 'image' && message.media_url ? (
+                                  <img
+                                    src={message.media_url}
+                                    alt={message.content ?? 'imagem'}
+                                    style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
+                                  />
+                                ) : message.content_type === 'video' && message.media_url ? (
+                                  <video
+                                    src={message.media_url}
+                                    controls
+                                    style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
+                                  />
+                                ) : message.content_type === 'document' && message.media_url ? (
+                                  <a
+                                    href={message.media_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: 'var(--teal)', fontSize: 13 }}
+                                  >
+                                    {message.content ?? t('history.downloadDocument', 'Baixar documento')}
+                                  </a>
+                                ) : (
+                                  <p>{message.content || `(${message.content_type})`}</p>
+                                )}
                               </article>
                             ))}
                           </div>
