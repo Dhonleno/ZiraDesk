@@ -327,7 +327,9 @@ function buildListConversationSqlContext(
       break;
     case 'closed':
       conditions.push("c.status = 'closed'");
-      conditions.push(`c.closed_by_user_id = ${pushParam(userId ?? null)}::uuid`);
+      if (!query.contact_id) {
+        conditions.push(`c.closed_by_user_id = ${pushParam(userId ?? null)}::uuid`);
+      }
       break;
     default:
       conditions.push('c.assigned_to IS NOT NULL');
@@ -539,6 +541,7 @@ export async function listConversations(
   const effectiveQuery: ListConversationsQuery = !isManager
     && query.assigned_to_me === undefined
     && !query.agent_id
+    && !query.contact_id
     && (query.tab === 'open' || !query.tab)
     ? { ...query, assigned_to_me: true }
     : query;
