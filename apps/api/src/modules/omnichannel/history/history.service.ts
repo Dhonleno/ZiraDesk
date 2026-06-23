@@ -471,6 +471,11 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
      LEFT JOIN ${usersRef} u ON u.id = al.user_id
      WHERE al.entity = 'conversation'
        AND al.entity_id = $1::uuid
+       AND al.action NOT IN (
+         'conversation.message',
+         'conversation.queue.notified',
+         'conversation.resolved'
+       )
      ORDER BY al.created_at ASC`,
     conversationId,
   );
@@ -550,6 +555,16 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
         && closureReason.notes.trim()
         ? closureReason.notes.trim()
         : description;
+    } else if (entry.action === 'message.failed') {
+      title = 'Falha no envio de mensagem';
+      description = entry.new_data?.error_message
+        ? String(entry.new_data.error_message)
+        : 'Mensagem não pôde ser entregue';
+    } else if (entry.action === 'help.requested') {
+      title = 'Ajuda solicitada';
+      description = typeof entry.new_data?.target_name === 'string' && entry.new_data.target_name.trim()
+        ? `Solicitou ajuda de ${entry.new_data.target_name.trim()}`
+        : null;
     }
 
     timeline.push({
