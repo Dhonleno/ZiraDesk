@@ -404,6 +404,9 @@ const campaignSendWorker = new Worker<CampaignSendJobData>(
   {
     connection: bullmqConnection,
     concurrency: 1,
+    lockDuration: 300_000,
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 50 },
   },
 );
 
