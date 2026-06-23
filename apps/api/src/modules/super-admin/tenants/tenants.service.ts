@@ -537,6 +537,42 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_status"
+    ON "${schemaName}".conversations(status)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_assigned_to"
+    ON "${schemaName}".conversations(assigned_to)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_contact_id"
+    ON "${schemaName}".conversations(contact_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_channel_id"
+    ON "${schemaName}".conversations(channel_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_last_message_at"
+    ON "${schemaName}".conversations(last_message_at DESC)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_autoassign"
+    ON "${schemaName}".conversations(status, assigned_to, queue_entered_at ASC NULLS LAST)
+    WHERE status = 'open' AND assigned_to IS NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_created_at"
+    ON "${schemaName}".conversations(created_at DESC)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "${schemaName}".conversation_assignments (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       conversation_id UUID NOT NULL REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
@@ -601,6 +637,11 @@ async function createTenantTables(schemaName: string): Promise<void> {
       metadata        JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_messages_conversation_id"
+    ON "${schemaName}".messages(conversation_id)
   `);
 
   await prisma.$executeRawUnsafe(`
