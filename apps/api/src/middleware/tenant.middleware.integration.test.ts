@@ -109,11 +109,10 @@ describe('Tenant middleware integration', () => {
     vi.restoreAllMocks();
   });
 
-  it('requisição com subdomínio válido resolve tenant e seta search_path', async () => {
+  it('requisição com subdomínio válido resolve tenant e popula request.tenant', async () => {
     const app = buildApp();
     const slug = requiredGlobal('slug');
     const schemaName = requiredGlobal('schema');
-    const searchPathSpy = vi.spyOn(prisma, '$executeRawUnsafe');
 
     const response = await app.inject({
       method: 'GET',
@@ -125,7 +124,6 @@ describe('Tenant middleware integration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ slug, schemaName });
-    expect(searchPathSpy).toHaveBeenCalledWith(`SET search_path TO "${schemaName}", public`);
   });
 
   it('requisição com subdomínio inexistente retorna 404', async () => {

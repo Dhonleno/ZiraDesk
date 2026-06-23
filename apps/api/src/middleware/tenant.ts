@@ -37,10 +37,6 @@ export async function tenantMiddleware(
     return reply.code(402).send({ error: 'Conta suspensa ou cancelada' });
   }
 
-  // Redireciona as queries do Prisma para o schema isolado do tenant
-  // O SET é feito via $executeRawUnsafe na conexão da requisição
-  await prisma.$executeRawUnsafe(`SET search_path TO "${tenant.schemaName}", public`);
-
   request.tenant = {
     id: tenant.id,
     name: tenant.name,
