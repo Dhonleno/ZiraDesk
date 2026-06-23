@@ -453,7 +453,7 @@ async function findBestAvailableAgent(
          AND aa.status = 'online'
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
-         AND u.role IN ('owner', 'admin', 'agent')
+         AND u.role IN ('agent')
        LIMIT 1`,
       preferredAgentId,
     );
@@ -469,7 +469,7 @@ async function findBestAvailableAgent(
        AND aa.status = 'online'
        AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('agent')
      ORDER BY aa.last_assigned_at ASC
      LIMIT 1`,
   );
@@ -1506,6 +1506,7 @@ async function processIncomingMessage(
           csatPayload: null,
           conversationStatus: currentConversation?.status ?? null,
           refreshInactivityForAssignedConversation: false,
+          isWaitingReturnFlow: false as const,
         };
       }
 
@@ -1542,6 +1543,7 @@ async function processIncomingMessage(
           csatPayload: null,
           conversationStatus: currentConversation?.status ?? null,
           refreshInactivityForAssignedConversation: false,
+          isWaitingReturnFlow: false as const,
         };
       }
 
@@ -1614,6 +1616,7 @@ async function processIncomingMessage(
         csatPayload,
         conversationStatus: currentConversation?.status ?? null,
         refreshInactivityForAssignedConversation: false,
+        isWaitingReturnFlow: false as const,
       };
     }
 
@@ -1703,7 +1706,18 @@ async function processIncomingMessage(
         );
       }
 
-      activeOutboundReplyAgentId = selectedAgent?.user_id ?? preferredAgentId ?? currentAssignedTo ?? null;
+      let validatedPreferredId: string | null = null;
+      if (preferredAgentId) {
+        const agentRow = await tx.$queryRawUnsafe<Array<{ role: string }>>(
+          `SELECT role FROM ${quoteIdent(schemaName)}.users WHERE id = $1::uuid LIMIT 1`,
+          preferredAgentId,
+        );
+        if (agentRow[0]?.role === 'agent') {
+          validatedPreferredId = preferredAgentId;
+        }
+      }
+
+      activeOutboundReplyAgentId = selectedAgent?.user_id ?? validatedPreferredId ?? null;
       await syncActiveConversationCounters(tx, [currentAssignedTo, selectedAgent?.user_id ?? null]);
     }
 
@@ -1882,6 +1896,7 @@ async function processIncomingMessage(
       shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isWaitingReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
       conversationStatus: currentConversation?.status ?? null,
+      isWaitingReturnFlow,
       activeOutboundReplyAgentId,
     };
   });
@@ -1938,11 +1953,14 @@ async function processIncomingMessage(
     }
   }
 
-  if (result.activeOutboundReplyAgentId) {
+  if (result.isWaitingReturnFlow) {
     io.to(`tenant:${tenantId}`).emit('conversation:status_changed', {
       conversationId: result.conversationId,
       status: 'open',
     });
+  }
+
+  if (result.activeOutboundReplyAgentId) {
     io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:status_changed', {
       conversationId: result.conversationId,
       status: 'open',
