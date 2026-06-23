@@ -1,5 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { redis } from '../config/redis.js';
 import type { Tenant, PlanFeature } from '@ziradesk/shared';
 
 declare module 'fastify' {
@@ -7,6 +9,12 @@ declare module 'fastify' {
     tenant: Tenant;
   }
 }
+
+type TenantWithPlan = Prisma.TenantGetPayload<{
+  include: { plan: { select: { features: true; maxMessages: true } } };
+}>;
+
+const TENANT_CACHE_TTL = 60;
 
 export async function tenantMiddleware(
   request: FastifyRequest,
@@ -20,14 +28,37 @@ export async function tenantMiddleware(
     return reply.code(400).send({ error: 'Tenant não identificado' });
   }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: subdomain },
-    include: {
-      plan: {
-        select: { features: true, maxMessages: true },
+  let tenant: TenantWithPlan | null = null;
+
+  const cacheKey = `tenant:slug:${subdomain}`;
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      tenant = JSON.parse(cached) as TenantWithPlan;
+    }
+  } catch {
+    // Redis indisponível — continua sem cache
+  }
+
+  if (!tenant) {
+    tenant = await prisma.tenant.findUnique({
+      where: { slug: subdomain },
+      include: {
+        plan: {
+          select: { features: true, maxMessages: true },
+        },
       },
-    },
-  });
+    });
+
+    if (tenant) {
+      try {
+        await redis.set(cacheKey, JSON.stringify(tenant), 'EX', TENANT_CACHE_TTL);
+      } catch {
+        // Redis indisponível — segue sem cachear
+      }
+    }
+  }
 
   if (!tenant) {
     return reply.code(404).send({ error: 'Tenant não encontrado' });
@@ -44,9 +75,9 @@ export async function tenantMiddleware(
     schemaName: tenant.schemaName,
     planId: tenant.planId,
     status: tenant.status as Tenant['status'],
-    trialEndsAt: tenant.trialEndsAt,
+    trialEndsAt: tenant.trialEndsAt ? new Date(tenant.trialEndsAt) : null,
     settings: tenant.settings as Record<string, unknown>,
-    createdAt: tenant.createdAt,
+    createdAt: new Date(tenant.createdAt),
     ...(tenant.plan && {
       plan: {
         features: (tenant.plan.features ?? {}) as Partial<Record<PlanFeature, boolean>>,
