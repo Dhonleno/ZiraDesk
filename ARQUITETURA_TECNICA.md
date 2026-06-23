@@ -1381,3 +1381,75 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
 - Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
+
+---
+
+## 17. PADRÕES DE FRONTEND — BOAS PRÁTICAS OBRIGATÓRIAS
+
+### 17.1 Tabelas com paginação server-side
+
+Toda tabela com paginação server-side (filtros e `page` enviados à API)
+**deve** implementar ordenação também no backend — nunca no frontend.
+
+**Regra:** sort no frontend afeta apenas a página atual, criando
+comportamento enganoso para o usuário (ex: ordenar por "Data" em uma
+tabela de 64 registros com 25 por página ordena só os 25 visíveis).
+
+**Implementação obrigatória:**
+- Backend: adicionar `sort_by` (enum de colunas permitidas via allowlist)
+  e `sort_order` (`asc | desc`) ao schema Zod da rota
+- Backend: usar `SORT_COLUMN_MAP` (allowlist) — nunca interpolar
+  o valor do usuário diretamente no SQL
+- Backend: `ORDER BY` com `NULLS LAST` / `NULLS FIRST` conforme direção
+- Frontend: estados `sortBy` e `sortOrder` incluídos no `queryKey`
+  do TanStack Query para disparar refetch ao mudar ordenação
+- Frontend: `placeholderData: keepPreviousData` obrigatório na query
+  para evitar flash/piscada da tabela durante o refetch
+
+**Colunas não recomendadas para sort:**
+- Expressões JSONB (ex: `metadata->>'campo'`) sem índice de suporte
+- Campos com alto percentual de valores `NULL` sem índice parcial
+
+**Referência de implementação:** `history.service.ts` + `History.tsx`
+
+---
+
+### 17.2 TanStack Query v5 — padrões obrigatórios
+
+| Situação | Padrão obrigatório |
+|---|---|
+| Lista com filtros ou sort | `placeholderData: keepPreviousData` |
+| Dados que atualizam em tempo real (status `running`) | `refetchInterval` condicional + Socket.io para updates incrementais |
+| Dados raramente alterados (planos, configurações) | `staleTime: 60_000` mínimo |
+| Query dependente de outra | `enabled: Boolean(dependência)` |
+| Mutação que invalida lista | `queryClient.invalidateQueries({ queryKey: ['chave-da-lista'] })` |
+
+**Nunca** usar `staleTime: 0` (default) em listas paginadas — causa
+refetch desnecessário a cada window focus.
+
+---
+
+### 17.3 Exportação de arquivos
+
+| Formato | Onde gerar | Biblioteca |
+|---|---|---|
+| CSV | Backend | Manual (padrão `csvField()` + separador `;` + BOM `﻿`) |
+| PDF simples (relatório) | Backend | PDFKit |
+| PDF com captura de tela | ❌ Não usar | `html2canvas` + `jspdf` descartados — qualidade inadequada para produção |
+| Excel | Backend | `xlsx` (já instalado em `apps/api`) |
+
+**Padrão CSV do projeto:**
+- Separador: `;` (ponto-e-vírgula — compatível com Excel Brasil)
+- BOM: `﻿` prefixado pela route handler
+- Escaping: `"${value.replace(/"/g, '""')}"` (RFC 4180)
+- Sem biblioteca externa — geração manual com helper local `csvField()`
+- Referência: `history.service.ts` → `exportHistoryCsv()`
+
+**Padrão PDF do projeto:**
+- Biblioteca: `pdfkit` (backend)
+- Paleta: tema claro (`#FFFFFF` fundo, `#14171C` texto, `#00A88C` primário)
+- Logo: `apps/web/public/icon-192.png` (ZiraDesk) + logo do tenant se existir
+- Rodapé: via evento `pageAdded` + chamada manual antes de `doc.end()`
+- Truncamento de texto longo: `truncate(text, maxChars)` manual —
+  `ellipsis: true` do PDFKit não é confiável
+- Referência: `campaign-pdf.service.ts`
