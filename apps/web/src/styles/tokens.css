@@ -2244,8 +2244,8 @@
 .history-transcript-list {
   display: grid;
   gap: 8px;
-  max-height: 260px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   padding-right: 4px;
 }
 

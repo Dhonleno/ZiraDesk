@@ -474,7 +474,8 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
        AND al.action NOT IN (
          'conversation.message',
          'conversation.queue.notified',
-         'conversation.resolved'
+         'conversation.resolved',
+         'conversation.pii.accessed'
        )
      ORDER BY al.created_at ASC`,
     conversationId,
