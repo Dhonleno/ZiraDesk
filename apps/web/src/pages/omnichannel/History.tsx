@@ -9,8 +9,10 @@ import {
   type HistoryFiltersParams,
   type HistoryPeriodPreset,
   type OmnichannelHistoryConversation,
+  type OmnichannelHistoryMessage,
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { useMediaUrl } from '../../hooks/useMediaUrl';
 import { GoalsConfig } from './GoalsConfig';
 
 type SortBy =
@@ -176,6 +178,70 @@ function HistoryDetailEmpty({ title, hint }: { title: string; hint: string }) {
       </div>
     </div>
   );
+}
+
+function HistoryMediaLoading() {
+  const { t } = useTranslation('omnichannel');
+
+  return (
+    <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+      {t('queue.previewLoadingMedia')}
+    </span>
+  );
+}
+
+function HistoryMedia({
+  message,
+  conversationId,
+}: {
+  message: OmnichannelHistoryMessage;
+  conversationId: string;
+}) {
+  const { t } = useTranslation('omnichannel');
+  const resolvedUrl = useMediaUrl(message.media_url, conversationId);
+
+  if (message.content_type === 'audio' && message.media_url) {
+    if (!resolvedUrl) return <HistoryMediaLoading />;
+    return <AudioPlayer src={resolvedUrl} />;
+  }
+
+  if (message.content_type === 'image' && message.media_url) {
+    if (!resolvedUrl) return <HistoryMediaLoading />;
+    return (
+      <img
+        src={resolvedUrl}
+        alt={message.content ?? 'imagem'}
+        style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
+      />
+    );
+  }
+
+  if (message.content_type === 'video' && message.media_url) {
+    if (!resolvedUrl) return <HistoryMediaLoading />;
+    return (
+      <video
+        src={resolvedUrl}
+        controls
+        style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
+      />
+    );
+  }
+
+  if (message.content_type === 'document' && message.media_url) {
+    if (!resolvedUrl) return <HistoryMediaLoading />;
+    return (
+      <a
+        href={resolvedUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--teal)', fontSize: 13 }}
+      >
+        {message.content ?? t('history.downloadDocument', 'Baixar documento')}
+      </a>
+    );
+  }
+
+  return <p>{message.content || `(${message.content_type})`}</p>;
 }
 
 function SortableHeader({
@@ -672,32 +738,10 @@ export function HistoryPage() {
                                   <strong>{message.sender_name || message.sender_type}</strong>
                                   <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>
                                 </header>
-                                {message.content_type === 'audio' && message.media_url ? (
-                                  <AudioPlayer src={message.media_url} />
-                                ) : message.content_type === 'image' && message.media_url ? (
-                                  <img
-                                    src={message.media_url}
-                                    alt={message.content ?? 'imagem'}
-                                    style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
-                                  />
-                                ) : message.content_type === 'video' && message.media_url ? (
-                                  <video
-                                    src={message.media_url}
-                                    controls
-                                    style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
-                                  />
-                                ) : message.content_type === 'document' && message.media_url ? (
-                                  <a
-                                    href={message.media_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ color: 'var(--teal)', fontSize: 13 }}
-                                  >
-                                    {message.content ?? t('history.downloadDocument', 'Baixar documento')}
-                                  </a>
-                                ) : (
-                                  <p>{message.content || `(${message.content_type})`}</p>
-                                )}
+                                <HistoryMedia
+                                  message={message}
+                                  conversationId={selectedConversationId!}
+                                />
                               </article>
                             ))}
                           </div>

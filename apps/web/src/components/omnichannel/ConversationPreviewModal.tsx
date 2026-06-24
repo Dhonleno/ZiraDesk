@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AudioPlayer } from './AudioPlayer';
 import { omnichannelApi } from '../../services/api';
+import { useMediaUrl } from '../../hooks/useMediaUrl';
 
 interface Props {
   conversationId: string;
@@ -17,48 +17,6 @@ function senderLabel(senderType: string): string {
   if (senderType === 'bot') return 'Bot';
   if (senderType === 'system') return 'Sistema';
   return 'Cliente';
-}
-
-function isDirectMediaUrl(mediaId: string): boolean {
-  return mediaId.startsWith('http') || mediaId.startsWith('blob:') || mediaId.startsWith('/');
-}
-
-function useMediaUrl(mediaId: string | null, conversationId: string) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    setBlobUrl(null);
-    if (!mediaId) return undefined;
-
-    if (isDirectMediaUrl(mediaId)) {
-      setBlobUrl(mediaId);
-      return undefined;
-    }
-
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    omnichannelApi
-      .downloadMedia(mediaId, conversationId)
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        setBlobUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setBlobUrl(null);
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [mediaId, conversationId]);
-
-  return blobUrl;
 }
 
 function PreviewMediaLoading() {
