@@ -98,6 +98,7 @@ async function createTicket(payload: Record<string, unknown> = {}) {
     .send({
       title: uniqueText('Ticket'),
       description: 'Ticket criado via teste de integração',
+      assigned_to: TEST_USER_ID,
       ...payload,
     });
 
@@ -194,6 +195,7 @@ describe('Tickets integration', () => {
       .set(authHeader())
       .send({
         title: uniqueText('Novo ticket'),
+        assigned_to: TEST_USER_ID,
       });
 
     expect(response.status).toBe(201);
@@ -202,6 +204,7 @@ describe('Tickets integration', () => {
       title: expect.stringContaining('Novo ticket'),
       status: 'open',
       priority: 'medium',
+      assigned_to: TEST_USER_ID,
     });
   });
 
@@ -270,6 +273,13 @@ describe('Tickets integration', () => {
   it('PATCH /api/tickets/:id com transição inválida retorna 422', async () => {
     const ticket = await createTicket({ status: 'open' });
 
+    const toInProgress = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader())
+      .send({ status: 'in_progress' });
+
+    expect(toInProgress.status).toBe(200);
+
     const resolveResponse = await createTestApp()
       .patch(`/api/tickets/${ticket.id}`)
       .set(authHeader())
@@ -293,6 +303,7 @@ describe('Tickets integration', () => {
       .send({
         title: uniqueText('Urgente'),
         priority: 'urgent',
+        assigned_to: TEST_USER_ID,
       });
 
     expect(response.status).toBe(422);
@@ -306,6 +317,7 @@ describe('Tickets integration', () => {
       .send({
         title: uniqueText('Waiting'),
         status: 'waiting',
+        assigned_to: TEST_USER_ID,
       });
 
     expect(response.status).toBe(422);

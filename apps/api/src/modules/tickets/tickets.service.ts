@@ -183,11 +183,11 @@ interface TicketTypeRuleRow {
 }
 
 const STATUS_TRANSITIONS: Record<string, ReadonlySet<string>> = {
-  open: new Set(['in_progress', 'waiting', 'resolved', 'closed']),
-  in_progress: new Set(['open', 'waiting', 'resolved', 'closed']),
-  waiting: new Set(['open', 'in_progress', 'resolved', 'closed']),
-  resolved: new Set(['open', 'closed']),
-  closed: new Set(['open']),
+  open:        new Set(['in_progress', 'waiting']),
+  in_progress: new Set(['open', 'waiting', 'resolved']),
+  waiting:     new Set(['open', 'in_progress']),
+  resolved:    new Set(['open', 'in_progress', 'closed']),
+  closed:      new Set(['open']),
 };
 
 function ensureValidStatusTransition(fromStatus: string, toStatus: string): void {
@@ -701,6 +701,15 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       requireDueDateForUrgent: typeRules.require_due_date_for_urgent,
       requireCategoryForWaiting: typeRules.require_category_for_waiting,
     });
+
+    const userExists = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM users WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+      data.assigned_to,
+    );
+    if (!userExists.length) {
+      throw new BusinessRuleError('Usuário responsável não encontrado ou inativo');
+    }
+
     const tagsLiteral = toPgArray(data.tags ?? []);
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
