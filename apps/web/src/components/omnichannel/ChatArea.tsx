@@ -1130,21 +1130,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     onError: () => toast.error(t('resolve.reopenError')),
   });
 
-  const transferSystemMessage = useMutation({
-    mutationFn: (agentName: string) =>
-      omnichannelApi.sendMessage(conversationId, {
-        content: t('transfer.systemMessage', { name: agentName }),
-        contentType: 'text',
-        isInternal: true,
-      }),
-    onSuccess: () => {
-      shouldAutoScrollNextRef.current = true;
-      nextScrollBehaviorRef.current = 'smooth';
-      void loadLatestMessages(true);
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
 
   const endHelpMutation = useMutation({
     mutationFn: () => omnichannelApi.endHelp(conversationId),
@@ -1627,7 +1612,11 @@ export function ChatArea({ conversationId, onClosed }: Props) {
       : msg.content;
     const showTemplateLabel = Boolean(isTemplateMessage && resolvedTemplateName);
     const showMessageContent = Boolean(resolvedTemplateBody) && !hideAudioLabel && !isCallRecording;
-    const agentDisplayName = conv?.assigned_name ?? currentUserName ?? t('chat.noAgent');
+    const agentDisplayName =
+      (isAgent ? msg.sender_name : null)
+      ?? conv?.assigned_name
+      ?? currentUserName
+      ?? t('chat.noAgent');
     const contactDisplayName = displayName;
     const organizationDisplayName = conv?.organization_name?.trim();
     const clientLabel = organizationDisplayName
@@ -1660,7 +1649,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
         : null;
     const isFailedMessage = resolveMessageDeliveryStatus(msg) === 'failed';
 
-    if (isSystem && !isCallRecording && !msg.is_internal) {
+    if (isSystem && !isCallRecording) {
       return (
         <div
           style={{
@@ -3209,8 +3198,12 @@ export function ChatArea({ conversationId, onClosed }: Props) {
         conversationId={conversationId}
         currentAgentId={conv?.assigned_to ?? null}
         onClose={() => setShowTransferModal(false)}
-        onTransferred={async ({ name: agentName }) => {
-          await transferSystemMessage.mutateAsync(agentName);
+        onTransferred={async () => {
+          shouldAutoScrollNextRef.current = true;
+          nextScrollBehaviorRef.current = 'smooth';
+          void loadLatestMessages(true);
+          void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+          void qc.invalidateQueries({ queryKey: ['conversations'] });
         }}
       />
 
