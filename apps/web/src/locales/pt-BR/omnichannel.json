@@ -714,7 +714,14 @@
     "empty": "Nenhum atendimento na fila",
     "emptyHint": "Novos atendimentos aparecerão aqui automaticamente",
     "allChannels": "Todos os canais",
-    "waitingTime": "Tempo na fila"
+    "waitingTime": "Tempo na fila",
+    "preview": "Visualizar",
+    "previewTitle": "Conversa com {{name}}",
+    "previewSubtitle": "Pré-visualização — somente leitura",
+    "previewClose": "Fechar",
+    "previewLoading": "Carregando mensagens...",
+    "previewEmpty": "Nenhuma mensagem nesta conversa",
+    "previewDownload": "Baixar documento"
   },
   "visitor": "Visitante",
   "agentFilter": "Filtro por agente",

@@ -714,7 +714,14 @@
     "empty": "No conversations in queue",
     "emptyHint": "New conversations will appear here automatically",
     "allChannels": "All channels",
-    "waitingTime": "Wait time"
+    "waitingTime": "Wait time",
+    "preview": "Preview",
+    "previewTitle": "Conversation with {{name}}",
+    "previewSubtitle": "Preview — read only",
+    "previewClose": "Close",
+    "previewLoading": "Loading messages...",
+    "previewEmpty": "No messages in this conversation",
+    "previewDownload": "Download document"
   },
   "visitor": "Visitor",
   "agentFilter": "Agent filter",

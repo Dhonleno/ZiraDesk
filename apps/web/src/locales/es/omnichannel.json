@@ -714,7 +714,14 @@
     "empty": "No hay atenciones en la cola",
     "emptyHint": "Las nuevas atenciones aparecerán aquí automáticamente",
     "allChannels": "Todos los canales",
-    "waitingTime": "Tiempo en cola"
+    "waitingTime": "Tiempo en cola",
+    "preview": "Visualizar",
+    "previewTitle": "Conversación con {{name}}",
+    "previewSubtitle": "Vista previa — solo lectura",
+    "previewClose": "Cerrar",
+    "previewLoading": "Cargando mensajes...",
+    "previewEmpty": "Sin mensajes en esta conversación",
+    "previewDownload": "Descargar documento"
   },
   "visitor": "Visitante",
   "agentFilter": "Filtro por agente",

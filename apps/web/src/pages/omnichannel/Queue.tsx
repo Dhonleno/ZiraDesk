@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../../components/layout/PageShell';
+import { ConversationPreviewModal } from '../../components/omnichannel/ConversationPreviewModal';
 import { omnichannelApi } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
 import { useToast } from '../../stores/toast.store';
@@ -161,6 +162,7 @@ export function QueuePage() {
   const toast = useToast();
   const [channelFilter, setChannelFilter] = useState('');
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [previewConversation, setPreviewConversation] = useState<{ id: string; contactName: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const { data, isLoading } = useQuery<QueueResponse>({
@@ -292,7 +294,7 @@ export function QueuePage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(300px, 1fr) minmax(150px, 220px) minmax(160px, 240px) 140px 110px 96px',
+              gridTemplateColumns: 'minmax(300px, 1fr) minmax(150px, 220px) minmax(160px, 240px) 140px 110px 196px',
               gap: 12,
               alignItems: 'center',
               padding: '10px 20px',
@@ -328,7 +330,7 @@ export function QueuePage() {
               key={conv.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(300px, 1fr) minmax(150px, 220px) minmax(160px, 240px) 140px 110px 96px',
+                gridTemplateColumns: 'minmax(300px, 1fr) minmax(150px, 220px) minmax(160px, 240px) 140px 110px 196px',
                 alignItems: 'center',
                 gap: 12,
                 padding: '14px 20px',
@@ -456,39 +458,65 @@ export function QueuePage() {
                 </div>
               </div>
 
-              {/* Assign button */}
-              <button
-                type="button"
-                className="tb-btn tb-btn-primary"
-                style={{ justifySelf: 'end', flexShrink: 0 }}
-                aria-label={`${t('queue.assignMe')} de ${contactName}`}
-                onClick={(e) => { e.stopPropagation(); void handleAssignMe(conv.id); }}
-                disabled={assigningId === conv.id}
-              >
-                {assigningId === conv.id ? (
-                  <>
-                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" />
-                      <path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                    {t('queue.assigning')}
-                  </>
-                ) : (
-                  <>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                      <circle cx="4" cy="3" r="1.6" stroke="currentColor" strokeWidth="1.4" />
-                      <path d="M1 9.5c0-1.66 1.343-3 3-3h1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                      <path d="M8.5 7.5 11 9.5l-2.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M11 9.5H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                    </svg>
-                    {t('queue.assignMe')}
-                  </>
-                )}
-              </button>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="tb-btn"
+                  aria-label={`${t('queue.preview')} — ${contactName}`}
+                  onClick={(e) => { e.stopPropagation(); setPreviewConversation({ id: conv.id, contactName }); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <circle cx="6" cy="6" r="3" stroke="currentColor" strokeWidth="1.4" />
+                    <circle cx="6" cy="6" r="1" fill="currentColor" />
+                  </svg>
+                  {t('queue.preview')}
+                </button>
+                <button
+                  type="button"
+                  className="tb-btn tb-btn-primary"
+                  aria-label={`${t('queue.assignMe')} — ${contactName}`}
+                  onClick={(e) => { e.stopPropagation(); void handleAssignMe(conv.id); }}
+                  disabled={assigningId === conv.id}
+                >
+                  {assigningId === conv.id ? (
+                    <>
+                      <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" />
+                        <path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      {t('queue.assigning')}
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <circle cx="4" cy="3" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+                        <path d="M1 9.5c0-1.66 1.343-3 3-3h1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        <path d="M8.5 7.5 11 9.5l-2.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M11 9.5H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
+                      {t('queue.assignMe')}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {previewConversation && (
+        <ConversationPreviewModal
+          conversationId={previewConversation.id}
+          contactName={previewConversation.contactName}
+          isAssigning={assigningId === previewConversation.id}
+          onClose={() => setPreviewConversation(null)}
+          onAssign={() => {
+            void handleAssignMe(previewConversation.id);
+            setPreviewConversation(null);
+          }}
+        />
+      )}
     </PageShell>
   );
 }
