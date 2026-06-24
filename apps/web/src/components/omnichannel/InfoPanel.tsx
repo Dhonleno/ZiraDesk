@@ -586,7 +586,7 @@ export function InfoPanel({ conversationId }: Props) {
               </PiiInfoField>
 
               {contactPhone ? (
-                <div style={{ marginTop: 12 }}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                   <CallWidget
                     contactName={contactName ?? t('info.contact')}
                     contactPhone={contactPhone}
