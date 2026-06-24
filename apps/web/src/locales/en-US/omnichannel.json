@@ -720,6 +720,7 @@
     "previewSubtitle": "Preview — read only",
     "previewClose": "Close",
     "previewLoading": "Loading messages...",
+    "previewLoadingMedia": "Loading media...",
     "previewEmpty": "No messages in this conversation",
     "previewDownload": "Download document"
   },

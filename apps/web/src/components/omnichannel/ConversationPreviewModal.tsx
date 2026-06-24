@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AudioPlayer } from './AudioPlayer';
@@ -16,6 +17,139 @@ function senderLabel(senderType: string): string {
   if (senderType === 'bot') return 'Bot';
   if (senderType === 'system') return 'Sistema';
   return 'Cliente';
+}
+
+function isDirectMediaUrl(mediaId: string): boolean {
+  return mediaId.startsWith('http') || mediaId.startsWith('blob:') || mediaId.startsWith('/');
+}
+
+function useMediaUrl(mediaId: string | null, conversationId: string) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBlobUrl(null);
+    if (!mediaId) return undefined;
+
+    if (isDirectMediaUrl(mediaId)) {
+      setBlobUrl(mediaId);
+      return undefined;
+    }
+
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    omnichannelApi
+      .downloadMedia(mediaId, conversationId)
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setBlobUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setBlobUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mediaId, conversationId]);
+
+  return blobUrl;
+}
+
+function PreviewMediaLoading() {
+  const { t } = useTranslation('omnichannel');
+
+  return (
+    <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+      {t('queue.previewLoadingMedia')}
+    </span>
+  );
+}
+
+function PreviewAudio({
+  mediaId,
+  conversationId,
+  isOutgoing,
+}: {
+  mediaId: string;
+  conversationId: string;
+  isOutgoing: boolean;
+}) {
+  const blobUrl = useMediaUrl(mediaId, conversationId);
+
+  if (!blobUrl) return <PreviewMediaLoading />;
+  return <AudioPlayer src={blobUrl} isOutgoing={isOutgoing} />;
+}
+
+function PreviewImage({
+  mediaId,
+  conversationId,
+  alt,
+}: {
+  mediaId: string;
+  conversationId: string;
+  alt: string;
+}) {
+  const blobUrl = useMediaUrl(mediaId, conversationId);
+
+  if (!blobUrl) return <PreviewMediaLoading />;
+  return (
+    <img
+      src={blobUrl}
+      alt={alt}
+      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }}
+    />
+  );
+}
+
+function PreviewVideo({
+  mediaId,
+  conversationId,
+}: {
+  mediaId: string;
+  conversationId: string;
+}) {
+  const blobUrl = useMediaUrl(mediaId, conversationId);
+
+  if (!blobUrl) return <PreviewMediaLoading />;
+  return (
+    <video
+      src={blobUrl}
+      controls
+      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }}
+    />
+  );
+}
+
+function PreviewDocument({
+  mediaId,
+  conversationId,
+  label,
+  isOutgoing,
+}: {
+  mediaId: string;
+  conversationId: string;
+  label: string;
+  isOutgoing: boolean;
+}) {
+  const blobUrl = useMediaUrl(mediaId, conversationId);
+
+  if (!blobUrl) return <PreviewMediaLoading />;
+  return (
+    <a
+      href={blobUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ color: isOutgoing ? '#fff' : 'var(--teal)', fontSize: 13 }}
+    >
+      {label}
+    </a>
+  );
 }
 
 export function ConversationPreviewModal({
@@ -145,28 +279,29 @@ export function ConversationPreviewModal({
                   lineHeight: 1.5,
                 }}>
                   {message.content_type === 'audio' && message.media_url ? (
-                    <AudioPlayer src={message.media_url} isOutgoing={isOutgoing} />
+                    <PreviewAudio
+                      mediaId={message.media_url}
+                      conversationId={conversationId}
+                      isOutgoing={isOutgoing}
+                    />
                   ) : message.content_type === 'image' && message.media_url ? (
-                    <img
-                      src={message.media_url}
+                    <PreviewImage
+                      mediaId={message.media_url}
+                      conversationId={conversationId}
                       alt={message.content ?? 'imagem'}
-                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }}
                     />
                   ) : message.content_type === 'video' && message.media_url ? (
-                    <video
-                      src={message.media_url}
-                      controls
-                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 6, display: 'block' }}
+                    <PreviewVideo
+                      mediaId={message.media_url}
+                      conversationId={conversationId}
                     />
                   ) : message.content_type === 'document' && message.media_url ? (
-                    <a
-                      href={message.media_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: isOutgoing ? '#fff' : 'var(--teal)', fontSize: 13 }}
-                    >
-                      {message.content ?? t('queue.previewDownload')}
-                    </a>
+                    <PreviewDocument
+                      mediaId={message.media_url}
+                      conversationId={conversationId}
+                      label={message.content ?? t('queue.previewDownload')}
+                      isOutgoing={isOutgoing}
+                    />
                   ) : (
                     <span>{message.content ?? `(${message.content_type})`}</span>
                   )}

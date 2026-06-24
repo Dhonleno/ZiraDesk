@@ -720,6 +720,7 @@
     "previewSubtitle": "Vista previa — solo lectura",
     "previewClose": "Cerrar",
     "previewLoading": "Cargando mensajes...",
+    "previewLoadingMedia": "Cargando medio...",
     "previewEmpty": "Sin mensajes en esta conversación",
     "previewDownload": "Descargar documento"
   },
