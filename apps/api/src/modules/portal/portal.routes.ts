@@ -22,6 +22,7 @@ import {
   PortalAuthError,
   PortalForbiddenError,
   PortalNotFoundError,
+  reopenTicketByContact,
   requestPortalPasswordReset,
   resetPortalPassword,
   submitPortalLgpdRequest,
@@ -270,6 +271,21 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof PortalNotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.patch<{ Params: { id: string } }>('/tickets/:id/reopen', { preHandler: [portalAuth] }, async (request, reply) => {
+    try {
+      await reopenTicketByContact(request.portalUser!, request.params.id);
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }
