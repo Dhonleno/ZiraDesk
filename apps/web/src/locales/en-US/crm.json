@@ -381,5 +381,6 @@
     "reveal": "Reveal data",
     "hide": "Hide data",
     "revealing": "Revealing..."
-  }
+  },
+  "openConversation": "Open conversation"
 }

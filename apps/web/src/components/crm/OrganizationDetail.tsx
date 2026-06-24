@@ -13,6 +13,7 @@ import { EditOrganizationModal } from './EditOrganizationModal';
 import { CreateContactModal } from './CreateContactModal';
 import { EditContactModal } from './EditContactModal';
 import { SelectChannelModal } from './SelectChannelModal';
+import { ConversationPreviewModal } from '../omnichannel/ConversationPreviewModal';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../../stores/toast.store';
@@ -151,6 +152,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const [unlinkContact, setUnlinkContact] = useState<CrmContact | null>(null);
   const [transferContact, setTransferContact] = useState<CrmContact | null>(null);
   const [transferSearchRaw, setTransferSearchRaw] = useState('');
+  const [previewConversationId, setPreviewConversationId] = useState<string | null>(null);
   const [transferTargetOrgId, setTransferTargetOrgId] = useState<string | null>(null);
   const debouncedTransferSearch = useDebounce(transferSearchRaw, 250);
   const [linkContactOpen, setLinkContactOpen] = useState(false);
@@ -578,7 +580,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     <div
                       key={conv.id}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
-                      onClick={() => navigate(`/omnichannel/conversations?conversation=${conv.id}`)}
+                      onClick={() => setPreviewConversationId(conv.id)}
                     >
                       <div style={{ width: 32, height: 32, borderRadius: 'var(--r)', background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: badge?.color ?? 'var(--txt-3)', flexShrink: 0 }}>
                         <ConversationChannelIcon channelType={conv.channel_type} />
@@ -935,6 +937,20 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
           </div>
         </div>
       </Modal>
+
+      {previewConversationId && (
+        <ConversationPreviewModal
+          conversationId={previewConversationId}
+          contactName={org.name}
+          onClose={() => setPreviewConversationId(null)}
+          onAssign={() => {
+            navigate(`/omnichannel/conversations?conversation=${previewConversationId}`);
+            setPreviewConversationId(null);
+          }}
+          isAssigning={false}
+          primaryLabel={t('openConversation')}
+        />
+      )}
     </>
   );
 }

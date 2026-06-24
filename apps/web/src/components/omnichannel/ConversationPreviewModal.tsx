@@ -10,6 +10,7 @@ interface Props {
   onClose: () => void;
   onAssign: () => void;
   isAssigning: boolean;
+  primaryLabel?: string;
 }
 
 function senderLabel(senderType: string, senderName?: string | null): string {
@@ -117,6 +118,7 @@ export function ConversationPreviewModal({
   onClose,
   onAssign,
   isAssigning,
+  primaryLabel,
 }: Props) {
   const { t, i18n } = useTranslation('omnichannel');
 
@@ -295,7 +297,7 @@ export function ConversationPreviewModal({
             onClick={onAssign}
             disabled={isAssigning}
           >
-            {isAssigning ? t('queue.assigning') : t('queue.assignMe')}
+            {isAssigning ? t('queue.assigning') : (primaryLabel ?? t('queue.assignMe'))}
           </button>
         </div>
       </div>
