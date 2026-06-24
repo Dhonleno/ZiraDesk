@@ -2643,6 +2643,7 @@ export interface OmnichannelMessage {
   conversation_id: string;
   sender_type: 'agent' | 'client' | 'bot' | 'system';
   sender_id: string | null;
+  sender_name?: string | null;
   content: string;
   content_type: 'text' | 'image' | 'audio' | 'video' | 'document' | string;
   media_url?: string | null;

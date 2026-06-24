@@ -226,6 +226,7 @@ interface MessageRow {
   conversation_id: string;
   sender_type: string;
   sender_id: string | null;
+  sender_name: string | null;
   content: string;
   content_type: string;
   media_url: string | null;
@@ -917,15 +918,24 @@ export async function listConversationMessages(
 
     if (cursor) {
       rows = await prisma.$queryRawUnsafe<MessageRow[]>(
-        `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
-                media_url, external_id, status, is_internal, created_at, metadata
-         FROM ${schemaPrefix}messages
-         WHERE conversation_id = $1::uuid
+        `SELECT
+           m.id, m.conversation_id, m.sender_type, m.sender_id,
+           m.content, m.content_type, m.media_url, m.external_id,
+           m.status, m.is_internal, m.created_at, m.metadata,
+           CASE
+             WHEN m.sender_type IN ('agent', 'bot') THEN u.name
+             WHEN m.sender_type = 'client'          THEN c.name
+             ELSE NULL
+           END AS sender_name
+         FROM ${schemaPrefix}messages m
+         LEFT JOIN ${schemaPrefix}users    u ON u.id = m.sender_id AND m.sender_type IN ('agent', 'bot')
+         LEFT JOIN ${schemaPrefix}contacts c ON c.id = m.sender_id AND m.sender_type = 'client'
+         WHERE m.conversation_id = $1::uuid
            AND (
-             created_at < $2
-             OR (created_at = $2 AND id < $3::uuid)
+             m.created_at < $2
+             OR (m.created_at = $2 AND m.id < $3::uuid)
            )
-         ORDER BY created_at DESC, id DESC
+         ORDER BY m.created_at DESC, m.id DESC
          LIMIT $4`,
         conversationId,
         cursor.created_at,
@@ -935,11 +945,20 @@ export async function listConversationMessages(
     }
   } else {
     rows = await prisma.$queryRawUnsafe<MessageRow[]>(
-      `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
-              media_url, external_id, status, is_internal, created_at, metadata
-       FROM ${schemaPrefix}messages
-       WHERE conversation_id = $1::uuid
-       ORDER BY created_at DESC, id DESC
+      `SELECT
+         m.id, m.conversation_id, m.sender_type, m.sender_id,
+         m.content, m.content_type, m.media_url, m.external_id,
+         m.status, m.is_internal, m.created_at, m.metadata,
+         CASE
+           WHEN m.sender_type IN ('agent', 'bot') THEN u.name
+           WHEN m.sender_type = 'client'          THEN c.name
+           ELSE NULL
+         END AS sender_name
+       FROM ${schemaPrefix}messages m
+       LEFT JOIN ${schemaPrefix}users    u ON u.id = m.sender_id AND m.sender_type IN ('agent', 'bot')
+       LEFT JOIN ${schemaPrefix}contacts c ON c.id = m.sender_id AND m.sender_type = 'client'
+       WHERE m.conversation_id = $1::uuid
+       ORDER BY m.created_at DESC, m.id DESC
        LIMIT $2`,
       conversationId,
       fetchLimit,

@@ -12,7 +12,8 @@ interface Props {
   isAssigning: boolean;
 }
 
-function senderLabel(senderType: string): string {
+function senderLabel(senderType: string, senderName?: string | null): string {
+  if (senderName) return senderName;
   if (senderType === 'agent') return 'Agente';
   if (senderType === 'bot') return 'Bot';
   if (senderType === 'system') return 'Sistema';
@@ -225,7 +226,7 @@ export function ConversationPreviewModal({
                 }}
               >
                 <div style={{ fontSize: 11, color: 'var(--txt-2)', marginBottom: 3 }}>
-                  {senderLabel(message.sender_type)}
+                  {senderLabel(message.sender_type, message.sender_name)}
                 </div>
                 <div style={{
                   background: isOutgoing ? 'var(--teal)' : 'var(--bg-3)',
