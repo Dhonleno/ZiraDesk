@@ -10,10 +10,12 @@ import {
   type GoalPeriod,
   type HistoryPeriodPreset,
   type OmnichannelGoal,
+  type OmnichannelPerformanceAgent,
   type PerformanceFiltersParams,
   type PerformanceMetricStatus,
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { AgentDetailModal } from '../../components/omnichannel/AgentDetailModal';
 
 const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = [
   { labelKey: 'history.periods.today', value: 'today' },
@@ -277,6 +279,7 @@ export function PerformancePage() {
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'agent' | 'department'>('agent');
+  const [selectedAgent, setSelectedAgent] = useState<OmnichannelPerformanceAgent | null>(null);
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const canQueryPerformance = useMemo(() => hasValidCustomRange(filters), [filters]);
 
@@ -633,6 +636,8 @@ export function PerformancePage() {
                     className={agent.total_conversations > 0 && ['breach', 'warning'].includes(overallStatus)
                       ? `performance-row-alert ${statusClass(overallStatus)}`
                       : undefined}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSelectedAgent(agent)}
                   >
                     <td>
                       <div className="history-agent-cell">
@@ -722,6 +727,15 @@ export function PerformancePage() {
           </button>
         </div>
       </div>
+      {selectedAgent && (
+        <AgentDetailModal
+          agent={selectedAgent}
+          period={filters.period ?? '7d'}
+          dateFrom={filters.date_from}
+          dateTo={filters.date_to}
+          onClose={() => setSelectedAgent(null)}
+        />
+      )}
     </PageShell>
   );
 }

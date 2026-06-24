@@ -460,7 +460,19 @@
     "emptyDepartmentsTitle": "No department performance found",
     "emptyDepartmentsHint": "Adjust the filters to compare department results.",
     "invalidRange": "Enter a valid custom period before exporting.",
-    "filterByDepartment": "Department"
+    "filterByDepartment": "Department",
+    "agentDetail": {
+      "subtitle": "Details for the selected period",
+      "close": "Close",
+      "recentConversations": "Recent conversations",
+      "loading": "Loading conversations...",
+      "noConversations": "No conversations in this period.",
+      "colProtocol": "Protocol",
+      "colContact": "Contact",
+      "colStatus": "Status",
+      "colWait": "Wait",
+      "colDate": "Date"
+    }
   },
   "composer": {
     "pasteRemove": "Remove file",
