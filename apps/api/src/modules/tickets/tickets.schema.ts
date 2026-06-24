@@ -11,7 +11,7 @@ export const createTicketSchema = z.object({
   priority:        z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   category:        z.string().max(100).optional(),
   type_id:         z.string().uuid().nullable().optional(),
-  assigned_to:     z.string().uuid().nullable().optional(),
+  assigned_to:     z.string().uuid({ message: 'Responsável é obrigatório' }),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
 });
