@@ -21,6 +21,7 @@ export const updateTicketSchema = createTicketSchema
   .partial()
   .extend({
     status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+    resolution_notes: z.string().trim().min(1).max(5000).optional(),
   });
 
 export const listTicketsQuerySchema = z.object({

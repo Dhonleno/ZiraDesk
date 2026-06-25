@@ -62,6 +62,8 @@ interface TicketRow {
   category:         string | null;
   assigned_to:      string | null;
   resolved_at:      Date | null;
+  resolution_notes: string | null;
+  closed_at:        Date | null;
   due_date:         Date | null;
   tags:             string[];
   custom_fields:    unknown;
@@ -356,6 +358,12 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
   `);
 
   await db.$executeRawUnsafe(`
+    ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
+    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ
+  `);
+
+  await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_tickets_type_id
     ON tickets(type_id)
   `);
@@ -525,7 +533,7 @@ async function resolveTenantSchemaName(tenantId: string): Promise<string | null>
 const BASE_SELECT = `
   SELECT
     t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
-    t.status, t.priority, t.category, t.assigned_to, t.resolved_at,
+    t.status, t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
@@ -720,7 +728,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
          ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
        RETURNING
          id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
-         assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name,  NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
@@ -803,7 +811,10 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     });
     const resolvedAt =
       newStatus === 'resolved' && old.status !== 'resolved' ? 'NOW()' :
-      newStatus !== 'resolved' && old.status === 'resolved' ? 'NULL' : null;
+      old.status === 'resolved' && newStatus !== 'resolved' && newStatus !== 'closed' ? 'NULL' : 'resolved_at';
+    const closedAt =
+      newStatus === 'closed' && old.status !== 'closed' ? 'NOW()' :
+      old.status === 'closed' && newStatus !== 'closed' ? 'NULL' : 'closed_at';
 
     const tagsLiteral = data.tags !== undefined ? toPgArray(data.tags) : null;
     const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
@@ -821,12 +832,14 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          type_id         = CASE WHEN $8::boolean THEN $9::uuid ELSE type_id END,
          due_date        = COALESCE($10::timestamptz, due_date),
          tags            = COALESCE($11::text[], tags),
+         resolution_notes = COALESCE($12::text, resolution_notes),
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
+         closed_at       = ${closedAt === 'NOW()' ? 'NOW()' : closedAt === 'NULL' ? 'NULL' : 'closed_at'},
          updated_at      = NOW()
-       WHERE id = $12::uuid
+       WHERE id = $13::uuid
        RETURNING
          id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
-         assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
@@ -841,6 +854,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       typeIdValue,
       data.due_date ?? null,
       tagsLiteral,
+      data.resolution_notes ?? null,
       id,
     );
 
@@ -927,6 +941,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
   }
 
   if (old.status !== 'closed' && ticket.status === 'closed') {
+    const closedEvent = await withOptionalSchema(schemaName, async (db) => logTicketEvent(id, updatedBy, 'closed', null, null, undefined, db));
+    if (closedEvent) emitTicketEvent(tenantId, id, closedEvent);
     void dispatchWebhook(tenantId, 'ticket.closed', {
       ticket: { id: ticket.id, title: ticket.title },
     });
@@ -1001,7 +1017,7 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
      WHERE id = $2::uuid
      RETURNING
        id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
-       assigned_to, resolved_at, due_date, tags, custom_fields, created_at, updated_at,
+       assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,
        NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
