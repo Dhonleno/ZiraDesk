@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import type { TFunction } from 'i18next';
 import {
   adminApi,
@@ -15,7 +17,6 @@ import {
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
-import { parseMarkdown } from '../../utils/markdown';
 import { PageShell } from '../../components/layout/PageShell';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { SourceBadge } from '../../components/tickets/SourceBadge';
@@ -35,7 +36,6 @@ const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 
 type DetailTab = 'comments' | 'history';
-type DescriptionTab = 'write' | 'preview';
 
 function sanitizeTicketTitle(value: string): string {
   return value
@@ -189,7 +189,6 @@ export function TicketDetailPage() {
 
   const [descriptionEditing, setDescriptionEditing] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
-  const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>('write');
   const [activeTab, setActiveTab] = useState<DetailTab>('comments');
 
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -216,7 +215,6 @@ export function TicketDetailPage() {
   const priorityRef = useRef<HTMLDivElement | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: ticket, isPending } = useQuery({
@@ -320,11 +318,6 @@ export function TicketDetailPage() {
     titleInputRef.current.focus();
     titleInputRef.current.select();
   }, [titleEditing]);
-
-  useEffect(() => {
-    if (!descriptionEditing || !descriptionInputRef.current) return;
-    descriptionInputRef.current.focus();
-  }, [descriptionEditing]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
@@ -435,54 +428,6 @@ export function TicketDetailPage() {
     }
 
     setSidebarTagInput('');
-  }
-
-  function applyDescriptionStyle(kind: 'bold' | 'italic' | 'code' | 'quote' | 'unordered' | 'ordered') {
-    const textarea = descriptionInputRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = descriptionDraft.slice(start, end);
-
-    let prefix = '';
-    let suffix = '';
-
-    if (kind === 'bold') {
-      prefix = '**';
-      suffix = '**';
-    }
-
-    if (kind === 'italic') {
-      prefix = '_';
-      suffix = '_';
-    }
-
-    if (kind === 'code') {
-      prefix = '`';
-      suffix = '`';
-    }
-
-    if (kind === 'quote') {
-      prefix = '> ';
-    }
-
-    if (kind === 'unordered') {
-      prefix = '- ';
-    }
-
-    if (kind === 'ordered') {
-      prefix = '1. ';
-    }
-
-    const nextValue = `${descriptionDraft.slice(0, start)}${prefix}${selected}${suffix}${descriptionDraft.slice(end)}`;
-    setDescriptionDraft(nextValue);
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      const cursor = start + prefix.length + selected.length + suffix.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
   }
 
   async function handleDelete() {
@@ -735,67 +680,42 @@ export function TicketDetailPage() {
               </header>
 
               {descriptionEditing ? (
-                <div className="ticket-description-editor">
-                  <div className="ticket-description-editor-tabs">
+                <div className="ticket-description-editor" data-color-mode="dark">
+                  <MDEditor
+                    value={descriptionDraft}
+                    onChange={(val) => setDescriptionDraft(val ?? '')}
+                    height={300}
+                    preview="live"
+                    visibleDragbar={false}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                     <button
                       type="button"
-                      className={descriptionTab === 'write' ? 'active' : ''}
-                      onClick={() => setDescriptionTab('write')}
-                    >
-                      {t('tickets.detail.write')}
-                    </button>
-                    <button
-                      type="button"
-                      className={descriptionTab === 'preview' ? 'active' : ''}
-                      onClick={() => setDescriptionTab('preview')}
-                    >
-                      {t('tickets.detail.preview')}
-                    </button>
-                  </div>
-
-                  {descriptionTab === 'write' ? (
-                    <>
-                      <div className="ticket-md-toolbar">
-                        <button type="button" onClick={() => applyDescriptionStyle('bold')}>B</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('italic')}>I</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('code')}>{'</>'}</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('quote')}>{'"'}</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('unordered')}>•</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('ordered')}>1.</button>
-                      </div>
-
-                      <textarea
-                        ref={descriptionInputRef}
-                        className="ticket-description-textarea"
-                        value={descriptionDraft}
-                        onChange={(event) => setDescriptionDraft(event.target.value)}
-                      />
-                    </>
-                  ) : (
-                    <div
-                      className="ticket-description-preview"
-                      dangerouslySetInnerHTML={{ __html: parseMarkdown(descriptionDraft || '') }}
-                    />
-                  )}
-
-                  <div className="ticket-description-actions">
-                    <button
-                      type="button"
-                      className="zd-btn"
+                      className="zd-btn zd-btn-secondary"
                       onClick={() => {
                         setDescriptionDraft(ticket.description ?? '');
                         setDescriptionEditing(false);
                       }}
                     >
-                      {t('tickets.cancel')}
+                      {t('tickets.actions.cancel')}
                     </button>
-                    <button type="button" className="zd-btn zd-btn-primary" onClick={saveDescription}>
-                      {t('tickets.save')}
+                    <button
+                      type="button"
+                      className="zd-btn zd-btn-primary"
+                      disabled={updateMutation.isPending}
+                      onClick={saveDescription}
+                    >
+                      {t('tickets.detail.saveDescription')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="ticket-description-render" dangerouslySetInnerHTML={{ __html: parseMarkdown(ticket.description ?? '') }} />
+                <div className="ticket-description-render" data-color-mode="dark">
+                  <MDEditor.Markdown
+                    source={ticket.description ?? ''}
+                    style={{ background: 'transparent', color: 'var(--txt)' }}
+                  />
+                </div>
               )}
             </section>
 

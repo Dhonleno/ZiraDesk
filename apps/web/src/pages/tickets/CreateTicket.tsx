@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type Keybo
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import {
   adminApi,
   contactsApi,
@@ -306,14 +308,16 @@ export default function CreateTicket() {
 
             <div className="ct-field">
               <label className="ct-label" htmlFor="ct-description">Descrição</label>
-              <textarea
-                id="ct-description"
-                value={form.description}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Adicione detalhes, passos para reproduzir e contexto..."
-                className="ct-textarea"
-                rows={10}
-              />
+              <div id="ct-description" data-color-mode="dark">
+                <MDEditor
+                  value={form.description}
+                  onChange={(val) => setForm((prev) => ({ ...prev, description: val ?? '' }))}
+                  height={200}
+                  preview="edit"
+                  hideToolbar={false}
+                  visibleDragbar={false}
+                />
+              </div>
             </div>
 
             <div className="ct-field">
