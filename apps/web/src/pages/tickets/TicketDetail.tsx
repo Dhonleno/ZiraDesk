@@ -37,6 +37,23 @@ const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
 
 type DetailTab = 'comments' | 'history';
 
+function useAppTheme(): 'dark' | 'light' {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+  ));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const nextTheme = document.documentElement.getAttribute('data-theme');
+      setTheme(nextTheme === 'light' ? 'light' : 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
+
 function sanitizeTicketTitle(value: string): string {
   return value
     .replace(/[`*_~>#\[\]\(\)!]/g, ' ')
@@ -183,6 +200,7 @@ export function TicketDetailPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
+  const appTheme = useAppTheme();
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -680,7 +698,7 @@ export function TicketDetailPage() {
               </header>
 
               {descriptionEditing ? (
-                <div className="ticket-description-editor" data-color-mode="dark">
+                <div className="ticket-description-editor" data-color-mode={appTheme}>
                   <MDEditor
                     value={descriptionDraft}
                     onChange={(val) => setDescriptionDraft(val ?? '')}
@@ -710,7 +728,7 @@ export function TicketDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="ticket-description-render" data-color-mode="dark">
+                <div className="ticket-description-render" data-color-mode={appTheme}>
                   <MDEditor.Markdown
                     source={ticket.description ?? ''}
                     style={{ background: 'transparent', color: 'var(--txt)' }}

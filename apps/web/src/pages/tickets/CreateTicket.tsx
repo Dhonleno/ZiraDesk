@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +41,23 @@ interface CreateTicketForm {
 
 type SubmitMode = 'open' | 'new';
 
+function useAppTheme(): 'dark' | 'light' {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+  ));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const nextTheme = document.documentElement.getAttribute('data-theme');
+      setTheme(nextTheme === 'light' ? 'light' : 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
+
 function buildDraft(form: CreateTicketForm): TicketCreateDraft {
   return {
     title: form.title,
@@ -63,6 +80,7 @@ export default function CreateTicket() {
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
+  const appTheme = useAppTheme();
   const titleRef = useRef<HTMLInputElement | null>(null);
   const [submitMode, setSubmitMode] = useState<SubmitMode>('open');
 
@@ -308,7 +326,7 @@ export default function CreateTicket() {
 
             <div className="ct-field">
               <label className="ct-label" htmlFor="ct-description">Descrição</label>
-              <div id="ct-description" data-color-mode="dark">
+              <div id="ct-description" data-color-mode={appTheme}>
                 <MDEditor
                   value={form.description}
                   onChange={(val) => setForm((prev) => ({ ...prev, description: val ?? '' }))}
