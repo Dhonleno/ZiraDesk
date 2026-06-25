@@ -43,13 +43,9 @@ export async function authMiddleware(
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
     const forcedLogoutAfterRaw = await redis.get(`auth:force_logout_after:${payload.sub}`);
     const forcedLogoutAfter = forcedLogoutAfterRaw ? Number(forcedLogoutAfterRaw) : Number.NaN;
-    const tokenIssuedAtMs =
-      typeof payload.iatMs === 'number'
-        ? payload.iatMs
-        : typeof payload.iat === 'number'
-          ? payload.iat * 1000
-          : Number.NaN;
-    if (Number.isFinite(forcedLogoutAfter) && Number.isFinite(tokenIssuedAtMs) && tokenIssuedAtMs < forcedLogoutAfter) {
+    // Tokens sem iatMs são legados. Se há cutoff ativo, eles devem ser rejeitados.
+    const tokenIssuedAtMs = typeof payload.iatMs === 'number' ? payload.iatMs : Number.NaN;
+    if (Number.isFinite(forcedLogoutAfter) && (!Number.isFinite(tokenIssuedAtMs) || tokenIssuedAtMs < forcedLogoutAfter)) {
       return reply.code(401).send({ error: 'Sessão inválida. Faça login novamente' });
     }
 

@@ -359,6 +359,7 @@ export function createTestJWT(overrides: JwtOverrides = {}): string {
       tenantId: overrides.isSuperAdmin ? undefined : tenantId,
       schemaName: overrides.isSuperAdmin ? undefined : schemaName,
       isSuperAdmin: overrides.isSuperAdmin ?? false,
+      iatMs: Date.now(),
     },
     env.JWT_SECRET,
     { expiresIn: '1h' },
