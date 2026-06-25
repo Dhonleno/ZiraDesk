@@ -3656,9 +3656,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(260px, 1fr));
   gap: 16px;
   height: calc(100vh - 180px);
+  overflow-x: auto;
   overflow-y: hidden;
   padding: 16px;
 }
@@ -3667,6 +3668,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--bg-2);
@@ -4567,8 +4569,15 @@
   }
 
   .tickets-kanban-board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
     height: auto;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+
+  .tickets-column {
+    height: auto;
+    max-height: 80vh;
   }
 
   .ticket-detail-v2-layout {
