@@ -65,8 +65,24 @@
       "resolve": "Resolve",
       "close": "Close",
       "reopen": "Reopen",
+      "cancel": "Cancel",
       "edit": "Edit",
       "delete": "Delete"
+    },
+    "resolve": {
+      "title": "Resolve ticket",
+      "subtitle": "Describe how the issue was resolved before finalizing.",
+      "notesLabel": "Resolution notes",
+      "notesPlaceholder": "Describe what was done to resolve this ticket...",
+      "notesRequired": "Resolution notes are required"
+    },
+    "close": {
+      "title": "Close ticket",
+      "subtitle": "The ticket will be permanently closed. It can be reopened if needed."
+    },
+    "reopen": {
+      "title": "Reopen ticket",
+      "subtitle": "The ticket will return to Open status and can be handled again."
     },
     "chooseFile": "Choose files",
     "noFileSelected": "No file selected",

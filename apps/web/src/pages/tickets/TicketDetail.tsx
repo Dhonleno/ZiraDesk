@@ -203,6 +203,10 @@ export function TicketDetailPage() {
   const [sidebarTagInput, setSidebarTagInput] = useState('');
   const [sidebarTags, setSidebarTags] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload>>({});
@@ -621,67 +625,30 @@ export function TicketDetailPage() {
             </div>
 
             {ticket.status === 'open' ? (
-              <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
-                  {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-                <button
-                  type="button"
-                  className="zd-btn"
-                  onClick={() => {
-                    if (user?.id) {
-                      setSidebarAssignedTo(user.id);
-                      queuePatch({ assigned_to: user.id });
-                    }
-                  }}
-                >
-                  {t('tickets.actions.assignToMe')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>
-                  {t('tickets.actions.assign')}
-                </button>
-              </>
+              <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>
+                {t('tickets.actions.assign')}
+              </button>
             ) : null}
 
             {ticket.status === 'in_progress' ? (
+              <button type="button" className="zd-btn zd-btn-primary" onClick={() => setShowResolveModal(true)}>
+                {t('tickets.actions.resolve')}
+              </button>
+            ) : null}
+
+            {ticket.status === 'resolved' ? (
               <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
+                <button type="button" className="zd-btn zd-btn-secondary" onClick={() => setShowReopenConfirm(true)}>
+                  {t('tickets.actions.reopen')}
+                </button>
+                <button type="button" className="zd-btn zd-btn-primary" onClick={() => setShowCloseConfirm(true)}>
                   {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-                <button
-                  type="button"
-                  className="zd-btn"
-                  onClick={() => {
-                    if (user?.id) {
-                      setSidebarAssignedTo(user.id);
-                      queuePatch({ assigned_to: user.id });
-                    }
-                  }}
-                >
-                  {t('tickets.actions.assignToMe')}
                 </button>
               </>
             ) : null}
 
-            {ticket.status === 'waiting' ? (
-              <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
-                  {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-              </>
-            ) : null}
-
-            {(ticket.status === 'resolved' || ticket.status === 'closed') ? (
-              <button type="button" className="zd-btn zd-btn-primary" onClick={() => patchStatus('open')}>
+            {ticket.status === 'closed' ? (
+              <button type="button" className="zd-btn zd-btn-secondary" onClick={() => setShowReopenConfirm(true)}>
                 {t('tickets.actions.reopen')}
               </button>
             ) : null}
@@ -1106,6 +1073,147 @@ export function TicketDetailPage() {
         loading={deleteTicketMutation.isPending}
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      {showResolveModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'var(--backdrop)',
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowResolveModal(false);
+              setResolutionNotes('');
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 12,
+              width: '100%',
+              maxWidth: 480,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-pop)',
+            }}
+          >
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)', margin: 0 }}>
+                {t('tickets.resolve.title')}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', marginTop: 4, marginBottom: 0 }}>
+                {t('tickets.resolve.subtitle')}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label
+                htmlFor="ticket-resolution-notes"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--txt-2)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.8,
+                }}
+              >
+                {t('tickets.resolve.notesLabel')} *
+              </label>
+              <textarea
+                id="ticket-resolution-notes"
+                value={resolutionNotes}
+                onChange={(event) => setResolutionNotes(event.target.value)}
+                placeholder={t('tickets.resolve.notesPlaceholder')}
+                rows={4}
+                style={{
+                  background: 'var(--bg-3)',
+                  border: `1px solid ${resolutionNotes.trim().length === 0 ? 'var(--red)' : 'var(--line)'}`,
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  color: 'var(--txt)',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  fontFamily: 'var(--font)',
+                }}
+              />
+              {resolutionNotes.trim().length === 0 ? (
+                <span style={{ fontSize: 11, color: 'var(--red)' }}>
+                  {t('tickets.resolve.notesRequired')}
+                </span>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                className="zd-btn zd-btn-secondary"
+                onClick={() => {
+                  setShowResolveModal(false);
+                  setResolutionNotes('');
+                }}
+              >
+                {t('tickets.actions.cancel')}
+              </button>
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={resolutionNotes.trim().length === 0 || updateMutation.isPending}
+                onClick={async () => {
+                  await updateMutation.mutateAsync({
+                    status: 'resolved',
+                    resolution_notes: resolutionNotes.trim(),
+                  } as Partial<CreateTicketPayload> & { resolution_notes: string });
+                  setShowResolveModal(false);
+                  setResolutionNotes('');
+                }}
+              >
+                {t('tickets.actions.resolve')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <ConfirmModal
+        open={showCloseConfirm}
+        title={t('tickets.close.title')}
+        message={t('tickets.close.subtitle')}
+        confirmLabel={t('tickets.actions.close')}
+        loading={updateMutation.isPending}
+        onConfirm={async () => {
+          await updateMutation.mutateAsync({ status: 'closed' });
+          setShowCloseConfirm(false);
+        }}
+        onCancel={() => setShowCloseConfirm(false)}
+      />
+
+      <ConfirmModal
+        open={showReopenConfirm}
+        title={t('tickets.reopen.title')}
+        message={t('tickets.reopen.subtitle')}
+        confirmLabel={t('tickets.actions.reopen')}
+        loading={updateMutation.isPending}
+        onConfirm={async () => {
+          await updateMutation.mutateAsync({ status: 'open' });
+          setShowReopenConfirm(false);
+        }}
+        onCancel={() => setShowReopenConfirm(false)}
       />
     </PageShell>
   );

@@ -65,8 +65,24 @@
       "resolve": "Resolver",
       "close": "Fechar",
       "reopen": "Reabrir",
+      "cancel": "Cancelar",
       "edit": "Editar",
       "delete": "Excluir"
+    },
+    "resolve": {
+      "title": "Resolver ticket",
+      "subtitle": "Descreva como o problema foi resolvido antes de finalizar.",
+      "notesLabel": "Descrição da solução",
+      "notesPlaceholder": "Descreva o que foi feito para resolver este ticket...",
+      "notesRequired": "A descrição da solução é obrigatória"
+    },
+    "close": {
+      "title": "Fechar ticket",
+      "subtitle": "O ticket será fechado definitivamente. Pode ser reaberto se necessário."
+    },
+    "reopen": {
+      "title": "Reabrir ticket",
+      "subtitle": "O ticket voltará para o status Aberto e poderá ser atendido novamente."
     },
     "chooseFile": "Escolher arquivos",
     "noFileSelected": "Nenhum arquivo",
