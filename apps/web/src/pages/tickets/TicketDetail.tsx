@@ -26,6 +26,14 @@ import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
+const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
+  open:        ['in_progress', 'waiting'],
+  in_progress: ['open', 'waiting', 'resolved'],
+  waiting:     ['open', 'in_progress'],
+  resolved:    ['open', 'in_progress', 'closed'],
+  closed:      ['open'],
+};
+
 type DetailTab = 'comments' | 'history';
 type DescriptionTab = 'write' | 'preview';
 
@@ -106,6 +114,30 @@ function getSlaLabel(sla: SlaInfo, t: TFunction<'tickets'>): string | null {
   return t('tickets.sla.expiresHours', { count: remainingHours });
 }
 
+function AuthedImage({ src, alt }: { src: string; alt: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const token = useAuthStore((s) => s.token);
+
+  useEffect(() => {
+    if (!token) return;
+    let revoke: string | null = null;
+    fetch(src, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        revoke = url;
+        setObjectUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [src, token]);
+
+  if (!objectUrl) return null;
+  return <img src={objectUrl} alt={alt} />;
+}
+
 function AttachmentCard({
   attachment,
   canDelete,
@@ -121,7 +153,7 @@ function AttachmentCard({
     <div className="ticket-attachment-item">
       {isImage ? (
         <a href={attachment.file_url} target="_blank" rel="noreferrer" className="ticket-attachment-thumb">
-          <img src={attachment.file_url} alt={attachment.filename} />
+          <AuthedImage src={attachment.file_url} alt={attachment.filename} />
         </a>
       ) : (
         <a href={attachment.file_url} target="_blank" rel="noreferrer" className="ticket-attachment-file">
@@ -541,16 +573,16 @@ export function TicketDetailPage() {
 
               {statusMenuOpen ? (
                 <div className="ticket-inline-menu">
-                  {(['open', 'in_progress', 'waiting', 'resolved', 'closed'] as TicketStatus[]).map((status) => (
+                  {(TICKET_STATUS_TRANSITIONS[ticket.status] ?? []).map((status) => (
                     <button
                       key={status}
                       type="button"
                       onClick={() => {
-                        patchStatus(status);
+                        patchStatus(status as TicketStatus);
                         setStatusMenuOpen(false);
                       }}
                     >
-                      {statusLabel(status, t)}
+                      {statusLabel(status as TicketStatus, t)}
                     </button>
                   ))}
                 </div>
