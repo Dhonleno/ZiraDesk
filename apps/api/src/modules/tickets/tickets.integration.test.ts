@@ -426,6 +426,34 @@ describe('Tickets integration', () => {
     expect(content.text).toBe('conteudo do anexo');
   });
 
+  it('GET /api/tickets/attachments/:id/content retorna 404 quando o objeto sumiu do storage', async () => {
+    const ticket = await createTicket();
+
+    const upload = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/attachments`)
+      .set(authHeader())
+      .attach('file', Buffer.from('conteudo perdido'), {
+        filename: 'perdido.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(upload.status).toBe(201);
+    const attachmentId = upload.body.data.id as string;
+    await prisma.$executeRawUnsafe(
+      `UPDATE "${requireSuiteTenant().schemaName}".ticket_attachments
+       SET filename = 'objeto-ausente.txt'
+       WHERE id = $1::uuid`,
+      attachmentId,
+    );
+
+    const response = await createTestApp()
+      .get(`/api/tickets/attachments/${attachmentId}/content`)
+      .set(authHeader());
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.message).toBe('Arquivo do anexo não encontrado');
+  });
+
   it('DELETE /api/tickets/attachments/:id remove do storage e do banco', async () => {
     const ticket = await createTicket();
 

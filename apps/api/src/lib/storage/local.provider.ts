@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { StorageProvider } from './storage.interface.js';
+import { StorageObjectNotFoundError, type StorageProvider } from './storage.interface.js';
 
 const BASE_DIR = path.resolve(process.cwd(), 'public', 'uploads');
 
@@ -31,6 +31,13 @@ export class LocalStorageProvider implements StorageProvider {
 
   async download(key: string): Promise<Buffer> {
     const filePath = resolvePath(key);
-    return fs.readFile(filePath);
+    try {
+      return await fs.readFile(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new StorageObjectNotFoundError(key);
+      }
+      throw error;
+    }
   }
 }

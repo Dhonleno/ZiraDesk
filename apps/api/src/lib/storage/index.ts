@@ -30,4 +30,4 @@ export function getStorage(): StorageProvider {
   return _instance;
 }
 
-export type { StorageProvider } from './storage.interface.js';
+export { StorageObjectNotFoundError, type StorageProvider } from './storage.interface.js';

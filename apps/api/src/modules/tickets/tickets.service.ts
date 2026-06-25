@@ -4,7 +4,7 @@ import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { getStorage } from '../../lib/storage/index.js';
+import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
 import type {
   CreateTicketInput,
   UpdateTicketInput,
@@ -1451,7 +1451,15 @@ export async function readAttachmentContent(attachmentId: string, schemaName?: s
   });
 
   const key = buildAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename);
-  const content = await getStorage().download(key);
+  let content: Buffer;
+  try {
+    content = await getStorage().download(key);
+  } catch (error) {
+    if (error instanceof StorageObjectNotFoundError) {
+      throw new NotFoundError('Arquivo do anexo');
+    }
+    throw error;
+  }
 
   return {
     mimeType: attachment.mime_type ?? 'application/octet-stream',

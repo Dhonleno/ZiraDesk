@@ -1,4 +1,4 @@
-import type { StorageProvider } from '../lib/storage/index.js';
+import { StorageObjectNotFoundError, type StorageProvider } from '../lib/storage/index.js';
 import { beforeEach, inject, vi } from 'vitest';
 import { redis } from '../config/redis.js';
 
@@ -21,7 +21,7 @@ class InMemoryStorageProvider implements StorageProvider {
   async download(key: string): Promise<Buffer> {
     const file = this.files.get(key);
     if (!file) {
-      throw new Error('Arquivo não encontrado');
+      throw new StorageObjectNotFoundError(key);
     }
     return Buffer.from(file.buffer);
   }

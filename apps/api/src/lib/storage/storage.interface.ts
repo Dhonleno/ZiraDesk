@@ -1,3 +1,10 @@
+export class StorageObjectNotFoundError extends Error {
+  constructor(key: string) {
+    super(`Objeto não encontrado no storage: ${key}`);
+    this.name = 'StorageObjectNotFoundError';
+  }
+}
+
 export interface StorageProvider {
   /** Persiste o buffer no storage e retorna a URL pública de acesso. */
   upload(key: string, buffer: Buffer, mimetype: string): Promise<string>;

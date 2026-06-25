@@ -5,7 +5,7 @@ import {
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import type { Readable } from 'node:stream';
-import type { StorageProvider } from './storage.interface.js';
+import { StorageObjectNotFoundError, type StorageProvider } from './storage.interface.js';
 
 function streamToBuffer(stream: Readable): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -67,9 +67,17 @@ export class R2StorageProvider implements StorageProvider {
   }
 
   async download(key: string): Promise<Buffer> {
-    const response = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
-    return streamToBuffer(response.Body as Readable);
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return streamToBuffer(response.Body as Readable);
+    } catch (error) {
+      const storageError = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (storageError.name === 'NoSuchKey' || storageError.$metadata?.httpStatusCode === 404) {
+        throw new StorageObjectNotFoundError(key);
+      }
+      throw error;
+    }
   }
 }

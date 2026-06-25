@@ -11,7 +11,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import rawBody from 'fastify-raw-body';
 import { Prisma } from '@prisma/client';
-import type { StorageProvider } from '../lib/storage/index.js';
+import { StorageObjectNotFoundError, type StorageProvider } from '../lib/storage/index.js';
 import { env } from '../config/env.js';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
@@ -103,7 +103,7 @@ class InMemoryStorageProvider implements StorageProvider {
   async download(key: string): Promise<Buffer> {
     const file = this.files.get(key);
     if (!file) {
-      throw new Error('Arquivo não encontrado');
+      throw new StorageObjectNotFoundError(key);
     }
     return Buffer.from(file.buffer);
   }
