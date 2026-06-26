@@ -226,6 +226,8 @@ export function TicketDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
+  const [showWaitingModal, setShowWaitingModal] = useState(false);
+  const [waitingReason, setWaitingReason] = useState<'customer' | 'internal' | 'third_party' | ''>('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -549,6 +551,13 @@ export function TicketDetailPage() {
                       key={status}
                       type="button"
                       onClick={() => {
+                        if (status === 'waiting') {
+                          setWaitingReason('');
+                          setShowWaitingModal(true);
+                          setStatusMenuOpen(false);
+                          return;
+                        }
+
                         patchStatus(status as TicketStatus);
                         setStatusMenuOpen(false);
                       }}
@@ -847,6 +856,13 @@ export function TicketDetailPage() {
                 <SourceBadge source={ticket.source ?? 'manual'} />
               </div>
 
+              {ticket.status === 'waiting' && ticket.waiting_reason ? (
+                <div className="ticket-sidebar-field">
+                  <span>{t('tickets.waiting.title')}</span>
+                  <strong>{t(`tickets.waiting.reasons.${ticket.waiting_reason}`)}</strong>
+                </div>
+              ) : null}
+
               <div className="ticket-sidebar-field">
                 <span>{t('tickets.fields.createdAt')}</span>
                 <strong className="mono">{formatMonoDate(ticket.created_at)}</strong>
@@ -1016,6 +1032,120 @@ export function TicketDetailPage() {
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {showWaitingModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ticket-waiting-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'var(--backdrop)',
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowWaitingModal(false);
+              setWaitingReason('');
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              width: '100%',
+              maxWidth: 460,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+              boxShadow: 'var(--shadow-pop)',
+            }}
+          >
+            <div>
+              <h3
+                id="ticket-waiting-title"
+                style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)', margin: 0 }}
+              >
+                {t('tickets.waiting.title')}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', marginTop: 4, marginBottom: 0 }}>
+                {t('tickets.waiting.subtitle')}
+              </p>
+            </div>
+
+            <div role="radiogroup" aria-labelledby="ticket-waiting-title" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(['customer', 'internal', 'third_party'] as const).map((reason) => (
+                <label
+                  key={reason}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    minHeight: 42,
+                    padding: '10px 12px',
+                    border: `1px solid ${waitingReason === reason ? 'var(--teal)' : 'var(--line)'}`,
+                    borderRadius: 8,
+                    background: waitingReason === reason ? 'var(--teal-dim)' : 'var(--bg-3)',
+                    color: 'var(--txt)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="ticket-waiting-reason"
+                    value={reason}
+                    checked={waitingReason === reason}
+                    onChange={() => setWaitingReason(reason)}
+                    style={{ accentColor: 'var(--teal)' }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    {t(`tickets.waiting.reasons.${reason}`)}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                className="zd-btn zd-btn-secondary"
+                onClick={() => {
+                  setShowWaitingModal(false);
+                  setWaitingReason('');
+                }}
+              >
+                {t('tickets.actions.cancel')}
+              </button>
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={!waitingReason || updateMutation.isPending}
+                onClick={async () => {
+                  if (!waitingReason) return;
+
+                  await updateMutation.mutateAsync({
+                    status: 'waiting',
+                    waiting_reason: waitingReason,
+                  });
+                  setShowWaitingModal(false);
+                  setWaitingReason('');
+                  setStatusMenuOpen(false);
+                }}
+              >
+                {t('tickets.waiting.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showResolveModal ? (
         <div

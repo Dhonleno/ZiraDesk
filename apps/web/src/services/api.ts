@@ -2380,6 +2380,7 @@ export const callsApi = {
 
 export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TicketWaitingReason = 'customer' | 'internal' | 'third_party';
 
 export interface Ticket {
   id:              string;
@@ -2397,6 +2398,7 @@ export interface Ticket {
   title:           string;
   description:     string | null;
   status:          TicketStatus;
+  waiting_reason:  TicketWaitingReason | null;
   priority:        TicketPriority;
   category:        string | null;
   assigned_to:     string | null;
@@ -2548,6 +2550,7 @@ export interface CreateTicketPayload {
   title:           string;
   description?:    string;
   status?:         TicketStatus;
+  waiting_reason?: TicketWaitingReason | null;
   priority?:       TicketPriority;
   category?:       string;
   type_id?:        string | null;

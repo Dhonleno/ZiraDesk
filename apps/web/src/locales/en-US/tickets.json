@@ -76,6 +76,16 @@
       "notesPlaceholder": "Describe what was done to resolve this ticket...",
       "notesRequired": "Resolution notes are required"
     },
+    "waiting": {
+      "title": "Waiting reason",
+      "subtitle": "Select the reason why this ticket is on hold.",
+      "confirm": "Confirm",
+      "reasons": {
+        "customer": "Waiting for customer",
+        "internal": "Waiting for internal team",
+        "third_party": "Waiting for third party"
+      }
+    },
     "close": {
       "title": "Close ticket",
       "subtitle": "The ticket will be permanently closed. It can be reopened if needed."

@@ -76,6 +76,16 @@
       "notesPlaceholder": "Descreva o que foi feito para resolver este ticket...",
       "notesRequired": "A descrição da solução é obrigatória"
     },
+    "waiting": {
+      "title": "Motivo de espera",
+      "subtitle": "Selecione o motivo pelo qual o ticket está aguardando.",
+      "confirm": "Confirmar",
+      "reasons": {
+        "customer": "Aguardando cliente",
+        "internal": "Aguardando área interna",
+        "third_party": "Aguardando terceiro"
+      }
+    },
     "close": {
       "title": "Fechar ticket",
       "subtitle": "O ticket será fechado definitivamente. Pode ser reaberto se necessário."
