@@ -2,9 +2,15 @@ import { prisma } from '../../config/database.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
+import { buildTenantUrl } from '../../utils/url.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
+import {
+  sendTicketCommentEmail,
+  sendTicketOpenedEmail,
+  sendTicketResolvedEmail,
+} from './ticket-emails.service.js';
 import type {
   CreateTicketInput,
   UpdateTicketInput,
@@ -534,6 +540,25 @@ async function resolveTenantSchemaName(tenantId: string): Promise<string | null>
   return tenant.schemaName;
 }
 
+async function resolveTenantInfo(tenantId: string): Promise<{
+  schemaName: string;
+  tenantName: string;
+  tenantSlug: string;
+}> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { schemaName: true, name: true, slug: true },
+  });
+  if (!tenant) throw new NotFoundError('Tenant');
+
+  tenantSchemaCache.set(tenantId, tenant.schemaName);
+  return {
+    schemaName: tenant.schemaName,
+    tenantName: tenant.name,
+    tenantSlug: tenant.slug,
+  };
+}
+
 const BASE_SELECT = `
   SELECT
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
@@ -782,6 +807,24 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
   void (async () => {
+    const tenantInfo = await resolveTenantInfo(tenantId);
+    const fullTicket = await getTicket(ticket.id, tenantInfo.schemaName);
+    if (!fullTicket.contact_email) return;
+
+    const ticketUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${ticket.id}`);
+    void sendTicketOpenedEmail({
+      tenantId,
+      tenantSchema: tenantInfo.schemaName,
+      tenantName: tenantInfo.tenantName,
+      contactEmail: fullTicket.contact_email,
+      contactName: fullTicket.contact_name ?? '',
+      ticketNumber: fullTicket.ticket_number,
+      ticketTitle: fullTicket.title,
+      ticketPriority: fullTicket.priority,
+      ticketUrl,
+    });
+  })().catch(() => {});
+  void (async () => {
     const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
     if (!resolvedSchemaName) return;
     await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'created');
@@ -960,6 +1003,27 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     void dispatchWebhook(tenantId, 'ticket.resolved', {
       ticket: { id: ticket.id, title: ticket.title, resolvedAt: ticket.resolved_at },
     });
+    if (data.resolution_notes) {
+      void (async () => {
+        const tenantInfo = await resolveTenantInfo(tenantId);
+        const fullTicket = await getTicket(id, tenantInfo.schemaName);
+        if (!fullTicket.contact_email) return;
+
+        const ticketUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
+        void sendTicketResolvedEmail({
+          tenantId,
+          tenantSchema: tenantInfo.schemaName,
+          tenantName: tenantInfo.tenantName,
+          contactEmail: fullTicket.contact_email,
+          contactName: fullTicket.contact_name ?? '',
+          ticketNumber: fullTicket.ticket_number,
+          ticketTitle: fullTicket.title,
+          ticketPriority: fullTicket.priority,
+          ticketUrl,
+          resolutionNotes: data.resolution_notes!,
+        });
+      })().catch(() => {});
+    }
     void (async () => {
       const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
       if (!resolvedSchemaName) return;
@@ -1216,6 +1280,28 @@ export async function addComment(ticketId: string, data: CreateCommentInput, use
       });
     }
   } catch { /* socket não inicializado em testes */ }
+
+  if (!data.is_internal) {
+    void (async () => {
+      const tenantInfo = await resolveTenantInfo(tenantId);
+      const fullTicket = await getTicket(ticketId, tenantInfo.schemaName);
+      if (!fullTicket.contact_email) return;
+
+      const ticketUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${ticketId}`);
+      void sendTicketCommentEmail({
+        tenantId,
+        tenantSchema: tenantInfo.schemaName,
+        tenantName: tenantInfo.tenantName,
+        contactEmail: fullTicket.contact_email,
+        contactName: fullTicket.contact_name ?? '',
+        ticketNumber: fullTicket.ticket_number,
+        ticketTitle: fullTicket.title,
+        ticketPriority: fullTicket.priority,
+        ticketUrl,
+        commentText: data.content,
+      });
+    })().catch(() => {});
+  }
 
   void (async () => {
     const schemaName = await resolveTenantSchemaName(tenantId);
