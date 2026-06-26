@@ -16,6 +16,10 @@ async function run() {
          ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
          ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
+         ADD COLUMN IF NOT EXISTS sla_paused_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
+         ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
+         ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS ticket_number SERIAL`,
       );
       logger.info(`✓ ${tenant.slug}`);

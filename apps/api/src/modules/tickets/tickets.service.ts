@@ -66,6 +66,10 @@ interface TicketRow {
   description:      string | null;
   status:           string;
   waiting_reason:   string | null;
+  sla_paused_at:    Date | null;
+  sla_paused_duration_seconds: number;
+  escalated:        boolean;
+  escalated_at:     Date | null;
   priority:         string;
   category:         string | null;
   assigned_to:      string | null;
@@ -370,6 +374,10 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
     ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS sla_paused_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS ticket_number SERIAL
   `);
 
@@ -562,7 +570,8 @@ async function resolveTenantInfo(tenantId: string): Promise<{
 const BASE_SELECT = `
   SELECT
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
-    t.status, t.waiting_reason, t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
+    t.status, t.waiting_reason, t.sla_paused_at, t.sla_paused_duration_seconds, t.escalated, t.escalated_at,
+    t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
@@ -756,10 +765,11 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
        VALUES
          ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
        RETURNING
-         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
-         NULL AS contact_name,  NULL AS organization_name,
+         NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
       data.contact_id      ?? null,
       data.organization_id ?? null,
@@ -874,6 +884,30 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       waitingReason = null;
     }
     const hasWaitingReason = waitingReason !== undefined;
+    let slaPausedAt: 'NOW()' | null | undefined;
+    let accumulateSlaPausedDuration = false;
+
+    if (old.status !== 'waiting' && newStatus === 'waiting' && data.waiting_reason === 'customer') {
+      slaPausedAt = 'NOW()';
+    }
+
+    if (
+      old.status === 'waiting' &&
+      old.waiting_reason === 'customer' &&
+      newStatus !== 'waiting' &&
+      old.sla_paused_at !== null
+    ) {
+      slaPausedAt = null;
+      accumulateSlaPausedDuration = true;
+    }
+
+    const slaPausedAtSql =
+      slaPausedAt === 'NOW()' ? 'NOW()' :
+      slaPausedAt === null ? 'NULL' :
+      'sla_paused_at';
+    const slaPausedDurationSql = accumulateSlaPausedDuration
+      ? `sla_paused_duration_seconds + GREATEST(0, EXTRACT(EPOCH FROM NOW() - sla_paused_at)::integer)`
+      : 'sla_paused_duration_seconds';
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `UPDATE tickets SET
@@ -888,15 +922,18 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          tags            = COALESCE($11::text[], tags),
          resolution_notes = COALESCE($12::text, resolution_notes),
          waiting_reason  = CASE WHEN $13::boolean THEN $14::text ELSE waiting_reason END,
+         sla_paused_at    = ${slaPausedAtSql},
+         sla_paused_duration_seconds = ${slaPausedDurationSql},
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
          closed_at       = ${closedAt === 'NOW()' ? 'NOW()' : closedAt === 'NULL' ? 'NULL' : 'closed_at'},
          updated_at      = NOW()
        WHERE id = $15::uuid
        RETURNING
-         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
-         NULL AS contact_name, NULL AS organization_name,
+         NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
       data.title ?? null,
       data.description ?? null,
@@ -1107,10 +1144,11 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
+       id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+       status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
        assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
-       NULL AS contact_name,  NULL AS organization_name,
+       NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
        NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
     userId, id,
   );
