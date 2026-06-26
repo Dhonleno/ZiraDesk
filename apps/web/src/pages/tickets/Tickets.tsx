@@ -316,6 +316,12 @@ export function TicketsPage() {
     staleTime: 60_000,
   });
 
+  const { data: categoriesData } = useQuery({
+    queryKey: ['ticket-categories'],
+    queryFn: adminApi.ticketCategories.list,
+    staleTime: 60_000,
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ ticketId, status }: { ticketId: string; status: TicketStatus }) =>
       ticketsApi.update(ticketId, { status }),
@@ -383,13 +389,10 @@ export function TicketsPage() {
   const closedTickets = closedTicketsData?.data ?? [];
   const total = ticketsData?.meta.total ?? tickets.length;
 
-  const categories = useMemo(() => {
-    const values = new Set<string>();
-    tickets.forEach((ticket) => {
-      if (ticket.category) values.add(ticket.category);
-    });
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [tickets]);
+  const categories = useMemo(
+    () => (categoriesData ?? []).filter((item) => item.is_active),
+    [categoriesData],
+  );
 
   const grouped = useMemo(() => {
     const map: Record<BoardStatus, Ticket[]> = {
@@ -522,7 +525,7 @@ export function TicketsPage() {
             >
               <option value="">{t('tickets.fields.category')}</option>
               {categories.map((item) => (
-                <option key={item} value={item}>{item}</option>
+                <option key={item.id} value={item.name}>{item.name}</option>
               ))}
             </select>
 
