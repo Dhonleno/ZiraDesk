@@ -72,6 +72,10 @@ function formatMonoDate(value: string | null): string {
   });
 }
 
+function formatTicketNumber(n: number): string {
+  return `#${String(n).padStart(5, '0')}`;
+}
+
 function statusLabel(status: TicketStatus, t: (key: string) => string): string {
   if (status === 'open') return t('tickets.kanban.open');
   if (status === 'in_progress') return t('tickets.kanban.inProgress');
@@ -525,7 +529,7 @@ export function TicketDetailPage() {
             <div className="ticket-detail-v2-breadcrumb">
               <span>{t('tickets.title')}</span>
               <span>/</span>
-              <strong>#{ticket.id.slice(-6).toUpperCase()} - {truncatedTitle}</strong>
+              <strong>{formatTicketNumber(ticket.ticket_number)} - {truncatedTitle}</strong>
             </div>
           </div>
 

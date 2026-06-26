@@ -48,6 +48,7 @@ export class PayloadTooLargeError extends Error {
 /* ── Row interfaces ──────────────────────────────────────────────────────── */
 interface TicketRow {
   id:               string;
+  ticket_number:    number;
   contact_id:       string | null;
   organization_id:  string | null;
   conversation_id:  string | null;
@@ -360,7 +361,8 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
   await db.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
-    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS ticket_number SERIAL
   `);
 
   await db.$executeRawUnsafe(`
@@ -532,7 +534,7 @@ async function resolveTenantSchemaName(tenantId: string): Promise<string | null>
 
 const BASE_SELECT = `
   SELECT
-    t.id, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
+    t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
     t.status, t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
@@ -727,7 +729,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
        VALUES
          ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
        RETURNING
-         id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name,  NULL AS organization_name,
@@ -838,7 +840,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          updated_at      = NOW()
        WHERE id = $13::uuid
        RETURNING
-         id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS organization_name,
@@ -1016,7 +1018,7 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+       id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
        assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,

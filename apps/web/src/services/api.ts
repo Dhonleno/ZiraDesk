@@ -2383,6 +2383,7 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface Ticket {
   id:              string;
+  ticket_number:   number;
   contact_id?:     string | null;
   organization_id?: string | null;
   conversation_id: string | null;

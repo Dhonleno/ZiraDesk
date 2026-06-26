@@ -57,6 +57,10 @@ function formatCompactDate(value: string): string {
   return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
+function formatTicketNumber(n: number): string {
+  return `#${String(n).padStart(5, '0')}`;
+}
+
 function initials(name: string | null | undefined): string {
   if (!name) return '??';
   return name
@@ -172,7 +176,7 @@ function TicketCard({
       title={sanitizeTicketTitle(ticket.title)}
     >
       <div className="tickets-card-top">
-        <span className="tickets-card-id">#{ticket.id.slice(-6).toUpperCase()}</span>
+        <span className="tickets-card-id">{formatTicketNumber(ticket.ticket_number)}</span>
         <span className="tickets-priority-badge" style={{ background: priority.bg, color: priority.color }}>
           {priority.label}
         </span>
