@@ -20,6 +20,11 @@ async function run() {
          ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
          ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
          ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS csat_score SMALLINT CHECK (csat_score BETWEEN 1 AND 5),
+         ADD COLUMN IF NOT EXISTS csat_comment TEXT,
+         ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS ticket_number SERIAL`,
       );
       logger.info(`✓ ${tenant.slug}`);

@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database.js';
+import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
@@ -7,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
 import {
+  sendTicketCsatEmail,
   sendTicketCommentEmail,
   sendTicketOpenedEmail,
   sendTicketResolvedEmail,
@@ -70,6 +72,11 @@ interface TicketRow {
   sla_paused_duration_seconds: number;
   escalated:        boolean;
   escalated_at:     Date | null;
+  csat_score:       number | null;
+  csat_comment:     string | null;
+  csat_sent_at:     Date | null;
+  csat_responded_at: Date | null;
+  csat_expires_at:  Date | null;
   priority:         string;
   category:         string | null;
   assigned_to:      string | null;
@@ -378,6 +385,11 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_score SMALLINT,
+    ADD COLUMN IF NOT EXISTS csat_comment TEXT,
+    ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS ticket_number SERIAL
   `);
 
@@ -571,6 +583,7 @@ const BASE_SELECT = `
   SELECT
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
     t.status, t.waiting_reason, t.sla_paused_at, t.sla_paused_duration_seconds, t.escalated, t.escalated_at,
+    t.csat_score, t.csat_comment, t.csat_sent_at, t.csat_responded_at, t.csat_expires_at,
     t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
@@ -766,7 +779,8 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
          ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
-         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+         csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
@@ -930,7 +944,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
        WHERE id = $15::uuid
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
-         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+         csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
@@ -1062,6 +1077,40 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       })().catch(() => {});
     }
     void (async () => {
+      try {
+        const tenantInfo = await resolveTenantInfo(tenantId);
+        const schema = schemaName ?? tenantInfo.schemaName;
+        const fullTicket = await getTicket(id, schema);
+        if (!fullTicket.contact_email || !fullTicket.contact_id) return;
+
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        const safeSchema = schema.replace(/"/g, '""');
+        await prisma.$executeRawUnsafe(
+          `UPDATE "${safeSchema}".tickets
+           SET csat_sent_at = NOW(),
+               csat_expires_at = $1::timestamptz,
+               updated_at = NOW()
+           WHERE id = $2::uuid`,
+          expiresAt.toISOString(),
+          id,
+        );
+
+        const csatBaseUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
+        await sendTicketCsatEmail({
+          tenantId,
+          tenantSchema: schema,
+          tenantName: tenantInfo.tenantName,
+          contactEmail: fullTicket.contact_email,
+          contactName: fullTicket.contact_name ?? '',
+          ticketNumber: fullTicket.ticket_number,
+          ticketTitle: fullTicket.title,
+          csatBaseUrl,
+        });
+      } catch (err) {
+        logger.error({ err }, '[TicketCsat] Failed to send CSAT email');
+      }
+    })();
+    void (async () => {
       const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
       if (!resolvedSchemaName) return;
       await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'resolved');
@@ -1145,7 +1194,8 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
      WHERE id = $2::uuid
      RETURNING
        id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
-       status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at, priority, category,
+       status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+       csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
        assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,

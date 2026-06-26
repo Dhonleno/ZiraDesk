@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import {
   portalAddCommentSchema,
   portalCreateTicketSchema,
@@ -25,6 +26,7 @@ import {
   reopenTicketByContact,
   requestPortalPasswordReset,
   resetPortalPassword,
+  submitTicketCsat,
   submitPortalLgpdRequest,
   submitPortalLgpdRectificationRequest,
   updatePortalLgpdConsent,
@@ -55,6 +57,23 @@ async function portalAuth(request: FastifyRequest, reply: FastifyReply) {
   } catch {
     return reply.code(401).send({ success: false, error: { message: 'Não autorizado' } });
   }
+}
+
+const portalTicketCsatParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+const portalTicketCsatBodySchema = z.object({
+  score: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(1000).optional(),
+});
+
+function resolveCsatTenantSlug(request: FastifyRequest): string | null {
+  const hostName = (request.hostname || request.headers.host || '').split(':')[0]?.toLowerCase() ?? '';
+  const parts = hostName.split('.').filter(Boolean);
+
+  if (parts[0] === 'suporte' && parts[1]) return parts[1];
+  return parts[0] && parts[0] !== 'localhost' && parts[0] !== '127' ? parts[0] : null;
 }
 
 export async function portalRoutes(app: FastifyInstance): Promise<void> {
@@ -254,6 +273,46 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
 
     const data = await createPortalTicket(request.portalUser!, parsed.data);
     return reply.code(201).send({ success: true, data });
+  });
+
+  app.post<{ Params: { id: string } }>('/tickets/:id/csat', async (request, reply) => {
+    const parsedParams = portalTicketCsatParamsSchema.safeParse(request.params);
+    const parsedBody = portalTicketCsatBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        success: false,
+        error: {
+          message: 'Dados inválidos',
+          details: {
+            params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+            body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          },
+        },
+      });
+    }
+
+    const tenantSlug = resolveCsatTenantSlug(request);
+    if (!tenantSlug) {
+      return reply.code(404).send({ success: false, error: { message: 'Tenant não encontrado' } });
+    }
+
+    try {
+      await submitTicketCsat(
+        parsedParams.data.id,
+        parsedBody.data.score,
+        parsedBody.data.comment,
+        tenantSlug,
+      );
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.post<{ Params: { id: string } }>('/tickets/:id/comments', { preHandler: [portalAuth] }, async (request, reply) => {

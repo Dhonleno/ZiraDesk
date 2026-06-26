@@ -102,7 +102,12 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.tickets
     ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
-    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS csat_score SMALLINT,
+    ADD COLUMN IF NOT EXISTS csat_comment TEXT,
+    ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -897,6 +902,48 @@ export async function addPortalComment(
   }
 
   return { success: true };
+}
+
+export async function submitTicketCsat(
+  ticketId: string,
+  score: number,
+  comment: string | undefined,
+  tenantSlug: string,
+): Promise<void> {
+  const tenant = await getTenantBySlug(tenantSlug);
+  await ensurePortalInfrastructure(tenant.schemaName);
+  const schema = quoteIdent(tenant.schemaName);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    csat_expires_at: Date | null;
+    csat_responded_at: Date | null;
+  }>>(
+    `SELECT id, csat_expires_at, csat_responded_at
+     FROM ${schema}.tickets
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    ticketId,
+  );
+
+  const ticket = rows[0];
+  if (!ticket) throw new PortalNotFoundError('Ticket não encontrado');
+  if (ticket.csat_responded_at) throw new PortalForbiddenError('CSAT já respondido');
+  if (ticket.csat_expires_at && new Date(ticket.csat_expires_at) < new Date()) {
+    throw new PortalForbiddenError('CSAT expirado');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.tickets
+     SET csat_score = $1::smallint,
+         csat_comment = $2,
+         csat_responded_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $3::uuid`,
+    score,
+    comment ?? null,
+    ticketId,
+  );
 }
 
 export async function reopenTicketByContact(

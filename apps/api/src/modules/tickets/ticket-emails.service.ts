@@ -249,3 +249,66 @@ export async function sendTicketResolvedEmail(
     logger.error({ err }, '[TicketEmail] Failed to send resolved email');
   }
 }
+
+export async function sendTicketCsatEmail(ctx: {
+  tenantId: string;
+  tenantSchema: string;
+  tenantName: string;
+  contactEmail: string;
+  contactName: string;
+  ticketNumber: number;
+  ticketTitle: string;
+  csatBaseUrl: string;
+}): Promise<void> {
+  if (!ctx.contactEmail) return;
+
+  const num = ticketNumberFormatted(ctx.ticketNumber);
+  const subject = `${num} — Como foi o seu atendimento?`;
+  const labels: Record<number, string> = {
+    1: '😞 Péssimo',
+    2: '😕 Ruim',
+    3: '😐 Regular',
+    4: '😊 Bom',
+    5: '🤩 Excelente',
+  };
+
+  const starButtons = [1, 2, 3, 4, 5].map((rating) => {
+    const url = escapeHtml(`${ctx.csatBaseUrl}?csat=${rating}`);
+    const color = rating >= 4 ? '#1c7a6e' : rating === 3 ? '#d97706' : '#dc2626';
+    return `<a href="${url}" style="display:inline-block;margin:4px;padding:10px 16px;background:${color};color:#ffffff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">
+      ${labels[rating]}
+    </a>`;
+  }).join('\n');
+
+  const bodyHtml = `
+    <p>Olá, <strong>${escapeHtml(ctx.contactName)}</strong>!</p>
+    <p>Seu ticket <strong>${num} — ${escapeHtml(ctx.ticketTitle)}</strong>
+       foi resolvido. Gostaríamos de saber como foi sua experiência.</p>
+    <p><strong>Como você avalia o atendimento?</strong></p>
+    <div style="text-align:center;margin:24px 0;">
+      ${starButtons}
+    </div>
+    <p style="font-size:13px;color:#9ca3af;text-align:center;">
+      Clique em uma das opções acima para registrar sua avaliação.
+    </p>
+  `;
+
+  const html = wrapTicketEmail({
+    headerTitle: 'Como foi o atendimento?',
+    bodyHtml,
+    footerText: `Este email foi enviado pela ${ctx.tenantName} via ZiraDesk. Protocolo ${num}.`,
+  });
+
+  try {
+    await sendEmail({
+      tenantId: ctx.tenantId,
+      tenantSchema: ctx.tenantSchema,
+      to: ctx.contactEmail,
+      subject,
+      html,
+      from: { name: ctx.tenantName },
+    });
+  } catch (err) {
+    logger.error({ err }, '[TicketEmail] Failed to send CSAT email');
+  }
+}
