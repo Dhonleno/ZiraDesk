@@ -59,6 +59,7 @@ interface TicketRow {
   title:            string;
   description:      string | null;
   status:           string;
+  waiting_reason:   string | null;
   priority:         string;
   category:         string | null;
   assigned_to:      string | null;
@@ -362,6 +363,7 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
     ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
     ADD COLUMN IF NOT EXISTS ticket_number SERIAL
   `);
 
@@ -535,7 +537,7 @@ async function resolveTenantSchemaName(tenantId: string): Promise<string | null>
 const BASE_SELECT = `
   SELECT
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
-    t.status, t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
+    t.status, t.waiting_reason, t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
@@ -729,7 +731,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
        VALUES
          ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
        RETURNING
-         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name,  NULL AS organization_name,
@@ -822,6 +824,13 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
     const hasAssignedTo = Object.prototype.hasOwnProperty.call(data, 'assigned_to');
     const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
+    let waitingReason: string | null | undefined;
+    if (data.status === 'waiting') {
+      waitingReason = data.waiting_reason ?? null;
+    } else if (data.status !== undefined) {
+      waitingReason = null;
+    }
+    const hasWaitingReason = waitingReason !== undefined;
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `UPDATE tickets SET
@@ -835,12 +844,13 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          due_date        = COALESCE($10::timestamptz, due_date),
          tags            = COALESCE($11::text[], tags),
          resolution_notes = COALESCE($12::text, resolution_notes),
+         waiting_reason  = CASE WHEN $13::boolean THEN $14::text ELSE waiting_reason END,
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
          closed_at       = ${closedAt === 'NOW()' ? 'NOW()' : closedAt === 'NULL' ? 'NULL' : 'closed_at'},
          updated_at      = NOW()
-       WHERE id = $13::uuid
+       WHERE id = $15::uuid
        RETURNING
-         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
          assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS organization_name,
@@ -857,6 +867,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       data.due_date ?? null,
       tagsLiteral,
       data.resolution_notes ?? null,
+      hasWaitingReason,
+      waitingReason ?? null,
       id,
     );
 
@@ -877,6 +889,19 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     if (old.status !== ticket.status) {
       const statusEvent = await logTicketEvent(id, updatedBy, 'status_changed', old.status, ticket.status, undefined, db);
       if (statusEvent) eventsToEmit.push({ event: statusEvent });
+    }
+
+    if (old.status !== 'waiting' && ticket.status === 'waiting') {
+      const waitingEvent = await logTicketEvent(
+        id,
+        updatedBy,
+        'waiting',
+        old.status,
+        'waiting',
+        { reason: ticket.waiting_reason },
+        db,
+      );
+      if (waitingEvent) eventsToEmit.push({ event: waitingEvent });
     }
 
     if (old.priority !== ticket.priority) {
@@ -1018,7 +1043,7 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
     `UPDATE tickets SET assigned_to = $1::uuid, updated_at = NOW()
      WHERE id = $2::uuid
      RETURNING
-       id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, priority, category,
+       id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description, status, waiting_reason, priority, category,
        assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name,  NULL AS organization_name,

@@ -290,7 +290,7 @@ describe('Tickets integration', () => {
     const invalidResponse = await createTestApp()
       .patch(`/api/tickets/${ticket.id}`)
       .set(authHeader())
-      .send({ status: 'waiting' });
+      .send({ status: 'waiting', waiting_reason: 'customer' });
 
     expect(invalidResponse.status).toBe(422);
     expect(invalidResponse.body.error.message).toContain('Transição de status inválida');

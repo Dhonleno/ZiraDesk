@@ -827,6 +827,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       source          VARCHAR(30)  NOT NULL DEFAULT 'manual',
       email_message_id VARCHAR(500),
       status          VARCHAR(30)  NOT NULL DEFAULT 'open',
+      waiting_reason  VARCHAR(30),
       priority        VARCHAR(20)  NOT NULL DEFAULT 'medium',
       category        VARCHAR(100),
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,

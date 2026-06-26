@@ -22,7 +22,18 @@ export const updateTicketSchema = createTicketSchema
   .extend({
     status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
     resolution_notes: z.string().trim().min(1).max(5000).optional(),
-  });
+    waiting_reason: z.enum(['customer', 'internal', 'third_party']).nullable().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.status === 'waiting' && !data.waiting_reason) return false;
+      return true;
+    },
+    {
+      message: 'Motivo de espera é obrigatório ao definir status como Aguardando',
+      path: ['waiting_reason'],
+    },
+  );
 
 export const listTicketsQuerySchema = z.object({
   page:        z.coerce.number().int().positive().default(1),

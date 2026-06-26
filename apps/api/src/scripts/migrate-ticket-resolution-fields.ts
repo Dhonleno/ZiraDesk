@@ -15,6 +15,7 @@ async function run() {
         `ALTER TABLE "${tenant.schemaName}".tickets
          ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
          ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
+         ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
          ADD COLUMN IF NOT EXISTS ticket_number SERIAL`,
       );
       logger.info(`✓ ${tenant.slug}`);
