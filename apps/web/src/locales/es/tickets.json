@@ -145,7 +145,7 @@
     "newFromEmail": "Nuevo ticket por e-mail",
     "newFromPortal": "Nuevo ticket desde el portal",
     "filterByAgent": "Todos los agentes",
-    "searchPlaceholder": "Buscar tickets...",
+    "searchPlaceholder": "Buscar número, título o contacto...",
     "view": "Vista",
     "viewKanban": "Kanban",
     "viewList": "Lista",

@@ -602,6 +602,25 @@ const BASE_SELECT = `
   LEFT JOIN organizations o  ON o.id  = t.organization_id
   LEFT JOIN ticket_types  tt ON tt.id = t.type_id`;
 
+const TICKET_SEARCH_CONDITION = `(
+  $1::text IS NULL
+  OR t.title ILIKE '%' || $1 || '%'
+  OR t.description ILIKE '%' || $1 || '%'
+  OR (
+    NULLIF(regexp_replace($1, '[^0-9]', '', 'g'), '') IS NOT NULL
+    AND (
+      lpad(t.ticket_number::text, 5, '0') ILIKE '%' || regexp_replace($1, '[^0-9]', '', 'g') || '%'
+      OR (
+        NULLIF(ltrim(regexp_replace($1, '[^0-9]', '', 'g'), '0'), '') IS NOT NULL
+        AND t.ticket_number::text ILIKE '%' || ltrim(regexp_replace($1, '[^0-9]', '', 'g'), '0') || '%'
+      )
+    )
+  )
+  OR ct.name ILIKE '%' || $1 || '%'
+  OR ct.email ILIKE '%' || $1 || '%'
+  OR o.name ILIKE '%' || $1 || '%'
+)`;
+
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
   return withOptionalSchema(schemaName, async (db) => {
@@ -622,7 +641,7 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
     const where = `
-      WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+      WHERE ${TICKET_SEARCH_CONDITION}
         AND ($2::text IS NULL OR t.status         = $2)
         AND ($3::text IS NULL OR t.priority       = $3)
         AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
@@ -641,7 +660,10 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
 
     const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count
-       FROM tickets t${where}`,
+       FROM tickets t
+       LEFT JOIN contacts      ct ON ct.id = t.contact_id
+       LEFT JOIN organizations o  ON o.id  = t.organization_id
+       ${where}`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
     );
 
@@ -692,7 +714,7 @@ export async function exportTickets(query: ExportTicketsQuery, schemaName?: stri
        LEFT JOIN contacts ct ON ct.id = t.contact_id
        LEFT JOIN organizations o ON o.id = t.organization_id
        LEFT JOIN ticket_types tt ON tt.id = t.type_id
-       WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+       WHERE ${TICKET_SEARCH_CONDITION}
          AND ($2::text IS NULL OR t.status = $2)
          AND ($3::text IS NULL OR t.priority = $3)
          AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)

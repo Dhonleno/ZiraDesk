@@ -106,11 +106,38 @@ async function createTicket(payload: Record<string, unknown> = {}) {
 
   return response.body.data as {
     id: string;
+    ticket_number: number;
     title: string;
     status: string;
     priority: string;
     assigned_to: string | null;
   };
+}
+
+async function createOrganizationAndContact() {
+  const { schemaName } = requireSuiteTenant();
+  const organizationRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+    `INSERT INTO "${schemaName}".organizations (name, email)
+     VALUES ($1, $2)
+     RETURNING id, name`,
+    uniqueText('Org Busca'),
+    'org.busca@ziradesk.test',
+  );
+  const organization = organizationRows[0];
+  if (!organization) throw new Error('Falha ao criar organização de teste');
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; email: string }>>(
+    `INSERT INTO "${schemaName}".contacts (organization_id, name, email)
+     VALUES ($1::uuid, $2, $3)
+     RETURNING id, name, email`,
+    organization.id,
+    uniqueText('Contato Busca'),
+    `contato.busca.${Date.now()}@ziradesk.test`,
+  );
+  const contact = contactRows[0];
+  if (!contact) throw new Error('Falha ao criar contato de teste');
+
+  return { organization, contact };
 }
 
 async function createTempTenant(track = true): Promise<TempTenant> {
@@ -256,6 +283,47 @@ describe('Tickets integration', () => {
 
     const returnedIds = [page1.body.data[0]?.id, page2.body.data[0]?.id].sort();
     expect(returnedIds).toEqual([firstMatch.id, secondMatch.id].sort());
+  });
+
+  it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
+    const { organization, contact } = await createOrganizationAndContact();
+    const ticket = await createTicket({
+      title: uniqueText('Ticket resolvido buscavel'),
+      status: 'in_progress',
+      priority: 'medium',
+      contact_id: contact.id,
+      organization_id: organization.id,
+    });
+    await createTicket({ title: uniqueText('Nao deve aparecer'), status: 'open' });
+
+    const resolveResponse = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader())
+      .send({ status: 'resolved' });
+
+    expect(resolveResponse.status).toBe(200);
+
+    const searchByNumber = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: `#${String(ticket.ticket_number).padStart(5, '0')}` })
+      .set(authHeader());
+    const searchByContact = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: contact.email })
+      .set(authHeader());
+    const searchByOrganization = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: organization.name })
+      .set(authHeader());
+
+    for (const response of [searchByNumber, searchByContact, searchByOrganization]) {
+      expect(response.status).toBe(200);
+      expect(response.body.meta.total).toBe(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: ticket.id,
+        status: 'resolved',
+      });
+    }
   });
 
   it('PATCH /api/tickets/:id atualiza status seguindo STATUS_TRANSITIONS', async () => {
