@@ -2181,6 +2181,10 @@
   color: var(--txt-3);
 }
 
+.history-detail-section.is-transcript {
+  gap: 12px;
+}
+
 .history-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2269,18 +2273,55 @@
 }
 
 .history-transcript-list {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
   max-height: none;
   overflow: visible;
-  padding-right: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg);
 }
 
 .history-transcript-item {
+  width: fit-content;
+  max-width: min(78%, 560px);
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   background: var(--bg-3);
-  padding: 8px 9px;
+  padding: 8px 10px;
+}
+
+.history-transcript-item.is-client,
+.history-transcript-item.is-bot {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+.history-transcript-item.is-agent {
+  align-self: flex-end;
+  border-color: var(--teal-dim);
+  border-bottom-right-radius: 4px;
+  background: var(--teal-dim);
+}
+
+.history-transcript-item.is-bot {
+  border-color: var(--blue-dim);
+  background: var(--blue-dim);
+}
+
+.history-transcript-item.is-system {
+  align-self: center;
+  max-width: 88%;
+  border-color: var(--line-2);
+  border-radius: var(--r);
+  background: var(--bg-4);
+}
+
+.history-transcript-item.is-internal {
+  border-color: var(--amber-dim);
+  background: var(--amber-dim);
 }
 
 .history-transcript-item header {
@@ -2304,9 +2345,13 @@
 .history-transcript-item p {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--txt-2);
+  color: var(--txt);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.history-transcript-item.is-system p {
+  color: var(--txt-2);
 }
 
 .history-csat-block {

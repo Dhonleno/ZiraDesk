@@ -244,6 +244,25 @@ function HistoryMedia({
   return <p>{message.content || `(${message.content_type})`}</p>;
 }
 
+function getTranscriptItemClass(message: OmnichannelHistoryMessage): string {
+  const senderType = message.sender_type.toLowerCase();
+  let variant = 'is-client';
+
+  if (senderType === 'agent') {
+    variant = 'is-agent';
+  } else if (senderType === 'bot') {
+    variant = 'is-bot';
+  } else if (senderType === 'system') {
+    variant = 'is-system';
+  }
+
+  return [
+    'history-transcript-item',
+    variant,
+    message.is_internal ? 'is-internal' : '',
+  ].filter(Boolean).join(' ');
+}
+
 function SortableHeader({
   column,
   label,
@@ -728,12 +747,12 @@ export function HistoryPage() {
                         )}
                       </section>
 
-                      <section className="history-detail-section">
+                      <section className="history-detail-section is-transcript">
                         <h3>{t('history.detail.transcript')}</h3>
                         {detailData.transcript.length > 0 ? (
                           <div className="history-transcript-list">
                             {detailData.transcript.map((message) => (
-                              <article key={message.id} className="history-transcript-item">
+                              <article key={message.id} className={getTranscriptItemClass(message)}>
                                 <header>
                                   <strong>{message.sender_name || message.sender_type}</strong>
                                   <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>
