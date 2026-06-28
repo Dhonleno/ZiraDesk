@@ -471,7 +471,9 @@
       "colContact": "Contact",
       "colStatus": "Status",
       "colWait": "Wait",
-      "colDate": "Date"
+      "colDate": "Date",
+      "openConversation": "Open conversation",
+      "openConversationWithProtocol": "Open conversation {{protocol}}"
     }
   },
   "composer": {

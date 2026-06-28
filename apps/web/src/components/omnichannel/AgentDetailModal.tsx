@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { omnichannelApi, type OmnichannelPerformanceAgent, type HistoryPeriodPreset } from '../../services/api';
 
 interface Props {
@@ -66,6 +67,7 @@ function statusColors(status: string): { bg: string; color: string } {
 
 export function AgentDetailModal({ agent, period, dateFrom, dateTo, onClose }: Props) {
   const { t, i18n } = useTranslation('omnichannel');
+  const navigate = useNavigate();
 
   const effectivePeriod = toHistoryPeriod(period);
 
@@ -100,6 +102,11 @@ export function AgentDetailModal({ agent, period, dateFrom, dateTo, onClose }: P
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  function openConversation(conversationId: string) {
+    onClose();
+    navigate(`/omnichannel/conversations?conversation=${encodeURIComponent(conversationId)}`);
+  }
 
   return (
     <div
@@ -276,15 +283,28 @@ export function AgentDetailModal({ agent, period, dateFrom, dateTo, onClose }: P
                       borderBottom: '1px solid var(--line)',
                     }}
                   >
-                    <div style={{
-                      color: 'var(--teal)',
-                      fontFamily: 'var(--mono)',
-                      fontSize: 11,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {conv.protocol_number ?? '—'}
+                    <div style={{ minWidth: 0 }}>
+                      {conv.protocol_number ? (
+                        <button
+                          type="button"
+                          className="agent-detail-protocol-btn"
+                          title={t('performance.agentDetail.openConversation')}
+                          aria-label={t('performance.agentDetail.openConversationWithProtocol', {
+                            protocol: conv.protocol_number,
+                          })}
+                          onClick={() => openConversation(conv.id)}
+                        >
+                          {conv.protocol_number}
+                        </button>
+                      ) : (
+                        <span style={{
+                          color: 'var(--txt-3)',
+                          fontFamily: 'var(--mono)',
+                          fontSize: 11,
+                        }}>
+                          —
+                        </span>
+                      )}
                     </div>
                     <div style={{
                       color: 'var(--txt)',

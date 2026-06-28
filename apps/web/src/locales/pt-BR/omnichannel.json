@@ -471,7 +471,9 @@
       "colContact": "Contato",
       "colStatus": "Status",
       "colWait": "TME",
-      "colDate": "Data"
+      "colDate": "Data",
+      "openConversation": "Abrir atendimento",
+      "openConversationWithProtocol": "Abrir atendimento {{protocol}}"
     }
   },
   "composer": {
