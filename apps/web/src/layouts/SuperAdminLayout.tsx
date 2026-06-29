@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { BrandLogo } from '../components/layout/BrandLogo';
@@ -68,9 +68,9 @@ function Breadcrumb() {
 }
 
 /* ── Nav item ─────────────────────────────────────────────────────────────── */
-type NavItemProps = { to: string; end?: true; title: string; children: React.ReactNode };
+type NavItemProps = { to: string; end?: true; title: string; expanded?: boolean; children: React.ReactNode };
 
-function NavItem({ to, end, title, children }: NavItemProps) {
+function NavItem({ to, end, title, expanded = false, children }: NavItemProps) {
   return (
     <NavLink
       to={to}
@@ -79,15 +79,35 @@ function NavItem({ to, end, title, children }: NavItemProps) {
       aria-label={title}
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
-      {children}
+      <span className="nav-item-icon" aria-hidden>
+        {children}
+      </span>
+      <span className="nav-item-label" aria-hidden={!expanded}>{title}</span>
     </NavLink>
   );
 }
+
+const NAV_RAIL_STORAGE_KEY = 'zd-nav-expanded';
 
 /* ── SuperAdminLayout ─────────────────────────────────────────────────────── */
 export function SuperAdminLayout() {
   const { user, logout } = useAuth();
   const initial = user?.name.charAt(0).toUpperCase() ?? '?';
+  const [isNavExpanded, setIsNavExpanded] = useState(() => {
+    try {
+      return localStorage.getItem(NAV_RAIL_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_RAIL_STORAGE_KEY, String(isNavExpanded));
+    } catch {
+      // Preferencia visual; sem impacto se o navegador bloquear storage.
+    }
+  }, [isNavExpanded]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', color: 'var(--txt)' }}>
@@ -160,21 +180,24 @@ export function SuperAdminLayout() {
         {/* Nav rail */}
         <nav
           aria-label="Navegação Super Admin"
-          style={{
-            width: 72,
-            minWidth: 72,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '12px 0 10px',
-            gap: 6,
-            background: 'var(--bg-2)',
-            borderRight: '1px solid var(--line)',
-            boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
-          }}
+          className={`nav-rail${isNavExpanded ? ' is-expanded' : ''}`}
         >
+          <button
+            type="button"
+            className="nav-rail-toggle"
+            aria-label={isNavExpanded ? 'Recolher menu' : 'Expandir menu'}
+            aria-expanded={isNavExpanded}
+            title={isNavExpanded ? 'Recolher menu' : 'Expandir menu'}
+            onClick={() => setIsNavExpanded((current) => !current)}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M4 5h10M4 9h10M4 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>Menu</span>
+          </button>
+
           {/* Dashboard */}
-          <NavItem to="/super-admin" end title="Dashboard">
+          <NavItem to="/super-admin" end title="Dashboard" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -184,7 +207,7 @@ export function SuperAdminLayout() {
           </NavItem>
 
           {/* Tenants */}
-          <NavItem to="/super-admin/tenants" title="Tenants">
+          <NavItem to="/super-admin/tenants" title="Tenants" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
                 d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
@@ -198,7 +221,7 @@ export function SuperAdminLayout() {
           </NavItem>
 
           {/* Planos */}
-          <NavItem to="/super-admin/plans" title="Planos">
+          <NavItem to="/super-admin/plans" title="Planos" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
                 d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
@@ -210,29 +233,20 @@ export function SuperAdminLayout() {
             </svg>
           </NavItem>
 
-          <div style={{ width: 28, height: 1, background: 'var(--line)', margin: '10px 0 6px', opacity: 0.8 }} />
+          <div className="nav-divider" />
 
           <div style={{ flex: 1 }} />
 
           {/* Bottom avatar */}
           <div
             title={user?.email}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--teal), #00A88C)',
-              border: '2px solid var(--bg-5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--on-teal)',
-              marginBottom: 6,
-            }}
+            className="nav-user"
           >
-            {initial}
+            <span className="nav-user-avatar">{initial}</span>
+            <span className="nav-user-copy">
+              <strong>{user?.name ?? 'Super Admin'}</strong>
+              <span>{user?.email}</span>
+            </span>
           </div>
         </nav>
 

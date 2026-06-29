@@ -295,10 +295,11 @@ type NavItemProps = {
   end?: boolean;
   title: string;
   badge?: number;
+  expanded?: boolean;
   children: React.ReactNode;
 };
 
-function NavItem({ to, end, title, badge, children }: NavItemProps) {
+function NavItem({ to, end, title, badge, expanded = false, children }: NavItemProps) {
   const badgeValue = badge ?? 0;
 
   return (
@@ -309,7 +310,10 @@ function NavItem({ to, end, title, badge, children }: NavItemProps) {
       aria-label={title}
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
-      {children}
+      <span className="nav-item-icon" aria-hidden>
+        {children}
+      </span>
+      <span className="nav-item-label" aria-hidden={!expanded}>{title}</span>
       {badgeValue > 0 && (
         <span className="nav-badge-dot" aria-hidden>
           {badgeValue > 1 ? (badgeValue > 99 ? '99+' : badgeValue) : null}
@@ -318,6 +322,8 @@ function NavItem({ to, end, title, badge, children }: NavItemProps) {
     </NavLink>
   );
 }
+
+const NAV_RAIL_STORAGE_KEY = 'zd-nav-expanded';
 
 function formatPauseDuration(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -373,6 +379,13 @@ export function TenantLayout() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [impersonatedTenantName, setImpersonatedTenantName] = useState<string | null>(null);
+  const [isNavExpanded, setIsNavExpanded] = useState(() => {
+    try {
+      return localStorage.getItem(NAV_RAIL_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
@@ -406,6 +419,14 @@ export function TenantLayout() {
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
   useFaviconBadge(unreadConversationNotifications > 0);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_RAIL_STORAGE_KEY, String(isNavExpanded));
+    } catch {
+      // Preferencia visual; sem impacto se o navegador bloquear storage.
+    }
+  }, [isNavExpanded]);
 
   useEffect(() => {
     const baseTitle = getCurrentZiraDeskTitle();
@@ -1108,23 +1129,26 @@ export function TenantLayout() {
 
         {/* Nav rail */}
         <nav
-          aria-label="Main navigation"
-          style={{
-            width: 68,
-            minWidth: 68,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '12px 0 10px',
-            gap: 6,
-            background: 'var(--bg-2)',
-            borderRight: '1px solid var(--line)',
-            boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
-          }}
+          aria-label="Navegação principal"
+          className={`nav-rail${isNavExpanded ? ' is-expanded' : ''}`}
         >
+          <button
+            type="button"
+            className="nav-rail-toggle"
+            aria-label={isNavExpanded ? 'Recolher menu' : 'Expandir menu'}
+            aria-expanded={isNavExpanded}
+            title={isNavExpanded ? 'Recolher menu' : 'Expandir menu'}
+            onClick={() => setIsNavExpanded((current) => !current)}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M4 5h10M4 9h10M4 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+            <span>Menu</span>
+          </button>
+
           {/* Início */}
           {isManager && (
-            <NavItem to="/home" title={tCommon('home.navLabel')}>
+            <NavItem to="/home" title={tCommon('home.navLabel')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1132,7 +1156,7 @@ export function TenantLayout() {
             </NavItem>
           )}
           {!isManager && user?.role === 'agent' && (
-            <NavItem to="/agent-home" title={tCommon('home.navLabel')}>
+            <NavItem to="/agent-home" title={tCommon('home.navLabel')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1145,6 +1169,7 @@ export function TenantLayout() {
             to="/omnichannel/conversations"
             title={t('nav.conversations', { defaultValue: 'Atendimentos' })}
             badge={unreadConversationNotifications}
+            expanded={isNavExpanded}
           >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
@@ -1159,7 +1184,7 @@ export function TenantLayout() {
 
           {/* Fila */}
           {canViewQueue && (
-            <NavItem to="/omnichannel/queue" title={t('nav.queue')} badge={queueCount}>
+            <NavItem to="/omnichannel/queue" title={t('nav.queue')} badge={queueCount} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M2 5h14M2 9h10M2 13h7"
                   stroke="currentColor" strokeWidth="1.4"
@@ -1170,7 +1195,7 @@ export function TenantLayout() {
 
           {/* Monitor */}
           {isManager && (
-            <NavItem to="/monitor" title="Monitor">
+            <NavItem to="/monitor" title="Monitor" expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
                 <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1180,7 +1205,7 @@ export function TenantLayout() {
 
           {/* Métricas */}
           {canViewMetricsNav && (
-            <NavItem to="/omnichannel/metrics" title="Métricas">
+            <NavItem to="/omnichannel/metrics" title="Métricas" expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
@@ -1191,7 +1216,7 @@ export function TenantLayout() {
           )}
 
           {canViewHistoryNav && (
-            <NavItem to="/omnichannel/history" title={t('nav.history')}>
+            <NavItem to="/omnichannel/history" title={t('nav.history')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <circle cx="9" cy="9" r="6.2" stroke="currentColor" strokeWidth="1.4" />
                 <path d="M9 5.8v3.5l2.5 1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1200,7 +1225,7 @@ export function TenantLayout() {
           )}
 
           {canViewPerformanceNav && (
-            <NavItem to="/omnichannel/performance" title={t('nav.performance')}>
+            <NavItem to="/omnichannel/performance" title={t('nav.performance')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M2 14l4-4 3 3 4-6 3 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -1208,16 +1233,16 @@ export function TenantLayout() {
           )}
 
           {/* Organizações */}
-          <NavItem to="/crm/organizations" title="Organizações">
+          <NavItem to="/crm/organizations" title="Organizações" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <rect x="2" y="5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-              <path d="M6 5V4a2 2 0 012-2h2a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M6 9h6M6 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              <path d="M4 15V3.8A1.8 1.8 0 0 1 5.8 2h6.4A1.8 1.8 0 0 1 14 3.8V15" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M2.5 15h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <path d="M7 5h1M10 5h1M7 8h1M10 8h1M7 11h1M10 11h1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </NavItem>
 
           {/* Contatos */}
-          <NavItem to="/crm/contacts" title="Contatos">
+          <NavItem to="/crm/contacts" title="Contatos" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <circle cx="9" cy="6.5" r="2.8" stroke="currentColor" strokeWidth="1.4"/>
               <path d="M3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
@@ -1225,7 +1250,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Tickets */}
-          <NavItem to="/tickets" title={t('nav.tickets', { defaultValue: 'Tickets' })} badge={ticketUnreadCount}>
+          <NavItem to="/tickets" title={t('nav.tickets', { defaultValue: 'Tickets' })} badge={ticketUnreadCount} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 5h10a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z"
@@ -1238,18 +1263,18 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Campanhas */}
-          <NavItem to="/omnichannel/campaigns" title="Campanhas">
+          <NavItem to="/omnichannel/campaigns" title="Campanhas" expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M2 6.5c0-1.1.9-2 2-2h2l2-2.5 2 2.5h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M9 4v2.5M6.5 10h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M3 10.2H2.5A1.5 1.5 0 0 1 1 8.7V7.3a1.5 1.5 0 0 1 1.5-1.5H5l7-3v10.4l-7-3H3Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 10.2 6.2 15H4.1L3 10.2M14.2 6.2c.7.4 1.1 1 1.1 1.8s-.4 1.4-1.1 1.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </NavItem>
 
-          <div style={{ width: 28, height: 1, background: 'var(--line)', margin: '10px 0 6px', opacity: 0.8 }} />
+          <div className="nav-divider" />
 
           {/* Administração */}
           {canViewAdminNav && (
-            <NavItem to="/admin" title="Administração">
+            <NavItem to="/admin" title="Administração" expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <rect x="3" y="3" width="12" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
                 <circle cx="9" cy="9" r="2.3" stroke="currentColor" strokeWidth="1.3" />
@@ -1267,49 +1292,28 @@ export function TenantLayout() {
           <div style={{ flex: 1 }} />
           <div
             title={user?.email}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'var(--bg-4)',
-              border: '2px solid var(--bg-5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--txt-2)',
-              marginBottom: 6,
-              overflow: 'hidden',
-            }}
+            className="nav-user"
           >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={user?.name ?? 'Avatar'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              initial
-            )}
+            <span className="nav-user-avatar">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={user?.name ?? 'Avatar'} />
+              ) : (
+                initial
+              )}
+            </span>
+            <span className="nav-user-copy">
+              <strong>{user?.name ?? 'Usuário'}</strong>
+              <span>{user?.email}</span>
+            </span>
           </div>
 
           <NavLink
             to="/settings/upgrade"
             title={`Plano atual: ${settings?.plan?.name ?? '—'}`}
-            style={({ isActive }) => ({
-              width: 58,
-              display: 'block',
-              textAlign: 'center',
-              textDecoration: 'none',
-              borderRadius: 12,
-              border: `1px solid ${isActive ? 'rgba(0,201,167,.35)' : 'var(--line-2)'}`,
-              background: isActive ? 'var(--teal-dim)' : 'var(--bg-3)',
-              color: isActive ? 'var(--teal)' : 'var(--txt-2)',
-              padding: '7px 4px',
-              marginBottom: 8,
-              boxShadow: isActive ? '0 8px 22px rgba(0, 201, 167, 0.12)' : 'none',
-              transition: 'all .16s ease',
-            })}
+            className={({ isActive }) => `nav-plan${isActive ? ' active' : ''}`}
           >
-            <span style={{ display: 'block', fontSize: 9, lineHeight: 1.1, color: 'var(--txt-3)' }}>Plano atual</span>
-            <strong style={{ display: 'block', fontSize: 10, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis' }}>{settings?.plan?.name ?? '—'}</strong>
+            <span>Plano atual</span>
+            <strong>{settings?.plan?.name ?? '—'}</strong>
           </NavLink>
         </nav>
 
