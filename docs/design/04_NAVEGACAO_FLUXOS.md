@@ -17,7 +17,7 @@ Dois "mundos" com shells distintos:
 
 ## 2. Nav-rail — ordem canônica e destinos
 
-A nav-rail (68px) é idêntica em toda tela do app. Ordem e item ativo:
+A nav-rail é idêntica em toda tela do app: 68px no estado recolhido padrão e 216px no estado expandido com rótulos. Ordem e item ativo:
 
 | # | Item | Módulo (breadcrumb) | Página inicial | Padrão da tela |
 |---|---|---|---|---|
@@ -34,6 +34,8 @@ Rodapé da nav-rail (`.nav-bottom`): avatar do usuário + `plan-pill` ("Plano Pr
 
 Regras:
 - Item ativo: `bg: var(--teal-dim); color: var(--teal)`.
+- Estado recolhido mostra apenas ícones com `title`/`aria-label`; estado expandido mostra ícone + rótulo.
+- A preferência de expansão pode ser persistida localmente, mas viewports estreitos devem usar o estado recolhido.
 - Itens que navegam usam `<a href>`, não `<div onclick>`.
 - Badge de notificação por seção no canto superior direito, em `var(--red)`.
 

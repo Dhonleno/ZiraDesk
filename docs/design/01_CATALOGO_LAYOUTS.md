@@ -9,8 +9,8 @@ Shell comum a todos (exceto Autenticação):
 ```html
 <body>
   <div class="topbar">…</div>          <!-- 52px -->
-  <div class="main">                   <!-- grid: 68px 1fr -->
-    <div class="nav-rail">…</div>      <!-- 68px -->
+  <div class="main">                   <!-- flex: nav-rail + content -->
+    <div class="nav-rail">…</div>      <!-- 68px recolhida, 216px expandida -->
     <div class="content">…</div>       <!-- varia por arquétipo -->
   </div>
 </body>
