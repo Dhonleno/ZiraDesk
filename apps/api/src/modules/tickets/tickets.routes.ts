@@ -1,9 +1,11 @@
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
+import { hasPermission } from '@ziradesk/shared';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
+import { maskEmail, maskPhone, maskDocument, maskName } from '../../utils/pii-mask.js';
 import {
   createTicketSchema,
   updateTicketSchema,
@@ -44,6 +46,7 @@ import {
   NotFoundError,
   ForbiddenError,
   BusinessRuleError,
+  PayloadTooLargeError,
 } from './tickets.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
@@ -51,6 +54,49 @@ const ticketsViewGuard = [...guard, requirePermission('tickets:view')];
 const ticketsEditGuard = [...guard, requirePermission('tickets:edit')];
 const ticketsDeleteGuard = [...guard, requirePermission('tickets:delete')];
 const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
+
+function maskTicketContactPii<T extends { contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null; contact_document?: string | null }>(ticket: T): T {
+  return {
+    ...ticket,
+    contact_name:     maskName(ticket.contact_name ?? null),
+    contact_email:    maskEmail(ticket.contact_email ?? null),
+    contact_phone:    maskPhone(ticket.contact_phone ?? null),
+    contact_document: maskDocument(ticket.contact_document ?? null),
+  };
+}
+
+function ensureSafeSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/i.test(schemaName)) {
+    throw new Error('Schema do tenant inválido');
+  }
+  return schemaName.replace(/"/g, '""');
+}
+
+async function insertTicketPiiAuditLog(schemaName: string, userId: string, ticketId: string): Promise<void> {
+  const safeSchemaName = ensureSafeSchemaName(schemaName);
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${safeSchemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'ticket.pii.accessed', 'ticket', $2::uuid, $3::jsonb)`,
+    userId,
+    ticketId,
+    JSON.stringify({
+      user_id: userId,
+      ticket_id: ticketId,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+function isMultipartTooLargeError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE';
+}
 
 async function ensureTicketRelationsInfrastructure(): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -80,7 +126,7 @@ async function ensureTicketRelationsInfrastructure(): Promise<void> {
 export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   await app.register(multipart, {
     limits: {
-      fileSize: 15 * 1024 * 1024,
+      fileSize: 10 * 1024 * 1024,
       files: 1,
     },
   });
@@ -94,8 +140,14 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         error: { message: 'Query inválida', details: parsed.error.flatten() },
       });
     }
-    const result = await listTickets(parsed.data);
-    return reply.send({ success: true, ...result });
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    const result = await listTickets(parsed.data, schemaName);
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : result.data.map(maskTicketContactPii),
+    });
   });
 
   // GET /api/tickets/stats  — must be before /:id to avoid conflict
@@ -121,7 +173,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    const tickets = await exportTickets(parsed.data);
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    const tickets = await exportTickets(parsed.data, schemaName);
 
     const headers = [
       'ID',
@@ -233,11 +286,12 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const ticket = await createTicket(parsed.data, request.user.id, request.user.tenantId!, schemaName);
       return reply.code(201).send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof BusinessRuleError) {
-        return reply.code(400).send({ success: false, error: { message: err.message } });
+        return reply.code(422).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }
@@ -453,6 +507,9 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const ticket = await getTicket(request.params.id, schemaName);
+      if (schemaName) {
+        await insertTicketPiiAuditLog(schemaName, request.user.id, request.params.id);
+      }
       return reply.send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -471,13 +528,14 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const ticket = await updateTicket(request.params.id, parsed.data, request.user.id, request.user.tenantId!);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const ticket = await updateTicket(request.params.id, parsed.data, request.user.id, request.user.tenantId!, schemaName);
       return reply.send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
       if (err instanceof BusinessRuleError)
-        return reply.code(400).send({ success: false, error: { message: err.message } });
+        return reply.code(422).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });
@@ -485,7 +543,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/tickets/:id
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: ticketsDeleteGuard }, async (request, reply) => {
     try {
-      const result = await deleteTicket(request.params.id, request.user.id, request.user.tenantId!);
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const result = await deleteTicket(request.params.id, request.user.id, request.user.tenantId!, schemaName);
       return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -780,23 +839,30 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     let mimeType = '';
     let commentId: string | null = null;
 
-    for await (const part of request.parts()) {
-      if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
-        fileBuffer = await part.toBuffer();
-        fileName = part.filename;
-        mimeType = part.mimetype;
-        continue;
-      }
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+          fileBuffer = await part.toBuffer();
+          fileName = part.filename;
+          mimeType = part.mimetype;
+          continue;
+        }
 
-      if (part.type === 'field' && part.fieldname === 'comment_id') {
-        const rawValue = String(part.value ?? '').trim();
-        commentId = rawValue || null;
-        continue;
-      }
+        if (part.type === 'field' && part.fieldname === 'comment_id') {
+          const rawValue = String(part.value ?? '').trim();
+          commentId = rawValue || null;
+          continue;
+        }
 
-      if (part.type === 'file') {
-        await part.toBuffer();
+        if (part.type === 'file') {
+          await part.toBuffer();
+        }
       }
+    } catch (err) {
+      if (isMultipartTooLargeError(err)) {
+        return reply.code(413).send({ success: false, error: { message: 'Arquivo excede o limite de 10MB' } });
+      }
+      throw err;
     }
 
     if (!fileBuffer || !fileName || !mimeType) {
@@ -807,6 +873,7 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
       const data = await addAttachment({
         ticketId: request.params.id,
         commentId,
@@ -814,9 +881,13 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         fileName,
         mimeType,
         buffer: fileBuffer,
+        ...(schemaName ? { schemaName } : {}),
       });
       return reply.code(201).send({ success: true, data });
     } catch (err) {
+      if (err instanceof PayloadTooLargeError || isMultipartTooLargeError(err)) {
+        return reply.code(413).send({ success: false, error: { message: 'Arquivo excede o limite de 10MB' } });
+      }
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
       }
@@ -833,7 +904,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: ticketsEditGuard },
     async (request, reply) => {
       try {
-        const result = await deleteAttachment(request.params.attachmentId, request.user.id);
+        const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+        const result = await deleteAttachment(request.params.attachmentId, request.user.id, schemaName);
         return reply.send({ success: true, data: result });
       } catch (err) {
         if (err instanceof NotFoundError) {
@@ -853,7 +925,8 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: ticketsViewGuard },
     async (request, reply) => {
       try {
-        const { content, filename, mimeType } = await readAttachmentContent(request.params.attachmentId);
+        const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+        const { content, filename, mimeType } = await readAttachmentContent(request.params.attachmentId, schemaName);
         reply.header('Content-Type', mimeType);
         reply.header('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
         reply.header('Cache-Control', 'private, max-age=3600');

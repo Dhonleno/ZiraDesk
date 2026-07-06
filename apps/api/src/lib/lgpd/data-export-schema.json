@@ -1,0 +1,634 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ziradesk.com/schemas/lgpd-export-v1.json",
+  "title": "ZiraDesk LGPD Data Export Schema",
+  "description": "Formato estruturado de exportação de dados pessoais conforme art. 18 da LGPD (direito de portabilidade)",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "exported_at",
+    "exported_by",
+    "subject",
+    "consent",
+    "contacts",
+    "conversations",
+    "messages",
+    "tickets",
+    "audit_trail",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.2.0"
+    },
+    "generated_at": {
+      "$ref": "#/$defs/dateTimeString",
+      "description": "Campo legado compatível com versões anteriores."
+    },
+    "request_id": {
+      "$ref": "#/$defs/entityId",
+      "description": "Campo legado compatível com versões anteriores."
+    },
+    "exported_at": {
+      "$ref": "#/$defs/dateTimeString"
+    },
+    "exported_by": {
+      "$ref": "#/$defs/exportedBy"
+    },
+    "subject": {
+      "$ref": "#/$defs/subject"
+    },
+    "consent": {
+      "$ref": "#/$defs/consent"
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contact"
+      }
+    },
+    "conversations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/conversation"
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/message"
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ticket"
+      }
+    },
+    "audit_trail": {
+      "description": "Formato canônico em lista de ações do titular. Também aceita objeto legado para retrocompatibilidade.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/auditEvent"
+          }
+        },
+        {
+          "$ref": "#/$defs/legacyAuditTrail"
+        }
+      ]
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    }
+  },
+  "$defs": {
+    "dateTimeString": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableDateTime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/dateTimeString"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableEmail": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "email"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "jsonValue": {
+      "type": [
+        "object",
+        "array",
+        "string",
+        "number",
+        "integer",
+        "boolean",
+        "null"
+      ]
+    },
+    "exportedBy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "user_id",
+        "name",
+        "email"
+      ],
+      "properties": {
+        "user_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "name": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "email": {
+          "$ref": "#/$defs/nullableEmail"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "id",
+        "name",
+        "email",
+        "phone",
+        "document",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "contact",
+            "user"
+          ]
+        },
+        "subject_type": {
+          "type": "string",
+          "enum": [
+            "contact",
+            "user",
+            "external"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "name": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "email": {
+          "$ref": "#/$defs/nullableEmail"
+        },
+        "phone": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "document": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "created_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        }
+      }
+    },
+    "consentHistoryEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "status",
+        "consent_at",
+        "consent_source"
+      ],
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "consent_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "consent_source": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "status",
+        "consent_at",
+        "consent_source",
+        "history"
+      ],
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "consent_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "consent_source": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/consentHistoryEntry"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "last_export_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "anonymized_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "anonymization_reason": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "name",
+        "email",
+        "phone",
+        "document",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "name": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "email": {
+          "$ref": "#/$defs/nullableEmail"
+        },
+        "phone": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "whatsapp": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "document": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "organization_id": {
+          "$ref": "#/$defs/nullableEntityId"
+        },
+        "role": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "department": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "portal_enabled": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "custom_fields": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "created_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        }
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "channel_type",
+        "status",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "channel_type": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "last_message": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "created_at": {
+          "$ref": "#/$defs/dateTimeString"
+        },
+        "closed_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/message"
+          }
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "conversation_id",
+        "sender_type",
+        "content_type",
+        "status",
+        "is_internal",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "conversation_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "sender_type": {
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "content_type": {
+          "type": "string"
+        },
+        "media_url": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "status": {
+          "type": "string"
+        },
+        "is_internal": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "#/$defs/dateTimeString"
+        }
+      }
+    },
+    "ticket": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "priority",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/dateTimeString"
+        }
+      }
+    },
+    "auditEvent": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "action",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "action": {
+          "type": "string"
+        },
+        "entity": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/nullableEntityId"
+        },
+        "created_at": {
+          "$ref": "#/$defs/dateTimeString"
+        },
+        "actor_user_id": {
+          "$ref": "#/$defs/nullableEntityId"
+        },
+        "request_type": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "status": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "requested_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "processed_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "requested_by": {
+          "$ref": "#/$defs/nullableEntityId"
+        },
+        "processed_by": {
+          "$ref": "#/$defs/nullableEntityId"
+        },
+        "payload": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "result": {
+          "$ref": "#/$defs/jsonValue"
+        },
+        "data": {
+          "$ref": "#/$defs/jsonValue"
+        }
+      }
+    },
+    "legacyAuditTrail": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "requests",
+        "events"
+      ],
+      "properties": {
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "id",
+              "request_type",
+              "status",
+              "requested_at",
+              "processed_at",
+              "requested_by",
+              "processed_by",
+              "payload",
+              "result"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/entityId"
+              },
+              "request_type": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "requested_at": {
+                "$ref": "#/$defs/dateTimeString"
+              },
+              "processed_at": {
+                "$ref": "#/$defs/nullableDateTime"
+              },
+              "requested_by": {
+                "$ref": "#/$defs/nullableEntityId"
+              },
+              "processed_by": {
+                "$ref": "#/$defs/nullableEntityId"
+              },
+              "payload": {
+                "$ref": "#/$defs/jsonValue"
+              },
+              "result": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+              "id",
+              "action",
+              "entity",
+              "entity_id",
+              "created_at",
+              "actor_user_id",
+              "data"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/entityId"
+              },
+              "action": {
+                "type": "string"
+              },
+              "entity": {
+                "type": "string"
+              },
+              "entity_id": {
+                "$ref": "#/$defs/nullableEntityId"
+              },
+              "created_at": {
+                "$ref": "#/$defs/dateTimeString"
+              },
+              "actor_user_id": {
+                "$ref": "#/$defs/nullableEntityId"
+              },
+              "data": {
+                "$ref": "#/$defs/jsonValue"
+              }
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "tenant_id",
+        "tenant_name",
+        "data_controller",
+        "data_processor"
+      ],
+      "properties": {
+        "tenant_id": {
+          "$ref": "#/$defs/tenantId"
+        },
+        "tenant_name": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "data_controller": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "data_processor": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^c[a-z0-9]{24}$",
+      "description": "cuid — usado apenas no schema public (tenant_id, plan_id)"
+    },
+    "entityId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID v4 — usado em entidades dentro do schema tenant"
+    },
+    "nullableEntityId": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/entityId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import type { CrmOrganization, CrmContact, CrmOrganizationConversation } from '../../services/api';
-import { adminApi, contactsApi, omnichannelApi, organizationsApi } from '../../services/api';
+import { contactsApi, omnichannelApi, organizationsApi } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { OrgStatusBadge } from './ContactBadge';
 import { OrganizationStats } from './OrganizationStats';
@@ -13,10 +13,13 @@ import { EditOrganizationModal } from './EditOrganizationModal';
 import { CreateContactModal } from './CreateContactModal';
 import { EditContactModal } from './EditContactModal';
 import { SelectChannelModal } from './SelectChannelModal';
+import { ConversationPreviewModal } from '../omnichannel/ConversationPreviewModal';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import { PiiReveal } from '../common/PiiReveal';
+import { maskEmail, maskPhone, maskDocument } from '../../utils/pii-mask';
 
 type Tab = 'data' | 'contacts' | 'conversations' | 'tickets' | 'notes';
 
@@ -64,6 +67,15 @@ function relativeDateLabel(dateStr: string | null | undefined, locale: string, t
   const days = Math.floor(hrs / 24);
   if (days < 7) return t('organizations.time.daysAgo', { count: days });
   return new Date(dateStr).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+}
+
+function PiiField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 12 }}>{children}</span>
+    </div>
+  );
 }
 
 function KV({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
@@ -135,13 +147,18 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const [notes, setNotes] = useState(org.notes ?? '');
   const [notesDirty, setNotesDirty] = useState(false);
   const [showSelectChannel, setShowSelectChannel] = useState(false);
-  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [, setCreatingConversation] = useState(false);
   const [conversationTargetContact, setConversationTargetContact] = useState<CrmContact | null>(null);
   const [unlinkContact, setUnlinkContact] = useState<CrmContact | null>(null);
   const [transferContact, setTransferContact] = useState<CrmContact | null>(null);
   const [transferSearchRaw, setTransferSearchRaw] = useState('');
+  const [previewConversationId, setPreviewConversationId] = useState<string | null>(null);
   const [transferTargetOrgId, setTransferTargetOrgId] = useState<string | null>(null);
   const debouncedTransferSearch = useDebounce(transferSearchRaw, 250);
+  const [linkContactOpen, setLinkContactOpen] = useState(false);
+  const [linkContactSearch, setLinkContactSearch] = useState('');
+  const [linkContactSelected, setLinkContactSelected] = useState<string | null>(null);
+  const debouncedLinkContactSearch = useDebounce(linkContactSearch, 300);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['org-stats', org.id],
@@ -151,13 +168,13 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   const { data: orgContacts = [], isLoading: contactsLoading } = useQuery({
     queryKey: ['org-contacts', org.id],
     queryFn:  () => organizationsApi.getContacts(org.id),
-    enabled:  activeTab === 'contacts',
+    enabled:  Boolean(org.id),
   });
 
   const { data: activeChannels = [] } = useQuery({
     queryKey: ['crm-active-channels'],
     queryFn: async () => {
-      const list = await adminApi.listChannels();
+      const list = await omnichannelApi.listConversationChannels();
       return list.filter((channel) => channel.status === 'active');
     },
     staleTime: 60_000,
@@ -177,6 +194,12 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       return organizationsApi.list(params);
     },
     enabled: transferContact !== null,
+  });
+
+  const { data: linkContactData, isLoading: linkContactLoading } = useQuery({
+    queryKey: ['contacts-link-search', debouncedLinkContactSearch],
+    queryFn: () => contactsApi.list({ search: debouncedLinkContactSearch, per_page: 10 }),
+    enabled: linkContactOpen && debouncedLinkContactSearch.length >= 2,
   });
 
   const { data: ticketData, isLoading: ticketsLoading } = useQuery({
@@ -219,6 +242,19 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       setTransferContact(null);
       setTransferSearchRaw('');
       setTransferTargetOrgId(null);
+    },
+    onError: () => toast.error(t('organizations.messages.contactActionError')),
+  });
+
+  const linkContactMutation = useMutation({
+    mutationFn: (contactId: string) => contactsApi.linkOrganization(contactId, org.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['org-contacts', org.id] });
+      void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      toast.success(t('organizations.linkContact.success'));
+      setLinkContactOpen(false);
+      setLinkContactSearch('');
+      setLinkContactSelected(null);
     },
     onError: () => toast.error(t('organizations.messages.contactActionError')),
   });
@@ -271,6 +307,10 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     urgent: t('organizations.tickets.priorities.urgent'),
   };
   const transferOrganizations = transferOrgData?.data.filter((item) => item.id !== org.id) ?? [];
+  const primaryContact = orgContacts.find((contact) => contact.is_primary) ?? null;
+  const canStartFromOrganization = !contactsLoading && primaryContact !== null;
+  const alreadyLinkedIds = new Set(orgContacts.map((c) => c.id));
+  const linkContactResults = (linkContactData?.data ?? []).filter((c) => !alreadyLinkedIds.has(c.id));
 
   function getConversationTitle(conv: CrmOrganizationConversation): string {
     return conv.protocol ?? conv.id;
@@ -297,7 +337,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
         type: 'outbound',
         initial_message: `Olá ${targetContact.name}, iniciamos seu atendimento.`,
       });
-      navigate(`/omnichannel/conversations?conversation=${created.id}`);
+      navigate(`/omnichannel/conversations?conversation=${created.conversation.id}`);
     } catch {
       toast.error(t('organizations.messages.conversationStartError'));
     } finally {
@@ -307,7 +347,21 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
     }
   }
 
-  async function handleStartConversation(preferredContact?: CrmContact | null) {
+  function handleStartConversation(contact: CrmContact) {
+    navigate('/omnichannel/conversations', {
+      state: {
+        preselectedContact: {
+          id: contact.id,
+          name: contact.name,
+          phone: contact.whatsapp ?? contact.phone,
+          organizationId: org.id,
+          organizationName: org.name,
+        },
+      },
+    });
+  }
+
+  async function handleStartConversationByChannel(preferredContact?: CrmContact | null) {
     setConversationTargetContact(preferredContact ?? null);
     if (activeChannels.length === 0) {
       toast.error(t('contacts.hasNoActiveChannels', { defaultValue: 'Nenhum canal ativo disponível' }));
@@ -318,6 +372,12 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       return;
     }
     setShowSelectChannel(true);
+  }
+
+  function handleLinkContactClose() {
+    setLinkContactOpen(false);
+    setLinkContactSearch('');
+    setLinkContactSelected(null);
   }
 
   return (
@@ -335,7 +395,9 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                 <OrgStatusBadge status={org.status} label={statusLabels[org.status] ?? org.status} />
               </div>
               {org.document && (
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--txt-3)', marginBottom: 6 }}>{org.document}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--txt-3)', marginBottom: 6 }}>
+                  <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskDocument(org.document ?? null)} fullValue={org.document ?? null} />
+                </div>
               )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
@@ -345,14 +407,32 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 8.5l1-1.5 5-5 1.5 1.5-5 5-2 .5.5-1.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                   {t('organizations.actions.edit')}
                 </button>
-                <button
-                  onClick={() => void handleStartConversation()}
-                  disabled={creatingConversation}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 'var(--r)', fontSize: 12, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontFamily: 'var(--font)', fontWeight: 600 }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 7.5V3a1 1 0 011-1h6a1 1 0 011 1v3.5a1 1 0 01-1 1H4.5l-3 2v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                  {t('organizations.actions.startConversation')}
-                </button>
+                {canStartFromOrganization ? (
+                  <button
+                    type="button"
+                    className="tb-btn-primary"
+                    onClick={() => handleStartConversation(primaryContact)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '5px 11px',
+                      borderRadius: 'var(--r)',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      border: '1px solid var(--teal)',
+                      background: 'var(--teal)',
+                      color: 'var(--on-teal)',
+                      fontFamily: 'var(--font)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                      <path d="M14 10c0 .667-.167 1.167-.5 1.5S12.667 12 12 12H4l-2 2V4c0-.667.167-1.167.5-1.5S3.333 2 4 2h8c.667 0 1.167.167 1.5.5S14 3.333 14 4v6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {t('startConversation')}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -389,10 +469,16 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
               <div>
                 <SectionTitle>{t('organizations.sections.generalInfo')}</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-                  <KV label={t('organizations.fields.email')}   value={org.email} />
-                  <KV label={t('organizations.fields.phone')}   value={org.phone} mono />
+                  <PiiField label={t('organizations.fields.email')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskEmail(org.email ?? null)} fullValue={org.email ?? null} />
+                  </PiiField>
+                  <PiiField label={t('organizations.fields.phone')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskPhone(org.phone ?? null)} fullValue={org.phone ?? null} />
+                  </PiiField>
                   <KV label={t('organizations.fields.website')} value={org.website} />
-                  <KV label={t('organizations.fields.document')} value={org.document} mono />
+                  <PiiField label={t('organizations.fields.document')}>
+                    <PiiReveal entityType="organization" entityId={org.id} maskedValue={maskDocument(org.document ?? null)} fullValue={org.document ?? null} />
+                  </PiiField>
                 </div>
               </div>
               <div>
@@ -420,14 +506,39 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
             <div style={{ padding: '16px 24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{orgContacts.length} {t('organizations.fields.contacts')}</span>
-                <button
-                  onClick={() => setCreateContact(true)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 'var(--r)', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontFamily: 'var(--font)' }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  {t('organizations.actions.addContact')}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="tb-btn"
+                    onClick={() => setLinkContactOpen(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <path d="M4.5 7.5a2.5 2.5 0 0 0 3.54 0l1.5-1.5a2.5 2.5 0 0 0-3.54-3.54l-.86.85" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                      <path d="M7.5 4.5a2.5 2.5 0 0 0-3.54 0L2.46 6a2.5 2.5 0 0 0 3.54 3.54l.86-.85" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    </svg>
+                    {t('organizations.actions.linkContact')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateContact(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 'var(--r)', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--on-teal)', fontFamily: 'var(--font)' }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    {t('organizations.actions.addContact')}
+                  </button>
+                </div>
               </div>
+              {!contactsLoading && orgContacts.length > 0 && !primaryContact ? (
+                <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 5, padding: '6px 0' }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M6 5.2V8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <circle cx="6" cy="3.7" r=".7" fill="currentColor"/>
+                  </svg>
+                  {t('noPrimaryContactHint')}
+                </div>
+              ) : null}
               {contactsLoading ? (
                 <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>{t('organizations.loading')}</div>
               ) : orgContacts.length === 0 ? (
@@ -438,7 +549,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     key={c.id}
                     contact={c}
                     onEdit={setEditContact}
-                    onStartConversation={() => { void handleStartConversation(c); }}
+                    onStartConversation={() => { void handleStartConversationByChannel(c); }}
                     onUnlink={() => setUnlinkContact(c)}
                     onTransfer={() => {
                       setTransferContact(c);
@@ -469,7 +580,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     <div
                       key={conv.id}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
-                      onClick={() => navigate(`/omnichannel/conversations?conversation=${conv.id}`)}
+                      onClick={() => setPreviewConversationId(conv.id)}
                     >
                       <div style={{ width: 32, height: 32, borderRadius: 'var(--r)', background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: badge?.color ?? 'var(--txt-3)', flexShrink: 0 }}>
                         <ConversationChannelIcon channelType={conv.channel_type} />
@@ -605,6 +716,114 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       />
 
       <Modal
+        open={linkContactOpen}
+        onClose={handleLinkContactClose}
+        title={t('organizations.linkContact.title')}
+        maxWidth="sm"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-3)', border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '7px 11px' }}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ color: 'var(--txt-3)', flexShrink: 0 }} aria-hidden>
+              <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              placeholder={t('organizations.linkContact.search')}
+              value={linkContactSearch}
+              onChange={(e) => setLinkContactSearch(e.target.value)}
+              autoFocus
+              style={{ background: 'none', border: 'none', outline: 'none', fontSize: 12, fontFamily: 'var(--font)', color: 'var(--txt)', width: '100%' }}
+            />
+          </div>
+
+          <div style={{ maxHeight: 280, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: 'var(--bg-5) transparent', border: '1px solid var(--line)', borderRadius: 'var(--r)', background: 'var(--bg-3)' }}>
+            {debouncedLinkContactSearch.length < 2 ? (
+              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>
+                {t('organizations.linkContact.typeToSearch')}
+              </div>
+            ) : linkContactLoading ? (
+              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>
+                {t('organizations.loading')}
+              </div>
+            ) : linkContactResults.length === 0 ? (
+              <div style={{ padding: '20px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>
+                {t('organizations.linkContact.empty')}
+              </div>
+            ) : (
+              linkContactResults.map((contact) => (
+                <button
+                  key={contact.id}
+                  type="button"
+                  onClick={() => setLinkContactSelected(contact.id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 12px',
+                    border: 'none',
+                    borderBottom: '1px solid var(--line)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    background: linkContactSelected === contact.id ? 'var(--teal-dim)' : 'transparent',
+                    outline: linkContactSelected === contact.id ? '1px solid var(--teal)' : 'none',
+                    outlineOffset: '-1px',
+                  }}
+                >
+                  <ContactAvatar id={contact.id} name={contact.name} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: linkContactSelected === contact.id ? 'var(--teal)' : 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {contact.name}
+                    </div>
+                    {(contact.email ?? contact.whatsapp ?? contact.phone) ? (
+                      <div style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {contact.email ?? contact.whatsapp ?? contact.phone}
+                      </div>
+                    ) : null}
+                  </div>
+                  {linkContactSelected === contact.id ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                      <path d="M2.5 7l3 3 6-6" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+            <button
+              type="button"
+              onClick={handleLinkContactClose}
+              style={{ padding: '6px 14px', borderRadius: 'var(--r)', border: '1px solid var(--line-2)', background: 'var(--bg-3)', color: 'var(--txt-2)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font)' }}
+            >
+              {t('cancel', { ns: 'common' })}
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (linkContactSelected) linkContactMutation.mutate(linkContactSelected); }}
+              disabled={!linkContactSelected || linkContactMutation.isPending}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--r)',
+                border: '1px solid var(--teal)',
+                background: 'var(--teal)',
+                color: 'var(--on-teal)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: linkContactSelected && !linkContactMutation.isPending ? 'pointer' : 'not-allowed',
+                opacity: linkContactSelected && !linkContactMutation.isPending ? 1 : 0.5,
+                fontFamily: 'var(--font)',
+              }}
+            >
+              {linkContactMutation.isPending ? t('loading', { ns: 'common' }) : t('organizations.linkContact.confirm')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={transferContact !== null}
         onClose={() => {
           setTransferContact(null);
@@ -718,6 +937,20 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
           </div>
         </div>
       </Modal>
+
+      {previewConversationId && (
+        <ConversationPreviewModal
+          conversationId={previewConversationId}
+          contactName={org.name}
+          onClose={() => setPreviewConversationId(null)}
+          onAssign={() => {
+            navigate(`/omnichannel/conversations?conversation=${previewConversationId}`);
+            setPreviewConversationId(null);
+          }}
+          isAssigning={false}
+          primaryLabel={t('openConversation')}
+        />
+      )}
     </>
   );
 }

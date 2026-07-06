@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ziradesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ziradesk?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-secret-ci-at-least-32-characters
+      JWT_REFRESH_SECRET: test-refresh-secret-at-least-32-chars
+      PORT: 3334
+      NODE_ENV: test
+      APP_URL: http://localhost:5173
+      API_URL: http://localhost:3334
+      REFRESH_COOKIE_NAME: zd_refresh
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      WHATSAPP_PHONE_NUMBER_ID: test_phone_number_id
+      WHATSAPP_WABA_ID: test_waba_id
+      WHATSAPP_ACCESS_TOKEN: test_whatsapp_access_token
+      WHATSAPP_VERIFY_TOKEN: test_whatsapp_verify_token
+      META_APP_SECRET: meta_app_secret_for_integration_tests
+      TWILIO_ACCOUNT_SID: test_twilio_account_sid
+      TWILIO_AUTH_TOKEN: test_twilio_auth_token
+      TWILIO_PHONE_NUMBER: '+15550000000'
+      TWILIO_TWIML_APP_SID: test_twiml_app_sid
+      TWILIO_API_KEY: test_twilio_api_key
+      TWILIO_API_SECRET: test_twilio_api_secret
+      RESEND_API_KEY: test_resend_api_key
+      RESEND_FROM_EMAIL: teste@ziradesk.com.br
+      RESEND_WEBHOOK_SECRET: test_resend_webhook_secret
+      STORAGE_PROVIDER: local
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Prepare pnpm
+        run: corepack prepare pnpm@latest --activate
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @ziradesk/shared build
+
+      - name: Run migrations
+        run: pnpm --filter @ziradesk/api db:migrate
+
+      - name: Run API tests
+        working-directory: apps/api
+        run: pnpm exec vitest run --config vitest.config.ts

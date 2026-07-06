@@ -101,6 +101,7 @@ function decodeAuthUserFromToken(token: string): AuthUser | null {
       name: payload.name,
       email: payload.email,
       role: payload.role,
+      mustChangePassword: false,
       ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     };
   } catch {
@@ -291,7 +292,7 @@ export function Tenants() {
         return;
       }
 
-      window.location.assign(`https://${tenantSlug}.ziradesk.com.br/omnichannel`);
+      window.location.assign(`https://${tenantSlug}.ziradesk.com/omnichannel`);
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });

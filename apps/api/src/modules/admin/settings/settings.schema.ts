@@ -17,10 +17,18 @@ export const updateSettingsSchema = z.object({
   inactivity_close_minutes: z.number().int().min(1).max(1440).optional(),
   inactivity_warning_message: z.string().max(2000).optional(),
   inactivity_close_message: z.string().max(2000).optional(),
-  active_outbound_validity_mode: z.enum(['end_of_day', 'hours']).optional(),
+  active_outbound_validity_mode: z.enum(['end_of_day', 'hours', 'unlimited']).optional(),
   active_outbound_validity_hours: z.number().int().min(1).max(168).optional(),
   bot_assigned_message: z.string().max(1000).optional(),
   max_conversations_per_agent: z.number().int().min(1).max(500).nullable().optional(),
+  lgpd_retention_enabled: z.boolean().optional(),
+  lgpd_retention_days: z.number().int().min(1).max(3650).optional(),
+  queue_notifications_enabled: z.boolean().optional(),
+  queue_message_template: z.string().max(1000).optional(),
+  queue_throttle_seconds: z.number().int().min(30).max(600).optional(),
+  agent_assume_template: z.string().max(1000).optional(),
+  expire_24h_action: z.enum(['close', 'keep_open']).optional(),
+  expire_24h_message: z.string().max(1000).optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined

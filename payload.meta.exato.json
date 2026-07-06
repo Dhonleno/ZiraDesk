@@ -1,0 +1,43 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "1922786558561358",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15551597121",
+              "phone_number_id": "704423209430762"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Dhon Freitas"
+                },
+                "wa_id": "556296689991",
+                "user_id": "BR.1840905986550087",
+                "country_code": "BR"
+              }
+            ],
+            "messages": [
+              {
+                "from": "556296689991",
+                "from_user_id": "BR.1840905986550087",
+                "id": "wamid.HBgMNTU2Mjk2Njg5OTkxFQIAEhgWM0VCMDBDRUExQTBBQ0REMkU4MDJERQA=",
+                "timestamp": "1780335167",
+                "text": {
+                  "body": "TEste"
+                },
+                "from_logical_id": "257960165003321",
+                "type": "text"
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

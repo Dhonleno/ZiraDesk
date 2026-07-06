@@ -69,7 +69,7 @@ async function syncActiveConversations(schemaName: string): Promise<void> {
        SELECT assigned_to AS user_id, COUNT(*)::integer AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
        GROUP BY assigned_to
      ) conv
      WHERE aa.user_id = conv.user_id`,
@@ -82,7 +82,7 @@ async function syncActiveConversations(schemaName: string): Promise<void> {
        SELECT DISTINCT assigned_to
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
      )`,
   );
 }

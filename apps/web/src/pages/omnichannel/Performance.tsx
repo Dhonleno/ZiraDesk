@@ -1,17 +1,21 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import './Performance.css';
 import { PageShell } from '../../components/layout/PageShell';
 import {
+  adminApi,
   omnichannelApi,
   type GoalPeriod,
   type HistoryPeriodPreset,
   type OmnichannelGoal,
+  type OmnichannelPerformanceAgent,
   type PerformanceFiltersParams,
   type PerformanceMetricStatus,
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { AgentDetailModal } from '../../components/omnichannel/AgentDetailModal';
 
 const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = [
   { labelKey: 'history.periods.today', value: 'today' },
@@ -19,6 +23,8 @@ const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = 
   { labelKey: 'history.periods.7d', value: '7d' },
   { labelKey: 'history.periods.30d', value: '30d' },
   { labelKey: 'history.periods.month', value: 'month' },
+  { labelKey: 'history.periods.last_week', value: 'last_week' },
+  { labelKey: 'history.periods.last_month', value: 'last_month' },
   { labelKey: 'history.periods.custom', value: 'custom' },
 ];
 
@@ -38,6 +44,9 @@ function parseFilters(searchParams: URLSearchParams): PerformanceFiltersParams {
 
   const botOptionId = toNonEmpty(searchParams.get('bot_option_id'));
   if (botOptionId) parsed.bot_option_id = botOptionId;
+
+  const departmentId = toNonEmpty(searchParams.get('department_id'));
+  if (departmentId) parsed.department_id = departmentId;
 
   const dateFrom = toNonEmpty(searchParams.get('date_from'));
   if (dateFrom) parsed.date_from = dateFrom;
@@ -96,14 +105,8 @@ function checkGoal(value: unknown, goal: unknown, type: 'max' | 'min'): Performa
   return 'breach';
 }
 
-function statusColor(status: PerformanceMetricStatus): string {
-  const statusMap: Record<PerformanceMetricStatus, string> = {
-    ok: 'var(--green)',
-    warning: 'var(--amber)',
-    breach: 'var(--red)',
-    no_goal: 'var(--txt-2)',
-  };
-  return statusMap[status];
+function statusClass(status: PerformanceMetricStatus): string {
+  return `is-${status.replace('_', '-')}`;
 }
 
 function getProgressPercent(value: unknown, goal: unknown, type: 'max' | 'min'): number | null {
@@ -124,8 +127,8 @@ function mapPeriodToGoalPeriod(
   dateTo?: string,
 ): GoalPeriod {
   if (period === 'today' || period === 'yesterday') return 'daily';
-  if (period === '7d') return 'weekly';
-  if (period === '30d' || period === 'month') return 'monthly';
+  if (period === '7d' || period === 'last_week') return 'weekly';
+  if (period === '30d' || period === 'month' || period === 'last_month') return 'monthly';
 
   if (period === 'custom' && dateFrom && dateTo) {
     const from = new Date(`${dateFrom}T00:00:00.000Z`).getTime();
@@ -140,13 +143,6 @@ function mapPeriodToGoalPeriod(
   return 'monthly';
 }
 
-function computeOverallStatus(statuses: PerformanceMetricStatus[]): PerformanceMetricStatus {
-  const withGoals = statuses.filter((status) => status !== 'no_goal');
-  if (withGoals.length === 0) return 'no_goal';
-  if (withGoals.includes('breach')) return 'breach';
-  if (withGoals.includes('warning')) return 'warning';
-  return 'ok';
-}
 
 function MetricCell({
   value,
@@ -161,42 +157,28 @@ function MetricCell({
   format: 'minutes' | 'percent' | 'csat' | 'number';
   type: 'max' | 'min';
 }) {
-  const color = statusColor(status);
   const progress = getProgressPercent(value, goal, type);
 
   const formattedValue = formatMetric(value, format);
   const formattedGoal = formatMetric(goal, format);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ color, fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>
+    <div className="performance-metric-cell">
+      <span className={`performance-metric-value ${statusClass(status)}`}>
         {formattedValue ?? '—'}
       </span>
 
       {progress !== null ? (
-        <div
-          style={{
-            height: 3,
-            width: 60,
-            background: 'var(--bg-5)',
-            borderRadius: 'var(--r-pill)',
-            overflow: 'hidden',
-          }}
-        >
+        <div className="performance-progress">
           <div
-            style={{
-              height: '100%',
-              width: `${progress}%`,
-              background: color,
-              borderRadius: 'var(--r-pill)',
-              transition: 'width 0.3s ease',
-            }}
+            className={`performance-progress-fill ${statusClass(status)}`}
+            style={{ width: `${progress}%` }}
           />
         </div>
       ) : null}
 
       {goal !== null && formattedGoal ? (
-        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+        <span className="performance-goal-hint">
           meta: {formattedGoal}
         </span>
       ) : null}
@@ -205,11 +187,11 @@ function MetricCell({
 }
 
 function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labels: Record<PerformanceMetricStatus, string> }) {
-  const config: Record<PerformanceMetricStatus, { color: string; bg: string; label: string }> = {
-    ok: { label: labels.ok, color: 'var(--green)', bg: 'var(--green-dim)' },
-    warning: { label: labels.warning, color: 'var(--amber)', bg: 'var(--amber-dim)' },
-    breach: { label: labels.breach, color: 'var(--red)', bg: 'var(--red-dim)' },
-    no_goal: { label: labels.no_goal, color: 'var(--txt-3)', bg: 'var(--bg-4)' },
+  const config: Record<PerformanceMetricStatus, { label: string }> = {
+    ok: { label: labels.ok },
+    warning: { label: labels.warning },
+    breach: { label: labels.breach },
+    no_goal: { label: labels.no_goal },
   };
   const current = config[status];
   const icon = status === 'ok' ? (
@@ -232,21 +214,63 @@ function StatusBadge({ status, labels }: { status: PerformanceMetricStatus; labe
   );
 
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '2px 8px',
-        borderRadius: 'var(--r-pill)',
-        background: current.bg,
-        color: current.color,
-        fontSize: 11,
-        fontWeight: 600,
-      }}
-    >
+    <span className={`performance-status-badge ${statusClass(status)}`}>
       {icon} {current.label}
     </span>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  status,
+  labels,
+}: {
+  label: string;
+  value: string;
+  status: PerformanceMetricStatus;
+  labels: Record<PerformanceMetricStatus, string>;
+}) {
+  return (
+    <div className={`performance-kpi-card ${statusClass(status)}`}>
+      <div className="performance-kpi-card-head">
+        <span>{label}</span>
+        <StatusBadge status={status} labels={labels} />
+      </div>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function LoadingState({ label }: { label: string }) {
+  return (
+    <div className="performance-state" role="status" aria-live="polite">
+      <div className="performance-loading-spinner" aria-hidden />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  hint,
+  variant = 'teal',
+}: {
+  title: string;
+  hint: string;
+  variant?: 'teal' | 'blue';
+}) {
+  return (
+    <div className="zd-empty-state history-empty performance-empty">
+      <div className={`zd-empty-icon performance-empty-icon ${variant}`} aria-hidden>
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M4 17V6M9 17V9M14 17V4M19 17V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M3 17.5h16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div>{title}</div>
+      <div className="history-empty-hint">{hint}</div>
+    </div>
   );
 }
 
@@ -254,6 +278,8 @@ export function PerformancePage() {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'agent' | 'department'>('agent');
+  const [selectedAgent, setSelectedAgent] = useState<OmnichannelPerformanceAgent | null>(null);
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   const canQueryPerformance = useMemo(() => hasValidCustomRange(filters), [filters]);
 
@@ -269,15 +295,21 @@ export function PerformancePage() {
     staleTime: 30_000,
   });
 
-  const { data: transferSkills = [] } = useQuery({
-    queryKey: ['transfer-skills'],
-    queryFn: omnichannelApi.getTransferSkills,
-    staleTime: 30_000,
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin-departments'],
+    queryFn: adminApi.departments.list,
+    staleTime: 60_000,
   });
 
   const { data: goals = [] } = useQuery({
     queryKey: ['omnichannel-goals'],
     queryFn: () => omnichannelApi.listGoals(),
+  });
+
+  const { data: performanceByGroupData, isLoading: isLoadingByGroup } = useQuery({
+    queryKey: ['omnichannel-performance-by-group', filters],
+    queryFn: () => omnichannelApi.listPerformanceByGroup(filters),
+    enabled: canQueryPerformance && activeTab === 'department',
   });
 
   const updateFilterParams = useCallback((values: Partial<Record<string, string | null>>, resetPage = true) => {
@@ -321,7 +353,7 @@ export function PerformancePage() {
 
   const handleExport = async () => {
     if (!canQueryPerformance) {
-      toast.error(t('history.noResultsHint'));
+      toast.error(t('performance.invalidRange'));
       return;
     }
 
@@ -363,18 +395,22 @@ export function PerformancePage() {
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
-      <div className="monitor-page history-page">
+      <div className="monitor-page history-page performance-page">
         <div className="monitor-header history-header">
           <div>
             <h1>{t('performance.title')}</h1>
             <p>{t('performance.subtitle')}</p>
           </div>
           <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+              <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             {t('performance.exportCsv')}
           </button>
         </div>
 
-        <div className="history-filters-grid">
+        <div className="performance-filter-bar">
           <select
             className="filter-select"
             value={filters.period ?? '7d'}
@@ -393,20 +429,22 @@ export function PerformancePage() {
             aria-label={t('history.filters.agent')}
           >
             <option value="">{t('history.filters.agent')}</option>
-            {(monitorData?.agents ?? []).map((agent) => (
+            {(monitorData?.agents ?? []).filter((a) =>
+              ['agent', 'supervisor', 'admin', 'owner'].includes(a.role)
+            ).map((agent) => (
               <option key={agent.id} value={agent.id}>{agent.name}</option>
             ))}
           </select>
 
           <select
             className="filter-select"
-            value={filters.bot_option_id ?? ''}
-            onChange={(event) => updateFilterParams({ bot_option_id: event.target.value || null })}
-            aria-label={t('history.filters.group')}
+            value={filters.department_id ?? ''}
+            onChange={(event) => updateFilterParams({ department_id: event.target.value || null })}
+            aria-label={t('performance.filterByDepartment')}
           >
-            <option value="">{t('history.filters.group')}</option>
-            {transferSkills.map((skill) => (
-              <option key={skill.id} value={skill.id}>{skill.name}</option>
+            <option value="">{t('performance.filterByDepartment')}</option>
+            {departments.filter((d) => d.isActive).map((dept) => (
+              <option key={dept.id} value={dept.id}>{dept.name}</option>
             ))}
           </select>
 
@@ -431,39 +469,145 @@ export function PerformancePage() {
         </div>
 
         <div className="performance-kpis-grid">
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.tma')}</span>
-            <strong style={{ color: teamKpiStatus.tma === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.tma) }}>
-              {formatMetric(performanceData?.team_kpis.avg_tma_minutes ?? null, 'minutes') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.tme')}</span>
-            <strong style={{ color: teamKpiStatus.tme === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.tme) }}>
-              {formatMetric(performanceData?.team_kpis.avg_tme_minutes ?? null, 'minutes') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.csat')}</span>
-            <strong style={{ color: teamKpiStatus.csat === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.csat) }}>
-              {formatMetric(performanceData?.team_kpis.avg_csat ?? null, 'csat') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.sla')}</span>
-            <strong style={{ color: teamKpiStatus.sla === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.sla) }}>
-              {formatMetric(performanceData?.team_kpis.sla_percent ?? null, 'percent') ?? '—'}
-            </strong>
-          </div>
-          <div className="performance-kpi-card">
-            <span>{t('performance.columns.volume')}</span>
-            <strong style={{ color: teamKpiStatus.volume === 'no_goal' ? 'var(--txt)' : statusColor(teamKpiStatus.volume) }}>
-              {formatMetric(performanceData?.team_kpis.total_volume ?? 0, 'number') ?? '0'}
-            </strong>
-          </div>
+          <KpiCard
+            label={t('performance.columns.tma')}
+            value={formatMetric(performanceData?.team_kpis.avg_tma_minutes ?? null, 'minutes') ?? '—'}
+            status={teamKpiStatus.tma}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.tme')}
+            value={formatMetric(performanceData?.team_kpis.avg_tme_minutes ?? null, 'minutes') ?? '—'}
+            status={teamKpiStatus.tme}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.csat')}
+            value={formatMetric(performanceData?.team_kpis.avg_csat ?? null, 'csat') ?? '—'}
+            status={teamKpiStatus.csat}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.sla')}
+            value={formatMetric(performanceData?.team_kpis.sla_percent ?? null, 'percent') ?? '—'}
+            status={teamKpiStatus.sla}
+            labels={statusLabels}
+          />
+          <KpiCard
+            label={t('performance.columns.volume')}
+            value={formatMetric(performanceData?.team_kpis.total_volume ?? 0, 'number') ?? '0'}
+            status={teamKpiStatus.volume}
+            labels={statusLabels}
+          />
+        </div>
+
+        <div className="history-tabs performance-tabs" role="tablist" aria-label={t('performance.table.viewMode')}>
+          {(['agent', 'department'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={activeTab === tab ? 'active' : undefined}
+              role="tab"
+              aria-selected={activeTab === tab}
+            >
+              {tab === 'agent' ? t('performance.byAgent') : t('performance.byDepartment')}
+            </button>
+          ))}
         </div>
 
         <div className="history-table-wrap">
+          {activeTab === 'department' ? (
+            <>
+              {isLoadingByGroup ? (
+                <LoadingState label={t('performance.loadingDepartments')} />
+              ) : (performanceByGroupData?.data.length ?? 0) === 0 ? (
+                <EmptyState
+                  title={t('performance.emptyDepartmentsTitle')}
+                  hint={t('performance.emptyDepartmentsHint')}
+                  variant="blue"
+                />
+              ) : (
+                <table className="history-table performance-table" role="grid">
+                  <thead>
+                    <tr>
+                      <th>{t('performance.table.department')}</th>
+                      <th>{t('performance.columns.volume')}</th>
+                      <th>{t('performance.columns.tma')}</th>
+                      <th>{t('performance.columns.tme')}</th>
+                      <th>{t('performance.columns.sla')}</th>
+                      <th>{t('performance.columns.csat')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(performanceByGroupData?.data ?? []).map((row, idx) => (
+                      <tr key={row.group_name ?? `__no_group_${idx}`}>
+                        <td>
+                          <span className="performance-entity-name">
+                            {row.group_name}
+                          </span>
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.total_conversations}
+                            status="no_goal"
+                            goal={null}
+                            format="number"
+                            type="min"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_tma_minutes}
+                            status="no_goal"
+                            goal={null}
+                            format="minutes"
+                            type="max"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_tme_minutes}
+                            status="no_goal"
+                            goal={null}
+                            format="minutes"
+                            type="max"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.sla_percent}
+                            status="no_goal"
+                            goal={null}
+                            format="percent"
+                            type="min"
+                          />
+                        </td>
+                        <td>
+                          <MetricCell
+                            value={row.avg_csat}
+                            status="no_goal"
+                            goal={null}
+                            format="csat"
+                            type="min"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : (
+          <>
+          {isLoading ? (
+            <LoadingState label={t('performance.loadingAgents')} />
+          ) : (performanceData?.data.length ?? 0) === 0 ? (
+            <EmptyState
+              title={t('performance.emptyAgentsTitle')}
+              hint={t('performance.emptyAgentsHint')}
+            />
+          ) : (
           <table className="history-table performance-table" role="grid">
             <thead>
               <tr>
@@ -478,33 +622,22 @@ export function PerformancePage() {
             </thead>
             <tbody>
               {(performanceData?.data ?? []).map((agent) => {
-                const goal = agent.goal;
-                const tmaStatus = checkGoal(agent.avg_tma_minutes, goal?.goal_tma_minutes ?? null, 'max');
-                const tmeStatus = checkGoal(agent.avg_tme_minutes, goal?.goal_tme_minutes ?? null, 'max');
-                const slaStatus = checkGoal(agent.sla_percent, goal?.goal_sla_percent ?? null, 'min');
-                const csatStatus = checkGoal(agent.avg_csat, goal?.goal_csat_min ?? null, 'min');
-                const volumeStatus = checkGoal(agent.total_conversations, goal?.goal_volume_min ?? null, 'min');
-                const overallStatus = computeOverallStatus([tmaStatus, tmeStatus, slaStatus, csatStatus, volumeStatus]);
+                const goal         = agent.goal;
+                const tmaStatus    = agent.goal_status?.tma    ?? 'no_goal';
+                const tmeStatus    = agent.goal_status?.tme    ?? 'no_goal';
+                const slaStatus    = agent.goal_status?.sla    ?? 'no_goal';
+                const csatStatus   = agent.goal_status?.csat   ?? 'no_goal';
+                const volumeStatus = agent.goal_status?.volume ?? 'no_goal';
+                const overallStatus = agent.goal_status?.overall ?? 'no_goal';
 
                 return (
                   <tr
                     key={agent.agent_id}
-                    style={{
-                      boxShadow: agent.total_conversations === 0
-                        ? 'none'
-                        : overallStatus === 'breach'
-                          ? 'inset 3px 0 0 var(--red)'
-                          : overallStatus === 'warning'
-                            ? 'inset 3px 0 0 var(--amber)'
-                            : 'none',
-                      background: agent.total_conversations === 0
-                        ? 'transparent'
-                        : overallStatus === 'breach'
-                          ? 'var(--red-dim)'
-                          : overallStatus === 'warning'
-                            ? 'var(--amber-dim)'
-                            : 'transparent',
-                    }}
+                    className={agent.total_conversations > 0 && ['breach', 'warning'].includes(overallStatus)
+                      ? `performance-row-alert ${statusClass(overallStatus)}`
+                      : undefined}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSelectedAgent(agent)}
                   >
                     <td>
                       <div className="history-agent-cell">
@@ -567,18 +700,9 @@ export function PerformancePage() {
               })}
             </tbody>
           </table>
-
-          {!isLoading && (performanceData?.data.length ?? 0) === 0 ? (
-            <div className="zd-empty-state history-empty">
-              <div className="zd-empty-icon" aria-hidden>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <path d="M5 4.5h12v10H9l-4 3v-3H5v-10Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div>{t('history.noResults')}</div>
-              <div className="history-empty-hint">{t('history.noResultsHint')}</div>
-            </div>
-          ) : null}
+          )}
+          </>
+          )}
         </div>
 
         <div className="history-pagination">
@@ -603,6 +727,15 @@ export function PerformancePage() {
           </button>
         </div>
       </div>
+      {selectedAgent && (
+        <AgentDetailModal
+          agent={selectedAgent}
+          period={filters.period ?? '7d'}
+          dateFrom={filters.date_from}
+          dateTo={filters.date_to}
+          onClose={() => setSelectedAgent(null)}
+        />
+      )}
     </PageShell>
   );
 }

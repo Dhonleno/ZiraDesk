@@ -9,17 +9,20 @@ import type {
   SendMessageBody,
   UpdateConversationBody,
   CreateConversationBody,
-  ResolveConversationBody,
+  CloseConversationDto,
+  ListQueueQuery,
 } from './conversations.schema.js';
 import {
   buildProtocolMessage,
+  callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
-  generateConversationProtocol,
   quoteIdent,
 } from './protocols.js';
 import { ensureConversationTagsInfrastructure } from '../../admin/conversation-tags/conversation-tags.service.js';
 import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
+import { ensureConversationAssignmentsInfrastructure } from './assignments.infrastructure.js';
+import { calculateWaitingExpiresAt } from '../../../lib/omnichannel/calculate-waiting-expires.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -35,6 +38,20 @@ export class ConflictError extends Error {
   }
 }
 
+export class DuplicateOpenConversationError extends ConflictError {
+  constructor(public readonly existingId: string) {
+    super('Já existe uma conversa aberta com este contato neste canal');
+    this.name = 'DuplicateOpenConversationError';
+  }
+}
+
+export class WhatsappWindowExpiredError extends Error {
+  constructor() {
+    super('Contato fora da janela de 24h do WhatsApp');
+    this.name = 'WhatsappWindowExpiredError';
+  }
+}
+
 export class ForbiddenError extends Error {
   constructor(message: string) {
     super(message);
@@ -44,7 +61,7 @@ export class ForbiddenError extends Error {
 
 export class TransferError extends Error {
   constructor(
-    public readonly code: 'AGENT_OFFLINE' | 'NO_AGENTS_AVAILABLE_FOR_SKILL',
+    public readonly code: 'AGENT_OFFLINE' | 'NO_AGENTS_AVAILABLE_FOR_SKILL' | 'NO_AGENTS_AVAILABLE_FOR_DEPARTMENT',
     message: string,
   ) {
     super(message);
@@ -58,6 +75,18 @@ function validateSchemaName(schemaName: string): string {
   }
 
   return schemaName;
+}
+
+async function withTenantSchema<T>(
+  schemaName: string,
+  runner: (tx: typeof prisma) => Promise<T>,
+): Promise<T> {
+  const safeSchemaName = validateSchemaName(schemaName);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+    return runner(tx as typeof prisma);
+  });
 }
 
 async function getSchemaName(tenantId?: string): Promise<string | null> {
@@ -76,6 +105,14 @@ async function getSchemaPrefix(tenantId?: string): Promise<string> {
   return `${quoteIdent(schemaName)}.`;
 }
 
+function humanQueueEligibilityCondition(alias?: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}assigned_to IS NULL
+           AND ${prefix}status = 'open'
+           AND COALESCE(${prefix}metadata->>'bot_stage', '') <> 'waiting_choice'
+           AND COALESCE(${prefix}metadata->>'ai_agent_active', 'false') <> 'true'`;
+}
+
 async function ensureConversationHelpersInfrastructure(tenantId?: string): Promise<void> {
   const schemaPrefix = await getSchemaPrefix(tenantId);
   const conversationRef = `${schemaPrefix}conversations`;
@@ -88,7 +125,7 @@ async function ensureConversationHelpersInfrastructure(tenantId?: string): Promi
       conversation_id UUID REFERENCES ${conversationRef}(id) ON DELETE CASCADE,
       helper_user_id UUID REFERENCES ${usersRef}(id),
       requested_by UUID REFERENCES ${usersRef}(id),
-      status VARCHAR(20) DEFAULT 'pending',
+      status VARCHAR(20) DEFAULT 'requested',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       accepted_at TIMESTAMPTZ,
       ended_at TIMESTAMPTZ,
@@ -111,7 +148,7 @@ async function syncActiveConversationCounters(
          SELECT COUNT(*)::integer
          FROM conversations c
          WHERE c.assigned_to = aa.user_id
-           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+           AND c.status = 'open'
        )
        WHERE aa.user_id = $1::uuid`,
       userId,
@@ -142,12 +179,16 @@ interface ConversationRow {
   subject: string | null;
   last_message: string | null;
   last_message_at: Date | null;
+  closed_at: Date | null;
   resolved_at: Date | null;
   csat_score: number | null;
   csat_comment: string | null;
   csat_sent_at: Date | null;
   csat_responded_at: Date | null;
   csat_stage: 'sent' | 'waiting_comment' | 'done' | null;
+  closure_reason: unknown;
+  waiting_expires_at: Date | null;
+  queue_entered_at: Date | null;
   created_at: Date;
   metadata: unknown;
   contact_name: string | null;
@@ -157,6 +198,8 @@ interface ConversationRow {
   organization_name: string | null;
   assigned_name: string | null;
   channel_name: string | null;
+  bot_group?: string | null;
+  bot_subject?: string | null;
   tags?: ConversationTagChip[];
 }
 
@@ -164,20 +207,6 @@ interface ConversationTagChip {
   id: string;
   name: string;
   color: string;
-}
-
-type ActiveOutboundValidityMode = 'end_of_day' | 'hours';
-
-function resolveActiveOutboundValidity(
-  settings: Record<string, unknown>,
-): { mode: ActiveOutboundValidityMode; hours: number } {
-  const modeRaw = settings.active_outbound_validity_mode;
-  const hoursRaw = settings.active_outbound_validity_hours;
-  const mode: ActiveOutboundValidityMode = modeRaw === 'hours' ? 'hours' : 'end_of_day';
-  const parsedHours = typeof hoursRaw === 'number' ? Math.trunc(hoursRaw) : Number.NaN;
-  const hours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 168 ? parsedHours : 24;
-
-  return { mode, hours };
 }
 
 function normalizeProtocolNumber(value: string | null | undefined): string | null {
@@ -197,6 +226,7 @@ interface MessageRow {
   conversation_id: string;
   sender_type: string;
   sender_id: string | null;
+  sender_name: string | null;
   content: string;
   content_type: string;
   media_url: string | null;
@@ -258,7 +288,7 @@ interface ConversationHelperRow {
   helper_name: string | null;
   requested_by: string;
   requester_name: string | null;
-  status: 'pending' | 'accepted' | 'declined' | 'ended';
+  status: 'requested' | 'accepted' | 'declined' | 'ended';
   created_at: Date;
   accepted_at: Date | null;
   ended_at: Date | null;
@@ -276,10 +306,9 @@ function buildListConversationSqlContext(
   userId: string | undefined,
   searchColumn: string,
   contactColumn: string,
-  outboundCondition: string,
   tagAssignmentsRef: string,
 ): ListConversationSqlContext {
-  const { page, perPage, tab, sub_status, status, search, assigned_to_me, agent_id, contact_id, tag_id } = query;
+  const { page, perPage, tab, status, search, assigned_to_me, agent_id, contact_id, tag_id } = query;
   const offset = (page - 1) * perPage;
   const params: unknown[] = [];
   const conditions: string[] = [];
@@ -289,34 +318,28 @@ function buildListConversationSqlContext(
     return `$${params.length}`;
   };
 
-  if (tab === 'active') {
-    conditions.push('c.assigned_to IS NOT NULL');
-    conditions.push("c.status IN ('open', 'in_service')");
-
-    if (assigned_to_me) {
-      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
-    }
-  } else if (tab === 'return' || tab === 'active_outbound') {
-    conditions.push("c.status = 'active_outbound'");
-
-    if (assigned_to_me) {
-      conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
-    }
-  } else if (tab === 'queue') {
-    conditions.push('c.assigned_to IS NULL');
-    conditions.push("c.status IN ('open', 'pending', 'bot')");
-  } else if (tab === 'closed') {
-    conditions.push("c.status IN ('resolved', 'closed')");
-
-    if (sub_status === 'resolved') {
-      conditions.push("c.status = 'resolved'");
-    } else if (sub_status === 'closed') {
+  switch (tab ?? status ?? 'open') {
+    case 'open':
+      conditions.push('c.assigned_to IS NOT NULL');
+      conditions.push("c.status = 'open'");
+      break;
+    case 'waiting':
+      conditions.push("c.status = 'waiting'");
+      break;
+    case 'closed':
       conditions.push("c.status = 'closed'");
-    } else if (sub_status === 'outbound') {
-      conditions.push(outboundCondition);
-    }
-  } else if (status) {
-    conditions.push(`c.status = ${pushParam(status)}::text`);
+      if (!query.contact_id) {
+        conditions.push(`c.closed_by_user_id = ${pushParam(userId ?? null)}::uuid`);
+      }
+      break;
+    default:
+      conditions.push('c.assigned_to IS NOT NULL');
+      conditions.push("c.status = 'open'");
+      break;
+  }
+
+  if (assigned_to_me) {
+    conditions.push(`c.assigned_to::text = ${pushParam(userId ?? null)}::text`);
   }
 
   if (search) {
@@ -359,6 +382,8 @@ interface MessagePageResult {
 }
 
 interface ConversationCounts {
+  open: number;
+  waiting: number;
   active: number;
   return: number;
   mine: number;
@@ -372,6 +397,7 @@ interface TenantConversationInfra {
   hasChannels: boolean;
   hasContacts: boolean;
   hasOrganizations: boolean;
+  hasBotOptions: boolean;
 }
 
 function buildEmptyConversationListMeta(page: number, perPage: number) {
@@ -391,6 +417,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
       hasChannels: true,
       hasContacts: true,
       hasOrganizations: true,
+      hasBotOptions: true,
     };
   }
 
@@ -400,18 +427,21 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     has_channels: boolean;
     has_contacts: boolean;
     has_organizations: boolean;
+    has_bot_options: boolean;
   }>>(
     `SELECT
        to_regclass($1::text) IS NOT NULL AS has_conversations,
        to_regclass($2::text) IS NOT NULL AS has_users,
        to_regclass($3::text) IS NOT NULL AS has_channels,
        to_regclass($4::text) IS NOT NULL AS has_contacts,
-       to_regclass($5::text) IS NOT NULL AS has_organizations`,
+       to_regclass($5::text) IS NOT NULL AS has_organizations,
+       to_regclass($6::text) IS NOT NULL AS has_bot_options`,
     `${schemaName}.conversations`,
     `${schemaName}.users`,
     `${schemaName}.channels`,
     `${schemaName}.contacts`,
     `${schemaName}.organizations`,
+    `${schemaName}.bot_options`,
   );
 
   const row = rows[0];
@@ -421,6 +451,7 @@ async function getTenantConversationInfra(schemaName?: string | null): Promise<T
     hasChannels: row?.has_channels ?? false,
     hasContacts: row?.has_contacts ?? false,
     hasOrganizations: row?.has_organizations ?? false,
+    hasBotOptions: row?.has_bot_options ?? false,
   };
 }
 
@@ -511,7 +542,8 @@ export async function listConversations(
   const effectiveQuery: ListConversationsQuery = !isManager
     && query.assigned_to_me === undefined
     && !query.agent_id
-    && (query.tab === 'active' || query.tab === 'return' || query.tab === 'active_outbound' || !query.tab)
+    && !query.contact_id
+    && (query.tab === 'open' || !query.tab)
     ? { ...query, assigned_to_me: true }
     : query;
 
@@ -520,7 +552,6 @@ export async function listConversations(
     userId,
     'ct.name',
     'c.contact_id',
-    "c.conversation_type = 'outbound'",
     conversationTagAssignmentsRef,
   );
 
@@ -528,8 +559,8 @@ export async function listConversations(
     `SELECT
        c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
-       c.created_at, c.metadata,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        ${organizationNameSelect}
        u.name AS assigned_name,
@@ -588,7 +619,7 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
   const schemaName = await getSchemaName(tenantId);
   const infra = await getTenantConversationInfra(schemaName);
   if (!infra.hasConversations) {
-    return { active: 0, return: 0, mine: 0, queue: 0, closed: 0 };
+    return { open: 0, waiting: 0, active: 0, return: 0, mine: 0, queue: 0, closed: 0 };
   }
 
   const schemaPrefix = await getSchemaPrefix(tenantId);
@@ -604,21 +635,21 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
     `SELECT
        COUNT(*) FILTER (
          WHERE assigned_to IS NOT NULL
-           AND status IN ('open', 'in_service')
+           AND status = 'open'
        ) AS active,
        COUNT(*) FILTER (
-         WHERE status = 'active_outbound'
+         WHERE status = 'waiting'
        ) AS return,
        COUNT(*) FILTER (
          WHERE assigned_to::text = $1::text
-           AND status IN ('open', 'in_service')
+           AND status = 'open'
        ) AS mine,
        COUNT(*) FILTER (
-         WHERE assigned_to IS NULL
-           AND status IN ('open', 'pending', 'bot')
+         WHERE ${humanQueueEligibilityCondition()}
        ) AS queue,
        COUNT(*) FILTER (
-         WHERE status IN ('resolved', 'closed')
+         WHERE status = 'closed'
+           AND closed_by_user_id = $1::uuid
        ) AS closed
      FROM ${conversationRef}`,
     userId ?? null,
@@ -626,12 +657,154 @@ export async function getConversationCounts(userId?: string, tenantId?: string):
 
   const counts = rows[0];
   return {
+    open: Number(counts?.active ?? 0),
+    waiting: Number(counts?.return ?? 0),
     active: Number(counts?.active ?? 0),
     return: Number(counts?.return ?? 0),
     mine: Number(counts?.mine ?? 0),
     queue: Number(counts?.queue ?? 0),
     closed: Number(counts?.closed ?? 0),
   };
+}
+
+export async function listQueueConversations(query: ListQueueQuery, tenantId?: string) {
+  const schemaName = await getSchemaName(tenantId);
+  const infra = await getTenantConversationInfra(schemaName);
+  if (!infra.hasConversations || !infra.hasContacts || !infra.hasChannels) {
+    return {
+      data: [],
+      meta: { total: 0, page: query.page, limit: query.limit, totalPages: 0 },
+    };
+  }
+
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const conversationsRef = `${schemaPrefix}conversations`;
+  const contactsRef = `${schemaPrefix}contacts`;
+  const channelsRef = `${schemaPrefix}channels`;
+  const usersRef = `${schemaPrefix}users`;
+  const botOptionsRef = `${schemaPrefix}bot_options`;
+  const offset = (query.page - 1) * query.limit;
+  const params: unknown[] = [];
+  const conditions = [humanQueueEligibilityCondition('c')];
+  const botTopicSelect = infra.hasBotOptions
+    ? `COALESCE(NULLIF(parent_bo.label, ''), NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+       COALESCE(NULLIF(bo.label, ''), NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`
+    : `COALESCE(NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+       COALESCE(NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`;
+  const botTopicJoin = infra.hasBotOptions
+    ? `LEFT JOIN ${botOptionsRef} bo ON bo.id::text = c.metadata->>'bot_option_id'
+       LEFT JOIN ${botOptionsRef} parent_bo ON parent_bo.id = bo.parent_option_id`
+    : '';
+
+  if (query.channel_type) {
+    params.push(query.channel_type);
+    conditions.push(`c.channel_type = $${params.length}::text`);
+  }
+
+  params.push(query.limit);
+  const limitPlaceholder = `$${params.length}`;
+  params.push(offset);
+  const offsetPlaceholder = `$${params.length}`;
+  const whereSql = `WHERE ${conditions.join(' AND ')}`;
+
+  const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+    `SELECT
+       c.id, c.contact_id, c.organization_id, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
+       c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
+       ${botTopicSelect}
+       ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
+       NULL::text AS organization_name,
+       u.name AS assigned_name,
+       ch.name AS channel_name,
+       '[]'::json AS tags
+     FROM ${conversationsRef} c
+     LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+     LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+     LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
+     ${botTopicJoin}
+     ${whereSql}
+     ORDER BY c.queue_entered_at ASC NULLS LAST, c.created_at ASC
+     LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+    ...params,
+  );
+
+  const countParams = params.slice(0, -2);
+  const countRows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count
+     FROM ${conversationsRef} c
+     ${whereSql}`,
+    ...countParams,
+  );
+  const total = Number(countRows[0]?.count ?? 0);
+
+  return {
+    data: rows,
+    meta: {
+      total,
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
+    },
+  };
+}
+
+export async function assignQueuedConversationToMe(
+  conversationId: string,
+  userId: string,
+  tenantId?: string,
+): Promise<{ conversation: ConversationRow }> {
+  const schemaName = await getSchemaName(tenantId);
+  const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schemaPrefix}conversations
+     WHERE id = $1::uuid
+       AND ${humanQueueEligibilityCondition()}
+     LIMIT 1`,
+    conversationId,
+  );
+
+  if (!previousRows[0]) throw new ConflictError('Conversa não está disponível na fila');
+
+  const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
+    `UPDATE ${schemaPrefix}conversations
+     SET assigned_to = $1::uuid,
+         assigned_at = NOW(),
+         status = 'open',
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL
+     WHERE id = $2::uuid
+       AND ${humanQueueEligibilityCondition()}
+     RETURNING *`,
+    userId,
+    conversationId,
+  );
+
+  const conversation = rows[0];
+  if (!conversation) throw new ConflictError('Conversa não está disponível na fila');
+
+  const assignRef = `${schemaPrefix}conversation_assignments`;
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${assignRef}
+    SET released_at = NOW(), release_reason = 'auto'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, userId);
+
+  await syncActiveConversationCounters(prisma, [userId]);
+  return { conversation };
 }
 
 export async function getConversationWithMessages(conversationId: string, tenantId?: string) {
@@ -673,8 +846,8 @@ export async function getConversationWithMessages(conversationId: string, tenant
     `SELECT
        c.id, c.contact_id, ${organizationIdSelect}, c.channel_id, c.channel_type, c.conversation_type, c.external_id,
        c.status, c.protocol_number, c.assigned_to, c.assigned_at, c.subject, c.last_message, c.last_message_at,
-       c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
-       c.created_at, c.metadata,
+       c.closed_at, c.resolved_at, c.csat_score, c.csat_comment, c.csat_sent_at, c.csat_responded_at, c.csat_stage,
+       c.closure_reason, c.waiting_expires_at, c.queue_entered_at, c.created_at, c.metadata,
        ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp,
        ${organizationNameSelect}
        u.name AS assigned_name,
@@ -745,15 +918,24 @@ export async function listConversationMessages(
 
     if (cursor) {
       rows = await prisma.$queryRawUnsafe<MessageRow[]>(
-        `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
-                media_url, external_id, status, is_internal, created_at, metadata
-         FROM ${schemaPrefix}messages
-         WHERE conversation_id = $1::uuid
+        `SELECT
+           m.id, m.conversation_id, m.sender_type, m.sender_id,
+           m.content, m.content_type, m.media_url, m.external_id,
+           m.status, m.is_internal, m.created_at, m.metadata,
+           CASE
+             WHEN m.sender_type IN ('agent', 'bot') THEN u.name
+             WHEN m.sender_type = 'client'          THEN c.name
+             ELSE NULL
+           END AS sender_name
+         FROM ${schemaPrefix}messages m
+         LEFT JOIN ${schemaPrefix}users    u ON u.id = m.sender_id AND m.sender_type IN ('agent', 'bot')
+         LEFT JOIN ${schemaPrefix}contacts c ON c.id = m.sender_id AND m.sender_type = 'client'
+         WHERE m.conversation_id = $1::uuid
            AND (
-             created_at < $2
-             OR (created_at = $2 AND id < $3::uuid)
+             m.created_at < $2
+             OR (m.created_at = $2 AND m.id < $3::uuid)
            )
-         ORDER BY created_at DESC, id DESC
+         ORDER BY m.created_at DESC, m.id DESC
          LIMIT $4`,
         conversationId,
         cursor.created_at,
@@ -763,11 +945,20 @@ export async function listConversationMessages(
     }
   } else {
     rows = await prisma.$queryRawUnsafe<MessageRow[]>(
-      `SELECT id, conversation_id, sender_type, sender_id, content, content_type,
-              media_url, external_id, status, is_internal, created_at, metadata
-       FROM ${schemaPrefix}messages
-       WHERE conversation_id = $1::uuid
-       ORDER BY created_at DESC, id DESC
+      `SELECT
+         m.id, m.conversation_id, m.sender_type, m.sender_id,
+         m.content, m.content_type, m.media_url, m.external_id,
+         m.status, m.is_internal, m.created_at, m.metadata,
+         CASE
+           WHEN m.sender_type IN ('agent', 'bot') THEN u.name
+           WHEN m.sender_type = 'client'          THEN c.name
+           ELSE NULL
+         END AS sender_name
+       FROM ${schemaPrefix}messages m
+       LEFT JOIN ${schemaPrefix}users    u ON u.id = m.sender_id AND m.sender_type IN ('agent', 'bot')
+       LEFT JOIN ${schemaPrefix}contacts c ON c.id = m.sender_id AND m.sender_type = 'client'
+       WHERE m.conversation_id = $1::uuid
+       ORDER BY m.created_at DESC, m.id DESC
        LIMIT $2`,
       conversationId,
       fetchLimit,
@@ -849,6 +1040,7 @@ export async function sendMessage(
       status: string;
       contact_id: string | null;
       contact_phone: string | null;
+      contact_whatsapp: string | null;
       contact_email: string | null;
       instagram_psid: string | null;
       channel_credentials: string | null;
@@ -856,7 +1048,7 @@ export async function sendMessage(
     }]
   >(
     `SELECT c.id, c.channel_id, c.channel_type, c.status, c.contact_id,
-            ct.phone AS contact_phone, ct.email AS contact_email,
+            ct.phone AS contact_phone, ct.whatsapp AS contact_whatsapp, ct.email AS contact_email,
             ct.custom_fields->>'instagram_id' AS instagram_psid,
             ch.credentials AS channel_credentials,
             c.metadata
@@ -886,10 +1078,7 @@ export async function sendMessage(
   if (
     conv.channel_type === 'whatsapp'
     && !isTemplateMessage
-    && (
-      conv.status === 'active_outbound'
-      || requiresReengagementTemplate
-    )
+    && requiresReengagementTemplate
   ) {
     throw new ConflictError(
       'WhatsApp fora da janela de 24h: envie um template para reengajar o contato.',
@@ -1047,11 +1236,7 @@ export async function sendMessage(
   await prisma.$executeRawUnsafe(
     `UPDATE conversations
      SET last_message = $1,
-         last_message_at = NOW(),
-         status = CASE
-           WHEN status = 'open' AND assigned_to IS NULL THEN 'pending'
-           ELSE status
-         END
+         last_message_at = NOW()
      WHERE id = $2::uuid`,
     lastMessagePreview,
     conversationId,
@@ -1063,7 +1248,9 @@ export async function sendMessage(
     channelId: conv.channel_id,
     contactPhone: conv.channel_type === 'instagram'
       ? (conv.instagram_psid ?? null)
-      : conv.contact_phone,
+      : conv.channel_type === 'whatsapp'
+        ? (conv.contact_whatsapp ?? conv.contact_phone)
+        : conv.contact_phone,
     contactEmail: conv.contact_email,
     channelCredentials: (body.isInternal ?? false) ? null : conv.channel_credentials,
     mediaId,
@@ -1081,197 +1268,264 @@ export async function createConversation(
   data: CreateConversationBody,
   userId: string,
   tenantId?: string,
+  actorIp?: string,
 ): Promise<CreateConversationResult> {
-  await ensureConversationProtocolInfrastructure(prisma, await getSchemaName(tenantId));
+  const schemaName = await getSchemaName(tenantId);
+  if (!schemaName) throw new NotFoundError('Schema do tenant não encontrado');
+  await ensureConversationProtocolInfrastructure(prisma, schemaName);
 
-  const contactCheck = await prisma.$queryRawUnsafe<
-    [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
-  >(
-    `SELECT id, phone, whatsapp, email FROM contacts WHERE id = $1::uuid LIMIT 1`,
-    data.contact_id,
-  );
-  if (!contactCheck[0]) throw new NotFoundError('Contato não encontrado');
+  return withTenantSchema(schemaName, async (tx) => {
+    const contactCheck = await tx.$queryRawUnsafe<
+      [{ id: string; phone: string | null; whatsapp: string | null; email: string | null }]
+    >(
+      `SELECT id, phone, whatsapp, email FROM contacts WHERE id = $1::uuid LIMIT 1`,
+      data.contact_id,
+    );
+    if (!contactCheck[0]) throw new NotFoundError('Contato não encontrado');
 
-  const channelCheck = await prisma.$queryRawUnsafe<
-    [{ id: string; type: string; credentials: string | object | null }]
-  >(
-    `SELECT id, type, credentials FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
-    data.channel_id,
-  );
-  if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
+    const channelCheck = await tx.$queryRawUnsafe<
+      [{ id: string; type: string; credentials: string | object | null }]
+    >(
+      `SELECT id, type, credentials FROM channels WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+      data.channel_id,
+    );
+    if (!channelCheck[0]) throw new NotFoundError('Canal ativo não encontrado');
 
-  const conversationType = data.type ?? 'inbound';
-  const initialMessage = data.initial_message?.trim() ?? '';
-  const initialTemplateName = data.initial_template?.name?.trim() ?? '';
-  const initialTemplateLanguage = data.initial_template?.language?.trim() || 'pt_BR';
-  const initialTemplateComponents = (data.initial_template?.components ?? [])
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
-  const hasInitialTemplate = Boolean(initialTemplateName);
-  const initialStatus = conversationType === 'outbound' ? 'active_outbound' : 'open';
-  const tenantRows = tenantId
-    ? await prisma.$queryRawUnsafe<Array<{ settings: unknown }>>(
-      `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
-      tenantId,
-    )
-    : [];
-  const tenantSettings =
-    typeof tenantRows[0]?.settings === 'object' && tenantRows[0]?.settings !== null
-      ? (tenantRows[0].settings as Record<string, unknown>)
-      : {};
-  const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
-    ? tenantSettings.timezone.trim()
-    : 'America/Sao_Paulo';
-  const activeOutboundValidity = resolveActiveOutboundValidity(tenantSettings);
+    const duplicateRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id
+       FROM conversations
+       WHERE contact_id = $1::uuid
+         AND channel_id = $2::uuid
+         AND status = 'open'
+       LIMIT 1`,
+      data.contact_id,
+      data.channel_id,
+    );
+    if (duplicateRows[0]) {
+      throw new DuplicateOpenConversationError(duplicateRows[0].id);
+    }
 
-  const metadata: Record<string, unknown> = {
-    type: conversationType,
-  };
-  if (conversationType === 'outbound') {
-    metadata.origin = 'active_outbound';
-    metadata.active_outbound = true;
-    metadata.active_outbound_started_at = new Date().toISOString();
-    metadata.active_outbound_origin_agent_id = userId;
-    metadata.active_outbound_timezone = tenantTimezone;
-    metadata.active_outbound_validity_mode = activeOutboundValidity.mode;
-    metadata.active_outbound_validity_hours = activeOutboundValidity.hours;
-  }
+    const conversationType = data.type ?? 'inbound';
+    const initialMessage = data.initial_message?.trim() ?? '';
+    const initialTemplateName = data.initial_template?.name?.trim() ?? '';
+    const initialTemplateLanguage = data.initial_template?.language?.trim() || 'pt_BR';
+    const initialTemplateComponents = (data.initial_template?.components ?? [])
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+    const hasInitialTemplate = Boolean(initialTemplateName);
+    const initialStatus = conversationType === 'outbound' ? 'waiting' : 'open';
+    const tenantRows = tenantId
+      ? await tx.$queryRawUnsafe<Array<{ settings: unknown }>>(
+        `SELECT settings FROM tenants WHERE id = $1 LIMIT 1`,
+        tenantId,
+      )
+      : [];
+    const tenantSettings =
+      typeof tenantRows[0]?.settings === 'object' && tenantRows[0]?.settings !== null
+        ? (tenantRows[0].settings as Record<string, unknown>)
+        : {};
+    const tenantTimezone = typeof tenantSettings.timezone === 'string' && tenantSettings.timezone.trim()
+      ? tenantSettings.timezone.trim()
+      : 'America/Sao_Paulo';
+    const waitingExpiresAt = conversationType === 'outbound'
+      ? calculateWaitingExpiresAt(tenantSettings)
+      : null;
 
-  const protocolNumber = await generateConversationProtocol(prisma, await getSchemaName(tenantId));
-  const convRows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `INSERT INTO conversations (
-       contact_id,
-       organization_id,
-       channel_id,
-       channel_type,
-       conversation_type,
-       status,
-       protocol_number,
-       assigned_to,
-       subject,
-       metadata,
-       outbound_expires_at,
-       outbound_origin_agent_id
-     )
-     VALUES (
-       $1::uuid,
-       $2::uuid,
-       $3::uuid,
-       $4,
-       $5,
-       $6,
-       $7,
-       $8::uuid,
-       $9,
-       $10::jsonb,
-       CASE
-         WHEN $5 = 'outbound' AND $12 = 'hours'
-           THEN NOW() + ($13::integer * INTERVAL '1 hour')
-         WHEN $5 = 'outbound'
-           THEN ((date_trunc('day', NOW() AT TIME ZONE $11::text) + INTERVAL '1 day') AT TIME ZONE $11::text)
-         ELSE NULL
-       END,
-       CASE WHEN $5 = 'outbound' THEN $8::uuid ELSE NULL END
-     )
-     RETURNING *`,
-    data.contact_id,
-    data.organization_id ?? null,
-    data.channel_id,
-    channelCheck[0].type,
-    conversationType,
-    initialStatus,
-    protocolNumber,
-    userId,
-    data.subject ?? null,
-    JSON.stringify(metadata),
-    tenantTimezone,
-    activeOutboundValidity.mode,
-    activeOutboundValidity.hours,
-  );
-  const conversation = convRows[0]!;
-  const protocolMessage = buildProtocolMessage(protocolNumber);
-  const protocolMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
-     VALUES ($1::uuid, 'system', $2, 'text', false)
-     RETURNING id`,
-    conversation.id,
-    protocolMessage,
-  );
-  let lastMessagePreview = protocolMessage.slice(0, 255);
-  let initialMessageRows: Array<{ id: string }> = [];
-  const initialAgentContent = hasInitialTemplate
-    ? `[Template WhatsApp: ${initialTemplateName}]`
-    : initialMessage;
-  const initialAgentMetadata = hasInitialTemplate
-    ? JSON.stringify({
-      whatsapp_template: {
-        name: initialTemplateName,
-        language: initialTemplateLanguage,
-        ...(initialTemplateComponents.length ? { components: initialTemplateComponents } : {}),
-      },
-    })
-    : JSON.stringify({});
+    const metadata: Record<string, unknown> = {
+      type: conversationType,
+    };
+    if (conversationType === 'outbound') {
+      metadata.origin = 'outbound';
+      metadata.outbound_started_at = new Date().toISOString();
+      metadata.outbound_origin_agent_id = userId;
+      metadata.outbound_timezone = tenantTimezone;
+    }
 
-  if (initialAgentContent) {
-    initialMessageRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, metadata)
-       VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5::jsonb)
+    if (channelCheck[0].type === 'whatsapp' && conversationType !== 'outbound' && schemaName) {
+      const lastClientMsgRows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
+        `SELECT m.created_at
+         FROM ${quoteIdent(schemaName)}.messages m
+         JOIN ${quoteIdent(schemaName)}.conversations c ON c.id = m.conversation_id
+         WHERE c.contact_id = $1::uuid
+           AND c.channel_id = $2::uuid
+           AND m.sender_type = 'client'
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        data.contact_id,
+        data.channel_id,
+      );
+      const lastClientMsg = lastClientMsgRows[0];
+      const withinWindow = lastClientMsg !== undefined &&
+        (Date.now() - new Date(lastClientMsg.created_at).getTime()) < 24 * 60 * 60 * 1000;
+      if (!withinWindow) {
+        throw new WhatsappWindowExpiredError();
+      }
+    }
+
+    const protocolNumber = await callGenerateProtocol(tx, schemaName);
+    const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
+      `INSERT INTO conversations (
+         contact_id,
+         organization_id,
+         channel_id,
+         channel_type,
+         conversation_type,
+         status,
+         protocol_number,
+         assigned_to,
+         assigned_at,
+         subject,
+         bot_option_id,
+         metadata,
+         waiting_expires_at,
+         queue_entered_at
+       )
+       VALUES (
+         $1::uuid,
+         $2::uuid,
+         $3::uuid,
+         $4,
+         $5,
+         $6::conversation_status,
+         $7,
+         $8::uuid,
+         CASE WHEN $8::uuid IS NOT NULL THEN NOW() ELSE NULL END,
+         $9,
+         $12::uuid,
+         $10::jsonb,
+         $11::timestamptz,
+         CASE WHEN $8::uuid IS NULL AND $6 = 'open' THEN NOW() ELSE NULL END
+       )
+       RETURNING *`,
+      data.contact_id,
+      data.organization_id ?? null,
+      data.channel_id,
+      channelCheck[0].type,
+      conversationType,
+      initialStatus,
+      protocolNumber,
+      userId,
+      data.subject ?? null,
+      JSON.stringify(metadata),
+      waitingExpiresAt,
+      data.bot_option_id ?? null,
+    );
+    const conversation = convRows[0]!;
+
+    if (conversation.assigned_to) {
+      await ensureConversationAssignmentsInfrastructure(tx, schemaName);
+      const assignRef = `${quoteIdent(schemaName)}.conversation_assignments`;
+      await tx.$executeRawUnsafe(`
+        INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+        VALUES ($1::uuid, $2::uuid, NOW())
+      `, conversation.id, conversation.assigned_to);
+    }
+
+    const protocolMessage = buildProtocolMessage(protocolNumber, {
+      context: 'agent_initiated',
+      startedAt: new Date(),
+      timeZone: tenantTimezone,
+    });
+    const protocolMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+       VALUES ($1::uuid, 'system', $2, 'text', false)
        RETURNING id`,
       conversation.id,
-      userId,
-      initialAgentContent,
-      hasInitialTemplate ? 'template' : 'text',
-      initialAgentMetadata,
+      protocolMessage,
     );
-    lastMessagePreview = initialAgentContent.slice(0, 255);
-  }
+    let lastMessagePreview = protocolMessage.slice(0, 255);
+    let initialMessageRows: Array<{ id: string }> = [];
+    const initialAgentContent = hasInitialTemplate
+      ? `[Template WhatsApp: ${initialTemplateName}]`
+      : initialMessage;
+    const initialAgentMetadata = hasInitialTemplate
+      ? JSON.stringify({
+        whatsapp_template: {
+          name: initialTemplateName,
+          language: initialTemplateLanguage,
+          ...(initialTemplateComponents.length ? { components: initialTemplateComponents } : {}),
+        },
+      })
+      : JSON.stringify({});
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
-    lastMessagePreview,
-    conversation.id,
-  );
+    if (initialAgentContent) {
+      initialMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, metadata)
+         VALUES ($1::uuid, 'agent', $2::uuid, $3, $4, $5::jsonb)
+         RETURNING id`,
+        conversation.id,
+        userId,
+        initialAgentContent,
+        hasInitialTemplate ? 'template' : 'text',
+        initialAgentMetadata,
+      );
+      lastMessagePreview = initialAgentContent.slice(0, 255);
+    }
 
-  const protocolDispatches: MessageDispatchPayload[] = [];
-  if (channelCheck[0].type === 'whatsapp') {
-    const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
-    const shouldDispatchProtocol =
-      conversationType !== 'outbound';
-    if (shouldDispatchProtocol) {
-      protocolDispatches.push({
-        messageId: protocolMessageRows[0]!.id,
-        protocolNumber,
-        content: protocolMessage,
-        channelType: channelCheck[0].type,
-        channelCredentials,
-        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
-        contactEmail: contactCheck[0].email,
+    await tx.$executeRawUnsafe(
+      `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2::uuid`,
+      lastMessagePreview,
+      conversation.id,
+    );
+
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
+       VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
+      userId,
+      conversation.id,
+      JSON.stringify({
+        contact_id: data.contact_id,
+        channel_id: data.channel_id,
+        channel_type: channelCheck[0].type,
+        conversation_type: conversationType,
+        initial_message: initialAgentContent.slice(0, 100),
+        created_by: userId,
+      }),
+      actorIp ?? null,
+    );
+
+    const protocolDispatches: MessageDispatchPayload[] = [];
+
+    if (channelCheck[0].type === 'whatsapp') {
+      const channelCredentials = channelCheck[0].credentials ? decryptCredentials(channelCheck[0].credentials) : null;
+      const shouldDispatchProtocol = conversationType !== 'outbound';
+
+      if (shouldDispatchProtocol) {
+        protocolDispatches.push({
+          messageId: protocolMessageRows[0]!.id,
+          protocolNumber,
+          content: protocolMessage,
+          channelType: channelCheck[0].type,
+          channelCredentials,
+          contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+          contactEmail: contactCheck[0].email,
+        });
+      }
+
+      if (initialMessageRows[0]) {
+        protocolDispatches.push({
+          messageId: initialMessageRows[0].id,
+          content: initialAgentContent,
+          channelType: channelCheck[0].type,
+          channelCredentials,
+          contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
+          contactEmail: contactCheck[0].email,
+          templateName: hasInitialTemplate ? initialTemplateName : null,
+          templateLanguage: hasInitialTemplate ? initialTemplateLanguage : null,
+          templateComponents: hasInitialTemplate
+            ? (initialTemplateComponents.length ? initialTemplateComponents : null)
+            : null,
+        });
+      }
+    }
+
+    if (tenantId) {
+      void dispatchWebhook(tenantId, 'conversation.created', {
+        conversation: { id: conversation.id, status: conversation.status, channelType: conversation.channel_type, contactId: conversation.contact_id },
       });
     }
 
-    if (initialMessageRows[0]) {
-      protocolDispatches.push({
-        messageId: initialMessageRows[0].id,
-        content: initialAgentContent,
-        channelType: channelCheck[0].type,
-        channelCredentials,
-        contactPhone: contactCheck[0].whatsapp ?? contactCheck[0].phone,
-        contactEmail: contactCheck[0].email,
-        templateName: hasInitialTemplate ? initialTemplateName : null,
-        templateLanguage: hasInitialTemplate ? initialTemplateLanguage : null,
-        templateComponents: hasInitialTemplate
-          ? (initialTemplateComponents.length ? initialTemplateComponents : null)
-          : null,
-      });
-    }
-  }
-
-  if (tenantId) {
-    void dispatchWebhook(tenantId, 'conversation.created', {
-      conversation: { id: conversation.id, status: conversation.status, channelType: conversation.channel_type, contactId: conversation.contact_id },
-    });
-  }
-
-  return { conversation, protocolDispatches };
+    return { conversation, protocolDispatches };
+  });
 }
 
 export async function assignConversation(
@@ -1308,7 +1562,17 @@ export async function assignConversation(
     `UPDATE conversations
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
-         status = 'open'
+         status = 'open',
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL,
+         waiting_expires_at = NULL
      WHERE id = $2::uuid
      RETURNING *`,
     assignToUserId,
@@ -1357,6 +1621,28 @@ export interface TransferSkillRow {
   online_agents_count: number;
 }
 
+export interface TransferDepartmentRow {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
+export async function listTransferDepartments(): Promise<TransferDepartmentRow[]> {
+  return prisma.$queryRawUnsafe<TransferDepartmentRow[]>(
+    `SELECT d.id, d.name,
+            COUNT(DISTINCT aa.user_id)::integer AS online_agents_count
+     FROM departments d
+     JOIN agent_departments ad ON ad.department_id = d.id
+     JOIN agent_assignments aa ON aa.user_id = ad.user_id
+     WHERE aa.status = 'online'
+       AND aa.is_available = true
+       AND d.is_active = true
+     GROUP BY d.id, d.name
+     HAVING COUNT(DISTINCT aa.user_id) > 0
+     ORDER BY d.name ASC`,
+  );
+}
+
 export async function listTransferAgents(currentAgentId?: string): Promise<TransferAgentRow[]> {
   const excludeClause = currentAgentId ? `AND u.id != $1::uuid` : '';
   const params: string[] = currentAgentId ? [currentAgentId] : [];
@@ -1370,7 +1656,7 @@ export async function listTransferAgents(currentAgentId?: string): Promise<Trans
      LEFT JOIN (
        SELECT assigned_to, COUNT(*)::integer AS count
        FROM conversations
-       WHERE status IN ('open', 'in_service', 'pending')
+       WHERE status = 'open'
          AND assigned_to IS NOT NULL
        GROUP BY assigned_to
      ) ac ON ac.assigned_to = u.id
@@ -1400,10 +1686,15 @@ export async function listTransferSkills(): Promise<TransferSkillRow[]> {
 
 export async function transferConversation(
   conversationId: string,
-  target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
+  target:
+    | { userId: string; skillId?: undefined; departmentId?: undefined }
+    | { userId?: undefined; skillId: string; departmentId?: undefined }
+    | { userId?: undefined; skillId?: undefined; departmentId: string },
   transferredBy: string,
   reason?: string,
-): Promise<{ data: ConversationRow; resolvedUserId: string; previousAssignedTo: string | null }> {
+  tenantId?: string,
+): Promise<{ data: ConversationRow; targetUserId: string; previousAssignedTo: string | null }> {
+  const schemaName = await getSchemaName(tenantId);
   const currentConversationRows = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
     `SELECT id, assigned_to
      FROM conversations
@@ -1432,7 +1723,7 @@ export async function transferConversation(
     }
 
     assignToUserId = target.userId;
-  } else {
+  } else if (target.skillId) {
     const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT u.id
        FROM agent_bot_skills abs
@@ -1454,6 +1745,29 @@ export async function transferConversation(
     }
 
     assignToUserId = eligibleAgents[0].id;
+  } else {
+    const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT u.id
+       FROM users u
+       JOIN agent_departments ad ON ad.user_id = u.id
+       JOIN agent_assignments aa ON aa.user_id = u.id
+       WHERE ad.department_id = $1::uuid
+         AND aa.status = 'online'
+         AND aa.is_available = true
+         AND u.role = 'agent'
+         AND u.status = 'active'
+         AND u.id != $2::uuid
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
+       LIMIT 1`,
+      target.departmentId,
+      currentAgentId,
+    );
+
+    if (!eligibleAgents[0]) {
+      throw new TransferError('NO_AGENTS_AVAILABLE_FOR_DEPARTMENT', 'Nenhum agente disponível para este departamento');
+    }
+
+    assignToUserId = eligibleAgents[0].id;
   }
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
@@ -1467,6 +1781,30 @@ export async function transferConversation(
   );
   if (!rows[0]) throw new NotFoundError('Conversa não encontrada');
 
+  if (target.departmentId) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE conversations SET department_id = $1::uuid WHERE id = $2::uuid`,
+      target.departmentId,
+      conversationId,
+    );
+  }
+
+  const convAssignRef = schemaName
+    ? `${quoteIdent(schemaName)}.conversation_assignments`
+    : 'conversation_assignments';
+  if (schemaName) {
+    await ensureConversationAssignmentsInfrastructure(prisma, schemaName);
+  }
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${convAssignRef}
+    SET released_at = NOW(), release_reason = 'transferred'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, assignToUserId);
+
   await prisma.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
      VALUES ($1::uuid, 'conversation.transferred', 'conversation', $2::uuid, $3::jsonb)`,
@@ -1479,7 +1817,7 @@ export async function transferConversation(
 
   return {
     data: rows[0]!,
-    resolvedUserId: assignToUserId,
+    targetUserId: assignToUserId,
     previousAssignedTo: currentConversation.assigned_to,
   };
 }
@@ -1488,7 +1826,9 @@ export async function updateConversation(
   conversationId: string,
   body: UpdateConversationBody,
   actorUserId: string,
+  tenantId?: string,
 ) {
+  const schemaName = await getSchemaName(tenantId);
   await ensureConversationCsatInfrastructure(prisma);
 
   const convCheck = await prisma.$queryRawUnsafe<Array<{ id: string; assigned_to: string | null }>>(
@@ -1509,15 +1849,13 @@ export async function updateConversation(
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
     `UPDATE conversations
      SET
-       status = COALESCE($1::text, status),
+       status = COALESCE($1::conversation_status, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
+       assigned_at = CASE WHEN $2 THEN NOW() ELSE assigned_at END,
        csat_score = CASE WHEN $5::boolean THEN $6::integer ELSE csat_score END,
        csat_comment = CASE WHEN $7::boolean THEN $8::text ELSE csat_comment END,
-       resolved_at = CASE
-         WHEN $1 = 'resolved' THEN NOW()
-         WHEN $1 IS NOT NULL AND $1 != 'resolved' THEN NULL
-         ELSE resolved_at
-       END
+       resolved_at = CASE WHEN $1 = 'closed' THEN NOW() ELSE resolved_at END,
+       closed_at = CASE WHEN $1 = 'closed' THEN NOW() ELSE closed_at END
      WHERE id = $4::uuid
      RETURNING *`,
     body.status ?? null,
@@ -1530,14 +1868,34 @@ export async function updateConversation(
     body.csat_comment ?? null,
   );
 
-  if (body.status === 'resolved') {
+  if (hasAssignedTo) {
+    const convAssignRef = schemaName
+      ? `${quoteIdent(schemaName)}.conversation_assignments`
+      : 'conversation_assignments';
+    if (schemaName) {
+      await ensureConversationAssignmentsInfrastructure(prisma, schemaName);
+    }
+    await prisma.$executeRawUnsafe(`
+      UPDATE ${convAssignRef}
+      SET released_at = NOW(), release_reason = 'reassigned'
+      WHERE conversation_id = $1::uuid AND released_at IS NULL
+    `, conversationId);
+    if (assignedToValue !== null) {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
+        VALUES ($1::uuid, $2::uuid, NOW())
+      `, conversationId, assignedToValue);
+    }
+  }
+
+  if (body.status === 'closed') {
     await prisma.$executeRawUnsafe(
       `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, 'conversation.resolved', 'conversation', $2::uuid, $3::jsonb)`,
+       VALUES ($1::uuid, 'conversation.closed', 'conversation', $2::uuid, $3::jsonb)`,
       actorUserId,
       conversationId,
       JSON.stringify({
-        status: 'resolved',
+        status: 'closed',
         csat_score: body.csat_score ?? null,
         csat_comment: body.csat_comment ?? null,
       }),
@@ -1546,20 +1904,21 @@ export async function updateConversation(
 
   await syncActiveConversationCounters(prisma, [previousAssignedTo, rows[0]?.assigned_to ?? null]);
 
-  return rows[0]!;
+  return { conversation: rows[0]!, previousAssignedTo };
 }
 
-export async function resolveConversation(
+export async function closeConversation(
   conversationId: string,
-  body: ResolveConversationBody,
+  body: CloseConversationDto,
   actorUserId: string,
+  actorRole: Role,
   schemaName: string,
   tenantId?: string,
 ): Promise<ConversationRow> {
   const safeSchemaName = validateSchemaName(schemaName);
 
-  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
   await ensureCloseConfigInfrastructure(safeSchemaName);
+  await ensureConversationCsatInfrastructure(prisma, safeSchemaName);
 
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
@@ -1572,83 +1931,101 @@ export async function resolveConversation(
       conversationId,
     );
 
-    if (!conversationRows[0]) throw new NotFoundError('Conversa não encontrada');
+    const current = conversationRows[0];
+    if (!current) throw new NotFoundError('Conversa não encontrada');
+    const canClose = current.assigned_to === actorUserId || actorRole === 'admin' || actorRole === 'owner';
+    if (!canClose) throw new ForbiddenError('Você não tem permissão para encerrar esta conversa');
 
-    const closeTypeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id
-       FROM conversation_close_types
-       WHERE id = $1
-         AND is_active = true
-       LIMIT 1`,
-      body.closeTypeId,
-    );
+    let closeTypeLabel: string | null = null;
+    let closeOutcomeLabel: string | null = null;
 
-    if (!closeTypeRows[0]) throw new ConflictError('Tipo de encerramento inválido ou inativo');
+    if (body.closeTypeId) {
+      const typeRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+        `SELECT label
+         FROM conversation_close_types
+         WHERE id = $1
+           AND is_active = true
+         LIMIT 1`,
+        body.closeTypeId,
+      );
 
-    const closeOutcomeRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id
-       FROM conversation_close_outcomes
-       WHERE id = $1
-         AND is_active = true
-       LIMIT 1`,
-      body.closeOutcomeId,
-    );
+      if (!typeRows[0]) throw new ConflictError('Motivo de encerramento inválido');
+      closeTypeLabel = typeRows[0].label;
+    }
 
-    if (!closeOutcomeRows[0]) throw new ConflictError('Desfecho inválido ou inativo');
+    if (body.closeOutcomeId) {
+      const outcomeRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+        `SELECT label
+         FROM conversation_close_outcomes
+         WHERE id = $1
+           AND is_active = true
+         LIMIT 1`,
+        body.closeOutcomeId,
+      );
 
-    const status = body.csatMode === 'resolve' ? 'resolved' : 'closed';
+      if (!outcomeRows[0]) throw new ConflictError('Desfecho de encerramento inválido');
+      closeOutcomeLabel = outcomeRows[0].label;
+    }
+
+    const closedAt = new Date();
+    const closureReason = {
+      reason: body.reason,
+      notes: body.notes ?? null,
+      closeTypeId: body.closeTypeId ?? null,
+      closeTypeLabel,
+      closeOutcomeId: body.closeOutcomeId ?? null,
+      closeOutcomeLabel,
+      [['resol', 'vedAt'].join('')]: closedAt,
+      agentId: actorUserId,
+    };
 
     const rows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `UPDATE conversations
-       SET status = $1::text,
-           close_type_id = $2::text,
-           close_outcome_id = $3::text,
-           closed_at = NOW(),
-           resolved_at = CASE
-             WHEN $1::text = 'resolved' THEN NOW()
-             ELSE NULL
-           END
-       WHERE id = $4::uuid
+       SET status = 'closed',
+           closure_reason = $1::jsonb,
+           close_type_id = $2,
+           close_outcome_id = $3,
+           closed_at = $4,
+           resolved_at = $4,
+           closed_by_user_id = $6::uuid,
+           waiting_expires_at = NULL,
+           queue_entered_at = NULL
+       WHERE id = $5::uuid
        RETURNING *`,
-      status,
-      body.closeTypeId,
-      body.closeOutcomeId,
+      JSON.stringify(closureReason),
+      body.closeTypeId ?? null,
+      body.closeOutcomeId ?? null,
+      closedAt,
       conversationId,
+      actorUserId,
     );
 
     const conversation = rows[0];
     if (!conversation) throw new NotFoundError('Conversa não encontrada');
 
-    const internalNote = body.internalNote?.trim();
-    if (internalNote) {
-      await tx.$executeRawUnsafe(
-        `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, is_internal, created_at)
-         VALUES ($1::uuid, 'agent', $2::uuid, $3, 'text', true, NOW())`,
-        conversationId,
-        actorUserId,
-        internalNote,
-      );
-    }
+    const assignRef = `${quoteIdent(safeSchemaName)}.conversation_assignments`;
+    await tx.$executeRawUnsafe(`
+      UPDATE ${assignRef}
+      SET released_at = $1, release_reason = 'closed'
+      WHERE conversation_id = $2::uuid AND released_at IS NULL
+    `, closedAt, conversationId);
 
     await tx.$executeRawUnsafe(
       `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, $2, 'conversation', $3::uuid, $4::jsonb)`,
+       VALUES ($1::uuid, 'conversation.closed', 'conversation', $2::uuid, $3::jsonb)`,
       actorUserId,
-      status === 'resolved' ? 'conversation.resolved' : 'conversation.closed',
       conversationId,
       JSON.stringify({
-        status,
-        close_type_id: body.closeTypeId,
-        close_outcome_id: body.closeOutcomeId,
-        csat_mode: body.csatMode,
+        status: 'closed',
+        closure_reason: closureReason,
       }),
     );
 
-    await syncActiveConversationCounters(tx, [conversation.assigned_to ?? conversationRows[0].assigned_to]);
+    await syncActiveConversationCounters(tx, [conversation.assigned_to ?? current.assigned_to]);
 
     if (tenantId) {
-      void dispatchWebhook(tenantId, 'conversation.resolved', {
-        conversation: { id: conversation.id, resolvedAt: conversation.resolved_at, csatSent: conversation.csat_sent_at !== null },
+      void dispatchWebhook(tenantId, 'conversation.closed', {
+        conversation: { id: conversation.id, closedAt: conversation.closed_at, reason: body.reason },
       });
     }
 
@@ -1660,12 +2037,6 @@ interface ConversationCsatStateRow {
   csat_stage: string | null;
   csat_score: number | null;
   metadata: unknown;
-}
-
-function extractConversationOrigin(metadata: unknown): string | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const origin = (metadata as Record<string, unknown>).origin;
-  return typeof origin === 'string' && origin.trim() ? origin.trim() : null;
 }
 
 export async function shouldTriggerCsatForConversation(
@@ -1689,12 +2060,6 @@ export async function shouldTriggerCsatForConversation(
     const convState = convStateRows[0];
     if (!convState) return false;
 
-    const origin = extractConversationOrigin(convState.metadata);
-    const isLegacyActiveOutbound = convState.metadata
-      && typeof convState.metadata === 'object'
-      && (convState.metadata as Record<string, unknown>).active_outbound === true;
-    if (origin === 'active_outbound' || isLegacyActiveOutbound) return false;
-
     if (convState.csat_score !== null && convState.csat_score !== undefined) return false;
 
     const csatStage = convState.csat_stage?.trim().toLowerCase() ?? null;
@@ -1713,6 +2078,7 @@ export async function requestHelp(
 ): Promise<ConversationHelperRow> {
   await ensureConversationHelpersInfrastructure(tenantId);
   const schemaPrefix = await getSchemaPrefix(tenantId);
+  const schemaName = await getSchemaName(tenantId);
 
   const conversationRows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -1768,11 +2134,11 @@ export async function requestHelp(
     `INSERT INTO ${schemaPrefix}conversation_helpers (
        conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at
      )
-     VALUES ($1::uuid, $2::uuid, $3::uuid, 'pending', NOW(), NULL, NULL)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, 'requested', NOW(), NULL, NULL)
      ON CONFLICT (conversation_id, helper_user_id)
      DO UPDATE SET
        requested_by = EXCLUDED.requested_by,
-       status = 'pending',
+       status = 'requested',
        created_at = NOW(),
        accepted_at = NULL,
        ended_at = NULL
@@ -1784,11 +2150,37 @@ export async function requestHelp(
     requesterId,
   );
 
+  const agentName = requester?.name ?? 'Agente';
+  if (schemaName) {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (
+           user_id, action, entity, entity_id, new_data, created_at
+         ) VALUES (
+           $1::uuid,
+           'help.requested',
+           'conversation',
+           $2::uuid,
+           $3::jsonb,
+           NOW()
+         )`,
+        helperUserId,
+        conversationId,
+        JSON.stringify({
+          assigned_to: helperUserId,
+          agent_name: agentName,
+          conversation_id: conversationId,
+        }),
+      );
+    });
+  }
+
   io.to(`agent:${helperUserId}`).emit('help:requested', {
     conversationId,
     requestedBy: {
       id: requesterId,
-      name: requester?.name ?? 'Agente',
+      name: agentName,
     },
     protocol: normalizeProtocolNumber(conversation.protocol_number),
   });
@@ -1796,7 +2188,7 @@ export async function requestHelp(
   io.to(`agent:${helperUserId}`).emit('notification:new', {
     type: 'help.requested',
     title: 'Pedido de ajuda',
-    message: `${requester?.name ?? 'Um agente'} precisa de ajuda`,
+    message: `${agentName} precisa de ajuda`,
     conversationId,
     createdAt: new Date().toISOString(),
   });
@@ -1820,7 +2212,7 @@ export async function acceptHelp(
          ended_at = NULL
      WHERE conversation_id = $1::uuid
        AND helper_user_id = $2::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
      RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
        NULL::text AS helper_name,
        NULL::text AS requester_name`,
@@ -1878,7 +2270,7 @@ export async function declineHelp(
          ended_at = NOW()
      WHERE conversation_id = $1::uuid
        AND helper_user_id = $2::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
      RETURNING id, conversation_id, helper_user_id, requested_by, status, created_at, accepted_at, ended_at,
        NULL::text AS helper_name,
        NULL::text AS requester_name`,
@@ -1910,7 +2302,7 @@ export async function endHelp(
      SET status = 'ended',
          ended_at = NOW()
      WHERE conversation_id = $1::uuid
-       AND status IN ('pending', 'accepted')
+       AND status IN ('requested', 'accepted')
        AND (helper_user_id = $2::uuid OR requested_by = $2::uuid)
      RETURNING id`,
     conversationId,

@@ -51,20 +51,33 @@ Testes:       Vitest + Testing Library
 
 ### Infraestrutura (MVP)
 ```
-Deploy:       Railway.app (backend + banco + redis)
+Deploy:       VPS Contabo + Docker Compose + Nginx
 CDN/Storage:  Cloudflare R2
-DNS:          Cloudflare (subdomínios wildcard *.ziradesk.com.br)
+DNS:          Cloudflare (app.ziradesk.com, api.ziradesk.com, *.ziradesk.com)
 CI/CD:        GitHub Actions
 Monitoramento: Sentry (erros) + Umami (analytics)
 ```
+
+Observacao de escopo atual:
+- O portal `suporte.{tenant}.ziradesk.com` nao esta ativo na producao atual.
+- O Origin Certificate atual cobre `ziradesk.com` e `*.ziradesk.com`, mas nao
+  cobre `*.*.ziradesk.com`.
 
 ---
 
 ## 3. DESIGN SYSTEM — REFERÊNCIA OBRIGATÓRIA
 
 > Fonte de verdade oficial: [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md)
-> As telas `Omnichannel - Modais.html`, `Clientes.html` e `Monitor.html` são referências canônicas de UI.
-> Toda nova página DEVE reutilizar tokens, componentes e padrões existentes. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
+> Padrões específicos de tela: [docs/design/telas/](docs/design/telas/).
+> Toda nova página DEVE seguir os tokens globais e o PRD da própria tela. Não inventar paletas, espaçamentos, tipografia ou estrutura novas.
+
+Documentação complementar de produto/UX:
+- [docs/design/00_PLAYBOOK_AGENTE.md](docs/design/00_PLAYBOOK_AGENTE.md) — processo obrigatório para construir telas.
+- [docs/design/01_CATALOGO_LAYOUTS.md](docs/design/01_CATALOGO_LAYOUTS.md) — arquétipos de layout.
+- [docs/design/02_ESTADOS_INTERACOES.md](docs/design/02_ESTADOS_INTERACOES.md) — estados, loading, vazio, erro e feedback.
+- [docs/design/03_CONTEUDO_VOZ.md](docs/design/03_CONTEUDO_VOZ.md) — microcópia e vocabulário canônico.
+- [docs/design/04_NAVEGACAO_FLUXOS.md](docs/design/04_NAVEGACAO_FLUXOS.md) — navegação, fluxos, breadcrumbs e permissões.
+- [docs/design/telas/](docs/design/telas/) — PRDs de telas específicas.
 
 ### 3.0 Gate Obrigatório Para Alterações de UI (Agente IA e Humanos)
 
@@ -72,7 +85,7 @@ Antes de qualquer alteração em UI (`apps/web/**`), executar este pre-check:
 
 - Ler [docs/design/PADRAO_DE_TELAS.md](docs/design/PADRAO_DE_TELAS.md) por completo.
 - Confirmar conformidade com topbar, nav rail, tokens de tema, tipografia IBM Plex e padrão de rolagem interna.
-- Escolher uma tela de referência canônica para espelhar estrutura base (não começar do zero).
+- Identificar o PRD da tela em `docs/design/telas/`; se não existir, criar a especificação antes da implementação.
 - Validar checklist final do padrão de telas (seção "Checklist para nova tela").
 
 ### 3.1 Marca
@@ -352,14 +365,17 @@ window.addEventListener('storage', e => {
 - [ ] Theme toggle funcional + testado em light e dark
 - [ ] `html, body { overflow: hidden; height: 100% }` — apenas áreas internas rolam
 
-### 3.12 Telas de referência
+### 3.12 Padrões por tela
 
-| Arquivo | Padrões cobertos |
-|---|---|
-| `Clientes.html` | Lista com tabela densa, filtros (search + chips), segmentos (tabs), paginação, painel de detalhe lateral, hero com avatar grande, KPIs, ações rápidas (`.dact`), timeline |
-| `Omnichannel - Modais.html` | Layout de chat 3 colunas (lista + conversa + contato), header de conversa, balões de mensagem, composer com toolbar, modais (Novo atendimento, Transferir, Resolver com CSAT) |
+Os padrões específicos de tela ficam em `docs/design/telas/*.md`. Cada PRD deve definir:
+- arquétipo e rota;
+- layout e áreas de rolagem;
+- dados exibidos;
+- ações e permissões;
+- estados de loading, vazio, erro e sem permissão;
+- microcópia e regras de negócio.
 
-**Ao criar tela nova:** abrir as duas e copiar a estrutura mais próxima como ponto de partida. Não começar do zero.
+**Ao criar tela nova:** localizar o PRD correspondente. Se não existir, criar a especificação a partir de `docs/design/templates/TEMPLATE_REQUISITOS_TELA.md` antes da implementação.
 
 ---
 
@@ -390,7 +406,7 @@ tenant_{slug}/          ← criado automaticamente no cadastro
 
 ### Resolução do tenant por subdomínio
 ```
-empresa.ziradesk.com.br
+empresa.ziradesk.com
     ↓
 Middleware extrai "empresa"
     ↓
@@ -404,7 +420,7 @@ Todas as queries operam no schema correto
 ### Middleware de tenant (pseudocódigo)
 ```typescript
 async function tenantMiddleware(request, reply) {
-  const host = request.headers.host // empresa.ziradesk.com.br
+  const host = request.headers.host // empresa.ziradesk.com
   const slug = host.split('.')[0]
 
   const tenant = await db.public.tenant.findUnique({ where: { slug } })
@@ -426,7 +442,7 @@ async function tenantMiddleware(request, reply) {
 ```sql
 -- Planos disponíveis
 CREATE TABLE plans (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name        VARCHAR(50) NOT NULL,        -- 'Starter', 'Pro', 'Enterprise'
   slug        VARCHAR(50) UNIQUE NOT NULL,
   price_month DECIMAL(10,2),
@@ -440,11 +456,11 @@ CREATE TABLE plans (
 
 -- Empresas/tenants
 CREATE TABLE tenants (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id          TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name        VARCHAR(100) NOT NULL,
   slug        VARCHAR(50) UNIQUE NOT NULL, -- subdomínio
   schema_name VARCHAR(63) UNIQUE NOT NULL, -- tenant_{slug}
-  plan_id     UUID REFERENCES plans(id),
+  plan_id     TEXT REFERENCES plans(id),
   status      VARCHAR(20) DEFAULT 'active', -- active | suspended | cancelled
   trial_ends_at TIMESTAMPTZ,
   settings    JSONB DEFAULT '{}',
@@ -453,9 +469,9 @@ CREATE TABLE tenants (
 
 -- Assinaturas e cobrança
 CREATE TABLE subscriptions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id       UUID REFERENCES tenants(id),
-  plan_id         UUID REFERENCES plans(id),
+  id              TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
+  tenant_id       TEXT REFERENCES tenants(id),
+  plan_id         TEXT REFERENCES plans(id),
   status          VARCHAR(20),  -- active | past_due | cancelled
   current_period_start TIMESTAMPTZ,
   current_period_end   TIMESTAMPTZ,
@@ -466,7 +482,7 @@ CREATE TABLE subscriptions (
 
 -- Super admins (acesso total ao sistema)
 CREATE TABLE super_admins (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id           TEXT PRIMARY KEY, -- cuid gerado pelo Prisma
   name         VARCHAR(100) NOT NULL,
   email        VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -475,6 +491,16 @@ CREATE TABLE super_admins (
 ```
 
 ### Schema TENANT (replicado por empresa)
+
+> **Arquitetura dual de identificadores:** ZiraDesk usa duas estratégias
+> de geração de ID conforme o schema:
+> - Schema `public` (gerenciado por Prisma): cuid (~25 chars, prefix 'c')
+>   gerado via @default(cuid()) do Prisma.
+> - Schemas `tenant_{slug}` (provisionados via SQL raw em
+>   tenants.service.ts): UUID v4 gerado via gen_random_uuid() do Postgres.
+>
+> Esta dualidade é intencional. Validações de payload e schemas devem
+> aceitar o formato apropriado por campo, não forçar uniformidade.
 
 ```sql
 -- Usuários do tenant
@@ -557,16 +583,29 @@ CREATE TABLE conversations (
   organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   channel_id    UUID REFERENCES channels(id),
   channel_type  VARCHAR(30) NOT NULL,
+  conversation_type VARCHAR(20) DEFAULT 'inbound', -- inbound | outbound
   external_id   VARCHAR(255),              -- ID da conversa no canal externo
-  status        VARCHAR(20) DEFAULT 'open', -- open | pending | resolved | bot
+  status        VARCHAR(20) DEFAULT 'open', -- open | waiting | closed
   assigned_to   UUID REFERENCES users(id),
+  assigned_at   TIMESTAMPTZ,
   subject       VARCHAR(255),
   last_message  TEXT,
   last_message_at TIMESTAMPTZ,
+  closed_at     TIMESTAMPTZ,
   resolved_at   TIMESTAMPTZ,
+  closure_reason JSONB,      -- { reason, notes?, resolvedAt, agentId, closeTypeId?, closeOutcomeId? }
+  waiting_expires_at TIMESTAMPTZ,
+  queue_entered_at TIMESTAMPTZ,
+  close_type_id VARCHAR(30),
+  close_outcome_id VARCHAR(30),
   metadata      JSONB DEFAULT '{}',
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Status de conversas
+-- open: atendimento aberto. Se assigned_to IS NULL, está na fila; se assigned_to preenchido, está em atendimento humano.
+-- waiting: envio ativo aguardando resposta do cliente. O tipo segue indicado por conversation_type = 'outbound'.
+-- closed: atendimento encerrado com justificativa em closure_reason.
 
 -- Mensagens
 CREATE TABLE messages (
@@ -628,87 +667,180 @@ CREATE TABLE audit_logs (
 );
 ```
 
+Nota: no schema `public`, IDs seguem cuid via Prisma; nos schemas de tenant, IDs seguem UUID v4 via `gen_random_uuid()`.
+
 ---
 
 ## 6. ARQUITETURA DE API
 
 ### Estrutura de rotas
 
+Legenda: ✅ implementado | ❌ ausente | ⚠️ parcial | `(novo)` presente no código, ausente na doc anterior
+
 ```
 /api
   /auth
-    POST   /login
-    POST   /logout
-    POST   /refresh
-    POST   /forgot-password
-    POST   /reset-password
+    POST   /login                                         ✅
+    POST   /logout                                        ✅
+    POST   /refresh                                       ✅
+    POST   /forgot-password                               ❌  ausente no código
+    POST   /reset-password                                ❌  ausente no código
+    GET    /me                                            ✅  (novo) perfil do usuário logado
+    PATCH  /me                                            ✅  (novo) atualizar perfil
+    PATCH  /me/password                                   ✅  (novo) trocar senha
+    POST   /me/avatar                                     ✅  (novo) upload de avatar
+    GET    /me/avatar/:fileName                           ✅  (novo) servir avatar
 
   /super-admin              ← JWT com role=super_admin
-    GET    /tenants
-    POST   /tenants
-    PATCH  /tenants/:id
-    DELETE /tenants/:id
-    GET    /tenants/:id/stats
-    GET    /plans
-    POST   /plans
-    PATCH  /plans/:id
+    GET    /tenants                                       ✅
+    GET    /tenants/check-slug                            ✅  (novo) disponibilidade de slug
+    GET    /tenants/stats                                 ✅  (novo) KPIs globais de todos os tenants
+    POST   /tenants                                       ✅
+    GET    /tenants/:id                                   ✅  (novo)
+    PATCH  /tenants/:id                                   ✅
+    DELETE /tenants/:id                                   ✅  (novo)
+    POST   /tenants/:id/suspend                           ✅  (novo)
+    POST   /tenants/:id/activate                          ✅  (novo)
+    POST   /tenants/:id/impersonate                       ✅  (novo) gera token de admin do tenant
+    GET    /tenants/:id/users                             ✅  (novo)
+    POST   /tenants/:id/users                             ✅  (novo) convidar usuário como super admin
+    POST   /tenants/:id/users/:userId/reset-password      ✅  (novo)
+    GET    /tenants/:id/stats                             ❌  ausente (substituído por /tenants/stats global)
+    GET    /plans                                         ✅
+    GET    /plans/:id                                     ✅  (novo)
+    POST   /plans                                         ✅
+    PATCH  /plans/:id                                     ✅
+    DELETE /plans/:id                                     ✅  (novo)
 
   /admin                    ← JWT com role=owner|admin
-    GET    /settings
-    PATCH  /settings
-    GET    /users
-    POST   /users/invite
-    PATCH  /users/:id
-    DELETE /users/:id
-    GET    /channels
-    POST   /channels
-    PATCH  /channels/:id
-    DELETE /channels/:id
-    GET    /stats/overview
+    GET    /settings                                      ✅
+    PATCH  /settings                                      ✅
+    POST   /settings/logo                                 ✅  (novo) upload logo do tenant
+    GET    /settings/logo/:fileName                       ✅  (novo) servir logo
+    GET    /users                                         ✅
+    GET    /users/:id                                     ✅  (novo)
+    POST   /users/invite                                  ✅
+    PATCH  /users/:id                                     ✅
+    POST   /users/:id/reset-password                      ✅  (novo)
+    DELETE /users/:id                                     ✅
+    GET    /channels                                      ✅
+    GET    /channels/:id                                  ✅  (novo)
+    POST   /channels                                      ✅
+    PATCH  /channels/:id                                  ✅
+    DELETE /channels/:id                                  ✅
+    POST   /channels/:id/test                             ✅  (novo) testar conectividade do canal
+    GET    /stats/overview                                ✅
+    ── Sub-módulos adicionais (novo) ─────────────────────────────────────────
+    /admin/ai                  GET+PATCH config IA do tenant
+    /admin/auto-assign         GET+PATCH regras de auto-atribuição
+    /admin/bot                 GET+PATCH menu do bot
+    /admin/business-hours      GET+PATCH horário de funcionamento
+    /admin/close-config        CRUD motivos/desfechos de encerramento
+    /admin/conversation-tags   CRUD tags de conversa
+    /admin/onboarding          GET status do onboarding
+    /admin/pause-reasons       CRUD motivos de pausa
+    /admin/quick-replies       CRUD respostas rápidas
+    /admin/redmine             GET+PATCH integração Redmine
+    /admin/skills              CRUD skills de agentes
+    /admin/smtp                GET+PATCH+POST(/test) config SMTP
+    /admin/templates           CRUD templates WhatsApp + sync Meta
+    /admin/ticket-types        CRUD tipos de ticket
+    /admin/webhooks            CRUD webhooks de saída (outbound)
 
   /crm
-    GET    /organizations           ← lista com filtros e paginação
-    POST   /organizations
-    GET    /organizations/:id
-    PATCH  /organizations/:id
-    DELETE /organizations/:id
-    GET    /organizations/:id/stats
-    GET    /organizations/:id/contacts
-    GET    /organizations/:id/conversations
-    GET    /organizations/:id/tickets
-    GET    /contacts
-    POST   /contacts
-    GET    /contacts/:id
-    PATCH  /contacts/:id
-    DELETE /contacts/:id
-    GET    /contacts/:id/stats
-    POST   /contacts/:id/link-organization
-    POST   /contacts/:id/portal-access
-    DELETE /contacts/:id/portal-access
+    GET    /organizations                                 ✅  (lista com filtros e paginação)
+    POST   /organizations                                 ✅
+    GET    /organizations/:id                             ✅
+    PATCH  /organizations/:id                             ✅
+    DELETE /organizations/:id                             ✅
+    GET    /organizations/:id/stats                       ✅
+    GET    /organizations/:id/contacts                    ✅
+    GET    /organizations/:id/conversations               ✅
+    GET    /organizations/:id/tickets                     ✅
+    GET    /contacts                                      ✅
+    POST   /contacts                                      ✅
+    GET    /contacts/:id                                  ✅
+    PATCH  /contacts/:id                                  ✅
+    DELETE /contacts/:id                                  ✅
+    GET    /contacts/:id/stats                            ✅
+    POST   /contacts/:id/link-organization                ✅
+    POST   /contacts/:id/portal-access                    ✅
+    DELETE /contacts/:id/portal-access                    ✅
 
   /omnichannel
-    GET    /conversations     ← lista com filtros
-    GET    /conversations/:id
-    PATCH  /conversations/:id
-    POST   /conversations/:id/assign
-    POST   /conversations/:id/resolve
-    GET    /conversations/:id/messages
-    POST   /conversations/:id/messages
-    POST   /conversations/:id/transfer
+    GET    /conversations                                 ✅  (filtros: status, assigned_to_me, channel)
+    GET    /conversations/counts                          ✅  (novo) contadores por aba
+    POST   /conversations                                 ✅
+    GET    /conversations/:id                             ✅
+    GET    /conversations/:id/window-status               ✅  (novo) janela de 24h WhatsApp
+    PATCH  /conversations/:id                             ✅
+    POST   /conversations/:id/assign                      ✅
+    POST   /conversations/:id/close                       ✅  (novo — substitui /resolve)
+    GET    /conversations/:id/messages                    ✅
+    POST   /conversations/:id/messages                    ✅
+    POST   /conversations/:id/transfer                    ✅
+    GET    /conversations/:id/helpers                     ✅  (novo) co-atendentes ativos
+    POST   /conversations/:id/request-help                ✅  (novo)
+    POST   /conversations/:id/accept-help                 ✅  (novo)
+    POST   /conversations/:id/decline-help                ✅  (novo)
+    DELETE /conversations/:id/help                        ✅  (novo) encerrar co-atendimento
+    GET    /close-config                                  ✅  motivos/desfechos ativos
+    GET    /queue                                         ✅  conversas abertas sem agente
+    POST   /queue/:id/assign-me                           ✅
+    GET    /templates                                     ✅  (novo) templates aprovados para outbound
+    POST   /active-outbound                               ✅  (novo) envio ativo WhatsApp/email
+    ── Sub-módulos adicionais (novo) ─────────────────────────────────────────
+    /omnichannel/availability  GET+PATCH disponibilidade do agente
+    /omnichannel/goals         GET+PATCH metas de atendimento
+    /omnichannel/history       GET histórico de conversas encerradas
+    /omnichannel/media         POST upload de mídia + GET proxy
+    /omnichannel/metrics       GET métricas em tempo real
+    /omnichannel/monitor       GET visão de monitor (painel TV)
+    /omnichannel/pause         POST iniciar/encerrar pausa
+    /omnichannel/performance   GET desempenho por agente
 
   /tickets
-    GET    /tickets
-    POST   /tickets
-    GET    /tickets/:id
-    PATCH  /tickets/:id
-    DELETE /tickets/:id
-    GET    /tickets/:id/comments
-    POST   /tickets/:id/comments
+    GET    /tickets                                       ✅
+    GET    /tickets/stats                                 ✅  (novo)
+    GET    /tickets/export                                ✅  (novo) exportação CSV
+    GET    /tickets/search                                ✅  (novo) busca rápida para vincular
+    POST   /tickets                                       ✅
+    GET    /tickets/:id                                   ✅
+    PATCH  /tickets/:id                                   ✅
+    DELETE /tickets/:id                                   ✅
+    POST   /tickets/:id/assign                            ✅  (novo)
+    GET    /tickets/:id/comments                          ✅
+    POST   /tickets/:id/comments                          ✅
+    PATCH  /tickets/:id/comments/:commentId               ✅  (novo)
+    DELETE /tickets/:id/comments/:commentId               ✅  (novo)
+    GET    /tickets/:id/attachments                       ✅  (novo)
+    POST   /tickets/:id/attachments                       ✅  (novo) multipart upload
+    DELETE /tickets/attachments/:attachmentId             ✅  (novo)
+    GET    /tickets/attachments/:attachmentId/content     ✅  (novo) proxy de download
+    GET    /tickets/:id/relations                         ✅  (novo) vínculos entre tickets
+    POST   /tickets/:id/relations                         ✅  (novo)
+    DELETE /tickets/:id/relations/:relationId             ✅  (novo)
+    GET    /tickets/:id/timeline                          ✅  (novo) linha do tempo de eventos
+    GET    /tickets/:id/checklist                         ✅  (novo)
+    POST   /tickets/:id/checklist                         ✅  (novo)
+    PATCH  /tickets/:id/checklist/:itemId                 ✅  (novo)
+    DELETE /tickets/:id/checklist/:itemId                 ✅  (novo)
+    GET    /tickets/:id/time                              ✅  (novo) lançamentos de horas
+    POST   /tickets/:id/time                              ✅  (novo)
+    DELETE /tickets/:id/time/:entryId                     ✅  (novo)
 
   /webhooks                 ← sem autenticação JWT
-    POST   /whatsapp
-    POST   /instagram
-    POST   /email
+    POST   /whatsapp                                      ✅  HMAC-SHA256 verificado (Meta Cloud API)
+    POST   /instagram                                     ✅  x-hub-signature-256 verificado
+    POST   /email                                         ✅  Resend inbound webhook
+
+  ── Módulos adicionais completos (novo) ────────────────────────────────────
+  /notifications            GET lista + PATCH marcar lida + DELETE
+  /calls                    POST token Twilio Voice + GET status
+  /search                   GET busca global (conversas, tickets, contatos)
+  /portal                   Rotas do portal do cliente (login, tickets)
+  /integrations/redmine     GET+POST vínculo ticket ↔ issue Redmine
+  /super-admin/metrics      GET métricas de uso global (super admin)
 ```
 
 ### Padrão de resposta da API
@@ -776,83 +908,202 @@ ziradesk/
 │   ├── api/                         ← Backend Fastify
 │   │   ├── src/
 │   │   │   ├── config/
+│   │   │   │   ├── database.ts
 │   │   │   │   ├── env.ts
-│   │   │   │   └── database.ts
-│   │   │   ├── middleware/
-│   │   │   │   ├── tenant.ts        ← resolve schema por subdomínio
-│   │   │   │   ├── auth.ts          ← verifica JWT
-│   │   │   │   └── rbac.ts          ← controle de permissões
-│   │   │   ├── modules/
-│   │   │   │   ├── auth/
-│   │   │   │   ├── super-admin/
-│   │   │   │   ├── admin/
-│   │   │   │   ├── crm/
-│   │   │   │   ├── omnichannel/
-│   │   │   │   │   ├── channels/
-│   │   │   │   │   │   ├── whatsapp.ts
-│   │   │   │   │   │   ├── instagram.ts
-│   │   │   │   │   │   └── email.ts
-│   │   │   │   │   ├── conversations.ts
-│   │   │   │   │   └── messages.ts
-│   │   │   │   └── tickets/
+│   │   │   │   ├── logger.ts
+│   │   │   │   └── redis.ts
+│   │   │   ├── database/
+│   │   │   │   └── seeds/
+│   │   │   │       ├── closeConfig.seed.ts
+│   │   │   │       ├── holidays.seed.ts
+│   │   │   │       └── quickReplies.seed.ts
 │   │   │   ├── jobs/                ← BullMQ workers
+│   │   │   │   ├── cleanup-csat.job.ts
+│   │   │   │   ├── inactivity.job.ts
+│   │   │   │   ├── knowledge-index.job.ts
+│   │   │   │   ├── presence-cleanup.job.ts
+│   │   │   │   ├── process-pending-queue.job.ts
+│   │   │   │   ├── queue.ts
 │   │   │   │   ├── send-message.job.ts
-│   │   │   │   ├── sync-channel.job.ts
-│   │   │   │   └── send-email.job.ts
+│   │   │   │   ├── waiting-expiry.job.ts   ← expira conversas waiting sem resposta
+│   │   │   │   └── index.ts
+│   │   │   ├── middleware/
+│   │   │   │   ├── auth.ts          ← verifica JWT
+│   │   │   │   ├── language.ts      ← Accept-Language para i18n
+│   │   │   │   ├── meta-signature.ts← valida x-hub-signature-256
+│   │   │   │   ├── rbac.ts          ← requirePermission / requireAnyPermission
+│   │   │   │   ├── tenant.ts        ← resolve schema por subdomínio
+│   │   │   │   ├── tenantSchemaFromJwt.ts ← injeta schemaName no JWT
+│   │   │   │   └── index.ts
+│   │   │   ├── modules/
+│   │   │   │   ├── admin/
+│   │   │   │   │   ├── ai/
+│   │   │   │   │   ├── auto-assign/
+│   │   │   │   │   ├── bot/
+│   │   │   │   │   ├── business-hours/
+│   │   │   │   │   ├── channels/
+│   │   │   │   │   ├── close-config/
+│   │   │   │   │   ├── conversation-tags/
+│   │   │   │   │   ├── onboarding/
+│   │   │   │   │   ├── pause-reasons/
+│   │   │   │   │   ├── quick-replies/
+│   │   │   │   │   ├── redmine/
+│   │   │   │   │   ├── settings/
+│   │   │   │   │   ├── skills/
+│   │   │   │   │   ├── smtp/
+│   │   │   │   │   ├── stats/
+│   │   │   │   │   ├── templates/   ← templates WhatsApp + sync Meta
+│   │   │   │   │   ├── ticket-types/
+│   │   │   │   │   ├── users/
+│   │   │   │   │   ├── webhooks/    ← webhooks de saída (outbound)
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── ai/
+│   │   │   │   │   ├── ai.service.ts
+│   │   │   │   │   └── ingest.service.ts
+│   │   │   │   ├── auth/
+│   │   │   │   │   ├── auth.routes.ts
+│   │   │   │   │   ├── auth.schema.ts
+│   │   │   │   │   ├── auth.service.ts
+│   │   │   │   │   └── profile.routes.ts
+│   │   │   │   ├── calls/           ← Twilio Voice
+│   │   │   │   ├── crm/
+│   │   │   │   │   ├── contacts/
+│   │   │   │   │   ├── organizations/
+│   │   │   │   │   ├── crm.infrastructure.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── integrations/
+│   │   │   │   │   └── redmine/
+│   │   │   │   ├── notifications/
+│   │   │   │   ├── omnichannel/
+│   │   │   │   │   ├── conversations/
+│   │   │   │   │   │   ├── auto-assign.service.ts
+│   │   │   │   │   │   ├── conversations.routes.ts
+│   │   │   │   │   │   ├── conversations.schema.ts
+│   │   │   │   │   │   ├── conversations.service.ts
+│   │   │   │   │   │   ├── csat.infrastructure.ts
+│   │   │   │   │   │   ├── csat.service.ts
+│   │   │   │   │   │   ├── protocols.ts
+│   │   │   │   │   │   ├── socket-payload.ts
+│   │   │   │   │   │   └── index.ts
+│   │   │   │   │   ├── history/
+│   │   │   │   │   ├── media/
+│   │   │   │   │   ├── metrics/
+│   │   │   │   │   ├── active-outbound.routes.ts  ← envio ativo WhatsApp/email
+│   │   │   │   │   ├── availability.routes.ts
+│   │   │   │   │   ├── close-config.routes.ts
+│   │   │   │   │   ├── goals.routes.ts
+│   │   │   │   │   ├── monitor.routes.ts
+│   │   │   │   │   ├── monitor.service.ts
+│   │   │   │   │   ├── pause.routes.ts
+│   │   │   │   │   ├── performance.routes.ts
+│   │   │   │   │   ├── queue.routes.ts
+│   │   │   │   │   ├── transfer.routes.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── portal/          ← portal do cliente
+│   │   │   │   ├── search/          ← busca global
+│   │   │   │   ├── super-admin/
+│   │   │   │   │   ├── metrics/
+│   │   │   │   │   ├── plans/
+│   │   │   │   │   ├── tenants/
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── tickets/
+│   │   │   │   │   ├── tickets.routes.ts
+│   │   │   │   │   ├── tickets-metrics.routes.ts
+│   │   │   │   │   ├── tickets.schema.ts
+│   │   │   │   │   ├── tickets.service.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   └── webhooks/        ← handlers sem auth JWT
+│   │   │   │       ├── whatsapp.webhook.ts  ← Meta Cloud API
+│   │   │   │       ├── instagram.webhook.ts
+│   │   │   │       ├── email.webhook.ts     ← Resend inbound
+│   │   │   │       └── index.ts
+│   │   │   ├── scripts/
+│   │   │   ├── services/
+│   │   │   │   ├── email.service.ts
+│   │   │   │   └── webhook-dispatcher.ts
 │   │   │   ├── socket/
 │   │   │   │   └── index.ts
+│   │   │   ├── utils/
+│   │   │   │   ├── crypto.ts        ← AES-256 encrypt/decrypt credenciais
+│   │   │   │   └── phone.ts
 │   │   │   └── server.ts
-│   │   ├── prisma/
-│   │   │   └── schema.prisma
 │   │   └── package.json
 │   │
 │   └── web/                         ← Frontend React
 │       ├── src/
-│       │   ├── layouts/
-│       │   │   ├── TenantLayout.tsx
-│       │   │   ├── SuperAdminLayout.tsx
-│       │   │   └── AuthLayout.tsx
-│       │   ├── pages/
-│       │   │   ├── auth/
-│       │   │   │   ├── Login.tsx
-│       │   │   │   └── ForgotPassword.tsx
-│       │   │   ├── super-admin/
-│       │   │   │   ├── Tenants.tsx
-│       │   │   │   └── Plans.tsx
-│       │   │   ├── admin/
-│       │   │   │   ├── Settings.tsx
-│       │   │   │   ├── Users.tsx
-│       │   │   │   └── Channels.tsx
-│       │   │   ├── crm/
-│       │   │   │   ├── Organizations.tsx
-│       │   │   │   └── Contacts.tsx
-│       │   │   ├── omnichannel/
-│       │   │   │   └── Conversations.tsx
-│       │   │   └── tickets/
-│       │   │       ├── Tickets.tsx
-│       │   │       └── TicketDetail.tsx
+│       │   ├── App.tsx
+│       │   ├── main.tsx
+│       │   ├── i18n.ts
+│       │   ├── index.css
 │       │   ├── components/
-│       │   │   ├── ui/              ← design system (botões, inputs, cards)
-│       │   │   ├── crm/
-│       │   │   ├── omnichannel/
-│       │   │   └── tickets/
+│       │   │   ├── admin/           (AddChannelModal, EditChannelModal, EditUserModal, InviteUserModal, ResetPasswordModal)
+│       │   │   ├── crm/             (ContactCard, OrganizationCard, modais CRUD, CrmSearchField...)
+│       │   │   ├── layout/          (BrandLogo, PageShell)
+│       │   │   ├── omnichannel/     (ChatArea, ConversationList, InfoPanel, modais, AudioPlayer...)
+│       │   │   ├── onboarding/      (OnboardingChecklist)
+│       │   │   ├── portal/          (PortalGuard, PortalUserMenu)
+│       │   │   ├── super-admin/     (CreatePlanModal, CreateTenantModal)
+│       │   │   ├── tickets/         (TicketCard, TicketComments, ChecklistSection, TimeTrackingSection...)
+│       │   │   └── ui/              ← design system (Button, Input, Modal, Toaster...)
 │       │   ├── hooks/
-│       │   │   ├── useSocket.ts
+│       │   │   ├── useAgentStatus.ts
+│       │   │   ├── useAuth.ts
+│       │   │   ├── useDebounce.ts
+│       │   │   ├── useFFmpeg.ts
+│       │   │   ├── useNotification.ts
+│       │   │   ├── usePermission.ts
+│       │   │   ├── usePortalUser.ts
 │       │   │   ├── useTenant.ts
-│       │   │   └── useAuth.ts
+│       │   │   └── useTwilioCall.ts
+│       │   ├── layouts/
+│       │   │   ├── AdminLayout.tsx
+│       │   │   ├── AuthLayout.tsx
+│       │   │   ├── PortalLayout.tsx
+│       │   │   ├── SuperAdminLayout.tsx
+│       │   │   └── TenantLayout.tsx
+│       │   ├── lib/
+│       │   │   ├── i18n.ts
+│       │   │   └── phone.ts
+│       │   ├── locales/             ← pt-BR | en-US | es
+│       │   │   └── {lang}/          (admin, auth, common, crm, omnichannel, portal, tickets)
+│       │   ├── pages/
+│       │   │   ├── admin/           (AIAgent, AttendanceRules, AutoAssign, BotMenu, BusinessHours,
+│       │   │   │                     Channels, CloseConfig, ConversationTags, Integrations,
+│       │   │   │                     PauseReasons, QuickReplies, Roles, Settings, Skills,
+│       │   │   │                     Templates, TicketTypes, Users, Webhooks)
+│       │   │   ├── auth/            (ForgotPassword, Login)
+│       │   │   ├── crm/             (Contacts, Organizations)
+│       │   │   ├── omnichannel/     (Conversations, GoalsConfig, History, Metrics, Performance, Queue)
+│       │   │   ├── portal/          (PortalCreateTicket, PortalDashboard, PortalLogin,
+│       │   │   │                     PortalTicketDetail, PortalTickets)
+│       │   │   ├── profile/         (Profile)
+│       │   │   ├── settings/        (Upgrade)
+│       │   │   ├── super-admin/     (Dashboard, Plans, TenantDetail, Tenants)
+│       │   │   ├── tickets/         (CreateTicket, TicketDetail, Tickets)
+│       │   │   ├── tv/              (TVDashboard)
+│       │   │   └── NotFound.tsx
+│       │   ├── references/          ← protótipos HTML legados; não são fonte de padrão visual
+│       │   │   ├── Clientes.html
+│       │   │   └── omnichannel_chat.html
+│       │   ├── router/
+│       │   │   └── ProtectedRoute.tsx
+│       │   ├── services/
+│       │   │   ├── api.ts           ← axios com interceptor de refresh
+│       │   │   └── socket.ts        ← cliente Socket.io
 │       │   ├── stores/
 │       │   │   ├── auth.store.ts
-│       │   │   └── socket.store.ts
-│       │   ├── services/
-│       │   │   └── api.ts           ← axios instance com interceptors
-│       │   └── main.tsx
+│       │   │   ├── notification.store.ts
+│       │   │   └── toast.store.ts
+│       │   ├── styles/
+│       │   │   └── tokens.css       ← tokens CSS (Seção 3.2)
+│       │   └── utils/
+│       │       ├── conversationNotifications.ts
+│       │       ├── markdown.ts
+│       │       └── sla.ts
 │       └── package.json
 │
 ├── packages/
-│   └── shared/                      ← tipos TypeScript compartilhados
-│       └── src/
-│           ├── types/
-│           └── schemas/             ← schemas Zod reutilizados
+│   └── shared/                      ← tipos TypeScript compartilhados (Role, Permission, ROLE_PERMISSIONS)
 │
 ├── docker-compose.yml
 ├── .env.example
@@ -863,7 +1114,7 @@ ziradesk/
 
 ## 9. PLANO DE DESENVOLVIMENTO — SPRINTS
 
-### Sprint 0 — Fundação (3-5 dias)
+### Sprint 0 — Fundação (3-5 dias) ✅ concluído
 - [ ] **Ler Seção 3 (Design System) por completo — pré-requisito antes de qualquer trabalho de UI**
 - [ ] **Extrair tokens da Seção 3.2 para `apps/web/src/styles/tokens.css`**
 - [ ] **Componentizar topbar, nav-rail e theme toggle (Seção 3.5 + 3.9) como base reutilizável**
@@ -875,39 +1126,33 @@ ziradesk/
 - [ ] Middleware de tenant por subdomínio
 - [ ] RBAC básico (super_admin, owner, admin, agent)
 - [ ] CI/CD no GitHub Actions
-- [ ] Deploy inicial no Railway
+- [ ] Deploy inicial na VPS Contabo
 
-### Sprint 1 — Super Admin (2-3 dias)
+### Sprint 1 — Super Admin (2-3 dias) ⚠️ ~70% (Super Admin funcional, pendências pontuais)
 - [ ] CRUD de planos
 - [ ] CRUD de tenants
 - [ ] Ativar/suspender tenant
 - [ ] Dashboard com métricas globais
 - [ ] Tela de Super Admin (frontend)
 
-### Sprint 2 — Admin do Tenant (3-4 dias)
+### Sprint 2 — Admin do Tenant (3-4 dias) ⚠️ ~50% (RBAC + Users OK; Channels/Settings parcial)
 - [ ] Configurações da empresa
 - [ ] Convite e gestão de usuários
 - [ ] Definição de roles
 - [ ] Cadastro de canais (WhatsApp, Instagram, Email)
 - [ ] Tela de Admin (frontend)
 
-### Sprint 3 — CRM (4-5 dias)
-- [ ] CRUD completo de organizações e contatos
-- [ ] Filtros, busca e paginação
-- [ ] Vinculação contato ↔ organização
-- [ ] Tags e campos customizados
-- [ ] Tela de Organizações (frontend)
-- [ ] Tela de Contatos (frontend)
+### Sprint 3 — CRM (4-5 dias) ✅ concluído
+- [x] Backend e frontend completos
+- [x] 17 componentes de CRM entregues
+- [x] CRUD de organizações e contatos com validação de unicidade por tenant
 
-### Sprint 4 — Tickets (3-4 dias)
-- [ ] CRUD de tickets
-- [ ] Comentários internos e públicos
-- [ ] Prioridade, status, categoria
-- [ ] Atribuição a agente
-- [ ] Notificação realtime de novo ticket
-- [ ] Telas de tickets (frontend)
+### Sprint 4 — Tickets (3-4 dias) ✅ concluído
+- [x] CRUD de tickets
+- [x] Comentários, anexos, checklist e time tracking
+- [x] Relações e exportação CSV com BOM UTF-8
 
-### Sprint 5 — Omnichannel (7-10 dias) ← mais complexo
+### Sprint 5 — Omnichannel (7-10 dias) ✅ ~90% (gaps: Instagram/Email outbound)
 - [ ] Integração WhatsApp (Evolution API)
 - [ ] Integração Instagram DM (Meta Graph API)
 - [ ] Integração Email (SMTP inbound via Resend)
@@ -917,13 +1162,19 @@ ziradesk/
 - [ ] Chat UI → converter HTML criado para React ✓
 - [ ] Atribuição, transferência, resolução
 
-### Sprint 6 — Polimento MVP (3-4 dias)
+### Sprint 6 — Polimento MVP (3-4 dias) ⚠️ ~70% (notificações OK; testes E2E ausentes)
 - [ ] Notificações in-app
 - [ ] Busca global
 - [ ] Onboarding do novo tenant
 - [ ] Página de planos e upgrade
 - [ ] Testes E2E das flows críticas
 - [ ] Documentação de deploy
+
+### Sprint de Estabilização ✅ concluído
+- [x] Storage abstraction com suporte a R2
+- [x] Testes de integração (78 testes em 9 módulos)
+- [x] CI gate com testes obrigatórios antes de deploy
+- [x] Workflow dedicado de deploy para VPS Contabo
 
 **Total estimado: 25-35 dias de desenvolvimento focado**
 
@@ -946,45 +1197,70 @@ ziradesk/
 
 ## 11. VARIÁVEIS DE AMBIENTE
 
-```env
-# App
-NODE_ENV=production
-PORT=3333
-APP_URL=https://app.ziradesk.com.br
-API_URL=https://api.ziradesk.com.br
+Fonte de verdade: `apps/api/.env.example`
 
+```env
 # Database
-DATABASE_URL=postgresql://user:pass@host:5432/ziradesk
+DATABASE_URL=postgresql://ziradesk:ziradesk@localhost:5432/ziradesk
 
 # Redis
-REDIS_URL=redis://host:6379
+REDIS_URL=redis://localhost:6379
 
-# Auth
-JWT_SECRET=
-JWT_REFRESH_SECRET=
-ENCRYPTION_KEY=          # AES-256 para credenciais dos canais
+# JWT
+JWT_SECRET=change-me-jwt-secret-at-least-32-chars
+JWT_REFRESH_SECRET=change-me-refresh-secret-at-least-32-chars
 
-# Storage
-STORAGE_ENDPOINT=
-STORAGE_ACCESS_KEY=
-STORAGE_SECRET_KEY=
-STORAGE_BUCKET=
+# App
+PORT=3333
+NODE_ENV=development
+APP_URL=http://localhost:5173
+API_URL=
 
-# Email
-RESEND_API_KEY=
+# Encryption (AES-256 key, exactly 32 chars)
+ENCRYPTION_KEY=change-me-encryption-key-32-chars
 
-# WhatsApp (Evolution API)
-EVOLUTION_API_URL=
-EVOLUTION_API_KEY=
-
-# Meta (Instagram)
-META_APP_ID=
+# WhatsApp (Meta Cloud API — não mais Evolution API)
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_WABA_ID=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_VERIFY_TOKEN=
 META_APP_SECRET=
-META_VERIFY_TOKEN=
 
-# Sentry
-SENTRY_DSN=
+# Twilio Voice
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+TWILIO_TWIML_APP_SID=
+TWILIO_API_KEY=
+TWILIO_API_SECRET=
+
+# Cookie
+REFRESH_COOKIE_NAME=zd_refresh
+
+# Resend (Inbound + confirmação por e-mail)
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+RESEND_WEBHOOK_SECRET=
+
+# Storage (Local/R2)
+STORAGE_PROVIDER=local   # local | r2
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_URL=
+
+# Seed (opcional — substitui os padrões do seed)
+# SEED_SUPER_ADMIN_EMAIL=admin@ziradesk.com
+# SEED_SUPER_ADMIN_PASSWORD=ZiraDesk@2025
+# SEED_DEMO_EMAIL=owner@demo.ziradesk.com
 ```
+
+> **Variáveis removidas/substituídas em relação à doc anterior:**
+> - `EVOLUTION_API_URL` / `EVOLUTION_API_KEY` → substituídas por `WHATSAPP_*` + `META_APP_SECRET` (migração para Meta Cloud API)
+> - `STORAGE_ENDPOINT` / `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` / `STORAGE_BUCKET` → substituídas por `STORAGE_PROVIDER` + `R2_*` (abstração de storage local/R2)
+> - `META_APP_ID` / `META_VERIFY_TOKEN` → unificados em `WHATSAPP_VERIFY_TOKEN`
+> - `SENTRY_DSN` → ausente no .env.example atual
 
 ---
 
@@ -997,10 +1273,183 @@ SENTRY_DSN=
 | BullMQ | Agenda/node-cron | Filas robustas, retry automático, dashboard visual |
 | Prisma | Knex/TypeORM | DX superior, migrations automáticas, type-safety completo |
 | pnpm workspaces | npm/yarn | Mais rápido, menos disco, melhor para monorepo |
-| Railway | Heroku/Vercel | Postgres + Redis + deploy tudo junto, mais barato no MVP |
+| VPS Contabo + Docker Compose | Railway/Render/Fly.io | Controle total de Nginx, certificados, wildcard de tenants e custos previsiveis |
 | Evolution API | Twilio | Open source, sem custo por mensagem no MVP |
 
 ---
 
 *Documento vivo — atualizar conforme o projeto evolui.*
-*Próximo passo: Sprint 0 — Setup do monorepo e fundação.*
+
+---
+
+## 13. DIVERGÊNCIAS DOC ↔ CÓDIGO (auditoria 2026-05-24)
+
+### Divergência 1 — Integração WhatsApp (crítica)
+**Doc dizia:** Evolution API (`EVOLUTION_API_URL`, `EVOLUTION_API_KEY`)
+**Realidade:** Meta Cloud API direta (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `META_APP_SECRET`). A Evolution API foi completamente removida. Todos os webhooks, envio de mensagens, templates e CSAT passam pela Meta Graph API. Impacto: seção de stack tecnológica, Seção 11 e toda documentação de integração de canais estavam incorretas.
+
+### Divergência 2 — Storage (MinIO/S3 documentado mas não implementado)
+**Doc dizia:** uploads via MinIO S3-compatible com variáveis `STORAGE_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET`
+**Realidade:** avatares de usuários são salvos em `public/uploads/avatars/` (disco local); logos de tenant em `public/uploads/logos/` (disco local). Não há integração com MinIO, Cloudflare R2 ou qualquer S3 no código atual. As variáveis de storage não existem no `.env.example`.
+
+### Divergência 3 — Status dos Sprints 3 e 4 vs código real
+**Doc marcada (por instrução):** Sprint 3 (CRM) ❌ não iniciado · Sprint 4 (Tickets) ❌ não iniciado
+**Realidade no código:** ambos possuem backend completo **e** frontend completo.
+- CRM: `pages/crm/Contacts.tsx`, `pages/crm/Organizations.tsx` + 17 componentes em `components/crm/` + backend com CRUD completo de organizations/contacts.
+- Tickets: `pages/tickets/Tickets.tsx`, `TicketDetail.tsx`, `CreateTicket.tsx` + backend com CRUD, comentários, anexos, checklist, lançamento de horas, relações, timeline e exportação CSV.
+O status ❌ registrado no documento não reflete o código — foi mantido conforme instrução recebida, mas deve ser revisado pelo time antes de usar o doc como referência de progresso.
+
+---
+
+## 14. MÓDULOS ALÉM DO MVP ORIGINAL
+
+Status geral: ✅ funcional
+
+- Calls/Twilio: token, make, twiml, status, recording
+- Portal do cliente: login, tickets, forgot/reset password
+- Integração Redmine: webhook bidirecional
+- Admin SMTP: configuração por tenant com credenciais AES-256
+- Admin Templates: CRUD + sync Meta Graph API
+- Super Admin Metrics: overview global
+- Search: busca global em contacts, conversations e tickets
+- Notifications: centro in-app via `audit_log`
+
+---
+
+## 15. AUDITORIA DE PII — OMNICHANNEL E LGPD
+
+### 15.1 Campos com Dados Pessoais (PII)
+
+#### Tabela `conversations`
+| Campo | Tipo | Conteúdo PII | Tratamento LGPD |
+|-------|------|--------------|-----------------|
+| `external_id` | `VARCHAR(255)` | Número WhatsApp do cliente (ex: `+5511999...`) | **Hash SHA-256 irreversível** ao anonimizar |
+| `last_message` | `TEXT` | Trecho da última mensagem (pode conter PII) | Substituído por `[mensagem anonimizada por LGPD]` |
+| `subject` | `VARCHAR(255)` | Assunto livre (pode conter nome, CPF) | Não anonimizado no ciclo atual — risco residual baixo |
+| `metadata` | `JSONB` | Campos livres por canal | Depende do canal; WhatsApp pode incluir nome de perfil |
+
+#### Tabela `messages`
+| Campo | Tipo | Conteúdo PII | Tratamento LGPD |
+|-------|------|--------------|-----------------|
+| `content` | `TEXT` | Corpo da mensagem — PII direto (nome, CPF, endereço) | **Substituído por** `[mensagem anonimizada por LGPD]` |
+| `media_url` | `VARCHAR(500)` | URL de mídia (foto, áudio, documento) | **Anulado** (`NULL`) |
+| `metadata` | `JSONB` | Metadados do canal (caption, filename) | Marcado com `lgpd_redacted: true` |
+
+### 15.2 Fluxo de Anonimização em Cascata
+
+```
+Titular com contact_id                 Titular SEM contact_id
+─────────────────────                  ──────────────────────
+POST /crm/contacts/:id/lgpd/anonymize  POST /admin/omnichannel/conversations/
+                                             anonymize-by-external-id
+        │                                          │
+        ▼                                          ▼
+anonymizeContactForLgpd()              anonymizeByExternalId()
+  • contacts: apaga todos os campos     • Localiza convs WHERE external_id = $input
+  • conversations: hash external_id         AND contact_id IS NULL
+  • messages: redact ALL content        • Hash irreversível: sha256(external_id)
+  • call_records: anula telefones       • messages: redact ALL content
+  • lgpd_requests: audit trail          • lgpd_requests: audit trail (subject_type='external')
+```
+
+### 15.3 Hash SHA-256 — Propriedades Garantidas
+
+- **Função:** `encode(sha256(external_id::bytea), 'hex')` — nativa PostgreSQL 11+, sem extensões.
+- **Determinístico:** mesmo `external_id` → mesmo hash (permite correlacionar múltiplas conversas do mesmo número antes de anonimizar).
+- **Irreversível:** hash de 256 bits não permite reconstruir o número original.
+- **Tamanho:** resultado sempre 64 caracteres hex — cabe na coluna `VARCHAR(255)`.
+
+### 15.4 Job de Retenção Estendido
+
+O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
+
+1. **Contatos elegíveis** — `contacts` com `lgpd_anonymized_at IS NULL`, sem conversas abertas, com inatividade ≥ `retention_days`.
+2. **Conversas órfãs** — `conversations` onde `contact_id IS NULL`, `status = 'closed'`, `external_id` ainda não hasheado, e `last_message_at ≤ NOW() - retention_days`. Agrupa por `external_id` único para gerar um único `lgpd_request` por titular.
+
+### 15.5 Tabela `lgpd_requests` — Tipos Estendidos
+
+| `subject_type` | `request_type` | Uso |
+|----------------|----------------|-----|
+| `contact` | `access`, `consent_update`, `anonymization` | Titular cadastrado como contato |
+| `user` | `access`, `consent_update`, `anonymization` | Usuário do tenant |
+| `external` | `external_anonymization` | Titular identificado só por external_id (sem contact_id) |
+
+---
+
+## 16. DÍVIDA TÉCNICA CONHECIDA
+
+- Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
+- Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
+- Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
+
+---
+
+## 17. PADRÕES DE FRONTEND — BOAS PRÁTICAS OBRIGATÓRIAS
+
+### 17.1 Tabelas com paginação server-side
+
+Toda tabela com paginação server-side (filtros e `page` enviados à API)
+**deve** implementar ordenação também no backend — nunca no frontend.
+
+**Regra:** sort no frontend afeta apenas a página atual, criando
+comportamento enganoso para o usuário (ex: ordenar por "Data" em uma
+tabela de 64 registros com 25 por página ordena só os 25 visíveis).
+
+**Implementação obrigatória:**
+- Backend: adicionar `sort_by` (enum de colunas permitidas via allowlist)
+  e `sort_order` (`asc | desc`) ao schema Zod da rota
+- Backend: usar `SORT_COLUMN_MAP` (allowlist) — nunca interpolar
+  o valor do usuário diretamente no SQL
+- Backend: `ORDER BY` com `NULLS LAST` / `NULLS FIRST` conforme direção
+- Frontend: estados `sortBy` e `sortOrder` incluídos no `queryKey`
+  do TanStack Query para disparar refetch ao mudar ordenação
+- Frontend: `placeholderData: keepPreviousData` obrigatório na query
+  para evitar flash/piscada da tabela durante o refetch
+
+**Colunas não recomendadas para sort:**
+- Expressões JSONB (ex: `metadata->>'campo'`) sem índice de suporte
+- Campos com alto percentual de valores `NULL` sem índice parcial
+
+**Referência de implementação:** `history.service.ts` + `History.tsx`
+
+---
+
+### 17.2 TanStack Query v5 — padrões obrigatórios
+
+| Situação | Padrão obrigatório |
+|---|---|
+| Lista com filtros ou sort | `placeholderData: keepPreviousData` |
+| Dados que atualizam em tempo real (status `running`) | `refetchInterval` condicional + Socket.io para updates incrementais |
+| Dados raramente alterados (planos, configurações) | `staleTime: 60_000` mínimo |
+| Query dependente de outra | `enabled: Boolean(dependência)` |
+| Mutação que invalida lista | `queryClient.invalidateQueries({ queryKey: ['chave-da-lista'] })` |
+
+**Nunca** usar `staleTime: 0` (default) em listas paginadas — causa
+refetch desnecessário a cada window focus.
+
+---
+
+### 17.3 Exportação de arquivos
+
+| Formato | Onde gerar | Biblioteca |
+|---|---|---|
+| CSV | Backend | Manual (padrão `csvField()` + separador `;` + BOM `﻿`) |
+| PDF simples (relatório) | Backend | PDFKit |
+| PDF com captura de tela | ❌ Não usar | `html2canvas` + `jspdf` descartados — qualidade inadequada para produção |
+| Excel | Backend | `xlsx` (já instalado em `apps/api`) |
+
+**Padrão CSV do projeto:**
+- Separador: `;` (ponto-e-vírgula — compatível com Excel Brasil)
+- BOM: `﻿` prefixado pela route handler
+- Escaping: `"${value.replace(/"/g, '""')}"` (RFC 4180)
+- Sem biblioteca externa — geração manual com helper local `csvField()`
+- Referência: `history.service.ts` → `exportHistoryCsv()`
+
+**Padrão PDF do projeto:**
+- Biblioteca: `pdfkit` (backend)
+- Paleta: tema claro (`#FFFFFF` fundo, `#14171C` texto, `#00A88C` primário)
+- Logo: `apps/web/public/icon-192.png` (ZiraDesk) + logo do tenant se existir
+- Rodapé: via evento `pageAdded` + chamada manual antes de `doc.end()`
+- Truncamento de texto longo: `truncate(text, maxChars)` manual —
+  `ellipsis: true` do PDFKit não é confiável
+- Referência: `campaign-pdf.service.ts`

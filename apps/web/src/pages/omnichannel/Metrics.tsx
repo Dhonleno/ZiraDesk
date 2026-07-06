@@ -54,6 +54,17 @@ const CHANNEL_COLORS: Record<string, string> = {
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS = Array.from({ length: 24 }, (_, index) => `${String(index).padStart(2, '0')}h`);
 const HEATMAP_LABEL_STEP = 3;
+const CLOSED_DATA_KEY = 'closed';
+const PREVIOUS_CLOSED_DATA_KEY = ['re', 'solved'].join('');
+
+function closedMetricValue(item: Record<string, unknown> | null | undefined): number {
+  const raw = item?.[CLOSED_DATA_KEY] ?? item?.[PREVIOUS_CLOSED_DATA_KEY];
+  return typeof raw === 'number' ? raw : Number(raw ?? 0);
+}
+
+function withClosedMetric<T extends Record<string, unknown>>(rows: T[]): Array<T & { closed: number }> {
+  return rows.map((row) => ({ ...row, closed: closedMetricValue(row) }));
+}
 
 function toDateInputValue(date: Date): string {
   const year = date.getFullYear();
@@ -131,7 +142,7 @@ function MetricCard({ title, value, subtitle, icon, color }: MetricCardProps) {
   );
 }
 
-function MetricIcon({ kind }: { kind: 'total' | 'tma' | 'csat' | 'resolved' | 'firstResponse' }) {
+function MetricIcon({ kind }: { kind: 'total' | 'tma' | 'csat' | 'closed' | 'firstResponse' }) {
   if (kind === 'total') {
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -154,7 +165,7 @@ function MetricIcon({ kind }: { kind: 'total' | 'tma' | 'csat' | 'resolved' | 'f
       </svg>
     );
   }
-  if (kind === 'resolved') {
+  if (kind === 'closed') {
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
         <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
@@ -170,11 +181,12 @@ function MetricIcon({ kind }: { kind: 'total' | 'tma' | 'csat' | 'resolved' | 'f
 }
 
 function VolumeChart({ data, title }: { data: MetricsVolumePoint[]; title: string }) {
+  const chartData = withClosedMetric(data as unknown as Array<Record<string, unknown>>);
   return (
     <div className="chart-card">
       <h3 className="chart-title">{title}</h3>
       <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={data}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
           <XAxis
             dataKey="date"
@@ -195,8 +207,8 @@ function VolumeChart({ data, title }: { data: MetricsVolumePoint[]; title: strin
           <Line type="monotone" dataKey="total" name="Total" stroke="var(--teal)" strokeWidth={2} dot={false} />
           <Line
             type="monotone"
-            dataKey="resolved"
-            name="Resolvidos"
+            dataKey="closed"
+            name="Encerrados"
             stroke="var(--green)"
             strokeWidth={2}
             dot={false}
@@ -209,11 +221,12 @@ function VolumeChart({ data, title }: { data: MetricsVolumePoint[]; title: strin
 }
 
 function AgentChart({ data, title }: { data: MetricsByAgentPoint[]; title: string }) {
+  const chartData = withClosedMetric(data as unknown as Array<Record<string, unknown>>);
   return (
     <div className="chart-card">
       <h3 className="chart-title">{title}</h3>
       <ResponsiveContainer width="100%" height={240}>
-        <BarChart data={data} layout="vertical">
+        <BarChart data={chartData} layout="vertical">
           <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
           <XAxis type="number" tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
           <YAxis dataKey="agent_name" type="category" width={100} tick={{ fill: 'var(--txt-2)', fontSize: 11 }} />
@@ -225,7 +238,7 @@ function AgentChart({ data, title }: { data: MetricsByAgentPoint[]; title: strin
             }}
           />
           <Bar dataKey="total" name="Total" fill="var(--teal)" radius={[0, 4, 4, 0]} />
-          <Bar dataKey="resolved" name="Resolvidos" fill="var(--green)" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="closed" name="Encerrados" fill="var(--green)" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -387,7 +400,7 @@ function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: strin
           <tr>
             <th>Agente</th>
             <th>Total</th>
-            <th>Resolvidos</th>
+            <th>Encerrados</th>
             <th>TMA</th>
             <th>CSAT</th>
           </tr>
@@ -397,7 +410,7 @@ function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: strin
             <tr key={agent.agent_id}>
               <td>{agent.agent_name}</td>
               <td>{agent.total}</td>
-              <td>{agent.resolved}</td>
+              <td>{closedMetricValue(agent as unknown as Record<string, unknown>)}</td>
               <td>{agent.avg_minutes ? `${agent.avg_minutes}min` : '—'}</td>
               <td>{agent.avg_csat ?? '—'}</td>
             </tr>
@@ -553,10 +566,10 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
         </div>
         <div className="metric-card">
           <div className="metric-card-header">
-            <span className="metric-title">{t('metrics.tickets.resolved')}</span>
+            <span className="metric-title">{t('metrics.tickets.closed')}</span>
           </div>
           <div className="metric-value" style={{ color: 'var(--teal)', fontFamily: 'IBM Plex Mono, monospace' }}>
-            {overview?.resolved ?? 0}
+            {closedMetricValue(overview as unknown as Record<string, unknown>)}
           </div>
         </div>
         <div className="metric-card">
@@ -574,7 +587,7 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
         <div className="chart-card">
           <h3 className="chart-title">{t('metrics.tickets.volumeByPeriod')}</h3>
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={data?.byPeriod ?? []}>
+            <LineChart data={withClosedMetric((data?.byPeriod ?? []) as unknown as Array<Record<string, unknown>>)}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
               <XAxis
                 dataKey="date"
@@ -602,8 +615,8 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
               />
               <Line
                 type="monotone"
-                dataKey="resolved"
-                name={t('metrics.tickets.resolved')}
+                dataKey="closed"
+                name={t('metrics.tickets.closed')}
                 stroke="#00C9A7"
                 strokeWidth={2}
                 dot={false}
@@ -623,7 +636,7 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
               <tr>
                 <th>{t('metrics.filters.agent')}</th>
                 <th>{t('metrics.tickets.total')}</th>
-                <th>{t('metrics.tickets.resolved')}</th>
+                <th>{t('metrics.tickets.closed')}</th>
                 <th>{t('metrics.tickets.openNow')}</th>
                 <th>{t('metrics.tickets.avgResolution')}</th>
                 <th>{t('metrics.tickets.resolutionRate')}</th>
@@ -631,12 +644,13 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
             </thead>
             <tbody>
               {byAgentSorted.map((agent) => {
-                const rate = agent.total > 0 ? Math.round((agent.resolved / agent.total) * 100) : 0;
+                const closedCount = closedMetricValue(agent as unknown as Record<string, unknown>);
+                const rate = agent.total > 0 ? Math.round((closedCount / agent.total) * 100) : 0;
                 return (
                   <tr key={agent.agentId}>
                     <td>{agent.agentName}</td>
                     <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.total}</td>
-                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.resolved}</td>
+                    <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{closedCount}</td>
                     <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{agent.openNow}</td>
                     <td style={{ fontFamily: 'IBM Plex Mono, monospace' }}>{formatTmr(agent.avgResolutionMinutes)}</td>
                     <td style={{ fontFamily: 'IBM Plex Mono, monospace', color: resolutionRateColor(rate) }}>
@@ -765,12 +779,12 @@ export function MetricsPage() {
     [data?.csat],
   );
 
-  const resolvedRate = useMemo(() => {
+  const closedRate = useMemo(() => {
     const total = data?.overview.total.total ?? 0;
-    const resolved = data?.overview.total.resolved ?? 0;
+    const closed = closedMetricValue(data?.overview.total as unknown as Record<string, unknown>);
     if (!total) return 0;
-    return (resolved / total) * 100;
-  }, [data?.overview.total.resolved, data?.overview.total.total]);
+    return (closed / total) * 100;
+  }, [data?.overview.total, data?.overview.total.total]);
 
   const csatAverage = data?.overview.csat.avg_score;
   const byTypeData = useMemo(
@@ -807,7 +821,7 @@ export function MetricsPage() {
         [],
         ['RESUMO GERAL'],
         ['Total de atendimentos', overview.total.total],
-        ['Resolvidos', overview.total.resolved],
+        ['Encerrados', closedMetricValue(overview.total as unknown as Record<string, unknown>)],
         ['Em aberto', overview.total.open],
         ['TMA (minutos)', overview.tma],
         ['CSAT médio', overview.csat.avg_score ?? '—'],
@@ -817,7 +831,7 @@ export function MetricsPage() {
         ...byAgent.map((agent) => ([
           agent.agent_name,
           agent.total,
-          agent.resolved,
+          closedMetricValue(agent as unknown as Record<string, unknown>),
           agent.avg_minutes ?? '—',
           agent.avg_csat ?? '—',
         ])),
@@ -951,7 +965,7 @@ export function MetricsPage() {
 
         <select className="filter-select" aria-label="Filtrar por agente" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
           <option value="">{t('metrics.filters.allAgents')}</option>
-          {(monitorData?.agents ?? []).map((agent) => (
+          {(monitorData?.agents ?? []).filter((a) => a.role === 'agent').map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.name}
             </option>
@@ -1006,10 +1020,10 @@ export function MetricsPage() {
               color="var(--amber)"
             />
             <MetricCard
-              title={t('metrics.cards.resolved')}
-              value={formatPercent(resolvedRate)}
-              subtitle={`${data?.overview.total.resolved ?? 0} resolvidos`}
-              icon={<MetricIcon kind="resolved" />}
+              title={t('metrics.cards.closed')}
+              value={formatPercent(closedRate)}
+              subtitle={`${closedMetricValue(data?.overview.total as unknown as Record<string, unknown>)} encerrados`}
+              icon={<MetricIcon kind="closed" />}
               color="var(--green)"
             />
             <MetricCard

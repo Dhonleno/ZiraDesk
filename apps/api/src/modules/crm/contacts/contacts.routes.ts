@@ -1,23 +1,59 @@
 import type { FastifyInstance } from 'fastify';
+import multipart from '@fastify/multipart';
+import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
-import { requirePermission } from '../../../middleware/rbac.js';
+import { hasRole, requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { ensureCrmInfrastructureMiddleware } from '../crm.infrastructure.js';
-import { createContactSchema, updateContactSchema, listContactsQuerySchema, linkOrganizationSchema } from './contacts.schema.js';
 import {
+  createContactSchema,
+  updateContactSchema,
+  listContactsQuerySchema,
+  countContactsQuerySchema,
+  linkOrganizationSchema,
+  updateContactLgpdConsentSchema,
+  exportContactLgpdQuerySchema,
+  anonymizeContactLgpdSchema,
+  contactImportConfirmSchema,
+  listLgpdRequestsQuerySchema,
+  lgpdRequestActionParamsSchema,
+  rejectLgpdRequestSchema,
+  addContactTagSchema,
+  contactTagParamsSchema,
+  bulkDeleteContactsSchema,
+} from './contacts.schema.js';
+import {
+  approveLgpdRectificationRequest,
+  maskContactListRecords,
+  maskLgpdRequestRecords,
+  rejectLgpdRectificationRequest,
+  registerContactPiiAccess,
+  registerContactPiiReveal,
   listContacts,
+  countContactsByFilter,
+  listDistinctContactTags,
+  listContactTagAssignments,
+  addContactTag,
+  removeContactTag,
+  listLgpdRequests,
   getContact,
   getContactStats,
   createContact,
   updateContact,
   deleteContact,
+  bulkDeleteContacts,
   linkToOrganization,
+  updateContactLgpdConsent,
+  exportContactLgpdData,
+  anonymizeContactForLgpd,
   createPortalAccess,
   revokePortalAccess,
   NotFoundError,
   ConflictError,
   PlanLimitError,
 } from './contacts.service.js';
+import { contactImportQueue } from '../../../jobs/queue.js';
+import { ContactImportError, createContactImportPreview, getStoredContactImport } from './contacts-import.service.js';
 
 const guard = [
   authMiddleware,
@@ -27,16 +63,329 @@ const guard = [
 const contactsViewGuard = [...guard, requirePermission('contacts:view')];
 const contactsEditGuard = [...guard, requirePermission('contacts:edit')];
 const contactsDeleteGuard = [...guard, requirePermission('contacts:delete')];
+const contactsLgpdGuard = [...guard, requirePermission('lgpd:manage')];
 const managePortalGuard = [...guard, requirePermission('contacts:edit')];
+const contactsPiiRevealGuard = [...guard, requirePermission('contacts:view'), requirePermission('pii:view-full')];
+const contactsImportGuard = [...guard, hasRole('owner', 'admin', 'agent')];
+
+const MAX_IMPORT_SIZE_BYTES = 10 * 1024 * 1024;
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
 
 export async function contactsRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    limits: {
+      fileSize: MAX_IMPORT_SIZE_BYTES,
+      files: 1,
+    },
+  });
+
   // GET /api/crm/contacts
   app.get('/', { preHandler: contactsViewGuard }, async (request, reply) => {
     const parsed = listContactsQuerySchema.safeParse(request.query);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
-    const result = await listContacts(parsed.data);
-    return reply.send({ success: true, ...result });
+    const result = await listContacts(parsed.data, request.user.schemaName);
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : maskContactListRecords(result.data),
+    });
+  });
+
+  // GET /api/crm/contacts/tags
+  app.get('/tags', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+    const tags = await listDistinctContactTags(schemaName);
+    return reply.send({ success: true, data: tags });
+  });
+
+  // GET /api/crm/contacts/count
+  app.get('/count', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const parsed = countContactsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const count = await countContactsByFilter(parsed.data, schemaName);
+    return reply.send({ count });
+  });
+
+  // GET /api/crm/contacts/:id/tags
+  app.get<{ Params: { id: string } }>('/:id/tags', { preHandler: contactsViewGuard }, async (request, reply) => {
+    const parsed = contactTagParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Parâmetros inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const data = await listContactTagAssignments(parsed.data.id, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  // POST /api/crm/contacts/:id/tags
+  app.post<{ Params: { id: string } }>('/:id/tags', { preHandler: contactsEditGuard }, async (request, reply) => {
+    const parsedParams = contactTagParamsSchema.safeParse(request.params);
+    const parsedBody = addContactTagSchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        success: false,
+        error: {
+          message: 'Dados inválidos',
+          details: {
+            params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+            body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          },
+        },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    await addContactTag(parsedParams.data.id, parsedBody.data.tag_id, schemaName);
+    return reply.code(201).send({
+      success: true,
+      data: { contact_id: parsedParams.data.id, tag_id: parsedBody.data.tag_id },
+    });
+  });
+
+  // DELETE /api/crm/contacts/:id/tags/:tagId
+  app.delete<{ Params: { id: string; tagId: string } }>(
+    '/:id/tags/:tagId',
+    { preHandler: contactsEditGuard },
+    async (request, reply) => {
+      const parsed = contactTagParamsSchema.safeParse(request.params);
+      if (!parsed.success || !parsed.data.tagId) {
+        return reply.code(400).send({
+          success: false,
+          error: { message: 'Parâmetros inválidos', details: parsed.success ? undefined : parsed.error.flatten() },
+        });
+      }
+
+      const schemaName = request.user.schemaName;
+      if (!schemaName) {
+        return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+      }
+
+      await removeContactTag(parsed.data.id, parsed.data.tagId, schemaName);
+      return reply.send({ success: true, data: { removed: true } });
+    },
+  );
+
+  // POST /api/crm/contacts/import/preview
+  app.post('/import/preview', { preHandler: contactsImportGuard }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(415).send({
+        success: false,
+        error: { message: 'Content-Type deve ser multipart/form-data' },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    const tenantId = request.user.tenantId;
+    if (!schemaName || !tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    let fileBuffer: Buffer | null = null;
+    let fileName: string | null = null;
+
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+          fileBuffer = await part.toBuffer();
+          fileName = part.filename;
+          continue;
+        }
+
+        if (part.type === 'file') {
+          await part.toBuffer();
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes('file too large')) {
+        return reply.code(413).send({ success: false, error: { message: 'Arquivo muito grande. Máximo 10MB' } });
+      }
+      throw err;
+    }
+
+    if (!fileBuffer || !fileName) {
+      return reply.code(400).send({ success: false, error: { message: 'Arquivo não enviado' } });
+    }
+
+    try {
+      const data = await createContactImportPreview({
+        buffer: fileBuffer,
+        fileName,
+        userId: request.user.id,
+        tenantId,
+        schemaName,
+      });
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof ContactImportError) {
+        return reply.code(err.statusCode).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/import/confirm
+  app.post('/import/confirm', { preHandler: contactsImportGuard }, async (request, reply) => {
+    const parsed = contactImportConfirmSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
+    }
+
+    const storedImport = await getStoredContactImport(parsed.data.importId);
+    if (!storedImport) {
+      return reply.code(404).send({ success: false, error: { message: 'Importação expirada ou não encontrada' } });
+    }
+
+    const schemaName = request.user.schemaName;
+    const tenantId = request.user.tenantId;
+    if (!schemaName || !tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    if (
+      storedImport.schemaName !== schemaName
+      || storedImport.tenantId !== tenantId
+      || storedImport.createdBy !== request.user.id
+    ) {
+      return reply.code(404).send({ success: false, error: { message: 'Importação expirada ou não encontrada' } });
+    }
+
+    const job = await contactImportQueue.add('contact-import', {
+      importId: parsed.data.importId,
+      mapping: parsed.data.mapping,
+      duplicateAction: parsed.data.duplicateAction,
+      tenantId,
+      schemaName,
+      userId: request.user.id,
+    });
+
+    return reply.send({
+      success: true,
+      data: {
+        jobId: String(job.id),
+        message: 'Importação iniciada',
+      },
+    });
+  });
+
+  // POST /api/crm/contacts/bulk-delete
+  app.post('/bulk-delete', { preHandler: contactsDeleteGuard }, async (request, reply) => {
+    const parsed = bulkDeleteContactsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const result = await bulkDeleteContacts(
+      parsed.data,
+      request.user.id,
+      request.user.schemaName,
+    );
+    return reply.send({ success: true, data: result });
+  });
+
+  // GET /api/crm/contacts/lgpd/requests
+  app.get('/lgpd/requests', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsed = listLgpdRequestsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
+    }
+
+    const result = await listLgpdRequests(parsed.data, request.user.schemaName);
+    const includeFullPii = canViewFullPii(request.user.role);
+    return reply.send({
+      success: true,
+      ...result,
+      data: includeFullPii ? result.data : maskLgpdRequestRecords(result.data),
+    });
+  });
+
+  // POST /api/crm/contacts/lgpd/requests/:id/approve
+  app.post<{ Params: { id: string } }>('/lgpd/requests/:id/approve', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsedParams = lgpdRequestActionParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Parâmetros inválidos', details: parsedParams.error.flatten() } });
+    }
+
+    try {
+      const data = await approveLgpdRectificationRequest(
+        parsedParams.data.id,
+        request.user.id,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/lgpd/requests/:id/reject
+  app.post<{ Params: { id: string } }>('/lgpd/requests/:id/reject', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsedParams = lgpdRequestActionParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Parâmetros inválidos', details: parsedParams.error.flatten() } });
+    }
+
+    const parsedBody = rejectLgpdRequestSchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsedBody.error.flatten() } });
+    }
+
+    try {
+      const data = await rejectLgpdRectificationRequest(
+        parsedParams.data.id,
+        request.user.id,
+        parsedBody.data.reason,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // POST /api/crm/contacts
@@ -45,7 +394,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await createContact(parsed.data, request.user.id, request.user.tenantId ?? undefined);
+      const contact = await createContact(parsed.data, request.user.id, request.user.tenantId ?? undefined, request.user.schemaName);
       return reply.code(201).send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof ConflictError)
@@ -59,7 +408,27 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/crm/contacts/:id
   app.get<{ Params: { id: string } }>('/:id', { preHandler: contactsViewGuard }, async (request, reply) => {
     try {
-      const contact = await getContact(request.params.id);
+      const contact = await getContact(request.params.id, request.user.schemaName);
+      await registerContactPiiAccess(contact.id, request.user.id, request.user.schemaName);
+      return reply.send({ success: true, data: contact });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/:id/pii/reveal
+  app.post<{ Params: { id: string } }>('/:id/pii/reveal', { preHandler: contactsPiiRevealGuard }, async (request, reply) => {
+    try {
+      await registerContactPiiReveal(
+        request.params.id,
+        request.user.id,
+        request.user.schemaName,
+        undefined,
+        { ip: request.ip, userAgent: request.headers['user-agent'] },
+      );
+      const contact = await getContact(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -95,7 +464,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await updateContact(request.params.id, parsed.data, request.user.id);
+      const contact = await updateContact(request.params.id, parsed.data, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -109,7 +478,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/contacts/:id
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: contactsDeleteGuard }, async (request, reply) => {
     try {
-      const contact = await deleteContact(request.params.id, request.user.id);
+      const contact = await deleteContact(request.params.id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -120,13 +489,82 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // PATCH /api/crm/contacts/:id/lgpd/consent
+  app.patch<{ Params: { id: string } }>('/:id/lgpd/consent', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsed = updateContactLgpdConsentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
+    }
+
+    try {
+      const data = await updateContactLgpdConsent(
+        request.params.id,
+        parsed.data,
+        request.user.id,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // GET /api/crm/contacts/:id/lgpd/export
+  app.get<{ Params: { id: string } }>('/:id/lgpd/export', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsed = exportContactLgpdQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Query inválida', details: parsed.error.flatten() } });
+    }
+
+    try {
+      const data = await exportContactLgpdData(
+        request.params.id,
+        request.user.id,
+        { includeMessages: parsed.data.include_messages },
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/crm/contacts/:id/lgpd/anonymize
+  app.post<{ Params: { id: string } }>('/:id/lgpd/anonymize', { preHandler: contactsLgpdGuard }, async (request, reply) => {
+    const parsed = anonymizeContactLgpdSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
+    }
+
+    try {
+      const data = await anonymizeContactForLgpd(
+        request.params.id,
+        request.user.id,
+        parsed.data,
+        request.user.schemaName,
+      );
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
   // POST /api/crm/contacts/:id/link-organization
   app.post<{ Params: { id: string } }>('/:id/link-organization', { preHandler: contactsEditGuard }, async (request, reply) => {
     const parsed = linkOrganizationSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
     try {
-      const contact = await linkToOrganization(request.params.id, parsed.data.organization_id, request.user.id);
+      const contact = await linkToOrganization(request.params.id, parsed.data.organization_id, request.user.id, request.user.schemaName);
       return reply.send({ success: true, data: contact });
     } catch (err) {
       if (err instanceof NotFoundError)
@@ -142,7 +580,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const data = await createPortalAccess(request.params.id, request.user.tenantId);
+      const data = await createPortalAccess(request.params.id, request.user.tenantId, request.user.schemaName);
 
       request.log.info({
         event: 'portal.access.created',
@@ -173,7 +611,7 @@ export async function contactsRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/crm/contacts/:id/portal-access
   app.delete<{ Params: { id: string } }>('/:id/portal-access', { preHandler: managePortalGuard }, async (request, reply) => {
     try {
-      const data = await revokePortalAccess(request.params.id);
+      const data = await revokePortalAccess(request.params.id, request.user.schemaName);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError) {

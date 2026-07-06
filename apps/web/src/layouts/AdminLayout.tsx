@@ -45,6 +45,18 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.departments',
+        path: '/admin/departments',
+        permission: 'users:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="1.5" y="5" width="5" height="9" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="9.5" y="1.5" width="5" height="12.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M6.5 9H9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.permissions',
         path: '/admin/roles',
         permission: 'users:manage',
@@ -100,6 +112,15 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.voiceConfig',
+        path: '/admin/voice-config',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M4.2 2.4h2l1 3-1.5 1.2a10.2 10.2 0 0 0 3.7 3.7l1.2-1.5 3 1v2c0 .8-.6 1.4-1.4 1.4A9.8 9.8 0 0 1 2.8 3.8c0-.8.6-1.4 1.4-1.4Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.attendanceRules',
         path: '/admin/attendance-rules',
         permission: 'settings:manage',
@@ -134,6 +155,18 @@ const NAV_GROUPS: NavGroup[] = [
             <circle cx="5.2" cy="4.3" r="1.1" stroke="currentColor" strokeWidth="1.2" />
             <circle cx="10.6" cy="8" r="1.1" stroke="currentColor" strokeWidth="1.2" />
             <circle cx="7.2" cy="11.7" r="1.1" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        ),
+      },
+      {
+        label: 'nav.queueConfig',
+        path: '/admin/queue-config',
+        permission: 'settings:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M2.5 4h11M2.5 8h7M2.5 12h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <circle cx="12" cy="11" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M12 9v.5M12 12.5V13M10.5 11h.5M13 11h.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
           </svg>
         ),
       },
@@ -233,6 +266,16 @@ const NAV_GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        label: 'nav.ticketCategories',
+        path: '/admin/ticket-categories',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M2 4.5h12M2 8h8M2 11.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            <circle cx="13" cy="11.5" r="2" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -279,6 +322,17 @@ const NAV_GROUPS: NavGroup[] = [
       </svg>
     ),
     items: [
+      {
+        label: 'nav.lgpd',
+        path: '/admin/lgpd',
+        permission: 'lgpd:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M8 1.8 3 3.8v4.2c0 3.2 2.1 5.9 5 6.8 2.9-.9 5-3.6 5-6.8V3.8L8 1.8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path d="M6.1 7.8 7.3 9l2.6-2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
       {
         label: 'nav.settings',
         path: '/admin/settings',

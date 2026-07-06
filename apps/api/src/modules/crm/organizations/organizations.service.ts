@@ -1,5 +1,14 @@
 import { prisma } from '../../../config/database.js';
-import type { CreateOrganizationInput, UpdateOrganizationInput, ListOrganizationsQuery } from './organizations.schema.js';
+import { type RawExecutor, withOptionalSchema } from '../crm.db.js';
+import type {
+  BulkDeleteOrganizationsInput,
+  CountOrganizationsQuery,
+  CreateOrganizationInput,
+  ListOrganizationsQuery,
+  UpdateOrganizationInput,
+} from './organizations.schema.js';
+import { maskDocument, maskEmail, maskPhone } from '../../../utils/pii-mask.js';
+import { buildOrganizationFilterWhere } from './organization-filter.js';
 
 export class NotFoundError extends Error {
   constructor(resource: string) {
@@ -56,6 +65,61 @@ interface OrganizationConflictRow {
   name: string;
 }
 
+interface PaginationMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+interface OrganizationSummary extends Omit<OrgRow, 'contacts_count' | 'conversations_count' | 'tickets_count'> {
+  contacts_count: number;
+  conversations_count: number;
+  tickets_count: number;
+}
+
+interface OrganizationStatsResult {
+  total_contacts: number;
+  total_conversations: number;
+  open_conversations: number;
+  total_tickets: number;
+  open_tickets: number;
+  last_contact_at: Date | null;
+}
+
+type OrganizationContactListItem = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  role: string | null;
+  is_primary: boolean;
+  created_at: Date;
+};
+
+export function maskOrganizationRecord(org: OrganizationSummary): OrganizationSummary {
+  return {
+    ...org,
+    email: maskEmail(org.email),
+    phone: maskPhone(org.phone),
+    document: maskDocument(org.document),
+  };
+}
+
+export function maskOrganizationListRecords(orgs: OrganizationSummary[]): OrganizationSummary[] {
+  return orgs.map(maskOrganizationRecord);
+}
+
+export function maskOrganizationContactRecords(contacts: OrganizationContactListItem[]): OrganizationContactListItem[] {
+  return contacts.map((contact) => ({
+    ...contact,
+    email: maskEmail(contact.email),
+    phone: maskPhone(contact.phone),
+    whatsapp: maskPhone(contact.whatsapp),
+  }));
+}
+
 function toPgArray(arr: string[]): string {
   if (!arr.length) return '{}';
   return '{' + arr.map(t => `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',') + '}';
@@ -73,10 +137,14 @@ function normalizeEmailForComparison(value: string | null | undefined): string |
   return normalized || null;
 }
 
-async function assertUniqueOrganizationDocument(document: string | null, ignoreOrganizationId?: string): Promise<void> {
+async function assertUniqueOrganizationDocument(
+  document: string | null,
+  ignoreOrganizationId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!document) return;
 
-  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<OrganizationConflictRow[]>(
     `SELECT id, name
      FROM organizations
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -92,10 +160,14 @@ async function assertUniqueOrganizationDocument(document: string | null, ignoreO
   }
 }
 
-async function assertUniqueOrganizationEmail(email: string | null, ignoreOrganizationId?: string): Promise<void> {
+async function assertUniqueOrganizationEmail(
+  email: string | null,
+  ignoreOrganizationId?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
   if (!email) return;
 
-  const rows = await prisma.$queryRawUnsafe<OrganizationConflictRow[]>(
+  const rows = await db.$queryRawUnsafe<OrganizationConflictRow[]>(
     `SELECT id, name
      FROM organizations
      WHERE ($1::uuid IS NULL OR id != $1::uuid)
@@ -134,14 +206,22 @@ const BASE_SELECT = `
   LEFT JOIN tickets t      ON t.organization_id = o.id`;
 
 /* ── listOrganizations ───────────────────────────────────────────────────── */
-export async function listOrganizations(query: ListOrganizationsQuery) {
+export async function listOrganizations(
+  query: ListOrganizationsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<{ data: OrganizationSummary[]; meta: PaginationMeta }> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => listOrganizations(query, undefined, tx));
+  }
+
   const { page, per_page, search, status, segment, responsible_id, tag, sort_by, sort_order } = query;
   const offset = (page - 1) * per_page;
 
   const sortCol = SORT_COLUMNS[sort_by] ?? 'o.created_at';
   const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `${BASE_SELECT}
      WHERE ($1::text IS NULL OR o.name ILIKE '%' || $1 || '%'
                              OR o.email ILIKE '%' || $1 || '%'
@@ -159,7 +239,7 @@ export async function listOrganizations(query: ListOrganizationsQuery) {
     per_page, offset,
   );
 
-  const countRows = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+  const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
     `SELECT COUNT(*) AS count FROM organizations o
      WHERE ($1::text IS NULL OR o.name ILIKE '%' || $1 || '%'
                              OR o.email ILIKE '%' || $1 || '%'
@@ -180,9 +260,33 @@ export async function listOrganizations(query: ListOrganizationsQuery) {
   };
 }
 
+export async function countOrganizationsByFilter(
+  filter: CountOrganizationsQuery,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<number> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => countOrganizationsByFilter(filter, undefined, tx));
+  }
+
+  const where = buildOrganizationFilterWhere({ filter });
+  const rows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*) AS count
+     FROM organizations o
+     WHERE ${where.sql}`,
+    ...where.params,
+  );
+
+  return Number(rows[0]?.count ?? 0);
+}
+
 /* ── getOrganization ─────────────────────────────────────────────────────── */
-export async function getOrganization(id: string) {
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+export async function getOrganization(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationSummary> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganization(id, undefined, tx));
+  }
+
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `${BASE_SELECT}
      WHERE o.id = $1::uuid
      GROUP BY o.id, u.name
@@ -194,15 +298,72 @@ export async function getOrganization(id: string) {
   return { ...r, contacts_count: Number(r.contacts_count), conversations_count: Number(r.conversations_count), tickets_count: Number(r.tickets_count) };
 }
 
-/* ── getOrganizationStats ────────────────────────────────────────────────── */
-export async function getOrganizationStats(id: string) {
-  await getOrganization(id);
+export async function registerOrganizationPiiAccess(
+  organizationId: string,
+  actorUserId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<void> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) =>
+      registerOrganizationPiiAccess(organizationId, actorUserId, undefined, tx));
+  }
 
-  const [stats] = await prisma.$queryRawUnsafe<OrgStatsRow[]>(
+  await getOrganization(organizationId, undefined, db);
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'organization.pii.accessed', 'organization', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    organizationId,
+    JSON.stringify({
+      user_id: actorUserId,
+      organization_id: organizationId,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+export async function registerOrganizationPiiReveal(
+  organizationId: string,
+  actorUserId: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+  meta?: { ip?: string | undefined; userAgent?: string | undefined },
+): Promise<void> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) =>
+      registerOrganizationPiiReveal(organizationId, actorUserId, undefined, tx, meta));
+  }
+
+  await getOrganization(organizationId, undefined, db);
+  await db.$executeRawUnsafe(
+    `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'organization.pii.revealed', 'organization', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    organizationId,
+    JSON.stringify({
+      user_id: actorUserId,
+      organization_id: organizationId,
+      ip: meta?.ip ?? null,
+      user_agent: meta?.userAgent ?? null,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+}
+
+/* ── getOrganizationStats ────────────────────────────────────────────────── */
+export async function getOrganizationStats(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationStatsResult> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationStats(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+
+  const [stats] = await db.$queryRawUnsafe<OrgStatsRow[]>(
     `SELECT
        COUNT(DISTINCT c.id)                                                   AS total_contacts,
        COUNT(DISTINCT conv.id)                                                AS total_conversations,
-       COUNT(DISTINCT conv.id) FILTER (WHERE conv.status IN ('open','pending','in_service')) AS open_conversations,
+       COUNT(DISTINCT conv.id) FILTER (WHERE conv.status = 'open') AS open_conversations,
        COUNT(DISTINCT t.id)                                                   AS total_tickets,
        COUNT(DISTINCT t.id)    FILTER (WHERE t.status NOT IN ('resolved','closed')) AS open_tickets,
        MAX(m.created_at)                                                      AS last_contact_at
@@ -226,9 +387,13 @@ export async function getOrganizationStats(id: string) {
 }
 
 /* ── getOrganizationContacts ─────────────────────────────────────────────── */
-export async function getOrganizationContacts(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{ id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; role: string | null; is_primary: boolean; created_at: Date }>>(
+export async function getOrganizationContacts(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<OrganizationContactListItem[]> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationContacts(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<OrganizationContactListItem[]>(
     `SELECT id, name, email, phone, whatsapp, role, is_primary, created_at
      FROM contacts WHERE organization_id = $1::uuid ORDER BY is_primary DESC, name ASC`,
     id,
@@ -236,9 +401,23 @@ export async function getOrganizationContacts(id: string) {
 }
 
 /* ── getOrganizationConversations ────────────────────────────────────────── */
-export async function getOrganizationConversations(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{
+export async function getOrganizationConversations(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{
+  id: string;
+  status: string;
+  channel_type: string | null;
+  protocol: string | null;
+  subject: string | null;
+  bot_department: string | null;
+  last_message: string | null;
+  last_message_at: Date | null;
+  created_at: Date;
+}>> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationConversations(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<Array<{
     id: string;
     status: string;
     channel_type: string | null;
@@ -268,9 +447,13 @@ export async function getOrganizationConversations(id: string) {
 }
 
 /* ── getOrganizationTickets ──────────────────────────────────────────────── */
-export async function getOrganizationTickets(id: string) {
-  await getOrganization(id);
-  return prisma.$queryRawUnsafe<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>>(
+export async function getOrganizationTickets(id: string, schemaName?: string, db: RawExecutor = prisma): Promise<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => getOrganizationTickets(id, undefined, tx));
+  }
+
+  await getOrganization(id, undefined, db);
+  return db.$queryRawUnsafe<Array<{ id: string; title: string; status: string; priority: string; created_at: Date }>>(
     `SELECT id, title, status, priority, created_at
      FROM tickets WHERE organization_id = $1::uuid ORDER BY created_at DESC LIMIT 20`,
     id,
@@ -278,16 +461,25 @@ export async function getOrganizationTickets(id: string) {
 }
 
 /* ── createOrganization ──────────────────────────────────────────────────── */
-export async function createOrganization(data: CreateOrganizationInput, createdBy: string) {
+export async function createOrganization(
+  data: CreateOrganizationInput,
+  createdBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<OrgRow> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => createOrganization(data, createdBy, undefined, tx));
+  }
+
   const normalizedEmail = normalizeEmailForComparison(data.email ?? null);
   const normalizedDocument = normalizeDocumentForComparison(data.document ?? null);
-  await assertUniqueOrganizationEmail(normalizedEmail);
-  await assertUniqueOrganizationDocument(normalizedDocument);
+  await assertUniqueOrganizationEmail(normalizedEmail, undefined, db);
+  await assertUniqueOrganizationDocument(normalizedDocument, undefined, db);
 
   const tagsLiteral    = toPgArray(data.tags ?? []);
   const customFieldsJson = JSON.stringify(data.custom_fields ?? {});
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `INSERT INTO organizations (
        type, name, document, email, phone, website, status,
        address_street, address_city, address_state, address_zip,
@@ -303,7 +495,7 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
 
   const org = rows[0]!;
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
      VALUES ($1::uuid, 'organization.created', 'organization', $2::uuid, $3::jsonb)`,
     createdBy, org.id, JSON.stringify(org),
@@ -313,16 +505,26 @@ export async function createOrganization(data: CreateOrganizationInput, createdB
 }
 
 /* ── updateOrganization ──────────────────────────────────────────────────── */
-export async function updateOrganization(id: string, data: UpdateOrganizationInput, updatedBy: string) {
-  const existing = await getOrganization(id);
+export async function updateOrganization(
+  id: string,
+  data: UpdateOrganizationInput,
+  updatedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<OrgRow> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => updateOrganization(id, data, updatedBy, undefined, tx));
+  }
+
+  const existing = await getOrganization(id, undefined, db);
   const normalizedEmail = data.email === undefined ? undefined : normalizeEmailForComparison(data.email);
   const normalizedDocument = data.document === undefined ? undefined : normalizeDocumentForComparison(data.document);
 
   if (normalizedEmail !== undefined) {
-    await assertUniqueOrganizationEmail(normalizedEmail, id);
+    await assertUniqueOrganizationEmail(normalizedEmail, id, db);
   }
   if (normalizedDocument !== undefined) {
-    await assertUniqueOrganizationDocument(normalizedDocument, id);
+    await assertUniqueOrganizationDocument(normalizedDocument, id, db);
   }
 
   const tagsLiteral = data.tags === undefined ? undefined : toPgArray(data.tags ?? []);
@@ -346,7 +548,7 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
   const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
   const hasNotes = Object.prototype.hasOwnProperty.call(data, 'notes');
 
-  const rows = await prisma.$queryRawUnsafe<OrgRow[]>(
+  const rows = await db.$queryRawUnsafe<OrgRow[]>(
     `UPDATE organizations SET
        type            = CASE WHEN $1::boolean THEN $2 ELSE type END,
        name            = CASE WHEN $3::boolean THEN $4 ELSE name END,
@@ -391,7 +593,7 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
   if (!rows[0]) throw new NotFoundError('Organização');
   const updated = rows[0];
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
      VALUES ($1::uuid, 'organization.updated', 'organization', $2::uuid, $3::jsonb, $4::jsonb)`,
     updatedBy, id, JSON.stringify(existing), JSON.stringify(updated),
@@ -401,18 +603,116 @@ export async function updateOrganization(id: string, data: UpdateOrganizationInp
 }
 
 /* ── deleteOrganization ──────────────────────────────────────────────────── */
-export async function deleteOrganization(id: string, deletedBy: string) {
-  const existing = await getOrganization(id);
+export async function deleteOrganization(
+  id: string,
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<OrganizationSummary> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => deleteOrganization(id, deletedBy, undefined, tx));
+  }
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE organizations SET status = 'inactive', updated_at = NOW() WHERE id = $1::uuid`, id,
+  const existing = await getOrganization(id, undefined, db);
+
+  await db.$executeRawUnsafe(
+    `UPDATE contacts SET organization_id = NULL, updated_at = NOW() WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `UPDATE conversations SET organization_id = NULL WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `UPDATE tickets SET organization_id = NULL WHERE organization_id = $1::uuid`,
+    id,
+  );
+  await db.$executeRawUnsafe(
+    `DELETE FROM organizations WHERE id = $1::uuid`,
+    id,
   );
 
-  await prisma.$executeRawUnsafe(
+  await db.$executeRawUnsafe(
     `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data)
      VALUES ($1::uuid, 'organization.deleted', 'organization', $2::uuid, $3::jsonb)`,
     deletedBy, id, JSON.stringify(existing),
   );
 
-  return { ...existing, status: 'inactive' };
+  return existing;
+}
+
+export interface BulkDeleteOrganizationsResult {
+  requested: number;
+  deleted: string[];
+  blocked: Array<{ id: string; reason: string }>;
+  not_found: string[];
+}
+
+export async function bulkDeleteOrganizations(
+  data: BulkDeleteOrganizationsInput,
+  deletedBy: string,
+  schemaName?: string,
+  db: RawExecutor = prisma,
+): Promise<BulkDeleteOrganizationsResult> {
+  if (schemaName) {
+    return withOptionalSchema(schemaName, (tx) => bulkDeleteOrganizations(data, deletedBy, undefined, tx));
+  }
+
+  let uniqueIds: string[];
+  if (data.ids) {
+    uniqueIds = [...new Set(data.ids)];
+  } else {
+    const where = buildOrganizationFilterWhere({
+      filter: data.filter ?? {},
+      excludeIds: data.exclude_ids,
+    });
+    const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT o.id::text
+       FROM organizations o
+       WHERE ${where.sql}
+       ORDER BY o.id`,
+      ...where.params,
+    );
+    uniqueIds = rows.map((row) => row.id);
+  }
+
+  const result: BulkDeleteOrganizationsResult = {
+    requested: uniqueIds.length,
+    deleted: [],
+    blocked: [],
+    not_found: [],
+  };
+
+  for (const id of uniqueIds) {
+    try {
+      await deleteOrganization(id, deletedBy, undefined, db);
+      result.deleted.push(id);
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        result.blocked.push({ id, reason: error.message });
+        continue;
+      }
+      if (error instanceof NotFoundError) {
+        result.not_found.push(id);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (data.filter) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, new_data)
+       VALUES ($1::uuid, 'bulk_delete_by_filter', 'organizations', $2::jsonb)`,
+      deletedBy,
+      JSON.stringify({
+        filter: data.filter,
+        exclude_ids: data.exclude_ids ?? [],
+        affected_count: result.deleted.length,
+        blocked_count: result.blocked.length,
+      }),
+    );
+  }
+
+  return result;
 }

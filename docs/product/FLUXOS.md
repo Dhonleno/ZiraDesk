@@ -7,10 +7,10 @@ Super Admin acessa /super-admin/tenants
 -> Sistema cria schema isolado no PostgreSQL
 -> Sistema cria usuario owner com senha temporaria
 -> Sistema envia e-mail de boas-vindas ao owner
--> Tenant ativo e acessivel em slug.ziradesk.com.br
+-> Tenant ativo e acessivel em slug.ziradesk.com
 
 ## Fluxo 2 — Login de usuario
-Usuario acessa empresa.ziradesk.com.br
+Usuario acessa empresa.ziradesk.com
 -> Middleware identifica tenant pelo subdominio
 -> Usuario insere e-mail e senha
 -> API valida credenciais no schema do tenant
@@ -24,17 +24,29 @@ Cliente envia mensagem no WhatsApp
 -> Sistema identifica o tenant pelo numero/token
 -> Busca ou cria conversa para o cliente
 -> Salva mensagem no banco
+-> Se a conversa ainda estiver no bot, permanece aberta sem agente e fora de "Meus atendimentos"
+-> Ao finalizar o menu do bot, conversa entra na fila com assigned_to vazio e queue_entered_at preenchido
 -> Emite evento Socket.io para agentes do tenant
--> Mensagem aparece em tempo real no chat do agente
+-> Atendimento aparece em tempo real na Fila de atendimentos
 
 ## Fluxo 4 — Atendimento de conversa
-Agente recebe nova conversa no omnichannel
--> Clica na conversa para abrir
--> Sistema marca conversa como "em atendimento"
+Agente visualiza a Fila de atendimentos
+-> Sistema mostra conversas abertas sem agente, ordenadas pela espera
+-> Agente clica em "Assumir"
+-> Sistema atribui a conversa ao agente e remove da fila
+-> Conversa passa a aparecer na aba "Aberto" como atendimento humano
 -> Agente le historico e contexto do cliente
 -> Agente digita e envia resposta
 -> Mensagem e enviada via API do canal (WhatsApp, etc.)
 -> Status da mensagem atualiza: enviado -> entregue -> lido
+
+## Fluxo 4B — Encerramento de atendimento
+Agente clica em "Encerrar" no atendimento aberto
+-> Sistema abre modal com motivos e desfechos cadastrados em Configuracoes > Encerramento
+-> Agente seleciona motivo, desfecho e opcionalmente informa observacoes
+-> API recebe POST /api/omnichannel/conversations/:id/close
+-> Sistema grava status closed, closure_reason, close_type_id, close_outcome_id e resolved_at
+-> Conversa passa a aparecer na aba "Encerrados"
 
 ## Fluxo 5 — Criacao de ticket
 Agente identifica demanda que precisa de acompanhamento

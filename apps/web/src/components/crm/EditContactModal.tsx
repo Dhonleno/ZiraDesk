@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { PhoneInput } from '../ui/PhoneInput';
-import type { CrmContact } from '../../services/api';
+import { ContactTagSelector } from './ContactTagSelector';
+import type { ContactTag, CrmContact } from '../../services/api';
 import { contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { isValidOptionalPhone } from '../../lib/phone';
@@ -21,7 +22,7 @@ const buildSchema = (invalidPhoneMessage: string) => z.object({
   role:       z.string().optional(),
   department: z.string().optional(),
   is_primary: z.boolean(),
-  tags:       z.array(z.string()),
+  tag_ids:    z.array(z.string().uuid()),
   notes:      z.string().optional(),
 });
 
@@ -37,19 +38,39 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
   const { t } = useTranslation(['crm', 'common']);
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [tagInput, setTagInput] = useState('');
+  const initializedTagsForContact = useRef<string | null>(null);
   const schema = useMemo(() => buildSchema(t('phone.invalid', { ns: 'common' })), [t]);
 
-  const { register, handleSubmit, watch, setValue, getValues, reset, setError, clearErrors, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, reset, setError, clearErrors, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { is_primary: false, tags: [] },
+    defaultValues: { is_primary: false, tag_ids: [] },
   });
 
-  const tags = watch('tags');
+  const tagIds = watch('tag_ids');
   const phoneValue = watch('phone') ?? '';
+  const contactTagsQuery = useQuery({
+    queryKey: ['contact-tags'],
+    queryFn: contactsApi.listTags,
+    enabled: Boolean(contact),
+  });
+  const assignedTagsQuery = useQuery({
+    queryKey: ['contact-tags-assigned', contact?.id],
+    queryFn: () => contactsApi.getTags(contact!.id),
+    enabled: Boolean(contact?.id),
+  });
+  const selectableTags = useMemo(() => {
+    const tagsById = new Map<string, ContactTag>();
+    for (const tag of contactTagsQuery.data ?? []) tagsById.set(tag.id, tag);
+    for (const tag of assignedTagsQuery.data ?? []) tagsById.set(tag.id, tag);
+    return [...tagsById.values()];
+  }, [assignedTagsQuery.data, contactTagsQuery.data]);
 
   useEffect(() => {
-    if (!contact) return;
+    if (!contact) {
+      initializedTagsForContact.current = null;
+      return;
+    }
+    initializedTagsForContact.current = null;
     reset({
       name:       contact.name,
       phone:      contact.phone ?? contact.whatsapp ?? '',
@@ -58,10 +79,18 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
       role:       contact.role ?? '',
       department: contact.department ?? '',
       is_primary: contact.is_primary,
-      tags:       contact.tags ?? [],
+      tag_ids:    [],
       notes:      contact.notes ?? '',
     });
   }, [contact, reset]);
+
+  useEffect(() => {
+    if (!contact || assignedTagsQuery.data === undefined) return;
+    if (initializedTagsForContact.current === contact.id) return;
+
+    setValue('tag_ids', assignedTagsQuery.data.map((tag) => tag.id));
+    initializedTagsForContact.current = contact.id;
+  }, [assignedTagsQuery.data, contact, setValue]);
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => contactsApi.update(contact!.id, {
@@ -72,13 +101,14 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
       role:       values.role || null,
       department: values.department || null,
       is_primary: values.is_primary,
-      tags:       values.tags,
+      tag_ids:    values.tag_ids,
       notes:      values.notes || null,
     }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
       if (contact?.id) {
         void queryClient.invalidateQueries({ queryKey: ['crm-contact', contact.id] });
+        void queryClient.invalidateQueries({ queryKey: ['contact-tags-assigned', contact.id] });
       }
       if (contact?.organization_id) {
         void queryClient.invalidateQueries({ queryKey: ['org-contacts', contact.organization_id] });
@@ -91,19 +121,6 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
       toast.error('Erro ao atualizar contato');
     },
   });
-
-  function addTag(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const val = tagInput.trim();
-    if (!val || tags.includes(val)) return;
-    setValue('tags', [...tags, val]);
-    setTagInput('');
-  }
-
-  function removeTag(tag: string) {
-    setValue('tags', getValues('tags').filter((t) => t !== tag));
-  }
 
   return (
     <Modal open={!!contact} onClose={onClose} title={t('contacts.modal.editTitle')} maxWidth="md">
@@ -139,30 +156,14 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
             <Input label={t('contacts.fields.department')} {...register('department')} />
           </div>
 
-          {/* Tags */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>{t('contacts.fields.tags')}</label>
-            {tags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
-                {tags.map((tag) => (
-                  <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 'var(--r-pill)', background: 'var(--teal-dim)', color: 'var(--teal)', border: '1px solid rgba(0,201,167,.25)', fontSize: 12 }}>
-                    {tag}
-                    <button type="button" onClick={() => removeTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', display: 'flex', alignItems: 'center', padding: 0 }} aria-label={`Remover ${tag}`}>
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M7.5 2.5l-5 5M2.5 2.5l5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <input
-              type="text"
-              placeholder={t('contacts.fields.tagsHint')}
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={addTag}
-              style={{ height: '2.5rem', width: '100%', borderRadius: '0.5rem', padding: '0 0.75rem', fontSize: '0.875rem', background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--txt)', outline: 'none', fontFamily: 'var(--font)' }}
-            />
-          </div>
+          <ContactTagSelector
+            tags={selectableTags}
+            selectedTagIds={tagIds}
+            loading={contactTagsQuery.isLoading || assignedTagsQuery.isLoading}
+            error={contactTagsQuery.isError || assignedTagsQuery.isError}
+            disabled={mutation.isPending}
+            onChange={(nextTagIds) => setValue('tag_ids', nextTagIds, { shouldDirty: true })}
+          />
 
           {contact?.organization_id && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

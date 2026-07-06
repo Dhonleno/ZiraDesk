@@ -4,6 +4,7 @@
       "all": "Todos",
       "save": "Guardar",
       "cancel": "Cancelar",
+      "confirm": "Confirmar",
       "back": "Volver",
       "edit": "Editar",
       "remove": "Eliminar",
@@ -18,7 +19,60 @@
       "noResults": "Sin resultados",
       "errorSave": "Error al guardar",
       "errorLoad": "Error al cargar datos",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "timeAgo": {
+        "justNow": "ahora",
+        "minutesAgo": "hace {{count}} min",
+        "hoursAgo": "hace {{count}}h",
+        "daysAgo": "hace {{count}} días"
+      }
+    },
+    "queueConfig": {
+      "title": "Notificaciones de Cola",
+      "subtitle": "Configure los mensajes enviados automáticamente durante la atención en cola",
+      "enabled": "Notificaciones de cola activas",
+      "enabledHint": "Cuando está activado, el cliente recibe un mensaje con su posición al entrar en la cola",
+      "positionMessage": "Mensaje de posición en cola",
+      "positionMessageHint": "Use {{position}} para mostrar la posición del cliente en la cola",
+      "throttle": "Intervalo mínimo entre notificaciones (segundos)",
+      "throttleHint": "Evita notificaciones repetidas en un corto intervalo de tiempo",
+      "agentAssumeMessage": "Mensaje al asumir la atención",
+      "agentAssumeMessageHint": "Use {{agent_name}} para mostrar el nombre del agente. Enviado cuando un agente toma la conversación",
+      "expire24hAction": "Acción al expirar ventana de 24h",
+      "expire24hClose": "Cerrar conversación",
+      "expire24hKeepOpen": "Mantener abierta",
+      "expire24hMessage": "Mensaje de cierre por inactividad",
+      "defaultPositionMessage": "Usted es el número {{position}} en la cola. Por favor espere, un agente lo atenderá pronto.",
+      "defaultAgentAssumeMessage": "¡Hola! Mi nombre es {{agent_name}}, continuaré su atención. ¿En qué puedo ayudarle?",
+      "defaultExpireMessage": "Hola, lamentablemente no pudimos atender en este momento. Por favor, contáctenos nuevamente cuando pueda.",
+      "positionPlaceholder": "Use {{position}} para mostrar la posición",
+      "agentNamePlaceholder": "Use {{agent_name}} para mostrar el nombre del agente",
+      "expireActions": {
+        "close": "Cerrar conversación",
+        "notify": "Enviar mensaje y cerrar"
+      },
+      "saved": "Configuración guardada con éxito",
+      "messages": {
+        "saved": "Configuración guardada con éxito"
+      }
+    },
+    "lgpd": {
+      "messages": {
+        "consentUpdated": "Consentimiento actualizado con éxito",
+        "exportDone": "Exportación completada",
+        "anonymized": "Datos anonimizados con éxito",
+        "retentionSaved": "Configuración de retención guardada"
+      },
+      "users": {
+        "empty": "No se encontraron usuarios",
+        "anonymizedBadge": "Anonimizado"
+      },
+      "userRequests": {
+        "empty": "No se encontraron solicitudes"
+      },
+      "system": "Sistema"
     },
     "nav": {
       "conversations": "Conversaciones",
@@ -26,6 +80,7 @@
       "users": "Usuarios",
       "channels": "Canales",
       "businessHours": "Horario de atención",
+      "voiceConfig": "Configuración de Voz",
       "bot": "Bot de atención",
       "autoAssign": "Distribución Automática",
       "skills": "Habilidades",
@@ -33,6 +88,7 @@
       "quickReplies": "Respuestas Rápidas",
       "templates": "Templates",
       "ticketTypes": "Tipos de Ticket",
+      "ticketCategories": "Categorías de Ticket",
       "conversationTags": "Etiquetas",
       "closeConfig": "Cierre de Atención",
       "aiAgent": "Agente de IA",
@@ -49,6 +105,7 @@
       "roundRobin": "Round-robin",
       "agents": "Agentes disponibles",
       "reset": "Reiniciar cola round-robin",
+      "resetTitle": "Restablecer configuración",
       "resetConfirm": "Esto reiniciará los contadores. ¿Confirmar?",
       "activeConversations": "{{count}} conversación(es) activa(s)",
       "lastAssigned": "Último: {{time}}",
@@ -189,7 +246,54 @@
         "closesAt": "Cierra a las {{time}}"
       },
       "save": "Guardar configuración",
-      "saved": "Horario de atención guardado"
+      "saved": "Horarios guardados con éxito",
+      "saveError": "Error al guardar horarios",
+      "shift": {
+        "morning": "Mañana",
+        "afternoon": "Tarde",
+        "fullDay": "Día completo",
+        "add": "Agregar turno",
+        "remove": "Eliminar"
+      },
+      "holiday": {
+        "noHolidays": "Sin feriados registrados",
+        "date": "Fecha",
+        "name": "Nombre",
+        "actions": "Acciones",
+        "closed": "Cerrado",
+        "special": "Horario especial",
+        "specialHours": "Horario especial: {{open}} a {{close}}",
+        "national": "Nacional ({{country}})",
+        "custom": "Personalizado",
+        "required": "Ingrese la fecha y el nombre del feriado.",
+        "specialHoursRequired": "Ingrese el horario de apertura y cierre para el horario especial.",
+        "importNational": "Importar feriados nacionales ({{country}})",
+        "imported": "Feriados importados: {{count}}"
+      },
+      "defaultAbsence": "¡Hola! Actualmente estamos fuera del horario de atención. Volveremos pronto.",
+      "always247": "Atención 24 horas, 7 días a la semana",
+      "holidays": "Feriados",
+      "addHoliday": "Agregar feriado",
+      "holidayDate": "Fecha del feriado",
+      "holidayName": "Nombre del feriado"
+    },
+    "voiceConfig": {
+      "title": "Configuración de Voz",
+      "subtitle": "Configura el número de teléfono para recibir llamadas",
+      "sectionTitle": "Recepción de llamadas",
+      "twilioPhoneNumber": "Número de Twilio",
+      "twilioPhoneNumberHint": "Formato internacional, ej: +5562999999999",
+      "defaultBotMenu": "Menú del bot para IVR",
+      "noBotMenu": "Ningún menú seleccionado",
+      "ivrEnabled": "Habilitar menú de voz (IVR)",
+      "ringTimeout": "Tiempo de timbre por agente (segundos)",
+      "saved": "Configuración guardada con éxito",
+      "errors": {
+        "duplicatePhone": "Este número ya está en uso por otro tenant",
+        "invalidPhone": "Ingresa un número válido en formato E.164",
+        "timeoutRange": "Ingresa un valor entre 5 y 60 segundos",
+        "save": "Error al guardar la configuración de voz"
+      }
     },
     "bot": {
       "title": "Bot de Atención",
@@ -223,11 +327,81 @@
         "tagHint": "Usado para filtrar conversaciones por departamento",
         "response": "Respuesta al seleccionar"
       },
+      "departmentLabel": "Departamento",
+      "noDepartment": "Sin departamento",
       "messages": {
         "saved": "Bot configurado con éxito",
         "optionAdded": "Opción agregada",
         "optionUpdated": "Opción actualizada",
         "optionDeleted": "Opción eliminada"
+      }
+    },
+    "botMenu": {
+      "emptyOptions": "Agregue opciones para iniciar el flujo del bot."
+    },
+    "skills": {
+      "title": "Habilidades",
+      "subtitle": "Define qué opciones del bot puede atender cada agente",
+      "noBotOptions": "No hay opciones de bot registradas",
+      "noBotOptionsHint": "Configure el bot primero para definir las habilidades",
+      "goToBot": "Configurar Bot",
+      "agentNoSkills": "Sin habilidades definidas",
+      "assign": "Asignar habilidades",
+      "assignTitle": "Habilidades — {{name}}",
+      "assignHint": "Seleccione qué opciones del bot puede atender este agente",
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermedio",
+        "senior": "Sénior"
+      },
+      "agentsCount": "{{count}} agente(s)",
+      "saved": "Skill guardada con éxito",
+      "deleted": "Skill eliminada con éxito",
+      "agents": "Agentes",
+      "searchAgent": "Buscar agente...",
+      "noAgentsFound": "Ningún agente encontrado",
+      "noAgents": "Ningún agente activo",
+      "close": "Cerrar",
+      "save": "Guardar",
+      "saving": "Guardando..."
+    },
+    "departments": {
+      "title": "Departamentos",
+      "subtitle": "Organice su equipo en departamentos y asigne agentes a cada uno",
+      "new": "Nuevo departamento",
+      "newTitle": "Nuevo departamento",
+      "editTitle": "Editar departamento",
+      "empty": "Sin departamentos registrados",
+      "emptyAgents": "Sin agentes en este departamento",
+      "noSelection": "Seleccione un departamento para ver los agentes",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "agentCount": "{{count}} agente(s)",
+      "agents": "Agentes",
+      "addAgent": "Agregar agente",
+      "addAgentTitle": "Agregar agente al departamento",
+      "addAgentConfirm": "Agregar {{count}} agente(s)",
+      "removeAgent": "Quitar",
+      "searchAgent": "Buscar agente...",
+      "noUsersFound": "No se encontraron usuarios",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "deleting": "Eliminando...",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "created": "Departamento creado con éxito",
+      "updated": "Departamento actualizado con éxito",
+      "deleted": "Departamento eliminado con éxito",
+      "agentAdded": "Agente(s) agregado(s) con éxito",
+      "agentRemoved": "Agente removido del departamento",
+      "confirmDelete": "Eliminar departamento",
+      "confirmDeleteBody": "Esta acción no se puede deshacer. El departamento se eliminará permanentemente.",
+      "hasAgentsWarning": "Elimine los agentes antes de borrar el departamento",
+      "fields": {
+        "name": "Nombre",
+        "description": "Descripción",
+        "isActive": "Departamento activo"
       }
     },
     "users": {
@@ -269,6 +443,12 @@
         "createdAt": "Miembro desde",
         "actions": "Acciones"
       },
+      "pagination": {
+        "of": "de",
+        "page": "Página",
+        "previous": "Anterior",
+        "next": "Siguiente"
+      },
       "messages": {
         "invited": "Usuario invitado con éxito",
         "inviteSuccess": "Invitación enviada con éxito",
@@ -276,14 +456,13 @@
         "updated": "Usuario actualizado",
         "deactivated": "Usuario desactivado",
         "cantDeleteSelf": "No puedes eliminarte a ti mismo",
-        "tempPassword": "Contraseña temporal",
         "reactivated": "Usuario reactivado con éxito",
         "tempPasswordTitle": "Usuario creado - contraseña temporal",
         "tempPasswordDesc": "No se pudo enviar el correo de invitación a {{name}}. Comparte la contraseña abajo manualmente.",
         "emailNotConfiguredWarning": "Configura RESEND_API_KEY en el servidor para enviar invitaciones por correo automáticamente.",
         "passwordReset": "Contraseña de {{name}} restablecida",
-        "tempPasswordHint": "El usuario deberá cambiar la contraseña en el primer acceso.",
-        "resetPasswordConfirm": "¿Restablecer la contraseña de {{name}} ({{email}})? Se generará una nueva contraseña temporal.",
+        "resetLinkSent": "Enlace de restablecimiento enviado a {{email}}",
+        "resetPasswordConfirm": "Se enviará un enlace de restablecimiento al correo de {{name}} ({{email}}).",
         "inviteEmailNotConfigured": "Invitación creada, pero el envío de correo no está configurado. Define RESEND_API_KEY en el entorno de la API.",
         "inviteEmailDomainNotVerified": "Invitación creada, pero el remitente no es válido. Revisa RESEND_FROM_EMAIL y el dominio verificado en Resend.",
         "inviteEmailDeliveryFailed": "No fue posible enviar la invitación por correo ahora. Revisa la configuración del proveedor e inténtalo de nuevo."
@@ -319,6 +498,14 @@
       "clickToAdd": "Clic para agregar",
       "testSuccess": "Canal conectado",
       "testFail": "Error de conexión",
+      "deactivated": "Canal desactivado",
+      "activated": "Canal activado",
+      "columnChannel": "Canal",
+      "configure": "Configurar",
+      "deactivate": "Desactivar",
+      "activate": "Activar",
+      "smtpLabel": "SMTP - Correo corporativo",
+      "edit": "Editar",
       "types": {
         "whatsapp": "WhatsApp",
         "instagram": "Instagram DM",
@@ -355,6 +542,7 @@
       "content": "Contenido",
       "contentPlaceholder": "Texto que se insertará en el chat...",
       "category": "Categoría",
+      "availableVariables": "Variables disponibles:",
       "categories": {
         "greeting": "Saludo",
         "service": "Atención",
@@ -383,10 +571,14 @@
       "new": "Nuevo template",
       "newTitle": "Nuevo template",
       "editTitle": "Editar template",
+      "rename": "Renombrar",
+      "metaManagedHint": "Esta plantilla fue aprobada por Meta. Solo se puede cambiar el nombre para mostrar.",
       "sync": "Sincronizar con Meta",
+      "syncNever": "Nunca sincronizado",
       "syncSuccess": "{{count}} template(s) sincronizado(s) con éxito",
       "syncError": "Error al sincronizar con Meta",
       "savedSuccess": "Template guardado con éxito",
+      "submittedSuccess": "Template enviado a Meta para revisión",
       "deletedSuccess": "Template eliminado con éxito",
       "deleteTitle": "Eliminar template",
       "deleteConfirm": "¿Seguro que deseas eliminar este template?",
@@ -405,20 +597,165 @@
         "AUTHENTICATION": "Autenticación"
       },
       "statusLabel": "Estado",
+      "pendingReview": "Se enviará para revisión",
+      "statusManagedHint": "Definido y actualizado por Meta",
       "status": {
         "approved": "Aprobado",
         "pending": "Pendiente",
-        "rejected": "Rechazado"
+        "rejected": "Rechazado",
+        "paused": "Pausado",
+        "disabled": "Desactivado",
+        "in_appeal": "En apelación",
+        "pending_deletion": "Eliminación pendiente"
       },
       "body": "Cuerpo del mensaje",
       "bodyRequired": "Informa el cuerpo del mensaje",
+      "bodyTooLong": "El cuerpo debe tener como máximo 1.024 caracteres",
+      "bodyVariablesHint": "Usa variables secuenciales: {{1}}, {{2}}, {{3}}",
+      "variablesFormat": "Usa variables secuenciales: {{1}}, {{2}}, {{3}}",
       "header": "Encabezado (opcional)",
+      "headerRequired": "Informa el texto del encabezado",
+      "headerTooLong": "El encabezado debe tener como máximo 60 caracteres",
+      "headerVariablesUnsupported": "El encabezado no puede contener variables en este formulario",
+      "headerType": {
+        "label": "Tipo de encabezado",
+        "none": "Ninguno",
+        "text": "Texto",
+        "image": "Imagen",
+        "video": "Video",
+        "document": "Documento"
+      },
+      "upload": {
+        "button": "Seleccionar archivo",
+        "loading": "Enviando a Meta...",
+        "error": "Error al subir. Verifica el archivo e intenta de nuevo.",
+        "remove": "Eliminar archivo",
+        "limitImage": "Máximo 5MB. Formatos aceptados: JPEG, PNG",
+        "limitVideo": "Máximo 16MB. Formato aceptado: MP4",
+        "limitDocument": "Máximo 100MB. Formato aceptado: PDF",
+        "success": "Archivo enviado a Meta",
+        "required": "Selecciona y envía el archivo del encabezado",
+        "invalidFormat": "El formato no está permitido para este encabezado",
+        "tooLarge": "El archivo supera el límite permitido",
+        "channelRequired": "Selecciona el canal antes de enviar el archivo",
+        "retry": "Intentar de nuevo"
+      },
       "footer": "Pie de página (opcional)",
+      "footerTooLong": "El pie debe tener como máximo 60 caracteres",
+      "footerVariablesUnsupported": "El pie no puede contener variables",
       "variables": "Variables",
       "variableExample": "Ejemplo de la variable {{index}}",
+      "variableExampleRequired": "Informa un ejemplo para esta variable",
+      "submitForReview": "Enviar para revisión",
       "preview": "Vista previa",
-      "empty": "No hay templates registrados",
-      "emptyHint": "Crea un template o sincroniza con Meta"
+      "table": {
+        "name": "Nombre",
+        "language": "Idioma",
+        "category": "Categoría",
+        "status": "Estado",
+        "lastSync": "Última sync",
+        "actions": "Acciones",
+        "showing": "Mostrando",
+        "of": "de",
+        "page": "Página"
+      },
+      "empty": {
+        "title": "Sin plantillas",
+        "subtitle": "Crea una plantilla o sincroniza con Meta"
+      },
+      "buttons": {
+        "title": "Botones (opcional)",
+        "hint": "Agrega hasta 10 botones. Máx: 3 respuesta rápida, 2 URL, 1 teléfono.",
+        "add": "Agregar botón",
+        "untitled": "Botón sin texto",
+        "type": {
+          "quickReply": "Respuesta rápida",
+          "url": "Enlace (URL)",
+          "phone": "Teléfono"
+        },
+        "textPlaceholder": "Texto del botón (máx. 25)",
+        "urlPlaceholder": "https://ejemplo.com o https://ejemplo.com/{{1}}",
+        "urlExampleLabel": "Ejemplo para la variable de URL",
+        "errors": {
+          "maxQuickReply": "Máximo de 3 botones de respuesta rápida",
+          "maxUrl": "Máximo de 2 botones de URL",
+          "maxPhone": "Máximo de 1 botón de teléfono",
+          "invalidPhone": "Formato inválido. Use +5511999999999"
+        }
+      }
+    },
+    "ticketCategories": {
+      "title": "Categorías de Ticket",
+      "subtitle": "Gestiona las categorías de tickets de tu workspace",
+      "new": "Nueva categoría",
+      "saved": "Categoría guardada con éxito",
+      "deleted": "Categoría eliminada con éxito",
+      "deleteError": "Esta categoría está en uso por tickets existentes",
+      "modalTitle": {
+        "new": "Nueva categoría de ticket",
+        "edit": "Editar categoría de ticket"
+      },
+      "fields": {
+        "name": "Nombre",
+        "nameRequired": "Ingrese el nombre",
+        "description": "Descripción",
+        "color": "Color",
+        "active": "Activo"
+      },
+      "list": {
+        "order": "Orden",
+        "name": "Nombre",
+        "description": "Descripción",
+        "color": "Color",
+        "status": "Estado",
+        "actions": "Acciones",
+        "active": "Activo",
+        "inactive": "Inactivo"
+      },
+      "empty": {
+        "title": "Sin categorías",
+        "subtitle": "Crea categorías para organizar tus tickets"
+      }
+    },
+    "ticketTypes": {
+      "title": "Tipos de Ticket",
+      "subtitle": "Gestiona los tipos de ticket de tu workspace",
+      "new": "Nuevo tipo",
+      "saved": "Tipo guardado con éxito",
+      "deleted": "Tipo eliminado con éxito",
+      "deleteError": "Error al eliminar tipo",
+      "modalTitle": {
+        "new": "Nuevo tipo de ticket",
+        "edit": "Editar tipo de ticket"
+      },
+      "fields": {
+        "name": "Nombre",
+        "nameRequired": "Ingrese el nombre",
+        "nameTooLong": "Máximo 60 caracteres",
+        "description": "Descripción",
+        "color": "Color",
+        "icon": "Ícono",
+        "active": "Activo",
+        "requireDueDateForUrgent": "Exigir plazo cuando la prioridad sea urgente",
+        "requireCategoryForWaiting": "Exigir categoría cuando el estado sea en espera"
+      },
+      "list": {
+        "order": "Orden",
+        "name": "Nombre",
+        "status": "Estado",
+        "actions": "Acciones",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "yes": "Sí",
+        "no": "No",
+        "urgentRequiresDueDate": "Urgente exige plazo: {{value}}",
+        "waitingRequiresCategory": "En espera exige categoría: {{value}}"
+      },
+      "modal": {
+        "save": "Guardar",
+        "saving": "Guardando...",
+        "cancel": "Cancelar"
+      }
     },
     "tags": {
       "title": "Etiquetas",
@@ -440,6 +777,9 @@
         "added": "Etiqueta aplicada",
         "removed": "Etiqueta eliminada de la conversación"
       }
+    },
+    "conversationTags": {
+      "columnOrder": "Orden"
     },
     "closeConfig": {
       "title": "Cierre de Atención",
@@ -490,7 +830,16 @@
       "statusIndexed": "Indexado",
       "statusError": "Error",
       "sourceType": "Origen",
+      "sourceManual": "Manual",
+      "sourceUrl": "URL",
+      "sourceFile": "Archivo",
+      "assistantLabel": "Asistente",
+      "recommendationText": "Recomendamos usar un modelo con buena capacidad de razonamiento y contexto largo.",
+      "fileSizeLimit": "Máximo 10MB. Formatos aceptados: PDF, TXT, DOCX",
+      "columnStatus": "Estado",
+      "columnChunks": "Chunks",
       "noArticles": "No hay artículos en la base de conocimiento",
+      "deleteTitle": "Eliminar fuente",
       "deleteConfirm": "¿Eliminar este artículo de la base de conocimiento?",
       "disabledNotice": "El Agente de IA está desactivado.",
       "disabledHint": "Configura y activa para comenzar a responder automáticamente. La base de conocimiento puede prepararse antes de activar.",
@@ -510,6 +859,7 @@
       "editTitle": "Editar webhook",
       "empty": "No hay webhooks configurados",
       "name": "Nombre",
+      "namePlaceholder": "Mi webhook",
       "url": "URL de destino",
       "secret": "Secret (opcional)",
       "secretHint": "Utilizado para firmar el payload con HMAC-SHA256",
@@ -554,6 +904,8 @@
     "integrations": {
       "title": "Integraciones",
       "subtitle": "Conecta ZiraDesk con herramientas externas",
+      "hide": "Ocultar",
+      "show": "Mostrar",
       "redmine": {
         "title": "Redmine",
         "description": "Sincroniza tickets y comentarios con Redmine",
@@ -617,6 +969,7 @@
       "settings:manage": "Configuraciones — Gestionar",
       "users:manage": "Usuarios — Gestionar",
       "channels:manage": "Canales — Gestionar",
+      "lgpd:manage": "LGPD — Gestionar",
       "contacts:view": "Contactos — Visualizar",
       "contacts:edit": "Contactos — Editar",
       "contacts:delete": "Contactos — Eliminar",
@@ -640,28 +993,52 @@
       "viewer": "Visualizador"
     }
   },
+  "tags": {
+    "subtitle": "Gestiona las etiquetas utilizadas en conversaciones y contactos",
+    "tabs": {
+      "conversations": "Conversas",
+      "contacts": "Contactos"
+    },
+    "columns": {
+      "name": "Nombre",
+      "color": "Color / vista previa",
+      "order": "Orden",
+      "actions": "Acciones"
+    }
+  },
+  "contactTags": {
+    "new": "Nueva etiqueta",
+    "saved": "Etiqueta guardada con éxito",
+    "deleted": "Etiqueta eliminada con éxito"
+  },
   "nav": {
     "admin": "Administración",
     "users": "Usuarios",
     "permissions": "Permisos y Acceso",
     "channels": "Canales",
     "businessHours": "Horario de atención",
+    "voiceConfig": "Configuración de Voz",
     "supportBot": "Bot de atención",
     "autoDistribution": "Distribución automática",
     "skills": "Habilidades",
+    "departments": "Departamentos",
     "pauseReasons": "Motivos de pausa",
     "quickReplies": "Respuestas rápidas",
     "templates": "Templates",
     "ticketTypes": "Tipos de ticket",
+    "ticketCategories": "Categorías de Ticket",
     "tags": "Etiquetas",
     "conversationClosing": "Cierre de atención",
     "aiAgent": "Agente de IA",
     "integrations": "Integraciones",
     "webhooks": "Webhooks",
     "attendanceRules": "Reglas de Atención",
+    "queueConfig": "Notificaciones de Cola",
     "settings": "Configuración",
+    "lgpd": "LGPD",
     "history": "Historial",
     "performance": "Performance",
+    "queue": "Cola",
     "groups": {
       "team": "Equipo",
       "attendance": "Atención",
@@ -671,6 +1048,25 @@
       "settings": "Configuración",
       "history": "Historial",
       "performance": "Performance"
+    }
+  },
+  "queueConfig": {
+    "title": "Notificaciones de Cola",
+    "subtitle": "Configure mensajes automáticos enviados al cliente mientras espera en cola",
+    "enabled": "Notificar clientes en cola",
+    "enabledHint": "Envía mensajes automáticos de posición y confirmación de atención vía WhatsApp",
+    "positionMessage": "Mensaje de posición en cola",
+    "positionMessageHint": "Use {{position}} para insertar la posición del cliente",
+    "throttle": "Intervalo mínimo entre notificaciones (segundos)",
+    "throttleHint": "Mínimo 30s, máximo 600s. Evita spam al cliente",
+    "agentAssumeMessage": "Saludo al asumir la atención",
+    "agentAssumeMessageHint": "Use {{agent_name}} para insertar el nombre del agente",
+    "expire24hAction": "Después de 24h sin atención",
+    "expire24hClose": "Cerrar conversación",
+    "expire24hKeepOpen": "Mantener abierta",
+    "expire24hMessage": "Mensaje al cerrar por 24h",
+    "messages": {
+      "saved": "Configuración de cola guardada con éxito"
     }
   },
   "attendanceRules": {
@@ -685,8 +1081,12 @@
       "limits": "Límites Operativos"
     },
     "csatEnabled": "Enviar CSAT automáticamente",
+    "csatScopeHint": "El CSAT se envía al cerrar atenciones inbound de WhatsApp y correo. El envío activo (outbound) no dispara CSAT.",
     "csatMessage": "Mensaje inicial del CSAT",
-    "csatExpiration": "Expiración del enlace (horas)",
+    "csatMessagePlaceholder": "Déjalo vacío para usar el mensaje predeterminado del sistema.",
+    "csatMessageHint": "Este texto se envía como primera solicitud de evaluación. Si queda vacío, se usa el modelo predeterminado.",
+    "csatDisabledHint": "CSAT desactivado. No se enviará encuesta de satisfacción tras cerrar atenciones.",
+    "csatExpiration": "Ventana de respuesta del CSAT (horas)",
     "emailAddress": "Dirección de correo de soporte",
     "emailConfirmation": "Enviar confirmación al cliente",
     "inactivityEnabled": "Activar monitoreo de inactividad",
@@ -732,6 +1132,250 @@
     "imageMaxSize": "La imagen debe tener como máximo 2MB.",
     "addressCopied": "Dirección copiada",
     "addressCopyError": "No fue posible copiar la dirección"
+  },
+  "lgpd": {
+    "title": "LGPD",
+    "subtitle": "Gestiona consentimiento, exportación, anonimización y políticas de retención de datos.",
+    "loading": "Cargando...",
+    "emptyContacts": "No se encontraron contactos",
+    "emptyRequests": "No se encontraron solicitudes LGPD",
+    "anonymizeTitle": "Anonimizar datos",
+    "confirmAnonymize": "¿Deseas anonimizar el contacto {{name}}? Esta acción no se puede deshacer.",
+    "anonymizeReasonPrompt": "Informa el motivo de la anonimización",
+    "anonymizeDefaultReason": "Solicitud LGPD desde panel administrativo",
+    "pagination": {
+      "prev": "Anterior",
+      "next": "Siguiente"
+    },
+    "actions": {
+      "export": "Exportar",
+      "anonymize": "Anonimizar"
+    },
+    "consentStatus": {
+      "pending": "Pendiente",
+      "granted": "Concedido",
+      "denied": "Denegado",
+      "revoked": "Revocado"
+    },
+    "requestTypes": {
+      "access": "Acceso",
+      "consent_update": "Actualización de consentimiento",
+      "anonymization": "Anonimización",
+      "rectification": "Rectificación",
+      "external_anonymization": "Anonimización externa"
+    },
+    "retention": {
+      "title": "Política de retención",
+      "subtitle": "Cuando está activa, la rutina diaria anonimiza contactos elegibles sin conversaciones abiertas.",
+      "enabled": "Activar retención automática",
+      "days": "Días de retención"
+    },
+    "contacts": {
+      "title": "Contactos y consentimiento",
+      "subtitle": "Ajusta el estado del consentimiento y ejecuta acciones del titular.",
+      "searchPlaceholder": "Buscar contacto por nombre, correo o teléfono...",
+      "apply": "Actualizar",
+      "total": "{{count}} contacto(s)",
+      "columns": {
+        "name": "Contacto",
+        "email": "Correo",
+        "consent": "Consentimiento",
+        "updatedAt": "Actualizado en",
+        "actions": "Acciones"
+      }
+    },
+    "requests": {
+      "title": "Solicitudes LGPD de contactos",
+      "subtitle": "Historial reciente de solicitudes de contactos procesadas.",
+      "columns": {
+        "when": "Fecha",
+        "contact": "Contacto",
+        "type": "Tipo",
+        "status": "Estado",
+        "by": "Solicitado por",
+        "actions": "Acciones"
+      },
+      "showDiff": "Ver diff",
+      "hideDiff": "Ocultar diff",
+      "noDiff": "No se detectaron diferencias para los campos informados.",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "rejectReasonPrompt": "Informa el motivo del rechazo",
+      "rejectReasonRequired": "Informa el motivo para rechazar la solicitud"
+    },
+    "rectification": {
+      "fields": {
+        "name": "Nombre",
+        "email": "Correo",
+        "phone": "Teléfono",
+        "document": "Documento"
+      }
+    },
+    "rejectModal": {
+      "title": "Rechazar solicitud",
+      "reasonLabel": "Motivo del rechazo",
+      "reasonPlaceholder": "Describe por qué se está rechazando la solicitud...",
+      "minCharsError": "El motivo debe tener al menos 10 caracteres.",
+      "cancelButton": "Cancelar",
+      "confirmButton": "Confirmar rechazo"
+    },
+    "tabs": {
+      "contacts": "Contactos",
+      "users": "Usuarios",
+      "external": "Solicitudes Externas"
+    },
+    "external": {
+      "formTitle": "Anonimizar por identificador externo",
+      "formSubtitle": "Use cuando el titular nunca fue registrado como contacto. El número de WhatsApp (external_id) y el contenido de los mensajes serán anonimizados.",
+      "externalIdPlaceholder": "Número de WhatsApp (ej: +5511999999999)",
+      "reasonPlaceholder": "Motivo de la anonimización",
+      "submitBtn": "Anonimizar",
+      "processing": "Procesando...",
+      "confirmAnonymize": "¿Anonimizar todas las conversaciones y mensajes de {{id}}? Esta acción no se puede deshacer.",
+      "anonymized": "{{conversations}} conversación(es) y {{messages}} mensaje(s) anonimizados con éxito.",
+      "listTitle": "Historial de solicitudes externas",
+      "listSubtitle": "Solicitudes de anonimización de titulares no registrados como contactos.",
+      "empty": "No se encontraron solicitudes externas",
+      "total": "{{count}} solicitud(es)",
+      "filter": {
+        "all": "Todos",
+        "pending": "Pendientes",
+        "processed": "Procesados",
+        "rejected": "Rechazados"
+      },
+      "columns": {
+        "result": "Resultado"
+      },
+      "resultSummary": "{{conversations}} conv., {{messages}} msg."
+    },
+    "users": {
+      "title": "Usuarios y consentimiento",
+      "subtitle": "Ajusta el estado del consentimiento y ejecuta acciones LGPD sobre usuarios del tenant.",
+      "searchPlaceholder": "Buscar usuario por nombre o correo...",
+      "apply": "Actualizar",
+      "total": "{{count}} usuario(s)",
+      "columns": {
+        "name": "Usuario",
+        "email": "Correo",
+        "role": "Perfil",
+        "consent": "Consentimiento",
+        "updatedAt": "Actualizado en",
+        "actions": "Acciones"
+      }
+    },
+    "userRequests": {
+      "title": "Solicitudes LGPD de usuarios",
+      "subtitle": "Historial reciente de solicitudes LGPD de usuarios del tenant.",
+      "columns": {
+        "when": "Fecha",
+        "user": "Usuario",
+        "type": "Tipo",
+        "status": "Estado",
+        "by": "Solicitado por"
+      }
+    },
+    "messages": {
+      "consentUpdated": "Consentimiento actualizado",
+      "retentionSaved": "Política de retención guardada",
+      "exportDone": "Exportación generada con éxito",
+      "anonymized": "Contacto anonimizado con éxito",
+      "userConsentUpdated": "Consentimiento del usuario actualizado",
+      "userExportDone": "Exportación generada con éxito",
+      "userAnonymized": "Usuario anonimizado con éxito",
+      "requestApproved": "Solicitud aprobada con éxito",
+      "requestRejected": "Solicitud rechazada"
+    },
+    "confirmAnonymizeUser": "¿Anonimizar al usuario {{name}}? Esta acción no se puede deshacer.",
+    "anonymizeUserReasonPrompt": "Indica el motivo de la anonimización del usuario",
+    "dashboard": {
+      "title": "Estado LGPD",
+      "pending": "Pendientes",
+      "expiring7d": "Vence en 7 días",
+      "expiring24h": "Vence en 24h",
+      "breached": "SLA vencido",
+      "oldestPending": "Solicitudes pendientes más antiguas",
+      "noOldestPending": "Sin solicitudes pendientes",
+      "slaDeadline": "Plazo",
+      "process": "Procesar"
+    },
+    "processModal": {
+      "title": "Procesar solicitud LGPD",
+      "subtitle": "Selecciona la acción y agrega notas antes de confirmar.",
+      "action": "Acción",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "notes": "Notas",
+      "notesPlaceholder": "Describe lo que se hizo o el motivo...",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar",
+      "processing": "Procesando..."
+    },
+    "privacy": {
+      "title": "Privacidad y LGPD",
+      "subtitle": "Gestiona tu consentimiento y solicita acciones sobre tus datos personales.",
+      "consent": {
+        "title": "Consentimiento",
+        "help": "Tu consentimiento para el procesamiento de datos personales registrados en esta plataforma.",
+        "statusLabel": "Estado del consentimiento",
+        "save": "Guardar",
+        "updatedAt": "Actualizado en",
+        "source": "Origen",
+        "lastExport": "Última exportación"
+      },
+      "request": {
+        "title": "Solicitar una acción sobre mis datos",
+        "help": "Solicita acceso o anonimización de tus datos. La solicitud será procesada por el administrador.",
+        "type": "Tipo de solicitud",
+        "reason": "Motivo (opcional)",
+        "reasonPlaceholder": "Describe el motivo de tu solicitud...",
+        "submit": "Enviar solicitud",
+        "types": {
+          "access": "Acceso a mis datos",
+          "anonymization": "Anonimización de mis datos"
+        }
+      },
+      "export": {
+        "title": "Exportar mis datos",
+        "help": "Descarga un archivo JSON con todos tus datos personales registrados.",
+        "button": "Exportar mis datos"
+      },
+      "history": {
+        "title": "Historial de solicitudes",
+        "requestedAt": "Solicitado el",
+        "empty": "No se encontraron solicitudes"
+      },
+      "messages": {
+        "consentSaved": "Consentimiento guardado con éxito",
+        "consentError": "Error al guardar consentimiento",
+        "requestCreated": "Solicitud enviada con éxito",
+        "requestError": "Error al enviar solicitud",
+        "exportDone": "Exportación generada con éxito"
+      }
+    }
+  },
+  "usage": {
+    "title": "Uso del plan",
+    "period": "Período: {{period}}",
+    "messages_sent": "Mensajes enviados",
+    "storage_bytes": "Almacenamiento",
+    "active_users": "Usuarios activos",
+    "unlimited": "Ilimitado",
+    "of": "de",
+    "used": "usado"
+  },
+  "tenantDetail": {
+    "usage": {
+      "title": "Uso del plan",
+      "subtitle": "Consumo actual del tenant en el período vigente.",
+      "period": "Período: {{period}}",
+      "messages_sent": "Mensajes enviados",
+      "storage_bytes": "Almacenamiento",
+      "active_users": "Usuarios activos",
+      "unlimited": "Ilimitado",
+      "of": "de",
+      "used": "usado",
+      "error": "No fue posible cargar el uso del plan."
+    }
   },
   "superAdmin": {
     "title": "Super Admin",
@@ -796,8 +1440,7 @@
         "subtitle": "Crea logins y restablece contraseñas sin impersonar.",
         "createLogin": "Crear login",
         "empty": "No se encontraron accesos para este tenant.",
-        "credentialsTitle": "Contraseña temporal generada",
-        "credentialsDescription": "Comparte esta contraseña temporal con {{name}}.",
+        "resetEmailSent": "Correo de restablecimiento enviado a {{name}}.",
         "table": {
           "actions": "Acciones"
         },
@@ -865,6 +1508,8 @@
     "plans": {
       "title": "Planes",
       "new": "Nuevo Plan",
+      "edit": "Editar",
+      "editPlan": "Editar plan",
       "fields": {
         "name": "Nombre",
         "slug": "Slug",
@@ -872,6 +1517,7 @@
         "priceYear": "Precio anual",
         "maxUsers": "Máx. usuarios",
         "maxContacts": "Máx. contactos",
+        "maxMessages": "Límite de mensajes/mes",
         "features": "Funciones",
         "isActive": "Activo"
       },

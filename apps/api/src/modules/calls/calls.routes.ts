@@ -5,9 +5,16 @@ import { env } from '../../config/env.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { getSocketServer } from '../../socket/index.js';
+import { getTenantByTwilioNumber } from '../admin/voice-config/voice-config.service.js';
+import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 import {
   conversationParamsSchema,
   makeCallBodySchema,
+} from './calls.schema.js';
+import type {
+  BotOptionRow,
+  TwilioGatherBody,
+  TwilioIncomingCallBody,
 } from './calls.schema.js';
 import {
   ensureCallRecordsInfrastructure,
@@ -30,6 +37,10 @@ interface TwilioTenant {
 
 const UUID_V4_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const callRecordsTableCache = new Map<string, boolean>();
+
+function apiBaseUrl(): string {
+  return env.API_URL.replace(/\/+$/, '');
+}
 
 function parseTwilioPayload(payload: unknown): Record<string, string> {
   if (!payload) return {};
@@ -212,6 +223,191 @@ export async function callsRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  app.post('/incoming', async (request, reply) => {
+    const body = request.body as TwilioIncomingCallBody;
+    const to = body.To;
+    const from = body.From;
+    const callSid = body.CallSid;
+
+    const tenant = await getTenantByTwilioNumber(to);
+
+    if (!tenant) {
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say(
+        { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+        'Este número não está configurado para receber chamadas. Encerrando.',
+      );
+      twiml.hangup();
+      return reply.type('text/xml').send(twiml.toString());
+    }
+
+    const { schemaName, config } = tenant;
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO ${quoteIdent(schemaName)}.call_records
+         (call_sid, direction, from_phone, to_phone, status)
+       VALUES ($1, 'inbound', $2, $3, 'initiated')
+       ON CONFLICT (call_sid) DO NOTHING`,
+      callSid,
+      from,
+      to,
+    );
+
+    if (!config.ivrEnabled || !config.defaultBotMenuId) {
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say(
+        { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+        'Olá! Nosso atendimento por voz está temporariamente indisponível. Por favor, envie uma mensagem pelo WhatsApp.',
+      );
+      twiml.hangup();
+      return reply.type('text/xml').send(twiml.toString());
+    }
+
+    const options = await prisma.$queryRawUnsafe<BotOptionRow[]>(
+      `SELECT id, number, label
+         FROM ${quoteIdent(schemaName)}.bot_options
+        WHERE bot_menu_id = $1::uuid
+          AND parent_option_id IS NULL
+        ORDER BY sort_order ASC, number ASC`,
+      config.defaultBotMenuId,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO ${quoteIdent(schemaName)}.call_ivr_sessions
+         (call_sid, from_phone, status)
+       VALUES ($1, $2, 'ivr')
+       ON CONFLICT (call_sid) DO NOTHING`,
+      callSid,
+      from,
+    );
+
+    const twiml = new twilio.twiml.VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 1,
+      timeout: 8,
+      action: `${apiBaseUrl()}/api/calls/incoming/menu?attempt=1`,
+      method: 'POST',
+    });
+
+    let menuText = 'Olá! Bem-vindo ao nosso atendimento. ';
+    for (const option of options) {
+      menuText += `Para ${option.label}, digite ${option.number}. `;
+    }
+    gather.say(
+      { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+      menuText,
+    );
+
+    twiml.redirect(`${apiBaseUrl()}/api/calls/incoming/menu?attempt=1&empty=true`);
+
+    return reply.type('text/xml').send(twiml.toString());
+  });
+
+  app.post('/incoming/menu', async (request, reply) => {
+    const body = request.body as TwilioGatherBody;
+    const query = request.query as { attempt?: string; empty?: string };
+    const attempt = Number(query.attempt ?? '1');
+    const digits = body.Digits?.trim();
+
+    const tenant = await getTenantByTwilioNumber(body.To);
+    if (!tenant) {
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.hangup();
+      return reply.type('text/xml').send(twiml.toString());
+    }
+
+    const { schemaName, config } = tenant;
+    let selectedOption: BotOptionRow | null = null;
+
+    if (digits && config.defaultBotMenuId) {
+      const rows = await prisma.$queryRawUnsafe<BotOptionRow[]>(
+        `SELECT id, number, label
+           FROM ${quoteIdent(schemaName)}.bot_options
+          WHERE bot_menu_id = $1::uuid
+            AND parent_option_id IS NULL
+            AND number = $2::int
+          LIMIT 1`,
+        config.defaultBotMenuId,
+        Number(digits),
+      );
+      selectedOption = rows[0] ?? null;
+    }
+
+    const twiml = new twilio.twiml.VoiceResponse();
+
+    if (!selectedOption) {
+      if (attempt >= 2) {
+        twiml.say(
+          { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+          'Não foi possível identificar sua opção. Por favor, tente novamente mais tarde ou envie uma mensagem pelo WhatsApp. Encerrando a chamada.',
+        );
+        twiml.hangup();
+        return reply.type('text/xml').send(twiml.toString());
+      }
+
+      const options = config.defaultBotMenuId
+        ? await prisma.$queryRawUnsafe<BotOptionRow[]>(
+            `SELECT id, number, label
+               FROM ${quoteIdent(schemaName)}.bot_options
+              WHERE bot_menu_id = $1::uuid
+                AND parent_option_id IS NULL
+              ORDER BY sort_order ASC, number ASC`,
+            config.defaultBotMenuId,
+          )
+        : [];
+
+      const gather = twiml.gather({
+        numDigits: 1,
+        timeout: 8,
+        action: `${apiBaseUrl()}/api/calls/incoming/menu?attempt=2`,
+        method: 'POST',
+      });
+
+      let menuText = 'Opção inválida. ';
+      for (const option of options) {
+        menuText += `Para ${option.label}, digite ${option.number}. `;
+      }
+      gather.say(
+        { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+        menuText,
+      );
+
+      twiml.say(
+        { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+        'Não foi possível identificar sua opção. Encerrando a chamada.',
+      );
+      twiml.hangup();
+
+      return reply.type('text/xml').send(twiml.toString());
+    }
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.call_ivr_sessions
+          SET bot_option_id = $2::uuid,
+              status = 'routing',
+              updated_at = NOW()
+        WHERE call_sid = $1`,
+      body.CallSid,
+      selectedOption.id,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.call_records
+          SET bot_option_id = $2::uuid
+        WHERE call_sid = $1`,
+      body.CallSid,
+      selectedOption.id,
+    );
+
+    twiml.say(
+      { voice: 'Polly.Camila-Neural', language: 'pt-BR' },
+      `Você escolheu ${selectedOption.label}. Conectando você a um de nossos atendentes.`,
+    );
+    // TODO Etapa 3 do plano geral: implementar <Dial> para agentes candidatos.
+
+    return reply.type('text/xml').send(twiml.toString());
+  });
 
   app.get('/token', { preHandler: guard }, async (request, reply) => {
     const token = await generateAccessToken(request.user.id);

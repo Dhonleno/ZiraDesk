@@ -1,6 +1,6 @@
 {
   "name": "ziradesk",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "private": true,
   "packageManager": "pnpm@9.0.0",
   "scripts": {
@@ -10,7 +10,8 @@
     "dev:web:secondary": "pnpm --filter @ziradesk/web run dev:secondary",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "test": "pnpm --filter @ziradesk/api test"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

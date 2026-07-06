@@ -4,6 +4,7 @@ import type { CrmContact } from '../../services/api';
 import { ContactAvatar } from './ContactAvatar';
 import { PrimaryBadge } from './ContactBadge';
 import { PermissionGate } from '../ui/PermissionGate';
+import { maskEmail, maskPhone } from '../../utils/pii-mask';
 
 interface ContactCardProps {
   contact: CrmContact;
@@ -17,6 +18,8 @@ interface ContactCardProps {
 export function ContactCard({ contact, onEdit, onStartConversation, onUnlink, onTransfer, showOrgLink }: ContactCardProps) {
   const { t } = useTranslation('crm');
   const navigate = useNavigate();
+  const maskedEmail = maskEmail(contact.email);
+  const maskedWhatsapp = maskPhone(contact.whatsapp);
 
   return (
     <div style={{
@@ -37,11 +40,11 @@ export function ContactCard({ contact, onEdit, onStartConversation, onUnlink, on
           <div style={{ fontSize: 11, color: 'var(--txt-3)', marginBottom: 2 }}>{contact.role}</div>
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {contact.email && (
-            <span style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{contact.email}</span>
+          {maskedEmail && (
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{maskedEmail}</span>
           )}
-          {contact.whatsapp && (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-2)' }}>{contact.whatsapp}</span>
+          {maskedWhatsapp && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-2)' }}>{maskedWhatsapp}</span>
           )}
         </div>
         {showOrgLink && contact.organization_name && (

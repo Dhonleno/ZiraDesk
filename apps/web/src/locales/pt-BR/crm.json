@@ -1,4 +1,11 @@
 {
+  "bulkSelect": {
+    "selectAllMatching": "Selecionar todos os {{count}} resultados",
+    "confirmTitle": "Confirmar exclusão em massa",
+    "confirmWarning": "Esta ação excluirá permanentemente {{count}} registro(s). Esta ação não pode ser desfeita.",
+    "confirmInstruction": "Digite o número {{count}} para confirmar.",
+    "confirmDelete": "Excluir permanentemente"
+  },
   "organizations": {
     "title": "Organizações",
     "new": "Nova organização",
@@ -8,6 +15,20 @@
     "noSelectionSub": "Clique em uma organização da lista para ver os detalhes",
     "loading": "Carregando...",
     "total": "{{n}} organizações",
+    "bulkDelete": {
+      "selectPage": "Selecionar página",
+      "selectItem": "Selecionar {{name}}",
+      "selected": "{{count}} selecionada(s)",
+      "clear": "Limpar",
+      "action": "Excluir",
+      "title": "Excluir organizações",
+      "confirm": "Excluir permanentemente {{count}} organização(ões)? Contatos, conversas e tickets serão preservados, mas ficarão sem organização vinculada.",
+      "confirmAction": "Excluir",
+      "cancel": "Cancelar",
+      "success": "{{count}} organização(ões) excluída(s)",
+      "partial": "Operação parcial: {{blocked}} bloqueada(s) e {{notFound}} não encontrada(s).",
+      "error": "Não foi possível excluir as organizações selecionadas"
+    },
     "type": {
       "company": "Empresa",
       "person": "Pessoa"
@@ -20,12 +41,15 @@
       "inactive": "Inativo"
     },
     "filters": {
+      "toggle": "Filtros",
       "segment": "Segmento",
       "segmentPlaceholder": "Filtrar por segmento",
       "tag": "Tag",
       "tagPlaceholder": "Filtrar por tag",
       "responsible": "Responsável",
       "responsibleAll": "Todos os responsáveis",
+      "clear": "Limpar",
+      "apply": "Aplicar",
       "clearSearch": "Limpar",
       "removeFilter": "Remover filtro",
       "clearAll": "Limpar filtros"
@@ -91,6 +115,7 @@
       "delete": "Excluir",
       "startConversation": "Iniciar atendimento",
       "addContact": "Adicionar contato",
+      "linkContact": "Vincular contato",
       "assume": "Assumir",
       "more": "Mais opções",
       "saveNotes": "Salvar notas",
@@ -171,6 +196,14 @@
     "notes": {
       "placeholder": "Adicione notas sobre esta organização...",
       "hint": "As notas são salvas automaticamente ao clicar em Salvar"
+    },
+    "linkContact": {
+      "title": "Vincular contato existente",
+      "search": "Buscar contato...",
+      "typeToSearch": "Digite ao menos 2 caracteres para buscar",
+      "empty": "Nenhum contato encontrado",
+      "confirm": "Vincular",
+      "success": "Contato vinculado com sucesso"
     }
   },
   "unlinkContact": "Desvincular contato",
@@ -180,12 +213,15 @@
   "searchOrganization": "Buscar organização...",
   "unlinkSuccess": "Contato desvinculado com sucesso",
   "transferSuccess": "Contato transferido com sucesso",
+  "startConversation": "Iniciar atendimento",
+  "noPrimaryContactHint": "Defina um contato primário para iniciar atendimentos direto da organização.",
   "contacts": {
     "title": "Contatos",
     "standalone": "Contatos avulsos",
     "standaloneDesc": "Contatos sem organização vinculada",
     "subtitle": "{{count}} contatos",
     "new": "Novo contato",
+    "newCompact": "Novo",
     "search": "Buscar contato...",
     "clearSearch": "Limpar",
     "filter": {
@@ -219,6 +255,19 @@
       "notes": "Notas",
       "tagsHint": "Digite e pressione Enter para adicionar"
     },
+    "tagsSection": {
+      "title": "Tags do contato",
+      "add": "Adicionar",
+      "empty": "Nenhuma tag",
+      "remove": "Remover {{name}}",
+      "error": "Não foi possível atualizar as tags do contato",
+      "picker": {
+        "title": "Selecionar tags",
+        "empty": "Nenhuma tag disponível. Cadastre em Administração → Etiquetas.",
+        "error": "Não foi possível carregar o catálogo de tags.",
+        "close": "Fechar seletor de tags"
+      }
+    },
     "actions": {
       "link": "Vincular organização",
       "unlink": "Desvincular",
@@ -228,6 +277,20 @@
     },
     "deleteConfirm": "Tem certeza que deseja excluir \"{{name}}\"?",
     "deleteWarning": "Esta ação não pode ser desfeita.",
+    "bulkDelete": {
+      "selectPage": "Selecionar página",
+      "selectItem": "Selecionar {{name}}",
+      "selected": "{{count}} selecionado(s)",
+      "clear": "Limpar",
+      "action": "Excluir",
+      "title": "Excluir contatos",
+      "confirm": "Excluir permanentemente {{count}} contato(s)? Contatos com conversas abertas serão mantidos.",
+      "confirmAction": "Excluir",
+      "cancel": "Cancelar",
+      "success": "{{count}} contato(s) excluído(s)",
+      "partial": "Operação parcial: {{blocked}} bloqueado(s) e {{notFound}} não encontrado(s).",
+      "error": "Não foi possível excluir os contatos selecionados"
+    },
     "hasActiveConversations": "Contato possui conversas ativas.",
     "hasNoActiveChannels": "Nenhum canal ativo disponível",
     "selectContact": "Selecione um contato",
@@ -268,5 +331,56 @@
       "submit": "Vincular",
       "submitting": "Vinculando..."
     }
-  }
+  },
+  "import": {
+    "button": "Importar",
+    "title": "Importar contatos",
+    "dropzone": "Arraste o arquivo aqui ou clique para selecionar",
+    "selectFile": "Selecionar arquivo",
+    "formats": "Formatos aceitos: CSV, Excel, vCard",
+    "sizeLimit": "Tamanho máximo: 10MB",
+    "downloadTemplate": "Baixar modelo CSV",
+    "totalRows": "{{count}} registros encontrados",
+    "duplicateAction": "Duplicatas",
+    "skip": "Ignorar duplicados",
+    "update": "Atualizar existentes",
+    "confirm": "Confirmar importação",
+    "inProgress": "Importação em andamento...",
+    "waitMessage": "Você será notificado quando a importação for concluída",
+    "close": "Fechar",
+    "closeAndRefresh": "Fechar e atualizar lista",
+    "result": {
+      "total": "Total processado",
+      "inserted": "Inseridos",
+      "updated": "Atualizados",
+      "skipped": "Ignorados",
+      "errors": "Erros"
+    },
+    "mapping": {
+      "title": "Mapeamento de colunas",
+      "ignore": "Ignorar"
+    },
+    "fields": {
+      "name": "Nome*",
+      "email": "E-mail",
+      "phone": "Telefone",
+      "whatsapp": "WhatsApp",
+      "organization": "Organização",
+      "role": "Cargo",
+      "department": "Departamento",
+      "tags": "Tags",
+      "customFields": "Campos customizados"
+    },
+    "error": {
+      "sizeLimit": "Arquivo muito grande. Máximo 10MB",
+      "format": "Formato não suportado. Use CSV, Excel ou vCard",
+      "generic": "Erro ao processar arquivo"
+    }
+  },
+  "pii": {
+    "reveal": "Revelar dados",
+    "hide": "Ocultar dados",
+    "revealing": "Revelando..."
+  },
+  "openConversation": "Abrir atendimento"
 }

@@ -11,7 +11,7 @@ export const createTicketSchema = z.object({
   priority:        z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   category:        z.string().max(100).optional(),
   type_id:         z.string().uuid().nullable().optional(),
-  assigned_to:     z.string().uuid().nullable().optional(),
+  assigned_to:     z.string().uuid({ message: 'Responsável é obrigatório' }),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
 });
@@ -21,7 +21,19 @@ export const updateTicketSchema = createTicketSchema
   .partial()
   .extend({
     status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
-  });
+    resolution_notes: z.string().trim().min(1).max(5000).optional(),
+    waiting_reason: z.enum(['customer', 'internal', 'third_party']).nullable().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.status === 'waiting' && !data.waiting_reason) return false;
+      return true;
+    },
+    {
+      message: 'Motivo de espera é obrigatório ao definir status como Aguardando',
+      path: ['waiting_reason'],
+    },
+  );
 
 export const listTicketsQuerySchema = z.object({
   page:        z.coerce.number().int().positive().default(1),

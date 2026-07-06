@@ -1,6 +1,6 @@
 {
   "name": "@ziradesk/web",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,9 @@
     "@ffmpeg/util": "^0.12.2",
     "@hookform/resolvers": "^3.6.0",
     "@tanstack/react-query": "^5.40.0",
+    "@tanstack/react-virtual": "^3.13.25",
     "@twilio/voice-sdk": "^2.18.2",
+    "@uiw/react-md-editor": "^4.1.1",
     "@ziradesk/shared": "workspace:*",
     "axios": "^1.7.2",
     "i18next": "^23.16.8",

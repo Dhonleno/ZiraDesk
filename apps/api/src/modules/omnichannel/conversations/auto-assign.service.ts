@@ -42,6 +42,14 @@ function tableRef(schemaName: string, table: string): string {
   return `${quoteIdent(schemaName)}.${table}`;
 }
 
+function humanQueueEligibilityCondition(alias?: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  return `${prefix}assigned_to IS NULL
+       AND ${prefix}status = 'open'
+       AND COALESCE(${prefix}metadata->>'bot_stage', '') <> 'waiting_choice'
+       AND COALESCE(${prefix}metadata->>'ai_agent_active', 'false') <> 'true'`;
+}
+
 function parseAutoAssignSettings(settings: unknown): AutoAssignSettings {
   const safe = typeof settings === 'object' && settings !== null
     ? (settings as Record<string, unknown>)
@@ -205,11 +213,13 @@ async function resolveAgentForAssignment(
   preferredAgentId?: string,
   requiredBotOptionId?: string,
   globalLimit?: number | null,
+  requiredDepartmentId?: string | null,
 ): Promise<AgentCandidateRow | null> {
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
   const botOptionsRef = tableRef(schemaName, 'bot_options');
   const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
+  const agentDepartmentsRef = tableRef(schemaName, 'agent_departments');
 
   const pickConnectedCandidate = async (
     candidates: AgentCandidateRow[],
@@ -251,6 +261,30 @@ async function resolveAgentForAssignment(
 
     const preferredConnected = await pickConnectedCandidate(preferredRows);
     if (preferredConnected) return preferredConnected;
+  }
+
+  if (requiredDepartmentId?.trim()) {
+    const rowsByDept = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM ${agentDepartmentsRef} ad
+       JOIN ${assignmentsRef} aa ON aa.user_id = ad.user_id
+       JOIN ${usersRef} u ON u.id = ad.user_id
+       WHERE ad.department_id = $1::uuid
+         AND aa.is_available = true
+         AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+         AND u.status = 'active'
+         AND u.role IN ('agent')
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
+       ORDER BY aa.last_assigned_at ASC
+       LIMIT 15`,
+      requiredDepartmentId.trim(),
+      globalLimit ?? null,
+    );
+
+    const connectedByDept = await pickConnectedCandidate(rowsByDept);
+    if (connectedByDept) return connectedByDept;
+    return null;
   }
 
   if (requiredBotOptionId?.trim()) {
@@ -318,7 +352,7 @@ async function syncAllActiveConversationCounters(
        SELECT assigned_to AS user_id, COUNT(*)::integer AS total
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
        GROUP BY assigned_to
      ) conv
      WHERE aa.user_id = conv.user_id`,
@@ -331,7 +365,7 @@ async function syncAllActiveConversationCounters(
        SELECT DISTINCT assigned_to
        FROM ${conversationsRef}
        WHERE assigned_to IS NOT NULL
-         AND status IN ('open', 'in_service', 'pending', 'bot')
+         AND status = 'open'
      )`,
   );
 }
@@ -343,24 +377,55 @@ async function persistAutoAssignment(
   conversationId: string,
   agentId: string,
   agentName: string,
+  requiredBotOptionId?: string,
+  departmentId?: string | null,
 ): Promise<boolean> {
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const messagesRef = tableRef(schemaName, 'messages');
+  const contactsRef = tableRef(schemaName, 'contacts');
 
   const updatedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE ${conversationsRef}
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
-         status = 'open'
+         status = 'open',
+         bot_option_id = COALESCE($3::uuid, bot_option_id),
+         department_id = COALESCE(department_id, $4::uuid),
+         metadata = CASE
+           WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+             'queue_wait_started_at', queue_entered_at,
+             'queue_wait_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - queue_entered_at)))::integer),
+             'queue_assigned_at', NOW()
+           )
+           ELSE metadata
+         END,
+         queue_entered_at = NULL,
+         waiting_expires_at = NULL
      WHERE id = $2::uuid
        AND assigned_to IS NULL
+       AND status = 'open'
+       AND COALESCE(metadata->>'bot_stage', '') <> 'waiting_choice'
+       AND COALESCE(metadata->>'ai_agent_active', 'false') <> 'true'
      RETURNING id`,
     agentId,
     conversationId,
+    requiredBotOptionId ?? null,
+    departmentId ?? null,
   );
 
   if (!updatedRows[0]) return false;
+
+  const convAssignRef = tableRef(schemaName, 'conversation_assignments');
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${convAssignRef}
+    SET released_at = NOW(), release_reason = 'auto'
+    WHERE conversation_id = $1::uuid AND released_at IS NULL
+  `, conversationId);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO ${convAssignRef} (conversation_id, agent_id, assigned_at)
+    VALUES ($1::uuid, $2::uuid, NOW())
+  `, conversationId, agentId);
 
   await prisma.$executeRawUnsafe(
     `UPDATE ${assignmentsRef}
@@ -369,7 +434,7 @@ async function persistAutoAssignment(
            SELECT COUNT(*)::integer
            FROM ${conversationsRef}
            WHERE assigned_to = $1::uuid
-             AND status IN ('open', 'in_service', 'pending', 'bot')
+             AND status = 'open'
          )
      WHERE user_id = $1::uuid`,
     agentId,
@@ -381,6 +446,40 @@ async function persistAutoAssignment(
     conversationId,
     `Atendimento atribuido automaticamente para ${agentName}`,
   );
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+    `SELECT ct.name
+     FROM ${conversationsRef} c
+     LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
+     WHERE c.id = $1::uuid
+     LIMIT 1`,
+    conversationId,
+  );
+  const contactName = contactRows[0]?.name ?? 'Cliente';
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+    await tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (
+         user_id, action, entity, entity_id, new_data, created_at
+       ) VALUES (
+         $1::uuid,
+         'conversation.assigned',
+         'conversation',
+         $2::uuid,
+         $3::jsonb,
+         NOW()
+       )`,
+      agentId,
+      conversationId,
+      JSON.stringify({
+        assigned_to: agentId,
+        contact_name: contactName,
+        status: 'open',
+        source: 'auto_assign',
+      }),
+    );
+  });
 
   try {
     const convRows = await prisma.$queryRawUnsafe<ConversationDispatchRow[]>(
@@ -485,7 +584,7 @@ export async function syncAgentAvailability(
          SELECT COUNT(*)::integer
          FROM ${conversationsRef}
          WHERE assigned_to = $1::uuid
-           AND status IN ('open', 'in_service', 'pending', 'bot')
+           AND status = 'open'
        )
        WHERE user_id = $1::uuid
        RETURNING user_id, active_conversations, max_conversations, status, is_available`,
@@ -539,6 +638,12 @@ export async function autoAssignConversation(
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
   await syncAllActiveConversationCounters(prisma, schemaName);
 
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
+    `SELECT department_id FROM ${tableRef(schemaName, 'conversations')} WHERE id = $1::uuid LIMIT 1`,
+    conversationId,
+  );
+  const departmentId = conversationRows[0]?.department_id ?? null;
+
   const nextAgent = await resolveAgentForAssignment(
     prisma,
     schemaName,
@@ -546,9 +651,12 @@ export async function autoAssignConversation(
     preferredAgentId,
     requiredBotOptionId,
     settings.max_conversations_per_agent,
+    departmentId,
   );
   if (!nextAgent) {
-    if (requiredBotOptionId) {
+    if (departmentId) {
+      logger.info({ departmentId }, '[AutoAssign] No agent for department, keeping in queue');
+    } else if (requiredBotOptionId) {
       logger.info({ optionId: requiredBotOptionId }, '[AutoAssign] No agent with skill for option, keeping in queue');
     }
     return null;
@@ -561,6 +669,8 @@ export async function autoAssignConversation(
     conversationId,
     nextAgent.user_id,
     nextAgent.name,
+    requiredBotOptionId,
+    departmentId,
   );
 
   if (!assigned) return null;
@@ -584,9 +694,8 @@ export async function autoAssignNextQueuedConversation(
   const queueRows = await prisma.$queryRawUnsafe<QueueConversationRow[]>(
     `SELECT id
      FROM ${conversationsRef}
-     WHERE assigned_to IS NULL
-       AND status IN ('open', 'pending', 'bot')
-     ORDER BY last_message_at ASC NULLS FIRST, created_at ASC
+     WHERE ${humanQueueEligibilityCondition()}
+     ORDER BY queue_entered_at ASC NULLS LAST, created_at ASC
      LIMIT 1`,
   );
 

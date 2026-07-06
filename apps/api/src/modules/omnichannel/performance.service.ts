@@ -123,6 +123,24 @@ function resolveDateRange(
     return { dateFromLocal: `${today.slice(0, 8)}01`, dateToLocal: today };
   }
 
+  if (period === 'last_week') {
+    const todayDate = new Date(`${today}T00:00:00.000Z`);
+    const dow = todayDate.getUTCDay(); // 0=Dom, 1=Seg, …, 6=Sáb
+    const daysToThisMonday = dow === 0 ? 6 : dow - 1;
+    const lastMonday = addDaysToIsoDate(today, -(daysToThisMonday + 7));
+    return { dateFromLocal: lastMonday, dateToLocal: addDaysToIsoDate(lastMonday, 6) };
+  }
+
+  if (period === 'last_month') {
+    const year = Number(today.slice(0, 4));
+    const month = Number(today.slice(5, 7));
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const firstOfLastMonth = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const firstOfThisMonth = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+    return { dateFromLocal: firstOfLastMonth, dateToLocal: addDaysToIsoDate(firstOfThisMonth, -1) };
+  }
+
   const days = period === '30d' ? 30 : 7;
   return {
     dateFromLocal: addDaysToIsoDate(today, -days),
@@ -142,8 +160,8 @@ function toNullableNumber(value: number | null | undefined): number | null {
 
 function mapRangeToGoalPeriod(period: PerformanceQuery['period'], dateFromLocal: string, dateToLocal: string): GoalPeriod {
   if (period === 'today' || period === 'yesterday') return 'daily';
-  if (period === '7d') return 'weekly';
-  if (period === '30d' || period === 'month') return 'monthly';
+  if (period === '7d' || period === 'last_week') return 'weekly';
+  if (period === '30d' || period === 'month' || period === 'last_month') return 'monthly';
 
   const from = new Date(`${dateFromLocal}T00:00:00.000Z`).getTime();
   const to = new Date(`${dateToLocal}T00:00:00.000Z`).getTime();
@@ -223,12 +241,16 @@ function getPerformanceBaseFilters(
   const dateToToken = pushParam(dateToLocal);
   const timezoneToken = pushParam(timezone);
 
-  conditions.push(`c.status <> 'bot'`);
+  conditions.push(`c.status IN ('open', 'waiting', 'closed')`);
   conditions.push(`c.created_at >= ((${dateFromToken}::date)::timestamp AT TIME ZONE ${timezoneToken}::text)`);
   conditions.push(`c.created_at < ((((${dateToToken}::date + INTERVAL '1 day')::timestamp) AT TIME ZONE ${timezoneToken}::text))`);
 
   if (query.bot_option_id) {
-    conditions.push(`c.metadata->>'bot_option_id' = ${pushParam(query.bot_option_id)}::text`);
+    conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
+  }
+
+  if (query.department_id) {
+    conditions.push(`c.department_id = ${pushParam(query.department_id)}::uuid`);
   }
 
   const usersFilterParts: string[] = [
@@ -275,6 +297,7 @@ export async function listPerformance(
   }
 
   const safeSchema = quoteIdent(schemaName);
+  const assignRef = `${safeSchema}.conversation_assignments`;
   const { conversationWhereSql, usersWhereSql, params } = getPerformanceBaseFilters(
     query,
     dateRange.dateFromLocal,
@@ -301,6 +324,12 @@ export async function listPerformance(
         c.id,
         c.assigned_to,
         c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
         c.assigned_at,
         c.resolved_at,
         c.closed_at,
@@ -310,11 +339,19 @@ export async function listPerformance(
         fr.first_response_seconds
       FROM ${safeSchema}.conversations c
       LEFT JOIN LATERAL (
-        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
         FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
         WHERE m.conversation_id = c.id
           AND m.sender_type = 'agent'
           AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
       ) fr ON TRUE
       WHERE ${conversationWhereSql}
     )
@@ -324,18 +361,20 @@ export async function listPerformance(
       u.avatar_url,
       COUNT(fc.id)::bigint AS total_conversations,
       AVG(
-        EXTRACT(EPOCH FROM (
-          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
-        )) / 60
+        EXTRACT(EPOCH FROM (ca.released_at - ca.assigned_at)) / 60
       ) FILTER (
-        WHERE fc.status IN ('resolved', 'closed')
-          AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+        WHERE ca.released_at IS NOT NULL
+          AND ca.release_reason = 'closed'
       ) AS avg_tma_minutes,
       AVG(
-        EXTRACT(EPOCH FROM (
-          fc.assigned_at - fc.created_at
-        )) / 60
-      ) FILTER (WHERE fc.assigned_at IS NOT NULL) AS avg_tme_minutes,
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
       AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
       COUNT(fc.id) FILTER (WHERE fc.csat_score IS NOT NULL)::bigint AS csat_count,
       ROUND(
@@ -357,6 +396,10 @@ export async function listPerformance(
       )::bigint AS sla_breach
     FROM ${safeSchema}.users u
     LEFT JOIN filtered_conversations fc ON fc.assigned_to = u.id
+    LEFT JOIN ${assignRef} ca
+      ON ca.conversation_id = fc.id
+      AND ca.agent_id = u.id
+      AND ca.release_reason = 'closed'
     WHERE ${usersWhereSql}
     GROUP BY u.id, u.name, u.avatar_url
     ORDER BY total_conversations DESC, u.name ASC
@@ -368,6 +411,12 @@ export async function listPerformance(
       SELECT
         c.id,
         c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
         c.assigned_at,
         c.resolved_at,
         c.closed_at,
@@ -377,11 +426,19 @@ export async function listPerformance(
         fr.first_response_seconds
       FROM ${safeSchema}.conversations c
       LEFT JOIN LATERAL (
-        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - c.created_at))) AS first_response_seconds
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
         FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
         WHERE m.conversation_id = c.id
           AND m.sender_type = 'agent'
           AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
       ) fr ON TRUE
       WHERE ${conversationWhereSql}
     )
@@ -389,17 +446,22 @@ export async function listPerformance(
       COUNT(fc.id)::bigint AS total_volume,
       AVG(
         EXTRACT(EPOCH FROM (
-          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.created_at
+          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
         )) / 60
       ) FILTER (
-        WHERE fc.status IN ('resolved', 'closed')
+        WHERE fc.status = 'closed'
           AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+          AND fc.performance_start_at IS NOT NULL
       ) AS avg_tma_minutes,
       AVG(
-        EXTRACT(EPOCH FROM (
-          fc.assigned_at - fc.created_at
-        )) / 60
-      ) FILTER (WHERE fc.assigned_at IS NOT NULL) AS avg_tme_minutes,
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
       AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
       ROUND(
         100.0 * COUNT(fc.id) FILTER (
@@ -514,6 +576,152 @@ export async function listPerformance(
       date_to: dateRange.dateToLocal,
       timezone,
       goal_period: goalPeriod,
+    },
+  };
+}
+
+interface PerformanceByGroupRowDb {
+  group_name: string | null;
+  total_conversations: number | bigint | null;
+  avg_tma_minutes: number | null;
+  avg_tme_minutes: number | null;
+  avg_csat: number | null;
+  sla_percent: number | null;
+}
+
+export async function listPerformanceByGroup(
+  schemaName: string,
+  query: PerformanceQuery,
+  timezone: string,
+) {
+  const dateRange = resolveDateRange(
+    query.period,
+    timezone,
+    query.date_from,
+    query.date_to,
+  );
+
+  if (dateRange.dateFromLocal > dateRange.dateToLocal) {
+    throw new Error('Período inválido: date_from maior que date_to');
+  }
+
+  const safeSchema = quoteIdent(schemaName);
+
+  const params: unknown[] = [];
+  const pushParam = (value: unknown): string => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+
+  const dateFromToken = pushParam(dateRange.dateFromLocal);
+  const dateToToken = pushParam(dateRange.dateToLocal);
+  const timezoneToken = pushParam(timezone);
+
+  const conditions: string[] = [
+    `c.status IN ('open', 'waiting', 'closed')`,
+    `c.created_at >= ((${dateFromToken}::date)::timestamp AT TIME ZONE ${timezoneToken}::text)`,
+    `c.created_at < ((((${dateToToken}::date + INTERVAL '1 day')::timestamp) AT TIME ZONE ${timezoneToken}::text))`,
+  ];
+
+  if (query.bot_option_id) {
+    conditions.push(`c.bot_option_id = ${pushParam(query.bot_option_id)}::uuid`);
+  }
+
+  if (query.department_id) {
+    conditions.push(`c.department_id = ${pushParam(query.department_id)}::uuid`);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const rows = await prisma.$queryRawUnsafe<PerformanceByGroupRowDb[]>(`
+    WITH filtered_conversations AS (
+      SELECT
+        c.id,
+        c.bot_option_id,
+        COALESCE(d.name, NULLIF(c.metadata->>'bot_department', ''), '—') AS group_name,
+        c.created_at,
+        c.conversation_type,
+        c.outbound_returned_at,
+        CASE
+          WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+          ELSE c.created_at
+        END AS performance_start_at,
+        c.assigned_at,
+        c.resolved_at,
+        c.closed_at,
+        c.last_message_at,
+        c.status,
+        c.csat_score,
+        fr.first_response_seconds
+      FROM ${safeSchema}.conversations c
+      LEFT JOIN ${safeSchema}.departments d ON d.id = c.department_id
+      LEFT JOIN LATERAL (
+        SELECT MIN(EXTRACT(EPOCH FROM (m.created_at - start_ref.performance_start_at))) AS first_response_seconds
+        FROM ${safeSchema}.messages m
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
+            ELSE c.created_at
+          END AS performance_start_at
+        ) start_ref
+        WHERE m.conversation_id = c.id
+          AND m.sender_type = 'agent'
+          AND m.is_internal = false
+          AND start_ref.performance_start_at IS NOT NULL
+          AND m.created_at >= start_ref.performance_start_at
+      ) fr ON TRUE
+      WHERE ${whereClause}
+    )
+    SELECT
+      fc.group_name,
+      COUNT(DISTINCT fc.id)::bigint AS total_conversations,
+      AVG(
+        EXTRACT(EPOCH FROM (
+          COALESCE(fc.resolved_at, fc.closed_at, fc.last_message_at) - fc.performance_start_at
+        )) / 60
+      ) FILTER (
+        WHERE fc.status = 'closed'
+          AND (fc.resolved_at IS NOT NULL OR fc.closed_at IS NOT NULL)
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tma_minutes,
+      AVG(
+        GREATEST(
+          EXTRACT(EPOCH FROM (fc.assigned_at - fc.performance_start_at)),
+          0
+        ) / 60
+      ) FILTER (
+        WHERE fc.assigned_at IS NOT NULL
+          AND fc.performance_start_at IS NOT NULL
+      ) AS avg_tme_minutes,
+      AVG(fc.csat_score) FILTER (WHERE fc.csat_score IS NOT NULL) AS avg_csat,
+      ROUND(
+        100.0 * COUNT(fc.id) FILTER (
+          WHERE fc.first_response_seconds IS NOT NULL
+            AND fc.first_response_seconds <= 300
+        ) / NULLIF(
+          COUNT(fc.id) FILTER (WHERE fc.first_response_seconds IS NOT NULL),
+          0
+        )
+      ) AS sla_percent
+    FROM filtered_conversations fc
+    GROUP BY fc.group_name
+    ORDER BY total_conversations DESC
+  `, ...params);
+
+  return {
+    data: rows.map((row) => ({
+      group_name: row.group_name ?? '—',
+      total_conversations: toNumber(row.total_conversations),
+      avg_tma_minutes: toNullableNumber(row.avg_tma_minutes),
+      avg_tme_minutes: toNullableNumber(row.avg_tme_minutes),
+      avg_csat: toNullableNumber(row.avg_csat),
+      sla_percent: toNullableNumber(row.sla_percent),
+    })),
+    applied_filters: {
+      ...query,
+      date_from: dateRange.dateFromLocal,
+      date_to: dateRange.dateToLocal,
+      timezone,
     },
   };
 }

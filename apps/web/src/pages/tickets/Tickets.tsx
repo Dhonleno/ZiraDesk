@@ -57,6 +57,10 @@ function formatCompactDate(value: string): string {
   return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
+function formatTicketNumber(n: number): string {
+  return `#${String(n).padStart(5, '0')}`;
+}
+
 function initials(name: string | null | undefined): string {
   if (!name) return '??';
   return name
@@ -172,7 +176,7 @@ function TicketCard({
       title={sanitizeTicketTitle(ticket.title)}
     >
       <div className="tickets-card-top">
-        <span className="tickets-card-id">#{ticket.id.slice(-6).toUpperCase()}</span>
+        <span className="tickets-card-id">{formatTicketNumber(ticket.ticket_number)}</span>
         <span className="tickets-priority-badge" style={{ background: priority.bg, color: priority.color }}>
           {priority.label}
         </span>
@@ -316,6 +320,12 @@ export function TicketsPage() {
     staleTime: 60_000,
   });
 
+  const { data: categoriesData } = useQuery({
+    queryKey: ['ticket-categories'],
+    queryFn: adminApi.ticketCategories.list,
+    staleTime: 60_000,
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ ticketId, status }: { ticketId: string; status: TicketStatus }) =>
       ticketsApi.update(ticketId, { status }),
@@ -383,13 +393,10 @@ export function TicketsPage() {
   const closedTickets = closedTicketsData?.data ?? [];
   const total = ticketsData?.meta.total ?? tickets.length;
 
-  const categories = useMemo(() => {
-    const values = new Set<string>();
-    tickets.forEach((ticket) => {
-      if (ticket.category) values.add(ticket.category);
-    });
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [tickets]);
+  const categories = useMemo(
+    () => (categoriesData ?? []).filter((item) => item.is_active),
+    [categoriesData],
+  );
 
   const grouped = useMemo(() => {
     const map: Record<BoardStatus, Ticket[]> = {
@@ -522,7 +529,7 @@ export function TicketsPage() {
             >
               <option value="">{t('tickets.fields.category')}</option>
               {categories.map((item) => (
-                <option key={item} value={item}>{item}</option>
+                <option key={item.id} value={item.name}>{item.name}</option>
               ))}
             </select>
 

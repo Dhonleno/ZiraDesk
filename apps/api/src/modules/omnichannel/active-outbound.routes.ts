@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthUser } from '@ziradesk/shared';
+import type { AuthUser, PlanFeature } from '@ziradesk/shared';
 import { z } from 'zod';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
@@ -9,8 +9,11 @@ import { messageQueue } from '../../jobs/queue.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { getSocketServer } from '../../socket/index.js';
 import { loadConversationSocketPayload } from './conversations/socket-payload.js';
+import { buildProtocolMessage } from './conversations/protocols.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
+import { calculateWaitingExpiresAt } from '../../lib/omnichannel/calculate-waiting-expires.js';
+import { hasFeature } from '../../middleware/entitlement.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -55,13 +58,23 @@ interface GeneratedProtocolRow {
   protocol: string;
 }
 
+interface DuplicateConversationRow {
+  id: string;
+}
+
 const listTemplatesQuerySchema = z.object({
   channel_id: z.string().uuid().optional(),
+});
+
+const windowStatusQuerySchema = z.object({
+  contactId: z.string().uuid(),
+  channelId: z.string().uuid(),
 });
 
 const activeOutboundSchema = z.object({
   contactId: z.string().uuid(),
   channelId: z.string().uuid(),
+  bot_option_id: z.string().uuid().optional(),
   templateName: z.string().trim().min(1).max(512).optional(),
   templateLanguage: z.string().trim().min(2).max(20).optional(),
   templateComponents: z.array(z.record(z.unknown())).optional(),
@@ -108,6 +121,35 @@ async function withTenantSchema<T>(
   });
 }
 
+async function getWhatsAppWindowStatus(
+  contactId: string,
+  channelId: string,
+  tx: TenantRawDbClient,
+): Promise<{ withinWindow: boolean; lastClientMessageAt: string | null }> {
+  const rows = await tx.$queryRawUnsafe<Array<{ created_at: Date }>>(
+    `SELECT m.created_at
+     FROM messages m
+     JOIN conversations c ON c.id = m.conversation_id
+     WHERE c.contact_id = $1::uuid
+       AND c.channel_id = $2::uuid
+       AND m.sender_type = 'client'
+     ORDER BY m.created_at DESC
+     LIMIT 1`,
+    contactId,
+    channelId,
+  );
+  const lastClientMessage = rows[0];
+  if (!lastClientMessage) {
+    return { withinWindow: false, lastClientMessageAt: null };
+  }
+  const withinWindow =
+    Date.now() - new Date(lastClientMessage.created_at).getTime() < 24 * 60 * 60 * 1000;
+  return {
+    withinWindow,
+    lastClientMessageAt: new Date(lastClientMessage.created_at).toISOString(),
+  };
+}
+
 export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> {
   app.get('/templates', { preHandler: guard }, async (request, reply) => {
     const parsed = listTemplatesQuerySchema.safeParse(request.query);
@@ -132,6 +174,29 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     return reply.send({ success: true, data: approvedTemplates });
   });
 
+  app.get('/active-outbound/window-status', { preHandler: guard }, async (request, reply) => {
+    const parsed = windowStatusQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const user = request.user as AuthUser;
+    const schemaName = user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const { contactId, channelId } = parsed.data;
+    const status = await withTenantSchema(schemaName, (tx) =>
+      getWhatsAppWindowStatus(contactId, channelId, tx),
+    );
+
+    return reply.send({ success: true, data: status });
+  });
+
   app.post('/active-outbound', { preHandler: guard }, async (request, reply) => {
     const parsed = activeOutboundSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -153,6 +218,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const {
       contactId,
       channelId,
+      bot_option_id: botOptionId,
       templateName,
       templateLanguage,
       templateComponents,
@@ -168,6 +234,15 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     const normalizedTemplateComponents = (templateComponents ?? []).filter(
       (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
     );
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true, plan: { select: { features: true } } },
+    });
+    const tenantSettings = typeof tenant?.settings === 'object' && tenant.settings !== null
+      ? tenant.settings as Record<string, unknown>
+      : {};
+    const waitingExpiresAt = calculateWaitingExpiresAt(tenantSettings);
+    const planFeatures = (tenant?.plan?.features ?? {}) as Partial<Record<PlanFeature, boolean>>;
 
     const result = await withTenantSchema(schemaName, async (tx) => {
       const contacts = await tx.$queryRawUnsafe<ContactRow[]>(
@@ -196,6 +271,47 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
 
       if (channel.type !== 'whatsapp' && channel.type !== 'email') {
         return { statusCode: 400 as const, payload: { success: false, error: { message: 'Canal não suporta envio ativo' } } };
+      }
+
+      if (channel.type === 'whatsapp' && !hasFeature(planFeatures, 'whatsapp')) {
+        return { statusCode: 403 as const, payload: { success: false, error: { code: 'FEATURE_NOT_AVAILABLE', message: 'Esta funcionalidade não está disponível no seu plano atual.', feature: 'whatsapp' } } };
+      }
+      if (channel.type === 'email' && !hasFeature(planFeatures, 'email')) {
+        return { statusCode: 403 as const, payload: { success: false, error: { code: 'FEATURE_NOT_AVAILABLE', message: 'Esta funcionalidade não está disponível no seu plano atual.', feature: 'email' } } };
+      }
+
+      const duplicateRows = await tx.$queryRawUnsafe<DuplicateConversationRow[]>(
+        `SELECT id
+         FROM conversations
+         WHERE contact_id = $1::uuid
+           AND channel_id = $2::uuid
+           AND status = 'open'
+         LIMIT 1`,
+        contactId,
+        channelId,
+      );
+      const duplicate = duplicateRows[0];
+      if (duplicate) {
+        return {
+          statusCode: 409 as const,
+          payload: { error: 'DUPLICATE_OPEN_CONVERSATION', existingId: duplicate.id },
+        };
+      }
+
+      if (channel.type === 'whatsapp' && !useTemplate) {
+        const { withinWindow } = await getWhatsAppWindowStatus(contactId, channelId, tx);
+        if (!withinWindow) {
+          return {
+            statusCode: 400 as const,
+            payload: {
+              success: false,
+              error: {
+                code: 'WHATSAPP_WINDOW_EXPIRED',
+                message: 'Fora da janela de 24h. Use um template aprovado para iniciar a conversa.',
+              },
+            },
+          };
+        }
       }
 
       if (channel.type === 'whatsapp' && useTemplate && !templateNameNormalized) {
@@ -242,7 +358,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       );
       const protocolNumber = protocolRows[0]?.protocol ?? null;
 
-      let resolvedTemplateBody: string | null = null;
+      let renderedTemplateBody: string | null = null;
       if (channel.type === 'whatsapp' && useTemplate && templateNameNormalized) {
         const templateRows = await tx.$queryRawUnsafe<Array<{
           body: string | null;
@@ -298,7 +414,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         const normalizedStatus = selectedTemplate.status?.trim().toLowerCase() ?? '';
         if (normalizedStatus && normalizedStatus !== 'approved') {
           return {
-            statusCode: 409 as const,
+            statusCode: 422 as const,
             payload: {
               success: false,
               error: {
@@ -319,7 +435,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
           };
         }
         if (selectedTemplate.body) {
-          resolvedTemplateBody = applyBodyParams(
+          renderedTemplateBody = applyBodyParams(
             selectedTemplate.body,
             extractBodyParamsFromComponents(normalizedTemplateComponents),
           );
@@ -328,10 +444,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
 
       const metadata = {
         type: 'outbound',
-        origin: 'active_outbound',
-        active_outbound: true,
-        active_outbound_started_at: new Date().toISOString(),
-        active_outbound_origin_agent_id: userId,
+        origin: 'outbound',
+        outbound_started_at: new Date().toISOString(),
+        outbound_origin_agent_id: userId,
       };
 
       const inserted = await tx.$queryRawUnsafe<ConversationInsertRow[]>(
@@ -343,19 +458,23 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
            status,
            assigned_to,
            assigned_at,
+           waiting_expires_at,
            protocol_number,
            subject,
+           bot_option_id,
            metadata
          ) VALUES (
            $1::uuid,
            $2::uuid,
            $3,
            'outbound',
-           'active_outbound',
+           'waiting',
            $4::uuid,
            NOW(),
+           $8::timestamptz,
            $5,
            $6,
+           $9::uuid,
            $7::jsonb
          )
          RETURNING *`,
@@ -366,6 +485,8 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         protocolNumber,
         normalizedSubject,
         JSON.stringify(metadata),
+        waitingExpiresAt,
+        botOptionId ?? null,
       );
 
       const conversation = inserted[0];
@@ -376,7 +497,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         };
       }
 
-      const protocolMessage = protocolNumber ? `Protocolo do atendimento: *${protocolNumber}*` : null;
+      const protocolMessage = protocolNumber
+        ? buildProtocolMessage(protocolNumber, { context: 'agent_initiated', startedAt: new Date() })
+        : null;
       let protocolMessageId: string | null = null;
       if (protocolMessage) {
         const protocolMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -390,7 +513,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
       }
 
       const initialContent = channel.type === 'whatsapp' && useTemplate
-        ? (resolvedTemplateBody ?? `[Template WhatsApp: ${templateNameNormalized}]`)
+        ? (renderedTemplateBody ?? `[Template WhatsApp: ${templateNameNormalized}]`)
         : normalizedMessage;
       const initialContentType = channel.type === 'whatsapp' && useTemplate ? 'template' : 'text';
       const initialMetadata = channel.type === 'whatsapp' && useTemplate
@@ -422,6 +545,22 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
          WHERE id = $2::uuid`,
         initialContent.slice(0, 255),
         conversation.id,
+      );
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data, ip_address)
+         VALUES ($1::uuid, 'conversation.created', 'conversation', $2::uuid, $3::jsonb, $4::inet)`,
+        userId,
+        conversation.id,
+        JSON.stringify({
+          contact_id: contactId,
+          channel_id: channelId,
+          channel_type: channel.type,
+          conversation_type: 'outbound',
+          initial_message: initialContent.slice(0, 100),
+          created_by: userId,
+        }),
+        request.ip ?? null,
       );
 
       return {
@@ -495,7 +634,7 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     void dispatchWebhook(tenantId, 'conversation.created', {
       conversation: {
         id: conversation.id,
-        status: 'active_outbound',
+        status: 'waiting',
         channelType: channelType,
       },
     });

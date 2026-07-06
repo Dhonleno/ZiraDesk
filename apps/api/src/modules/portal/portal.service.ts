@@ -3,14 +3,19 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { getSocketServer } from '../../socket/index.js';
+import { sendEmail } from '../../services/email.service.js';
 import type {
   PortalAddCommentInput,
   PortalCreateTicketInput,
+  PortalLgpdConsentInput,
+  PortalLgpdRectificationInput,
+  PortalLgpdRequestInput,
   PortalLoginInput,
   PortalTicketsQuery,
 } from './portal.schema.js';
 
 const PORTAL_TOKEN_TTL = '7d';
+const PORTAL_RESET_TOKEN_TTL = '1h';
 
 export class PortalAuthError extends Error {}
 export class PortalNotFoundError extends Error {}
@@ -24,6 +29,24 @@ export interface PortalJwtPayload {
   organizationId: string | null;
   type: 'portal';
   exp?: number;
+}
+
+interface PortalResetJwtPayload {
+  sub: string;
+  schemaName: string;
+  tenantSlug: string;
+  type: 'portal-reset';
+  exp?: number;
+}
+
+interface PortalLgpdRequestRow {
+  id: string;
+  request_type: string;
+  status: string;
+  payload: unknown;
+  result: unknown;
+  requested_at: Date;
+  processed_at: Date | null;
 }
 
 function quoteIdent(identifier: string): string {
@@ -67,13 +90,24 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
     ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS portal_password_hash VARCHAR(255),
     ADD COLUMN IF NOT EXISTS portal_last_login TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS portal_invited_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    ADD COLUMN IF NOT EXISTS lgpd_consent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_consent_source VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS lgpd_last_export_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_anonymized_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS lgpd_anonymization_reason TEXT
   `);
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.tickets
     ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'manual',
-    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500)
+    ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(500),
+    ADD COLUMN IF NOT EXISTS csat_score SMALLINT,
+    ADD COLUMN IF NOT EXISTS csat_comment TEXT,
+    ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -91,6 +125,52 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.ticket_comments
     ALTER COLUMN user_id DROP NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
+      user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+      subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+      request_type VARCHAR(30) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      requested_by UUID REFERENCES ${schema}.users(id),
+      processed_by UUID REFERENCES ${schema}.users(id),
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      result JSONB NOT NULL DEFAULT '{}'::jsonb,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processed_at TIMESTAMPTZ,
+      sla_deadline TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '15 days'),
+      notified_at TIMESTAMPTZ,
+      reminder_sent_at TIMESTAMPTZ
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.lgpd_requests
+    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+    ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.lgpd_requests
+    ALTER COLUMN sla_deadline SET DEFAULT (NOW() + INTERVAL '15 days')
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE ${schema}.lgpd_requests
+    SET sla_deadline = requested_at + INTERVAL '15 days'
+    WHERE status = 'pending'
+      AND sla_deadline IS NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact
+    ON ${schema}.lgpd_requests(contact_id)
   `);
 }
 
@@ -169,6 +249,85 @@ export async function verifyPortalToken(token: string): Promise<PortalJwtPayload
   return decoded;
 }
 
+function resolvePortalResetUrl(tenantSlug: string, token: string): string {
+  if (env.NODE_ENV === 'production') {
+    return `https://suporte.${tenantSlug}.ziradesk.com/reset-password?token=${encodeURIComponent(token)}`;
+  }
+  const appUrl = env.APP_URL.replace(/\/$/, '');
+  return `${appUrl}/portal/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+export async function requestPortalPasswordReset(host: string, email: string): Promise<void> {
+  const hostInfo = resolveHostTenant(host);
+  if (!hostInfo.isPortal || !hostInfo.tenantSlug) {
+    return;
+  }
+
+  const tenant = await getTenantBySlug(hostInfo.tenantSlug);
+  await ensurePortalInfrastructure(tenant.schemaName);
+  const schema = quoteIdent(tenant.schemaName);
+
+  const contacts = await prisma.$queryRawUnsafe<Array<{ id: string; email: string | null }>>(
+    `SELECT id, email
+     FROM ${schema}.contacts
+     WHERE LOWER(email) = LOWER($1)
+       AND portal_enabled = true
+     LIMIT 1`,
+    email,
+  );
+
+  const contact = contacts[0];
+  if (!contact || !contact.email) {
+    return;
+  }
+
+  const token = jwt.sign(
+    {
+      sub: contact.id,
+      schemaName: tenant.schemaName,
+      tenantSlug: tenant.slug,
+      type: 'portal-reset',
+    } satisfies PortalResetJwtPayload,
+    env.JWT_SECRET,
+    { expiresIn: PORTAL_RESET_TOKEN_TTL },
+  );
+
+  const resetUrl = resolvePortalResetUrl(tenant.slug, token);
+  await sendEmail({
+    tenantId: tenant.id,
+    tenantSchema: tenant.schemaName,
+    to: contact.email,
+    subject: 'Redefinição de senha — Portal de Suporte',
+    html: `<p>Clique no link para redefinir sua senha:</p>
+<p><a href="${resetUrl}">Redefinir senha</a></p>
+<p>O link expira em 1 hora.</p>`,
+  });
+}
+
+export async function resetPortalPassword(token: string, password: string): Promise<void> {
+  let payload: PortalResetJwtPayload;
+  try {
+    payload = jwt.verify(token, env.JWT_SECRET) as PortalResetJwtPayload;
+  } catch {
+    throw new PortalAuthError('Token inválido ou expirado');
+  }
+
+  if (payload.type !== 'portal-reset' || !payload.sub || !payload.schemaName) {
+    throw new PortalAuthError('Token inválido');
+  }
+
+  await ensurePortalInfrastructure(payload.schemaName);
+  const schema = quoteIdent(payload.schemaName);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.contacts
+     SET portal_password_hash = $1
+     WHERE id = $2::uuid`,
+    await bcrypt.hash(password, 12),
+    payload.sub,
+  );
+}
+
 export async function portalMe(portalUser: PortalJwtPayload) {
   const schema = quoteIdent(portalUser.schemaName);
   const rows = await prisma.$queryRawUnsafe<Array<{
@@ -203,6 +362,232 @@ export async function portalMe(portalUser: PortalJwtPayload) {
   const contact = rows[0];
   if (!contact) throw new PortalNotFoundError('Contato não encontrado');
   return contact;
+}
+
+export async function getPortalLgpdState(portalUser: PortalJwtPayload): Promise<{
+  consent: {
+    status: string;
+    at: Date | null;
+    source: string | null;
+    last_export_at: Date | null;
+    anonymized_at: Date | null;
+    anonymization_reason: string | null;
+  };
+  requests: PortalLgpdRequestRow[];
+}> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const contacts = await prisma.$queryRawUnsafe<Array<{
+    lgpd_consent_status: string;
+    lgpd_consent_at: Date | null;
+    lgpd_consent_source: string | null;
+    lgpd_last_export_at: Date | null;
+    lgpd_anonymized_at: Date | null;
+    lgpd_anonymization_reason: string | null;
+  }>>(
+    `SELECT
+       lgpd_consent_status,
+       lgpd_consent_at,
+       lgpd_consent_source,
+       lgpd_last_export_at,
+       lgpd_anonymized_at,
+       lgpd_anonymization_reason
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  const contact = contacts[0];
+  if (!contact) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requests = await prisma.$queryRawUnsafe<PortalLgpdRequestRow[]>(
+    `SELECT id, request_type, status, payload, result, requested_at, processed_at
+     FROM ${schema}.lgpd_requests
+     WHERE contact_id = $1::uuid
+     ORDER BY requested_at DESC
+     LIMIT 30`,
+    portalUser.contactId,
+  );
+
+  return {
+    consent: {
+      status: contact.lgpd_consent_status,
+      at: contact.lgpd_consent_at,
+      source: contact.lgpd_consent_source,
+      last_export_at: contact.lgpd_last_export_at,
+      anonymized_at: contact.lgpd_anonymized_at,
+      anonymization_reason: contact.lgpd_anonymization_reason,
+    },
+    requests,
+  };
+}
+
+export async function updatePortalLgpdConsent(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdConsentInput,
+): Promise<{ status: string; consent_at: Date | null; source: string | null; request_id: string }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+  const source = payload.source?.trim() || 'portal_self_service';
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    lgpd_consent_status: string;
+    lgpd_consent_at: Date | null;
+    lgpd_consent_source: string | null;
+  }>>(
+    `UPDATE ${schema}.contacts
+     SET lgpd_consent_status = $1,
+         lgpd_consent_source = $2,
+         lgpd_consent_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $3::uuid
+       AND portal_enabled = true
+     RETURNING id, lgpd_consent_status, lgpd_consent_at, lgpd_consent_source`,
+    payload.status,
+    source,
+    portalUser.contactId,
+  );
+
+  const contact = rows[0];
+  if (!contact) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, processed_by, payload, result, processed_at
+    )
+    VALUES (
+      $1::uuid, 'consent_update', 'processed', NULL, NULL, $2::jsonb, $3::jsonb, NOW()
+    )
+    RETURNING id`,
+    portalUser.contactId,
+    JSON.stringify({ channel: 'portal', status: payload.status, source }),
+    JSON.stringify({ consent_at: contact.lgpd_consent_at?.toISOString() ?? null }),
+  );
+
+  const requestId = requestRows[0]?.id;
+  if (!requestId) {
+    throw new PortalNotFoundError('Falha ao registrar trilha LGPD');
+  }
+
+  return {
+    status: contact.lgpd_consent_status,
+    consent_at: contact.lgpd_consent_at,
+    source: contact.lgpd_consent_source,
+    request_id: requestId,
+  };
+}
+
+export async function submitPortalLgpdRequest(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdRequestInput,
+): Promise<{ id: string; request_type: string; status: string; requested_at: Date }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const ticketRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  if (!ticketRows[0]) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    requested_at: Date;
+  }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, payload, result
+    )
+    VALUES (
+      $1::uuid, $2, 'pending', NULL, $3::jsonb, '{}'::jsonb
+    )
+    RETURNING id, request_type, status, requested_at`,
+    portalUser.contactId,
+    payload.request_type,
+    JSON.stringify({
+      channel: 'portal',
+      reason: payload.reason ?? null,
+      include_messages: payload.include_messages ?? true,
+    }),
+  );
+
+  const request = requestRows[0];
+  if (!request) {
+    throw new PortalNotFoundError('Falha ao criar solicitação LGPD');
+  }
+
+  return request;
+}
+
+export async function submitPortalLgpdRectificationRequest(
+  portalUser: PortalJwtPayload,
+  payload: PortalLgpdRectificationInput,
+): Promise<{ id: string; request_type: string; status: string; requested_at: Date }> {
+  await ensurePortalInfrastructure(portalUser.schemaName);
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schema}.contacts
+     WHERE id = $1::uuid
+       AND portal_enabled = true
+     LIMIT 1`,
+    portalUser.contactId,
+  );
+
+  if (!contactRows[0]) {
+    throw new PortalNotFoundError('Contato não encontrado');
+  }
+
+  const requestedChanges = {
+    ...(payload.name?.trim() ? { name: payload.name.trim() } : {}),
+    ...(payload.email?.trim() ? { email: payload.email.trim() } : {}),
+    ...(payload.phone?.trim() ? { phone: payload.phone.trim() } : {}),
+    ...(payload.document?.trim() ? { document: payload.document.trim() } : {}),
+  };
+
+  const requestRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    request_type: string;
+    status: string;
+    requested_at: Date;
+  }>>(
+    `INSERT INTO ${schema}.lgpd_requests (
+      contact_id, request_type, status, requested_by, payload, result
+    )
+    VALUES (
+      $1::uuid, 'rectification', 'pending', NULL, $2::jsonb, '{}'::jsonb
+    )
+    RETURNING id, request_type, status, requested_at`,
+    portalUser.contactId,
+    JSON.stringify({
+      channel: 'portal',
+      requested_changes: requestedChanges,
+    }),
+  );
+
+  const request = requestRows[0];
+  if (!request) {
+    throw new PortalNotFoundError('Falha ao criar solicitação LGPD');
+  }
+
+  return request;
 }
 
 export async function listPortalTickets(portalUser: PortalJwtPayload, query: PortalTicketsQuery) {
@@ -517,4 +902,103 @@ export async function addPortalComment(
   }
 
   return { success: true };
+}
+
+export async function submitTicketCsat(
+  ticketId: string,
+  score: number,
+  comment: string | undefined,
+  tenantSlug: string,
+): Promise<void> {
+  const tenant = await getTenantBySlug(tenantSlug);
+  await ensurePortalInfrastructure(tenant.schemaName);
+  const schema = quoteIdent(tenant.schemaName);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    csat_expires_at: Date | null;
+    csat_responded_at: Date | null;
+  }>>(
+    `SELECT id, csat_expires_at, csat_responded_at
+     FROM ${schema}.tickets
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    ticketId,
+  );
+
+  const ticket = rows[0];
+  if (!ticket) throw new PortalNotFoundError('Ticket não encontrado');
+  if (ticket.csat_responded_at) throw new PortalForbiddenError('CSAT já respondido');
+  if (ticket.csat_expires_at && new Date(ticket.csat_expires_at) < new Date()) {
+    throw new PortalForbiddenError('CSAT expirado');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.tickets
+     SET csat_score = $1::smallint,
+         csat_comment = $2,
+         csat_responded_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $3::uuid`,
+    score,
+    comment ?? null,
+    ticketId,
+  );
+}
+
+export async function reopenTicketByContact(
+  portalUser: PortalJwtPayload,
+  ticketId: string,
+): Promise<void> {
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; status: string; assigned_to: string | null }>>(
+    `SELECT id, status, assigned_to
+     FROM ${schema}.tickets
+     WHERE id = $1::uuid
+       AND (
+         contact_id = $2::uuid
+         OR ($3::uuid IS NOT NULL AND organization_id = $3::uuid)
+       )
+     LIMIT 1`,
+    ticketId,
+    portalUser.contactId,
+    portalUser.organizationId,
+  );
+
+  const ticket = rows[0];
+  if (!ticket) throw new PortalNotFoundError('Ticket não encontrado');
+  if (ticket.status !== 'resolved') {
+    throw new PortalForbiddenError('Apenas tickets resolvidos podem ser reabertos pelo cliente');
+  }
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${schema}.tickets
+     SET status = 'open', resolved_at = NULL, updated_at = NOW()
+     WHERE id = $1::uuid`,
+    ticketId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${schema}.ticket_events
+       (ticket_id, user_id, event_type, old_value, new_value, metadata)
+     VALUES ($1::uuid, NULL, 'status_changed', 'resolved', 'open',
+             '{"source": "contact_portal"}'::jsonb)`,
+    ticketId,
+  );
+
+  try {
+    const io = getSocketServer();
+    io.to(`tenant:${portalUser.tenantId}`).emit('ticket:updated', { ticketId });
+    if (ticket.assigned_to) {
+      io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+        type: 'ticket_reopened_by_contact',
+        title: 'Ticket reaberto pelo cliente',
+        message: 'O cliente reabriu um ticket atribuído a você.',
+        href: `/tickets/${ticketId}`,
+      });
+    }
+  } catch {
+    // socket pode não estar disponível em testes
+  }
 }

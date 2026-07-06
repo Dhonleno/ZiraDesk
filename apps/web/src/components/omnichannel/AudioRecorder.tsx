@@ -297,7 +297,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       const setup = setupCanvas(canvas);
       if (!setup) return;
       const { ctx, width, height } = setup;
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#00C9A7';
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || 'currentColor';
 
       const audioCtx = new AudioContext();
       liveAudioCtxRef.current = audioCtx;
@@ -347,7 +347,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       const setup = setupCanvas(canvas);
       if (!setup) return;
       const { ctx, width, height } = setup;
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#00C9A7';
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || 'currentColor';
       const barWidth = 3;
       const gap = 2;
       const playheadX = Math.round(progress * width);
@@ -474,9 +474,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
       if (disabled || isRecording || isConverting || isSending) return;
       const mimeType = getSupportedMimeType();
       if (!mimeType) {
-        toast.error(t('media.browserNotSupported', {
-          defaultValue: 'Navegador nao suporta gravacao de audio.',
-        }));
+        toast.error(t('media.browserNotSupported'));
         return;
       }
 
@@ -729,7 +727,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             }}
           />
           <span style={{ color: 'var(--txt-2)', fontSize: 13 }}>
-            {isSending ? 'Enviando audio...' : `Convertendo audio... ${pct}%`}
+            {isSending ? t('media.sending') : t('media.converting', { pct })}
           </span>
           <div
             className="converting-bar"
@@ -776,7 +774,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             type="button"
             className="rec-cancel"
             onClick={cancelRecording}
-            title="Descartar"
+            title={t('media.discard')}
+            aria-label={t('media.discard')}
             style={{
               width: 32,
               height: 32,
@@ -797,7 +796,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             type="button"
             className="rec-play-preview"
             onClick={() => void togglePreviewPlay()}
-            title={isPlayingPreview ? 'Pausar' : 'Ouvir gravacao'}
+            title={isPlayingPreview ? t('media.pausePlayback') : t('media.listenRecording')}
+            aria-label={isPlayingPreview ? t('media.pausePlayback') : t('media.listenRecording')}
             style={{
               width: 32,
               height: 32,
@@ -850,14 +850,15 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             type="button"
             className="rec-send"
             onClick={() => void confirmSend()}
-            title="Confirmar envio"
+            title={t('media.confirmSend')}
+            aria-label={t('media.confirmSend')}
             style={{
               width: 36,
               height: 36,
               borderRadius: '50%',
               background: 'var(--teal)',
               border: 'none',
-              color: '#0a1a18',
+              color: 'var(--on-teal)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -890,7 +891,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           type="button"
           className="rec-cancel"
           onClick={cancelRecording}
-          title="Cancelar"
+          title={t('media.discard')}
+          aria-label={t('media.discard')}
           style={{
             width: 32,
             height: 32,
@@ -912,7 +914,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             type="button"
             className="rec-resume"
             onClick={resumeRecording}
-            title="Retomar gravacao"
+            title={t('media.resumeRecording')}
+            aria-label={t('media.resumeRecording')}
             style={{
               width: 32,
               height: 32,
@@ -934,7 +937,8 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
             type="button"
             className="rec-pause"
             onClick={pauseRecording}
-            title="Pausar"
+            title={t('media.pausePlayback')}
+            aria-label={t('media.pausePlayback')}
             style={{
               width: 32,
               height: 32,
@@ -983,7 +987,7 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
                 whiteSpace: 'nowrap',
               }}
             >
-              ⏸️ Pausado
+              ⏸️ {t('media.paused')}
             </span>
           ) : (
             <span
@@ -1017,14 +1021,15 @@ export const AudioRecorder = forwardRef<AudioRecorderHandle, AudioRecorderProps>
           type="button"
           className="rec-send"
           onClick={stopForPreview}
-          title={isPaused ? 'Ir para revisao' : 'Parar e revisar'}
+          title={isPaused ? t('media.goToReview') : t('media.stopAndReview')}
+          aria-label={isPaused ? t('media.goToReview') : t('media.stopAndReview')}
           style={{
             width: 36,
             height: 36,
             borderRadius: '50%',
             background: 'var(--teal)',
             border: 'none',
-            color: '#0a1a18',
+            color: 'var(--on-teal)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { omnichannelApi, type TransferAgent, type TransferSkill } from '../../services/api';
+import { omnichannelApi, type TransferAgent, type TransferDepartment } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { avatarClass } from '../../utils/avatar';
 
 interface Props {
   open: boolean;
@@ -12,7 +13,7 @@ interface Props {
   onTransferred?: (agent: { id: string; name: string }) => Promise<void>;
 }
 
-type Tab = 'agent' | 'skill';
+type Tab = 'agent' | 'department';
 
 function initials(name: string): string {
   return name.trim().charAt(0).toUpperCase() || '?';
@@ -46,7 +47,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
   const [tab, setTab] = useState<Tab>('agent');
   const [search, setSearch] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
     setTab('agent');
     setSearch('');
     setSelectedAgentId(null);
-    setSelectedSkillId(null);
+    setSelectedDepartmentId(null);
     setReason('');
   }, [open]);
 
@@ -68,7 +69,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
   useEffect(() => {
     setSearch('');
     setSelectedAgentId(null);
-    setSelectedSkillId(null);
+    setSelectedDepartmentId(null);
   }, [tab]);
 
   const { data: agents = [], isLoading: loadingAgents } = useQuery({
@@ -78,9 +79,9 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
     staleTime: 10_000,
   });
 
-  const { data: skills = [], isLoading: loadingSkills } = useQuery({
-    queryKey: ['transfer-skills'],
-    queryFn: () => omnichannelApi.getTransferSkills(),
+  const { data: departments = [], isLoading: loadingDepartments } = useQuery({
+    queryKey: ['transfer-departments'],
+    queryFn: () => omnichannelApi.getTransferDepartments(),
     enabled: open,
     staleTime: 10_000,
   });
@@ -90,20 +91,20 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
     : agents;
 
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? null;
-  const selectedSkill = skills.find((s) => s.id === selectedSkillId) ?? null;
+  const selectedDepartment = departments.find((d) => d.id === selectedDepartmentId) ?? null;
 
   const transferMutation = useMutation({
     mutationFn: async () => {
       if (tab === 'agent' && selectedAgentId) {
         return omnichannelApi.transfer(conversationId, { userId: selectedAgentId }, reason.trim() || undefined);
       }
-      if (tab === 'skill' && selectedSkillId) {
-        return omnichannelApi.transfer(conversationId, { skillId: selectedSkillId }, reason.trim() || undefined);
+      if (tab === 'department' && selectedDepartmentId) {
+        return omnichannelApi.transfer(conversationId, { departmentId: selectedDepartmentId }, reason.trim() || undefined);
       }
       throw new Error('Nenhuma seleção');
     },
     onSuccess: async () => {
-      const label = tab === 'agent' ? selectedAgent?.name : selectedSkill?.name;
+      const label = tab === 'agent' ? selectedAgent?.name : selectedDepartment?.name;
       if (tab === 'agent' && selectedAgent && onTransferred) {
         await onTransferred({ id: selectedAgent.id, name: selectedAgent.name });
       }
@@ -118,6 +119,8 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
         toast.error(t('transfer.agentOffline'));
       } else if (code === 'NO_AGENTS_AVAILABLE_FOR_SKILL') {
         toast.error(t('transfer.noAgentsForSkill'));
+      } else if (code === 'NO_AGENTS_AVAILABLE_FOR_DEPARTMENT') {
+        toast.error(t('transfer.noAgentsForDepartment'));
       } else {
         toast.error(t('transfer.error', { defaultValue: 'Erro ao transferir conversa' }));
       }
@@ -126,7 +129,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
 
   const canSubmit =
     !transferMutation.isPending &&
-    ((tab === 'agent' && selectedAgentId !== null) || (tab === 'skill' && selectedSkillId !== null));
+    ((tab === 'agent' && selectedAgentId !== null) || (tab === 'department' && selectedDepartmentId !== null));
 
   if (!open) return null;
 
@@ -174,10 +177,10 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
             background: 'var(--bg-3)',
           }}
         >
-          {(['agent', 'skill'] as const).map((value) => {
+          {(['agent', 'department'] as const).map((value) => {
             const active = tab === value;
             const Icon = value === 'agent' ? AgentIcon : SkillIcon;
-            const label = value === 'agent' ? t('transfer.byAgent') : t('transfer.bySkill');
+            const label = value === 'agent' ? t('transfer.byAgent') : t('transfer.byDepartment');
             return (
               <button
                 key={value}
@@ -226,7 +229,6 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                   fontSize: 13,
                   fontFamily: 'var(--font)',
                   padding: '9px 11px',
-                  outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
@@ -252,8 +254,8 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                   filteredAgents.map((agent: TransferAgent) => {
                     const selected = selectedAgentId === agent.id;
                     const available = agent.is_available && agent.active_conversations === 0;
-                    const badgeColor = available ? 'var(--teal)' : 'var(--yellow, #f59e0b)';
-                    const badgeBg = available ? 'var(--teal-dim)' : 'color-mix(in srgb, var(--yellow, #f59e0b) 15%, transparent)';
+                    const badgeColor = available ? 'var(--teal)' : 'var(--amber)';
+                    const badgeBg = available ? 'var(--teal-dim)' : 'color-mix(in srgb, var(--amber) 15%, transparent)';
                     const badgeLabel = available
                       ? t('transfer.available')
                       : t('transfer.inService', { count: agent.active_conversations });
@@ -277,13 +279,12 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                         }}
                       >
                         <div
+                          className={avatarClass(agent.name)}
                           style={{
                             width: 32,
                             height: 32,
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg,#667eea,#764ba2)',
-                            color: '#fff',
-                            fontWeight: 600,
+                            fontWeight: 500,
                             fontSize: 13,
                             display: 'flex',
                             alignItems: 'center',
@@ -323,7 +324,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
             </>
           )}
 
-          {tab === 'skill' && (
+          {tab === 'department' && (
             <div
               style={{
                 maxHeight: 260,
@@ -333,22 +334,22 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                 background: 'var(--bg-3)',
               }}
             >
-              {loadingSkills ? (
+              {loadingDepartments ? (
                 <div style={{ padding: 12, color: 'var(--txt-3)', fontSize: 12 }}>
                   {t('history.loading')}
                 </div>
-              ) : skills.length === 0 ? (
+              ) : departments.length === 0 ? (
                 <div style={{ padding: 12, color: 'var(--txt-3)', fontSize: 12 }}>
-                  {t('transfer.noSkills')}
+                  {t('transfer.noDepartmentsAvailable')}
                 </div>
               ) : (
-                skills.map((skill: TransferSkill) => {
-                  const selected = selectedSkillId === skill.id;
+                departments.map((dept: TransferDepartment) => {
+                  const selected = selectedDepartmentId === dept.id;
                   return (
                     <button
-                      key={skill.id}
+                      key={dept.id}
                       type="button"
-                      onClick={() => setSelectedSkillId(skill.id)}
+                      onClick={() => setSelectedDepartmentId(dept.id)}
                       style={{
                         width: '100%',
                         textAlign: 'left',
@@ -364,7 +365,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                       }}
                     >
                       <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                        {skill.name}
+                        {dept.name}
                       </div>
                       <span
                         style={{
@@ -378,7 +379,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                           flexShrink: 0,
                         }}
                       >
-                        {t('transfer.onlineAgents', { count: skill.online_agents_count })}
+                        {t('transfer.onlineAgents', { count: dept.online_agents_count })}
                       </span>
                     </button>
                   );
@@ -407,7 +408,6 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                 fontSize: 13,
                 padding: '10px 12px',
                 resize: 'vertical',
-                outline: 'none',
                 minHeight: 78,
                 boxSizing: 'border-box',
               }}
@@ -442,7 +442,7 @@ export function TransferModal({ open, conversationId, currentAgentId, onClose, o
                 borderRadius: 'var(--r)',
                 border: '1px solid var(--teal)',
                 background: 'var(--teal)',
-                color: '#0E1A18',
+                color: 'var(--on-teal)',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 fontSize: 13,
                 fontWeight: 600,

@@ -337,7 +337,7 @@ export function Webhooks() {
             label={t('tenantAdmin.webhooks.name')}
             value={form.name}
             onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="Meu webhook"
+            placeholder={t('tenantAdmin.webhooks.namePlaceholder')}
           />
 
           <Input

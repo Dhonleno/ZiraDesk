@@ -5,6 +5,8 @@ export type Permission =
   | 'settings:manage'
   | 'users:manage'
   | 'channels:manage'
+  | 'lgpd:manage'
+  | 'pii:view-full'
   | 'contacts:view'
   | 'contacts:edit'
   | 'contacts:delete'
@@ -26,6 +28,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'settings:manage',
     'users:manage',
     'channels:manage',
+    'lgpd:manage',
+    'pii:view-full',
     'contacts:view',
     'contacts:edit',
     'contacts:delete',
@@ -45,6 +49,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'settings:manage',
     'users:manage',
     'channels:manage',
+    'lgpd:manage',
+    'pii:view-full',
     'contacts:view',
     'contacts:edit',
     'contacts:delete',

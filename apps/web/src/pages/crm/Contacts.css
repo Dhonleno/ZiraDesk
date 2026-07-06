@@ -1,0 +1,10 @@
+.contact-row-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.contact-list-item:hover .contact-row-actions {
+  opacity: 1;
+}

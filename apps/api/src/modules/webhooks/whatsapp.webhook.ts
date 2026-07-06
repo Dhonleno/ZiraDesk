@@ -2,12 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
+import { completeCampaignIfSettled } from '../omnichannel/campaigns/campaign-delivery.service.js';
+import { closeFailedInitialOutbound } from '../omnichannel/outbound-failure.service.js';
 import { redis } from '../../config/redis.js';
 import { messageQueue } from '../../jobs/queue.js';
-import { verifyMetaSignature } from '../../middleware/meta-signature.js';
+import { verifyWhatsAppMetaSignature } from '../../middleware/meta-signature.js';
 import { getSocketServer } from '../../socket/index.js';
 import { decryptCredentials } from '../../utils/crypto.js';
-import { normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
+import { normalizePhoneForStorage, normalizeWhatsAppSenderPhone } from '../../utils/phone.js';
 import {
   ensureBotInfrastructure,
   processBotMessage,
@@ -16,10 +18,12 @@ import {
   getBusinessHoursStatus,
   isWithinBusinessHours,
 } from '../admin/business-hours/business-hours.service.js';
+import { updateTemplateStatusFromMeta } from '../admin/templates/templates.service.js';
 import {
   buildProtocolMessage,
   callGenerateProtocol,
   ensureConversationProtocolInfrastructure,
+  quoteIdent,
 } from '../omnichannel/conversations/protocols.js';
 import { loadConversationSocketPayload } from '../omnichannel/conversations/socket-payload.js';
 import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
@@ -42,12 +46,14 @@ import {
   generateAIResponse,
   getConversationHistoryText,
 } from '../ai/ai.service.js';
+import { notifyQueuePosition } from '../omnichannel/queue/queue-notifications.service.js';
+import { recalculateQueuePositionsQueue } from '../../jobs/recalculate-queue-positions.job.js';
 
 interface MetaMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction';
+  type: 'text' | 'interactive' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction' | 'button' | 'contacts';
   context?: {
     id?: string;
     from?: string;
@@ -78,6 +84,38 @@ interface MetaMessage {
   audio?: { id: string; mime_type: string };
   video?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; filename: string; mime_type: string };
+  button?: { text?: string; payload?: string };
+  contacts?: MetaSharedContact[];
+}
+
+interface MetaSharedContact {
+  name?: {
+    formatted_name?: string;
+    first_name?: string;
+    last_name?: string;
+    middle_name?: string;
+    suffix?: string;
+    prefix?: string;
+  };
+  phones?: Array<{
+    phone?: string;
+    type?: string;
+    wa_id?: string;
+  }>;
+  emails?: Array<{
+    email?: string;
+    type?: string;
+  }>;
+  org?: {
+    company?: string;
+    department?: string;
+    title?: string;
+  };
+  urls?: Array<{
+    url?: string;
+    type?: string;
+  }>;
+  birthday?: string;
 }
 
 interface InteractiveMenuOption {
@@ -108,8 +146,8 @@ interface MetaWebhookPayload {
     id: string;
     changes: Array<{
       value: {
-        messaging_product: 'whatsapp';
-        metadata: {
+        messaging_product?: 'whatsapp';
+        metadata?: {
           display_phone_number: string;
           phone_number_id: string;
         };
@@ -119,6 +157,10 @@ interface MetaWebhookPayload {
         }>;
         messages?: MetaMessage[];
         statuses?: MetaStatus[];
+        event?: string;
+        message_template_id?: string;
+        message_template_name?: string;
+        message_template_language?: string;
       };
       field: string;
     }>;
@@ -147,6 +189,7 @@ interface ContactRow {
 
 interface ConversationRow {
   id: string;
+  queue_entered_at?: Date | null;
   assigned_to?: string | null;
   outbound_origin_agent_id?: string | null;
   outbound_expires_at?: Date | null;
@@ -199,7 +242,7 @@ interface ActiveConversationByPhoneRow {
   id: string;
 }
 
-const ACTIVE_CONVERSATION_STATUSES = "'open', 'pending', 'active_outbound', 'in_service', 'in_progress', 'bot'";
+const ACTIVE_CONVERSATION_STATUSES = "'open', 'waiting'";
 const CLOSE_KEYWORD = '#sair';
 const CLOSE_MESSAGE = 'Seu atendimento foi encerrado. Obrigado pelo contato! 😊';
 const CLOSE_HINT = '\n\nDigite *#sair* a qualquer momento para encerrar o atendimento.';
@@ -208,6 +251,16 @@ const LOW_SIGNAL_MESSAGE_REGEX = /^(oi+|ol[aá]|opa|e ai|e aí|bom dia|boa tarde
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function alternateBrazilMobileDigits(digits: string): string {
+  if (digits.length === 13 && digits.startsWith('55') && digits.charAt(4) === '9') {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  if (digits.length === 12 && digits.startsWith('55')) {
+    return digits.slice(0, 4) + '9' + digits.slice(4);
+  }
+  return digits;
 }
 
 function isLowSignalMessage(content: string): boolean {
@@ -258,6 +311,94 @@ function withWhatsappEnvFallback(credentials: Record<string, string>): Record<st
 function withCloseHint(messageText: string): string {
   if (messageText.toLowerCase().includes(CLOSE_KEYWORD)) return messageText;
   return `${messageText}${CLOSE_HINT}`;
+}
+
+function cleanText(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
+function buildSharedContactName(contact: MetaSharedContact): string {
+  const formatted = cleanText(contact.name?.formatted_name);
+  if (formatted) return formatted;
+
+  const nameParts = [
+    contact.name?.prefix,
+    contact.name?.first_name,
+    contact.name?.middle_name,
+    contact.name?.last_name,
+    contact.name?.suffix,
+  ]
+    .map((part) => cleanText(part))
+    .filter((part): part is string => Boolean(part));
+
+  return nameParts.join(' ') || 'Sem nome';
+}
+
+function buildSharedContactsMessage(contacts: MetaSharedContact[] | undefined): {
+  content: string;
+  metadata: Array<Record<string, unknown>>;
+} {
+  const normalizedContacts = (contacts ?? []).map((contact) => {
+    const name = buildSharedContactName(contact);
+    const phones = (contact.phones ?? [])
+      .map((phone) => ({
+        phone: cleanText(phone.phone),
+        type: cleanText(phone.type),
+        wa_id: cleanText(phone.wa_id),
+      }))
+      .filter((phone) => phone.phone || phone.wa_id);
+    const emails = (contact.emails ?? [])
+      .map((email) => ({
+        email: cleanText(email.email),
+        type: cleanText(email.type),
+      }))
+      .filter((email) => email.email);
+    const urls = (contact.urls ?? [])
+      .map((url) => ({
+        url: cleanText(url.url),
+        type: cleanText(url.type),
+      }))
+      .filter((url) => url.url);
+    const org = {
+      company: cleanText(contact.org?.company),
+      department: cleanText(contact.org?.department),
+      title: cleanText(contact.org?.title),
+    };
+
+    return {
+      name,
+      phones,
+      emails,
+      urls,
+      birthday: cleanText(contact.birthday),
+      org,
+    };
+  });
+
+  const sections = normalizedContacts.map((contact) => {
+    const lines = [`Contato compartilhado: ${contact.name}`];
+    for (const phone of contact.phones) {
+      if (phone.phone) lines.push(`Telefone${phone.type ? ` (${phone.type})` : ''}: ${phone.phone}`);
+      if (phone.wa_id && phone.wa_id !== phone.phone?.replace(/\D/g, '')) lines.push(`WhatsApp ID: ${phone.wa_id}`);
+    }
+    for (const email of contact.emails) {
+      if (email.email) lines.push(`E-mail${email.type ? ` (${email.type})` : ''}: ${email.email}`);
+    }
+    if (contact.org.company) lines.push(`Empresa: ${contact.org.company}`);
+    if (contact.org.department) lines.push(`Departamento: ${contact.org.department}`);
+    if (contact.org.title) lines.push(`Cargo: ${contact.org.title}`);
+    for (const url of contact.urls) {
+      if (url.url) lines.push(`Link${url.type ? ` (${url.type})` : ''}: ${url.url}`);
+    }
+    if (contact.birthday) lines.push(`Aniversario: ${contact.birthday}`);
+    return lines.join('\n');
+  });
+
+  return {
+    content: sections.join('\n\n') || 'Contato compartilhado',
+    metadata: normalizedContacts,
+  };
 }
 
 function buildMentionPreview(content: string | null | undefined, contentType: string): string {
@@ -312,7 +453,7 @@ async function findBestAvailableAgent(
          AND aa.status = 'online'
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
-         AND u.role IN ('owner', 'admin', 'agent')
+         AND u.role IN ('agent')
        LIMIT 1`,
       preferredAgentId,
     );
@@ -328,7 +469,7 @@ async function findBestAvailableAgent(
        AND aa.status = 'online'
        AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
        AND u.status = 'active'
-       AND u.role IN ('owner', 'admin', 'agent')
+       AND u.role IN ('agent')
      ORDER BY aa.last_assigned_at ASC
      LIMIT 1`,
   );
@@ -348,7 +489,7 @@ async function syncActiveConversationCounters(
          SELECT COUNT(*)::integer
          FROM conversations c
          WHERE c.assigned_to = aa.user_id
-           AND c.status IN ('open', 'in_service', 'pending', 'bot')
+           AND c.status = 'open'
        )
        WHERE aa.user_id = $1::uuid`,
       userId,
@@ -356,31 +497,65 @@ async function syncActiveConversationCounters(
   }
 }
 
+const CHANNEL_CACHE_TTL_S = 60;
+
 async function findChannelByPhoneNumberId(
   phoneNumberId: string,
 ): Promise<ChannelMatch | null> {
+  const cacheKey = `whatsapp:channel:${phoneNumberId}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached) as ChannelMatch;
+  } catch {
+    // cache miss or Redis unavailable — continue with DB scan
+  }
+
   const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
     `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
   );
   const envFallbackMatches: ChannelMatch[] = [];
 
   for (const tenant of tenants) {
-    const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
-      `SELECT id, credentials FROM "${tenant.schema_name}".channels
-       WHERE type = 'whatsapp' AND status = 'active'
-       LIMIT 100`,
-    );
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM "${tenant.schema_name}".channels
+         WHERE type = 'whatsapp' AND status = 'active'
+         LIMIT 100`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[WhatsApp] Failed to query channels for tenant schema',
+      );
+      continue;
+    }
 
     for (const channel of channels) {
-      const credentials = decryptCredentials(channel.credentials);
+      let credentials: Record<string, string>;
+      try {
+        credentials = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[WhatsApp] Invalid channel credentials payload',
+        );
+        continue;
+      }
       const channelPhoneNumberId = getCredentialValue(credentials, 'phoneNumberId', 'phone_number_id');
       if (channelPhoneNumberId === phoneNumberId) {
-        return {
+        const match: ChannelMatch = {
           tenantId: tenant.id,
           schemaName: tenant.schema_name,
           channelId: channel.id,
           channelCredentials: withWhatsappEnvFallback(credentials as Record<string, string>),
         };
+        try {
+          await redis.set(cacheKey, JSON.stringify(match), 'EX', CHANNEL_CACHE_TTL_S);
+        } catch {
+          // silent
+        }
+        return match;
       }
 
       if (!channelPhoneNumberId && env.WHATSAPP_PHONE_NUMBER_ID === phoneNumberId) {
@@ -396,7 +571,13 @@ async function findChannelByPhoneNumberId(
 
   if (envFallbackMatches.length === 1) {
     logger.warn({ phoneNumberId }, '[WhatsApp] Using .env fallback — channel credentials are missing phoneNumberId');
-    return envFallbackMatches[0]!;
+    const match = envFallbackMatches[0]!;
+    try {
+      await redis.set(cacheKey, JSON.stringify(match), 'EX', CHANNEL_CACHE_TTL_S);
+    } catch {
+      // silent
+    }
+    return match;
   }
 
   if (envFallbackMatches.length > 1) {
@@ -404,6 +585,103 @@ async function findChannelByPhoneNumberId(
   }
 
   return null;
+}
+
+async function findChannelsByWabaId(wabaId: string): Promise<ChannelMatch[]> {
+  const tenants = await prisma.$queryRawUnsafe<TenantRow[]>(
+    `SELECT id, schema_name FROM tenants WHERE status IN ('active', 'trial')`,
+  );
+  const matches: ChannelMatch[] = [];
+  const envFallbackMatches: ChannelMatch[] = [];
+
+  for (const tenant of tenants) {
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM ${quoteIdent(tenant.schema_name)}.channels
+         WHERE type = 'whatsapp' AND status = 'active'
+         LIMIT 100`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[WhatsApp] Failed to query channels for template status update',
+      );
+      continue;
+    }
+
+    for (const channel of channels) {
+      let credentials: Record<string, string>;
+      try {
+        credentials = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[WhatsApp] Invalid channel credentials while processing template status',
+        );
+        continue;
+      }
+
+      const channelWabaId = getCredentialValue(credentials, 'wabaId', 'waba_id');
+      const match = {
+        tenantId: tenant.id,
+        schemaName: tenant.schema_name,
+        channelId: channel.id,
+        channelCredentials: withWhatsappEnvFallback(credentials),
+      };
+
+      if (channelWabaId === wabaId) {
+        matches.push(match);
+      } else if (!channelWabaId && env.WHATSAPP_WABA_ID === wabaId) {
+        envFallbackMatches.push(match);
+      }
+    }
+  }
+
+  if (matches.length > 0) return matches;
+  if (envFallbackMatches.length === 1) {
+    logger.warn({ wabaId }, '[WhatsApp] Using .env fallback for template status update');
+    return envFallbackMatches;
+  }
+  if (envFallbackMatches.length > 1) {
+    logger.warn(
+      { wabaId, count: envFallbackMatches.length },
+      '[WhatsApp] Ambiguous .env fallback for template status update',
+    );
+  }
+  return [];
+}
+
+async function processTemplateStatusUpdate(
+  wabaId: string,
+  value: MetaWebhookPayload['entry'][number]['changes'][number]['value'],
+): Promise<void> {
+  const channels = await findChannelsByWabaId(wabaId);
+  if (channels.length === 0) {
+    logger.warn({ wabaId }, '[WhatsApp] No channel found for template status update');
+    return;
+  }
+
+  let updated = 0;
+  for (const channel of channels) {
+    updated += await updateTemplateStatusFromMeta(channel.schemaName, channel.channelId, {
+      templateId: value.message_template_id,
+      templateName: value.message_template_name,
+      language: value.message_template_language,
+      event: value.event,
+    });
+  }
+
+  logger.info(
+    {
+      wabaId,
+      templateId: value.message_template_id,
+      templateName: value.message_template_name,
+      event: value.event,
+      updated,
+    },
+    '[WhatsApp] Template status updated',
+  );
 }
 
 function getLocalWeekday(timezone: string): number {
@@ -500,6 +778,20 @@ async function sendConversationWhatsAppText(
   });
 }
 
+async function markMessageDispatchStatus(
+  schemaName: string,
+  messageId: string,
+  status: 'sent' | 'failed',
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${quoteIdent(schemaName)}.messages
+     SET status = $2
+     WHERE id = $1::uuid`,
+    messageId,
+    status,
+  );
+}
+
 async function sendWhatsAppInteractiveMenu(
   phoneNumberId: string,
   accessToken: string,
@@ -565,7 +857,7 @@ async function sendWhatsAppInteractiveMenu(
 
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+      `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
@@ -763,8 +1055,14 @@ async function processIncomingMessage(
 
   const { tenantId, schemaName, channelId, channelCredentials } = found;
 
-  const formattedPhone = normalizeWhatsAppSenderPhone(senderPhone);
+  let formattedPhone: string;
+  try {
+    formattedPhone = normalizePhoneForStorage(senderPhone) ?? normalizeWhatsAppSenderPhone(senderPhone);
+  } catch {
+    formattedPhone = normalizeWhatsAppSenderPhone(senderPhone);
+  }
   const formattedPhoneDigits = formattedPhone.replace(/\D/g, '');
+  const formattedPhoneDigitsAlt = alternateBrazilMobileDigits(formattedPhoneDigits);
   const tenantRows = await prisma.$queryRawUnsafe<TenantSettingsRow[]>(
     'SELECT settings FROM tenants WHERE id = $1 LIMIT 1',
     tenantId,
@@ -789,6 +1087,7 @@ async function processIncomingMessage(
   let content = '';
   let contentType = 'text';
   let interactiveReplyId: string | null = null;
+  let templateButtonPayload: string | null = null;
   let externalMediaId: string | null = null;
   const mediaMetadata: Record<string, unknown> = {};
 
@@ -848,6 +1147,20 @@ async function processIncomingMessage(
       content = message.reaction?.emoji?.trim() || 'Reação removida';
       contentType = 'text';
       break;
+    case 'button': {
+      content = message.button?.text?.trim() || message.button?.payload?.trim() || '[Resposta de botão]';
+      contentType = 'text';
+      templateButtonPayload = message.button?.payload?.trim() || null;
+      break;
+    }
+    case 'contacts': {
+      const sharedContacts = buildSharedContactsMessage(message.contacts);
+      content = sharedContacts.content;
+      contentType = 'text';
+      mediaMetadata.message_type = 'contacts';
+      mediaMetadata.shared_contacts = sharedContacts.metadata;
+      break;
+    }
     default:
       content = '📎 Anexo';
       contentType = 'text';
@@ -877,9 +1190,12 @@ async function processIncomingMessage(
           OR phone = $1
           OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $2
           OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $2
+          OR regexp_replace(COALESCE(whatsapp, ''), '\\D', '', 'g') = $3
+          OR regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $3
        LIMIT 1`,
       formattedPhone,
       formattedPhoneDigits,
+      formattedPhoneDigitsAlt,
     );
 
     let contactId: string;
@@ -914,22 +1230,23 @@ async function processIncomingMessage(
            metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
-         AND status = 'active_outbound'
-         AND outbound_expires_at IS NOT NULL
-         AND outbound_expires_at <= NOW()`,
+         AND status = 'waiting'
+         AND waiting_expires_at IS NOT NULL
+         AND waiting_expires_at <= NOW()`,
       contactId,
       channelId,
       JSON.stringify({
-        active_outbound_expired: true,
-        active_outbound_expired_at: new Date().toISOString(),
+        waiting_expired: true,
+        waiting_expired_at: new Date().toISOString(),
       }),
     );
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
       `SELECT id, status, csat_stage, csat_score, csat_expires_at
+              , queue_entered_at
               , assigned_to
               , outbound_origin_agent_id
-              , outbound_expires_at
+              , waiting_expires_at AS outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
               , metadata->>'bot_tag' AS bot_tag
               , metadata->>'bot_department' AS bot_department
@@ -940,10 +1257,7 @@ async function processIncomingMessage(
          AND channel_id = $2::uuid
          AND (
            status IN (${ACTIVE_CONVERSATION_STATUSES})
-           OR (
-             status = 'resolved'
-             AND csat_stage IN ('sent', 'waiting_comment')
-           )
+           OR csat_stage IN ('sent', 'waiting_comment')
          )
        ORDER BY created_at DESC
        LIMIT 1`,
@@ -1040,7 +1354,7 @@ async function processIncomingMessage(
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
     const currentCsatExpiresAt = currentConversation?.csat_expires_at ?? null;
-    const isActiveOutboundReturnFlow = currentConversation?.status === 'active_outbound';
+    const isWaitingReturnFlow = currentConversation?.status === 'waiting';
 
     let mentionMetadata: Record<string, unknown> | null = null;
     if (quotedExternalId) {
@@ -1085,6 +1399,7 @@ async function processIncomingMessage(
       ...mediaMetadata,
       ...(mentionMetadata ? { mention: mentionMetadata } : {}),
       ...(interactiveReplyId ? { interactive_reply_id: interactiveReplyId } : {}),
+      ...(templateButtonPayload !== null ? { template_button_payload: templateButtonPayload } : {}),
     };
 
     const isCsatPending = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
@@ -1191,6 +1506,7 @@ async function processIncomingMessage(
           csatPayload: null,
           conversationStatus: currentConversation?.status ?? null,
           refreshInactivityForAssignedConversation: false,
+          isWaitingReturnFlow: false as const,
         };
       }
 
@@ -1227,6 +1543,7 @@ async function processIncomingMessage(
           csatPayload: null,
           conversationStatus: currentConversation?.status ?? null,
           refreshInactivityForAssignedConversation: false,
+          isWaitingReturnFlow: false as const,
         };
       }
 
@@ -1299,21 +1616,29 @@ async function processIncomingMessage(
         csatPayload,
         conversationStatus: currentConversation?.status ?? null,
         refreshInactivityForAssignedConversation: false,
+        isWaitingReturnFlow: false as const,
       };
     }
 
     const currentAssignedTo = currentConversation?.assigned_to ?? null;
     const currentBotStage = currentConversation?.bot_stage ?? null;
+    const currentQueueEnteredAt = currentConversation?.queue_entered_at ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
     let activeOutboundReplyAgentId: string | null = null;
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
+    const isLegacyQueueWithoutBotStage = !isNewConversation
+      && !hasAssignedAgent
+      && !isWaitingReturnFlow
+      && !isAIAgentActive
+      && currentBotStage === null
+      && currentQueueEnteredAt !== null;
     const isWaitingForHumanQueue = !isNewConversation
       && !hasAssignedAgent
-      && !isActiveOutboundReturnFlow
+      && !isWaitingReturnFlow
       && !isAIAgentActive
-      && (currentBotStage === null || currentBotStage === 'choice');
+      && (currentBotStage === 'choice' || isLegacyQueueWithoutBotStage);
 
-    if (isActiveOutboundReturnFlow) {
+    if (isWaitingReturnFlow) {
       const preferredAgentId = currentConversation?.outbound_origin_agent_id ?? currentAssignedTo ?? null;
       let preferredAgentName: string | null = null;
       if (preferredAgentId) {
@@ -1339,23 +1664,36 @@ async function processIncomingMessage(
           resolvedAssignedTo,
           conversationId,
         );
+
+        const assignRef = `${quoteIdent(schemaName)}.conversation_assignments`;
+        await tx.$executeRawUnsafe(`
+          UPDATE ${assignRef}
+          SET released_at = NOW(), release_reason = 'auto'
+          WHERE conversation_id = $1::uuid AND released_at IS NULL
+        `, conversationId);
+        if (resolvedAssignedTo) {
+          await tx.$executeRawUnsafe(`
+            INSERT INTO ${assignRef} (conversation_id, agent_id, assigned_at)
+            VALUES ($1::uuid, $2::uuid, NOW())
+          `, conversationId, resolvedAssignedTo);
+        }
       }
 
       await tx.$executeRawUnsafe(
         `UPDATE conversations
          SET status = 'open',
-             outbound_returned_at = NOW(),
+             waiting_expires_at = NULL,
              metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
          WHERE id = $1::uuid`,
         conversationId,
         JSON.stringify({
-          active_outbound_returned: true,
-          active_outbound_returned_at: new Date().toISOString(),
-          active_outbound_origin_agent_id: preferredAgentId,
-          active_outbound_origin_agent_name: preferredAgentName,
-          active_outbound_received_by_agent_id: selectedAgent?.user_id ?? null,
-          active_outbound_received_by_agent_name: selectedAgent?.name ?? null,
-          active_outbound_replied_within_window: true,
+          waiting_returned: true,
+          waiting_returned_at: new Date().toISOString(),
+          waiting_origin_agent_id: preferredAgentId,
+          waiting_origin_agent_name: preferredAgentName,
+          waiting_received_by_agent_id: selectedAgent?.user_id ?? null,
+          waiting_received_by_agent_name: selectedAgent?.name ?? null,
+          waiting_replied_within_window: true,
         }),
       );
 
@@ -1368,7 +1706,18 @@ async function processIncomingMessage(
         );
       }
 
-      activeOutboundReplyAgentId = selectedAgent?.user_id ?? preferredAgentId ?? currentAssignedTo ?? null;
+      let validatedPreferredId: string | null = null;
+      if (preferredAgentId) {
+        const agentRow = await tx.$queryRawUnsafe<Array<{ role: string }>>(
+          `SELECT role FROM ${quoteIdent(schemaName)}.users WHERE id = $1::uuid LIMIT 1`,
+          preferredAgentId,
+        );
+        if (agentRow[0]?.role === 'agent') {
+          validatedPreferredId = preferredAgentId;
+        }
+      }
+
+      activeOutboundReplyAgentId = selectedAgent?.user_id ?? validatedPreferredId ?? null;
       await syncActiveConversationCounters(tx, [currentAssignedTo, selectedAgent?.user_id ?? null]);
     }
 
@@ -1383,8 +1732,10 @@ async function processIncomingMessage(
     }
 
     let botResponse: Awaited<ReturnType<typeof processBotMessage>> | null = null;
-    if (!hasAssignedAgent && !isActiveOutboundReturnFlow && !isAIAgentActive) {
-      const canProcessBot = isNewConversation || currentBotStage === 'waiting_choice';
+    if (!hasAssignedAgent && !isWaitingReturnFlow && !isAIAgentActive) {
+      const canProcessBot = isNewConversation
+        || currentBotStage === 'waiting_choice'
+        || (!isWaitingForHumanQueue && currentBotStage === null);
       const skipBot = currentBotStage === 'done';
       if (!skipBot && canProcessBot) {
         botResponse = await processBotMessage(
@@ -1428,6 +1779,18 @@ async function processIncomingMessage(
       outsideBusinessHours,
     );
 
+    if (isNewConversation && protocolNumber) {
+      protocolMessageContent = buildProtocolMessage(protocolNumber);
+      const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
+         VALUES ($1::uuid, 'system', $2, 'text', false)
+         RETURNING id`,
+        conversationId,
+        protocolMessageContent,
+      );
+      protocolMessageId = protocolRows[0]!.id;
+    }
+
     if (botResponse) {
       const botText = isNewConversation ? withCloseHint(botResponse.text) : botResponse.text;
       let resolvedBotText = botText;
@@ -1444,7 +1807,9 @@ async function processIncomingMessage(
           `SELECT COUNT(*)::text AS count
            FROM conversations
            WHERE assigned_to IS NULL
-             AND status IN ('open', 'pending', 'bot')
+             AND status = 'open'
+             AND COALESCE(metadata->>'bot_stage', '') <> 'waiting_choice'
+             AND COALESCE(metadata->>'ai_agent_active', 'false') <> 'true'
              AND id != $1::uuid`,
           conversationId,
         );
@@ -1472,6 +1837,7 @@ async function processIncomingMessage(
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET status = 'open',
+               queue_entered_at = COALESCE(queue_entered_at, NOW()),
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
@@ -1481,7 +1847,8 @@ async function processIncomingMessage(
       } else {
         await tx.$executeRawUnsafe(
           `UPDATE conversations
-           SET status = 'bot',
+           SET status = 'open',
+               queue_entered_at = NULL,
                last_message = $1,
                last_message_at = NOW()
            WHERE id = $2::uuid`,
@@ -1491,24 +1858,12 @@ async function processIncomingMessage(
       }
     }
 
-    if (isNewConversation && protocolNumber) {
-      protocolMessageContent = buildProtocolMessage(protocolNumber);
-      const protocolRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-        `INSERT INTO messages (conversation_id, sender_type, content, content_type, is_internal)
-         VALUES ($1::uuid, 'system', $2, 'text', false)
-         RETURNING id`,
-        conversationId,
-        protocolMessageContent,
-      );
-      protocolMessageId = protocolRows[0]!.id;
-    }
-
     return {
       conversationId,
       closeByKeyword: false as const,
       isNewConversation,
-      isBotLeafTransfer: !isActiveOutboundReturnFlow && botResponse?.type === 'choice',
-      shouldAutoAssign: !isActiveOutboundReturnFlow && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
+      isBotLeafTransfer: !isWaitingReturnFlow && botResponse?.type === 'choice',
+      shouldAutoAssign: !isWaitingReturnFlow && !isWaitingForHumanQueue && ((isNewConversation && !botResponse) || botResponse?.type === 'choice'),
       botTag: botResponse?.type === 'choice'
         ? (botResponse.option?.tag ?? undefined)
         : (currentConversation?.bot_tag ?? undefined),
@@ -1534,13 +1889,14 @@ async function processIncomingMessage(
       refreshInactivityForAssignedConversation: hasAssignedAgent,
       shouldProcessAI: (botResponse === null || botResponse?.type === 'invalid')
         && !hasAssignedAgent
-        && !isActiveOutboundReturnFlow
+        && !isWaitingReturnFlow
         && currentBotStage !== 'done'
         && !isAIAgentActive
         && !isWaitingForHumanQueue,
-      shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isActiveOutboundReturnFlow,
+      shouldProcessAIActive: isAIAgentActive && !hasAssignedAgent && !isWaitingReturnFlow,
       aiAttempts: currentConversation?.ai_attempts ?? 0,
       conversationStatus: currentConversation?.status ?? null,
+      isWaitingReturnFlow,
       activeOutboundReplyAgentId,
     };
   });
@@ -1597,10 +1953,27 @@ async function processIncomingMessage(
     }
   }
 
-  if (result.activeOutboundReplyAgentId) {
-    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('active_outbound:replied', {
+  if (result.isWaitingReturnFlow) {
+    io.to(`tenant:${tenantId}`).emit('conversation:status_changed', {
       conversationId: result.conversationId,
-      contactName: result.contactName,
+      status: 'open',
+    });
+  }
+
+  if (result.activeOutboundReplyAgentId) {
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:status_changed', {
+      conversationId: result.conversationId,
+      status: 'open',
+    });
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:assigned', {
+      conversationId: result.conversationId,
+    });
+    io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('notification:new', {
+      type: 'conversation.assigned',
+      title: 'Conversa atribuída',
+      message: 'Um atendimento foi atribuído a você',
+      conversationId: result.conversationId,
+      createdAt: new Date().toISOString(),
     });
   }
 
@@ -1657,16 +2030,26 @@ async function processIncomingMessage(
   }
 
   if (result.isNewConversation && result.protocolMessageId && result.protocolMessageContent) {
-    await messageQueue.add('send', {
-      messageId: result.protocolMessageId,
-      conversationId: result.conversationId,
-      tenantId,
-      tenantSchema: schemaName,
-      channelType: 'whatsapp',
+    const protocolSent = await sendConversationWhatsAppText(
       channelCredentials,
-      content: result.protocolMessageContent,
-      to: formattedPhone,
-    });
+      formattedPhone,
+      result.protocolMessageContent,
+    );
+
+    if (protocolSent) {
+      await markMessageDispatchStatus(schemaName, result.protocolMessageId, 'sent');
+    } else {
+      await messageQueue.add('send', {
+        messageId: result.protocolMessageId,
+        conversationId: result.conversationId,
+        tenantId,
+        tenantSchema: schemaName,
+        channelType: 'whatsapp',
+        channelCredentials,
+        content: result.protocolMessageContent,
+        to: formattedPhone,
+      });
+    }
   }
 
   // Pre-check AI config when bot reached a leaf node, so we can decide whether to send
@@ -1725,6 +2108,12 @@ async function processIncomingMessage(
     // the AI greeting below takes its place.
   }
 
+  // Bot reached a leaf → conversation in queue, no auto-assign attempted
+  if (result.isBotLeafTransfer && !result.shouldAutoAssign && !aiActivatesOnLeaf) {
+    void notifyQueuePosition(schemaName, tenantId, result.conversationId)
+      .catch((err) => logger.error({ err }, '[Webhook] Failed to send queue position notification'));
+  }
+
   if (result.shouldAutoAssign) {
     if (aiActivatesOnLeaf && aiConfigForLeaf) {
       // Bot reached a leaf node and AI Agent is enabled → activate AI instead of assigning to agent
@@ -1733,7 +2122,7 @@ async function processIncomingMessage(
 
       await prisma.$executeRawUnsafe(
         `UPDATE "${schemaName}".conversations
-         SET status = 'bot',
+         SET status = 'open',
              metadata = COALESCE(metadata, '{}'::jsonb) || '{"ai_agent_active":true,"ai_attempts":0}'::jsonb
          WHERE id = $1::uuid`,
         result.conversationId,
@@ -1763,7 +2152,22 @@ async function processIncomingMessage(
         });
       }
     } else {
-      await autoAssignConversation(
+      if (result.botOptionId) {
+        void prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
+          `SELECT department_id FROM "${schemaName}".bot_options WHERE id = $1::uuid LIMIT 1`,
+          result.botOptionId,
+        )
+          .then((rows) =>
+            prisma.$executeRawUnsafe(
+              `UPDATE "${schemaName}".conversations SET department_id = $1::uuid WHERE id = $2::uuid`,
+              rows[0]?.department_id ?? null,
+              result.conversationId,
+            ),
+          )
+          .catch((err) => logger.warn({ err }, '[Webhook] Failed to propagate department_id from bot_option'));
+      }
+
+      const assignedAgentId = await autoAssignConversation(
         result.conversationId,
         tenantId,
         schemaName,
@@ -1772,6 +2176,16 @@ async function processIncomingMessage(
         undefined,
         result.botOptionId,
       );
+      if (!assignedAgentId) {
+        // No agent available — conversation stays in queue
+        void notifyQueuePosition(schemaName, tenantId, result.conversationId)
+          .catch((err) => logger.error({ err }, '[Webhook] Failed to send queue position notification'));
+      } else {
+        // Agent was auto-assigned — recalculate positions for remaining queue
+        void recalculateQueuePositionsQueue
+          .add('recalculate', { schemaName, tenantId }, { jobId: `recalc-${tenantId}-${Date.now()}` })
+          .catch((err) => logger.error({ err }, '[Webhook] Failed to enqueue recalculate job'));
+      }
     }
   }
 
@@ -1841,7 +2255,7 @@ async function processIncomingMessage(
             );
             await prisma.$executeRawUnsafe(
               `UPDATE "${schemaName}".conversations
-               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+               SET status = 'open', last_message = $1, last_message_at = NOW(),
                    metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                WHERE id = $3::uuid`,
               clarification.slice(0, 255),
@@ -1883,7 +2297,7 @@ async function processIncomingMessage(
             );
             await prisma.$executeRawUnsafe(
               `UPDATE "${schemaName}".conversations
-               SET status = 'bot', last_message = $1, last_message_at = NOW(),
+               SET status = 'open', last_message = $1, last_message_at = NOW(),
                    metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                WHERE id = $3::uuid`,
               clarification.slice(0, 255),
@@ -1923,7 +2337,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                  WHERE id = $3::uuid`,
                 aiResult.response.slice(0, 255),
@@ -2005,7 +2419,7 @@ async function processIncomingMessage(
           );
           await prisma.$executeRawUnsafe(
             `UPDATE "${schemaName}".conversations
-             SET status = 'bot', last_message = $1, last_message_at = NOW(),
+             SET status = 'open', last_message = $1, last_message_at = NOW(),
                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
              WHERE id = $3::uuid`,
             clarification.slice(0, 255),
@@ -2049,7 +2463,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
                  WHERE id = $3::uuid`,
                 clarification.slice(0, 255),
@@ -2089,7 +2503,7 @@ async function processIncomingMessage(
               );
               await prisma.$executeRawUnsafe(
                 `UPDATE "${schemaName}".conversations
-                 SET status = 'bot', last_message = $1, last_message_at = NOW(),
+                 SET status = 'open', last_message = $1, last_message_at = NOW(),
                      metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
                  WHERE id = $2::uuid`,
                 aiResult.response.slice(0, 255),
@@ -2122,6 +2536,72 @@ async function processIncomingMessage(
     }
   }
 
+  // Campaign reply and opt-out tracking
+  try {
+    const campaignConvRows = await prisma.$queryRawUnsafe<Array<{
+      campaign_id: string;
+      contact_id: string;
+    }>>(
+      `SELECT
+         c.metadata->>'campaign_id' AS campaign_id,
+         c.contact_id::text AS contact_id
+       FROM "${schemaName}".conversations c
+       WHERE c.id = $1::uuid
+         AND c.metadata->>'campaign_id' IS NOT NULL
+       LIMIT 1`,
+      result.conversationId,
+    );
+    const campaignConv = campaignConvRows[0];
+    if (campaignConv?.campaign_id && campaignConv?.contact_id) {
+      const OPT_OUT_KEYWORDS = /^(sair|stop|parar|cancelar|0)$/i;
+      const incomingText = (result.message as { content?: string }).content?.trim() ?? '';
+      const isOptOut = OPT_OUT_KEYWORDS.test(incomingText);
+
+      if (isOptOut) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "${schemaName}".campaign_contacts
+           SET status = 'opted_out'
+           WHERE campaign_id = $1::uuid AND contact_id = $2::uuid AND status != 'opted_out'`,
+          campaignConv.campaign_id,
+          campaignConv.contact_id,
+        );
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "${schemaName}".campaign_optouts (contact_id, phone, campaign_id)
+           VALUES ($1::uuid, $2, $3::uuid)
+           ON CONFLICT (contact_id) DO UPDATE SET opted_out_at = NOW(), campaign_id = EXCLUDED.campaign_id`,
+          campaignConv.contact_id,
+          formattedPhone,
+          campaignConv.campaign_id,
+        );
+        logger.info(
+          { campaignId: campaignConv.campaign_id, contactId: campaignConv.contact_id },
+          '[WhatsApp] Campaign opt-out registered',
+        );
+      } else {
+        const repliedRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+          `UPDATE "${schemaName}".campaign_contacts
+           SET status = 'replied', replied_at = NOW()
+           WHERE campaign_id = $1::uuid
+             AND contact_id = $2::uuid
+             AND status NOT IN ('replied', 'opted_out', 'failed')
+           RETURNING id`,
+          campaignConv.campaign_id,
+          campaignConv.contact_id,
+        );
+        if (repliedRows[0]) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "${schemaName}".campaigns
+             SET replied_count = replied_count + 1, updated_at = NOW()
+             WHERE id = $1::uuid`,
+            campaignConv.campaign_id,
+          );
+        }
+      }
+    }
+  } catch (campaignErr) {
+    logger.warn({ err: campaignErr, conversationId: result.conversationId }, '[WhatsApp] Campaign reply tracking failed');
+  }
+
   // Notify assigned agent if conversation has one
   const convAssigned = await prisma.$queryRawUnsafe<[{ assigned_to: string | null; contact_name: string | null }]>(
     `SELECT c.assigned_to, ct.name AS contact_name
@@ -2131,19 +2611,44 @@ async function processIncomingMessage(
     result.conversationId,
   );
   const assignedUserId = convAssigned[0]?.assigned_to ?? null;
+  const senderType = result.message.sender_type;
+  const conversationStatus = result.conversationStatus;
   if (assignedUserId) {
+    // Só criar notificação para mensagens de cliente.
+    if (senderType !== 'client') return;
+
     const clientName = convAssigned[0]?.contact_name ?? senderName;
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "${schemaName}".audit_logs (user_id, action, entity, entity_id, new_data)
-       VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,
-      assignedUserId,
-      result.conversationId,
-      JSON.stringify({ assigned_to: assignedUserId, conversationId: result.conversationId, clientName, preview: content.substring(0, 100) }),
-    );
+    const preview = content?.trim() ?? '';
+    const isNumericOnly = /^\d+$/.test(preview);
+
+    // Respostas numéricas em fluxo de bot não devem notificar agente.
+    if (isNumericOnly && conversationStatus === 'bot') return;
+
+    const notificationPreview = isNumericOnly
+      ? `Mensagem de ${clientName}`
+      : (preview ? preview.substring(0, 100) : 'Nova mensagem');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+         VALUES ($1::uuid, 'conversation.message', 'conversation', $2::uuid, $3::jsonb)`,
+        assignedUserId,
+        result.conversationId,
+        JSON.stringify({
+          assigned_to: assignedUserId,
+          conversationId: result.conversationId,
+          contact_name: clientName,
+          clientName,
+          preview: notificationPreview,
+          channel: 'whatsapp',
+        }),
+      );
+    });
     io.to(`agent:${assignedUserId}`).emit('notification:new', {
       type: 'conversation.message',
       title: `Nova mensagem de ${clientName}`,
-      message: content.substring(0, 80),
+      message: notificationPreview.substring(0, 80),
       conversationId: result.conversationId,
       createdAt: new Date().toISOString(),
     });
@@ -2190,16 +2695,23 @@ async function processStatusUpdate(
   );
 
   for (const tenant of tenants) {
-    const result = await prisma.$queryRawUnsafe<MessageRow[]>(
-      `UPDATE "${tenant.schema_name}".messages
-       SET status = $1,
-           metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
-       WHERE external_id = $2
-       RETURNING id, conversation_id`,
-      mappedStatus,
-      status.id,
-      JSON.stringify(statusMetadata),
-    );
+    let result: MessageRow[];
+    try {
+      result = await prisma.$queryRawUnsafe<MessageRow[]>(
+        `UPDATE "${tenant.schema_name}".messages
+         SET status = $1,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+         WHERE external_id = $2
+         RETURNING id, conversation_id`,
+        mappedStatus,
+        status.id,
+        JSON.stringify(statusMetadata),
+      );
+    } catch (err: unknown) {
+      const meta = (err as { code?: string; meta?: { code?: string } }).meta;
+      if ((err as { code?: string }).code === 'P2010' && meta?.code === '42P01') continue;
+      throw err;
+    }
 
     if (result[0]) {
       if (requiresReengagementTemplate) {
@@ -2226,7 +2738,7 @@ async function processStatusUpdate(
           result[0].conversation_id,
         );
 
-        if (convRows[0]?.status === 'active_outbound') {
+        if (convRows[0]?.status === 'waiting') {
           await prisma.$executeRawUnsafe(
             `INSERT INTO "${tenant.schema_name}".messages (
                id,
@@ -2289,6 +2801,125 @@ async function processStatusUpdate(
           conversationId: result[0].conversation_id,
         });
       }
+
+      // Campaign tracking: update campaign_contacts and counters for delivered/read/failed
+      if (status.status === 'delivered' || status.status === 'read' || status.status === 'failed') {
+        try {
+          const campaignMetaRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string }>>(
+            `SELECT metadata->>'campaign_id' AS campaign_id
+             FROM "${tenant.schema_name}".conversations
+             WHERE id = $1::uuid
+               AND metadata->>'campaign_id' IS NOT NULL
+             LIMIT 1`,
+            result[0].conversation_id,
+          );
+          const campaignId = campaignMetaRows[0]?.campaign_id;
+          if (campaignId) {
+            if (status.status === 'delivered') {
+              const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+                `UPDATE "${tenant.schema_name}".campaign_contacts
+                 SET status = 'delivered',
+                     delivered_at = NOW(),
+                     message_id = COALESCE(message_id, $1)
+                 WHERE conversation_id = $2::uuid
+                   AND status = 'sent'
+                 RETURNING id`,
+                status.id,
+                result[0].conversation_id,
+              );
+              if (updated[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET delivered_count = delivered_count + 1, updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                );
+              }
+            } else if (status.status === 'read') {
+              const updated = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+                `UPDATE "${tenant.schema_name}".campaign_contacts
+                 SET status = 'read',
+                     read_at = NOW(),
+                     message_id = COALESCE(message_id, $1)
+                 WHERE conversation_id = $2::uuid
+                   AND status IN ('sent', 'delivered')
+                 RETURNING id`,
+                status.id,
+                result[0].conversation_id,
+              );
+              if (updated[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET read_count = read_count + 1, updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                );
+              }
+            } else if (status.status === 'failed') {
+              const firstError = status.errors?.[0];
+              const failureReason =
+                firstError?.error_data?.details
+                || firstError?.message
+                || firstError?.title
+                || 'Falha reportada pela Meta';
+              const failedRows = await prisma.$queryRawUnsafe<Array<{ campaign_id: string; previous_status: string }>>(
+                `WITH target AS (
+                   SELECT id, campaign_id, status AS previous_status
+                   FROM "${tenant.schema_name}".campaign_contacts
+                   WHERE conversation_id = $2::uuid
+                     AND status NOT IN ('failed', 'delivered', 'read', 'replied', 'opted_out')
+                 ),
+                 updated AS (
+                   UPDATE "${tenant.schema_name}".campaign_contacts cc
+                   SET status = 'failed',
+                       error_message = $3,
+                       failed_at = NOW(),
+                       message_id = COALESCE(cc.message_id, $1)
+                   FROM target
+                   WHERE cc.id = target.id
+                   RETURNING target.campaign_id::text, target.previous_status
+                 )
+                 SELECT campaign_id, previous_status FROM updated`,
+                status.id,
+                result[0].conversation_id,
+                failureReason.slice(0, 500),
+              );
+              if (failedRows[0]) {
+                await prisma.$executeRawUnsafe(
+                  `UPDATE "${tenant.schema_name}".campaigns
+                   SET failed_count = failed_count + $2::integer,
+                       updated_at = NOW()
+                   WHERE id = $1::uuid`,
+                  campaignId,
+                  failedRows.length,
+                );
+                await completeCampaignIfSettled(tenant.schema_name, campaignId);
+              }
+
+            }
+          }
+
+          if (status.status === 'failed') {
+            const firstError = status.errors?.[0];
+            const failureReason =
+              firstError?.error_data?.details
+              || firstError?.message
+              || firstError?.title
+              || 'Falha reportada pela Meta';
+            await closeFailedInitialOutbound({
+              schemaName: tenant.schema_name,
+              conversationId: result[0].conversation_id,
+              messageId: result[0].id,
+              provider: 'whatsapp',
+              reason: failureReason,
+              tenantId: tenant.id,
+            });
+          }
+        } catch (campaignErr) {
+          logger.warn({ err: campaignErr, conversationId: result[0].conversation_id }, '[WhatsApp] Campaign status tracking failed');
+        }
+      }
+
       break;
     }
   }
@@ -2313,7 +2944,7 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
   // POST /api/webhooks/whatsapp — receive messages from Meta Cloud API
   app.post('/whatsapp', {
     config: { rawBody: true },
-    preHandler: [verifyMetaSignature],
+    preHandler: [verifyWhatsAppMetaSignature],
   }, async (request, reply) => {
     // Meta requires a fast 200 response
     void reply.status(200).send({ success: true });
@@ -2324,6 +2955,15 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
 
     for (const entry of payload.entry) {
       for (const change of entry.changes) {
+        if (change.field === 'message_template_status_update') {
+          try {
+            await processTemplateStatusUpdate(entry.id, change.value);
+          } catch (err) {
+            request.log.error({ err }, '[WhatsApp] Failed to process template status update');
+          }
+          continue;
+        }
+
         if (change.field !== 'messages') continue;
 
         const value = change.value;
@@ -2345,7 +2985,11 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
           const contact = value.contacts?.[0];
           const senderName = contact?.profile.name ?? message.from;
           const senderPhone = message.from;
-          const phoneNumberId = value.metadata.phone_number_id;
+          const phoneNumberId = value.metadata?.phone_number_id;
+          if (!phoneNumberId) {
+            request.log.warn('[WhatsApp] Incoming message without phone_number_id');
+            continue;
+          }
 
           try {
             await processIncomingMessage(app, {

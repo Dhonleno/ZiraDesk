@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { CreatePlanModal } from '../../components/super-admin/CreatePlanModal';
+import { EditPlanModal } from '../../components/super-admin/EditPlanModal';
 import { useToast } from '../../stores/toast.store';
 
 interface Plan {
@@ -15,6 +16,7 @@ interface Plan {
   priceYear: string;
   maxUsers: number;
   maxContacts: number;
+  maxMessages: number;
   features: Record<string, unknown>;
   isActive: boolean;
   createdAt: string;
@@ -33,6 +35,7 @@ export function Plans() {
   const toast = useToast();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
 
   const { data: plans = [], isLoading } = useQuery({
     queryKey: ['super-admin', 'plans'],
@@ -123,6 +126,10 @@ export function Plans() {
                   <p className="text-xs" style={{ color: '#5C6370' }}>Contatos</p>
                   <p className="font-medium" style={{ color: '#F0F1F3' }}>{formatLimit(plan.maxContacts)}</p>
                 </div>
+                <div className="col-span-2 rounded-lg px-3 py-2" style={{ background: '#1A1C20' }}>
+                  <p className="text-xs" style={{ color: '#5C6370' }}>{t('superAdmin.plans.fields.maxMessages')}</p>
+                  <p className="font-medium" style={{ color: '#F0F1F3' }}>{formatLimit(plan.maxMessages)}</p>
+                </div>
               </div>
 
               {Object.entries(plan.features).filter(([, v]) => v === true).length > 0 && (
@@ -147,34 +154,49 @@ export function Plans() {
                 </div>
               )}
 
-              <button
-                disabled={toggleMutation.isPending}
-                onClick={() => toggleMutation.mutate(plan)}
-                className="w-full rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-40"
-                style={
-                  plan.isActive
-                    ? {
-                        background: 'rgba(248,113,113,.15)',
-                        color: '#F87171',
-                        border: '1px solid rgba(248,113,113,.25)',
-                      }
-                    : {
-                        background: 'rgba(62,207,142,.15)',
-                        color: '#3ECF8E',
-                        border: '1px solid rgba(62,207,142,.25)',
-                      }
-                }
-                onMouseEnter={(e) => {
-                  if (plan.isActive) e.currentTarget.style.background = 'rgba(248,113,113,.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = plan.isActive
-                    ? 'rgba(248,113,113,.15)'
-                    : 'rgba(62,207,142,.15)';
-                }}
-              >
-                {toggleMutation.isPending ? '...' : plan.isActive ? 'Desativar' : 'Ativar'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditingPlan(plan)}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium transition-colors"
+                  style={{
+                    background: 'var(--bg-3)',
+                    color: 'var(--txt-3)',
+                    border: '1px solid var(--line)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.08)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; }}
+                >
+                  {t('superAdmin.plans.edit')}
+                </button>
+                <button
+                  disabled={toggleMutation.isPending}
+                  onClick={() => toggleMutation.mutate(plan)}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-40"
+                  style={
+                    plan.isActive
+                      ? {
+                          background: 'rgba(248,113,113,.15)',
+                          color: '#F87171',
+                          border: '1px solid rgba(248,113,113,.25)',
+                        }
+                      : {
+                          background: 'rgba(62,207,142,.15)',
+                          color: '#3ECF8E',
+                          border: '1px solid rgba(62,207,142,.25)',
+                        }
+                  }
+                  onMouseEnter={(e) => {
+                    if (plan.isActive) e.currentTarget.style.background = 'rgba(248,113,113,.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = plan.isActive
+                      ? 'rgba(248,113,113,.15)'
+                      : 'rgba(62,207,142,.15)';
+                  }}
+                >
+                  {toggleMutation.isPending ? '...' : plan.isActive ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -188,6 +210,16 @@ export function Plans() {
           void qc.invalidateQueries({ queryKey: ['super-admin', 'plans'] });
         }}
       />
+
+      {editingPlan && (
+        <EditPlanModal
+          plan={editingPlan}
+          onClose={() => setEditingPlan(null)}
+          onSaved={() => {
+            void qc.invalidateQueries({ queryKey: ['super-admin', 'plans'] });
+          }}
+        />
+      )}
     </div>
   );
 }

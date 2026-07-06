@@ -1,0 +1,10 @@
+{
+  "dpo": {
+    "title": "Data Protection Officer",
+    "email": "Email",
+    "phone": "Phone",
+    "contact": "Contact"
+  },
+  "privacyPolicy": "Privacy Policy",
+  "termsOfService": "Terms of Service"
+}

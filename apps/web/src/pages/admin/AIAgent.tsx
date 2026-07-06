@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, type AIAgentConfig, type KnowledgeArticle } from '../../services/api';
@@ -33,9 +33,15 @@ function StatusBadge({ status, error }: { status: string; error?: string | null 
 }
 
 function SourceBadge({ type }: { type: string }) {
+  const { t } = useTranslation('admin');
+
   return (
     <span className="ai-source-badge">
-      {type === 'manual' ? 'Manual' : type === 'url' ? 'URL' : 'Arquivo'}
+      {type === 'manual'
+        ? t('tenantAdmin.aiAgent.sourceManual')
+        : type === 'url'
+          ? t('tenantAdmin.aiAgent.sourceUrl')
+          : t('tenantAdmin.aiAgent.sourceFile')}
     </span>
   );
 }
@@ -57,6 +63,14 @@ export function AIAgentPage() {
   const [configForm, setConfigForm] = useState<Partial<AIAgentConfig>>({});
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [configDirty, setConfigDirty] = useState(false);
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
 
   const { data: config, isLoading: configLoading } = useQuery({
     queryKey: ['ai-config'],
@@ -228,7 +242,7 @@ export function AIAgentPage() {
                   value={configForm.agent_name ?? ''}
                   onChange={(e) => handleConfigChange('agent_name', e.target.value)}
                   className="ai-input"
-                  placeholder="Assistente"
+                  placeholder={t('tenantAdmin.aiAgent.assistantLabel')}
                 />
               </div>
 
@@ -280,8 +294,7 @@ export function AIAgentPage() {
                   placeholder="0.5"
                 />
                 <small className="ai-field-help">
-                  Valores entre 0.4 e 0.6 são recomendados. Valores muito altos ({'>'}0.7) podem fazer a IA transferir
-                  mesmo quando tem conhecimento relevante.
+                  {t('tenantAdmin.aiAgent.recommendationText')}
                 </small>
               </div>
             </div>
@@ -395,7 +408,7 @@ export function AIAgentPage() {
                       <path d="M20 16.7A4 4 0 0 0 18 9h-1A5 5 0 1 0 5 13.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     <span>{selectedFile ? selectedFile.name : t('tenantAdmin.aiAgent.dropzone')}</span>
-                    <small>PDF, DOCX, TXT — max 10 MB</small>
+                    <small>{t('tenantAdmin.aiAgent.fileSizeLimit')}</small>
                   </div>
                   <input
                     ref={fileInputRef}
@@ -434,8 +447,8 @@ export function AIAgentPage() {
                 <div className="ai-articles-header">
                   <span>{t('tenantAdmin.aiAgent.title')}</span>
                   <span>{t('tenantAdmin.aiAgent.sourceType')}</span>
-                  <span>Status</span>
-                  <span>Chunks</span>
+                  <span>{t('tenantAdmin.aiAgent.columnStatus')}</span>
+                  <span>{t('tenantAdmin.aiAgent.columnChunks')}</span>
                   <span />
                 </div>
                 {articles.map((article) => (
@@ -458,11 +471,11 @@ export function AIAgentPage() {
                       <button
                         className="ai-delete-btn"
                         title={t('tenantAdmin.aiAgent.deleteConfirm')}
-                        onClick={() => {
-                          if (window.confirm(t('tenantAdmin.aiAgent.deleteConfirm'))) {
-                            deleteMutation.mutate(article.id);
-                          }
-                        }}
+                        onClick={() => openConfirm(
+                          t('tenantAdmin.aiAgent.deleteTitle'),
+                          t('tenantAdmin.aiAgent.deleteConfirm'),
+                          () => deleteMutation.mutate(article.id),
+                        )}
                       >
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                           <path d="M2 3.5h10M5.5 3.5V2.5h3v1M6 6v4M8 6v4M3 3.5l.7 7.5h6.6L11 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -476,6 +489,28 @@ export function AIAgentPage() {
           </section>
         </div>
       </div>
+
+      {confirmState.open && (
+        <div className="modal-overlay" style={overlayStyle} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span>{confirmState.title}</span>
+              <button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
+
+const overlayStyle: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 };

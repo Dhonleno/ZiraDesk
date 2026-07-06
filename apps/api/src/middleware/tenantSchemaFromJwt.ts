@@ -6,6 +6,7 @@ export async function tenantSchemaFromJwt(
   reply: FastifyReply,
 ): Promise<void> {
   const user = request.user;
+  const resolvedTenant = (request as FastifyRequest & { tenant?: { id: string; schemaName: string } }).tenant;
 
   if (!user || user.isSuperAdmin) {
     return reply.code(403).send({ error: 'Acesso não permitido' });
@@ -15,9 +16,18 @@ export async function tenantSchemaFromJwt(
     return reply.code(401).send({ error: 'Token inválido: tenantId ausente' });
   }
 
+  if (resolvedTenant && resolvedTenant.id !== user.tenantId) {
+    return reply.code(403).send({ error: 'Acesso cross-tenant não permitido' });
+  }
+
   // Fast path: schemaName already in JWT (tokens issued after this deploy)
   if (user.schemaName) {
-    await prisma.$executeRawUnsafe(`SET search_path TO "${user.schemaName}", public`);
+    const schemaName = resolvedTenant?.schemaName ?? user.schemaName;
+    await prisma.$executeRawUnsafe(`SET search_path TO "${schemaName}", public`);
+    request.user = {
+      ...user,
+      schemaName,
+    };
     return;
   }
 

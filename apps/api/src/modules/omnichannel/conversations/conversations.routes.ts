@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
+import { z } from 'zod';
+import { hasPermission } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -9,7 +11,7 @@ import {
   createConversationBodySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
-  resolveConversationBodySchema,
+  closeConversationSchema,
   assignConversationBodySchema,
   transferConversationBodySchema,
   requestHelpBodySchema,
@@ -21,7 +23,7 @@ import {
   listConversationMessages,
   sendMessage,
   updateConversation,
-  resolveConversation,
+  closeConversation,
   createConversation,
   assignConversation,
   transferConversation,
@@ -30,9 +32,10 @@ import {
   declineHelp,
   endHelp,
   getConversationHelpers,
-  shouldTriggerCsatForConversation,
   NotFoundError,
   ConflictError,
+  DuplicateOpenConversationError,
+  WhatsappWindowExpiredError,
   ForbiddenError,
   TransferError,
 } from './conversations.service.js';
@@ -48,6 +51,8 @@ import { prisma } from '../../../config/database.js';
 import { sendCsatMessage, sendWhatsAppTextMessage } from './csat.service.js';
 import { loadConversationSocketPayload } from './socket-payload.js';
 import { dispatchWebhook } from '../../../services/webhook-dispatcher.js';
+import { checkMessageQuota } from '../../../services/usage.service.js';
+import { maskEmail, maskPhone } from '../../../utils/pii-mask.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const conversationsViewGuard = [...guard, requirePermission('conversations:view')];
@@ -76,6 +81,13 @@ interface ConversationWindowStatusRow {
   last_message_at: Date | null;
 }
 
+interface ConversationChannelRow {
+  id: string;
+  type: string;
+  name: string;
+  status: string;
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -97,6 +109,37 @@ async function withTenantSchema<T>(
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
     return runner(tx);
   });
+}
+
+function canViewFullPii(role: string): boolean {
+  return hasPermission(role as Parameters<typeof hasPermission>[0], 'pii:view-full');
+}
+
+async function insertPiiAuditLog(schemaName: string, userId: string, entity: string, entityId: string): Promise<void> {
+  await withTenantSchema(schemaName, (tx) =>
+    tx.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+       VALUES ($1::uuid, 'conversation.pii.accessed', $2, $3::uuid, $4::jsonb)`,
+      userId,
+      entity,
+      entityId,
+      JSON.stringify({
+        user_id: userId,
+        entity,
+        entity_id: entityId,
+        timestamp: new Date().toISOString(),
+      }),
+    ),
+  );
+}
+
+async function canSendWithinMessageQuota(tenantId: string): Promise<boolean> {
+  const tenantPlan = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { plan: { select: { maxMessages: true } } },
+  });
+  const maxMessages = tenantPlan?.plan?.maxMessages ?? -1;
+  return checkMessageQuota(tenantId, maxMessages);
 }
 
 async function sendConversationWhatsAppText(
@@ -215,7 +258,40 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       request.user.tenantId,
       request.user.role,
     );
-    return reply.send({ success: true, ...result });
+    const includeFullPii = canViewFullPii(request.user.role);
+    const data = includeFullPii
+      ? result.data
+      : result.data.map((conversation) => ({
+        ...conversation,
+        contact_email: maskEmail(conversation.contact_email ?? null),
+        contact_phone: maskPhone(conversation.contact_phone ?? null),
+        contact_whatsapp: maskPhone(conversation.contact_whatsapp ?? null),
+      }));
+    return reply.send({ success: true, ...result, data });
+  });
+
+  // GET /api/omnichannel/conversations/channels
+  app.get('/channels', { preHandler: conversationsReplyGuard }, async (request, reply) => {
+    const tenantUser = request.user as AuthUser;
+    const schemaName = tenantUser.schemaName;
+
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    const channels = await withTenantSchema(schemaName, (tx) =>
+      tx.$queryRawUnsafe<ConversationChannelRow[]>(
+        `SELECT id::text AS id, type::text AS type, name::text AS name, status::text AS status
+         FROM channels
+         WHERE status = 'active'
+         ORDER BY name ASC`,
+      ),
+    );
+
+    return reply.send({ success: true, data: channels });
   });
 
   // GET /api/omnichannel/conversations/counts
@@ -225,7 +301,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/omnichannel/conversations
-  app.post('/', { preHandler: conversationsManageGuard }, async (request, reply) => {
+  app.post('/', { preHandler: conversationsReplyGuard }, async (request, reply) => {
     const parsed = createConversationBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -234,7 +310,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const result = await createConversation(parsed.data, request.user.id, request.user.tenantId);
+      const result = await createConversation(parsed.data, request.user.id, request.user.tenantId, request.ip);
       const tenantUser = request.user as AuthUser;
 
       const io = getSocketServer();
@@ -257,10 +333,28 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      return reply.code(201).send({ success: true, data: result.conversation });
+      return reply.code(201).send({
+        success: true,
+        data: result.conversation,
+      });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof DuplicateOpenConversationError) {
+        return reply.code(409).send({
+          error: 'DUPLICATE_OPEN_CONVERSATION',
+          existingId: err.existingId,
+        });
+      }
+      if (err instanceof WhatsappWindowExpiredError) {
+        return reply.code(400).send({
+          success: false,
+          error: {
+            code: 'WHATSAPP_WINDOW_EXPIRED',
+            message: 'Contato fora da janela de 24h do WhatsApp. Use Envio Ativo com um template aprovado.',
+          },
+        });
       }
       throw err;
     }
@@ -270,6 +364,10 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/:id', { preHandler: conversationsViewGuard }, async (request, reply) => {
     try {
       const result = await getConversationWithMessages(request.params.id, request.user.tenantId);
+      const schemaName = request.user.schemaName;
+      if (schemaName) {
+        await insertPiiAuditLog(schemaName, request.user.id, 'conversation', request.params.id);
+      }
       return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError) {
@@ -370,6 +468,28 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       try {
+        if (!parsed.data.isInternal) {
+          const tenantId = request.user.tenantId;
+          if (!tenantId) {
+            return reply.code(401).send({ success: false, error: { message: 'Token inválido: tenantId ausente' } });
+          }
+
+          const withinQuota = await canSendWithinMessageQuota(tenantId);
+          if (!withinQuota) {
+            request.log.warn(
+              { tenantId, conversationId: request.params.id },
+              'conversations: monthly message quota exceeded, blocking manual send',
+            );
+            return reply.status(402).send({
+              success: false,
+              error: {
+                code: 'QUOTA_EXCEEDED',
+                message: 'Limite mensal de mensagens atingido. Faça upgrade do seu plano.',
+              },
+            });
+          }
+        }
+
         const result = await sendMessage(request.params.id, request.user.id, parsed.data);
         const tenantUser = request.user as AuthUser;
 
@@ -558,13 +678,16 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       try {
         const target = parsed.data.user_id
           ? { userId: parsed.data.user_id }
-          : { skillId: parsed.data.skill_id! };
+          : parsed.data.skill_id
+            ? { skillId: parsed.data.skill_id }
+            : { departmentId: parsed.data.department_id! };
 
         const result = await transferConversation(
           request.params.id,
           target,
           request.user.id,
           parsed.data.reason,
+          request.user.tenantId,
         );
         const tenantUser = request.user as AuthUser;
         const tenantId = tenantUser.tenantId ?? null;
@@ -578,7 +701,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        const destinationAgentName = await getAgentName(schemaName, result.resolvedUserId);
+        const destinationAgentName = await getAgentName(schemaName, result.targetUserId);
 
         const transferMsg = `Seu atendimento foi transferido. Agora você está sendo atendido por *${destinationAgentName}*.`;
         const systemMsg = `Atendimento transferido para ${destinationAgentName}${parsed.data.reason ? ` - Motivo: ${parsed.data.reason}` : ''}`;
@@ -590,7 +713,7 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           }
         } catch (error) {
           request.log.error(
-            { error, conversationId, assignedTo: result.resolvedUserId },
+            { error, conversationId, assignedTo: result.targetUserId },
             '[Omnichannel] Falha ao enviar mensagem de transferência via WhatsApp',
           );
         }
@@ -607,23 +730,30 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         await syncAgentAvailability(
           prisma,
           schemaName,
-          [result.previousAssignedTo, result.resolvedUserId],
+          [result.previousAssignedTo, result.targetUserId],
           tenantId,
         );
 
         const io = getSocketServer();
-        io.to(`agent:${result.resolvedUserId}`).emit('conversation:transferred', {
+        io.to(`agent:${result.targetUserId}`).emit('conversation:transferred', {
           conversationId,
           reason: parsed.data.reason,
         });
-        io.to(`agent:${result.resolvedUserId}`).emit('conversation:assigned', {
+        io.to(`agent:${result.targetUserId}`).emit('conversation:assigned', {
           conversationId,
-          agentId: result.resolvedUserId,
+          agentId: result.targetUserId,
+        });
+        io.to(`agent:${result.targetUserId}`).emit('notification:new', {
+          type: 'conversation.assigned',
+          title: 'Conversa transferida',
+          message: 'Um atendimento foi transferido para você',
+          conversationId,
+          createdAt: new Date().toISOString(),
         });
         io.to(`tenant:${tenantId}`).emit('conversation:updated', {
           conversationId,
-          assignedTo: result.resolvedUserId,
-          assigned_to: result.resolvedUserId,
+          assignedTo: result.targetUserId,
+          assigned_to: result.targetUserId,
           status: 'open',
         });
 
@@ -643,9 +773,9 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // PATCH /api/omnichannel/conversations/:id/resolve
-  app.patch<{ Params: { id: string } }>('/:id/resolve', { preHandler: conversationsManageGuard }, async (request, reply) => {
-    const parsed = resolveConversationBodySchema.safeParse(request.body);
+  // POST /api/omnichannel/conversations/:id/close
+  app.post<{ Params: { id: string } }>('/:id/close', { preHandler: conversationsManageGuard }, async (request, reply) => {
+    const parsed = closeConversationSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
         success: false,
@@ -664,10 +794,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const conversation = await resolveConversation(
+      const conversation = await closeConversation(
         request.params.id,
         parsed.data,
         request.user.id,
+        request.user.role,
         schemaName,
         tenantUser.tenantId,
       );
@@ -675,37 +806,39 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const tenantId = tenantUser.tenantId ?? null;
       if (tenantId) {
         await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);
+        try {
+          await sendCsatMessage(request.params.id, schemaName, tenantId, prisma);
+        } catch (csatError) {
+          request.log.error(
+            {
+              err: csatError instanceof Error ? csatError.message : String(csatError),
+              conversationId: request.params.id,
+            },
+            '[Omnichannel] Falha ao disparar CSAT após encerramento',
+          );
+        }
       }
+      const { conversation: refreshedConversation } = await getConversationWithMessages(
+        request.params.id,
+        tenantUser.tenantId,
+      );
 
       const io = getSocketServer();
-
-      if (parsed.data.csatMode === 'resolve') {
-        const shouldTriggerCsat = await shouldTriggerCsatForConversation(
-          request.params.id,
-          schemaName,
-        );
-
-        if (shouldTriggerCsat) {
-          sendCsatMessage(request.params.id, schemaName, tenantUser.tenantId, prisma).catch((err: unknown) => {
-            request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-          });
-        } else {
-          request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on resolve');
-        }
-
-        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
-          conversationId: request.params.id,
-        });
-      }
-
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
-      return reply.send({ success: true, data: conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:closed', {
+        conversationId: request.params.id,
+        reason: parsed.data.reason,
+      });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation: refreshedConversation });
+      return reply.send({ success: true, data: refreshedConversation });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
       }
       if (err instanceof ConflictError) {
         return reply.code(409).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof ForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }
@@ -721,13 +854,19 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const conversation = await updateConversation(request.params.id, parsed.data, request.user.id);
+      const { conversation, previousAssignedTo } = await updateConversation(
+        request.params.id,
+        parsed.data,
+        request.user.id,
+        request.user.tenantId,
+      );
       const tenantUser = request.user as AuthUser;
       const patchSchemaName = tenantUser.schemaName ?? null;
       const patchTenantId = tenantUser.tenantId ?? null;
+      let responseConversation = conversation;
 
       if (
-        (parsed.data.status === 'resolved' || parsed.data.status === 'closed') &&
+        parsed.data.status === 'closed' &&
         patchSchemaName &&
         patchTenantId
       ) {
@@ -737,30 +876,47 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
           [conversation.assigned_to],
           patchTenantId,
         );
+        try {
+          await sendCsatMessage(request.params.id, patchSchemaName, patchTenantId, prisma);
+        } catch (csatError) {
+          request.log.error(
+            {
+              err: csatError instanceof Error ? csatError.message : String(csatError),
+              conversationId: request.params.id,
+            },
+            '[Omnichannel] Falha ao disparar CSAT após fechamento via patch',
+          );
+        }
+        const { conversation: refreshedConversation } = await getConversationWithMessages(
+          request.params.id,
+          tenantUser.tenantId,
+        );
+        responseConversation = refreshedConversation;
       }
 
       const io = getSocketServer();
-      if (parsed.data.status === 'resolved') {
-        if (patchSchemaName) {
-          const shouldTriggerCsat = await shouldTriggerCsatForConversation(
-            request.params.id,
-            patchSchemaName,
-          );
-          if (shouldTriggerCsat) {
-            sendCsatMessage(request.params.id, patchSchemaName, patchTenantId, prisma).catch((err: unknown) => {
-              request.log.error({ err, conversationId: request.params.id }, '[CSAT] Error sending survey');
-            });
-          } else {
-            request.log.info({ conversationId: request.params.id }, '[CSAT] Skipping on status update');
-          }
-        }
-        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:resolved', {
+      if (parsed.data.status === 'closed') {
+        io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:closed', {
           conversationId: request.params.id,
+          reason: 'manual',
         });
       }
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:updated', { conversation: responseConversation });
 
-      return reply.send({ success: true, data: conversation });
+      if (parsed.data.assignedTo && parsed.data.assignedTo !== previousAssignedTo) {
+        io.to(`agent:${parsed.data.assignedTo}`).emit('conversation:assigned', {
+          conversationId: request.params.id,
+        });
+        io.to(`agent:${parsed.data.assignedTo}`).emit('notification:new', {
+          type: 'conversation.assigned',
+          title: 'Conversa atribuída',
+          message: 'Um atendimento foi atribuído a você',
+          conversationId: request.params.id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return reply.send({ success: true, data: responseConversation });
     } catch (err) {
       if (err instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
@@ -841,5 +997,90 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>('/:id/help', { preHandler: conversationsManageGuard }, async (request, reply) => {
     const data = await endHelp(request.params.id, request.user.id, request.user.tenantId);
     return reply.send({ success: true, data });
+  });
+
+  // PATCH /api/omnichannel/conversations/:id/group
+  app.patch<{ Params: { id: string } }>('/:id/group', { preHandler: conversationsReplyGuard }, async (request, reply) => {
+    const bodySchema = z.object({
+      bot_option_id: z.string().uuid().nullable(),
+    });
+    const parsed = bodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    const schemaName = request.user.schemaName;
+    if (!schemaName) {
+      return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+    }
+
+    const safeSchema = ensureSafeSchemaName(schemaName);
+    const { bot_option_id } = parsed.data;
+
+    return withTenantSchema(schemaName, async (tx) => {
+      // Valida que a conversa existe
+      const convRows = await tx.$queryRawUnsafe<Array<{ id: string; metadata: unknown }>>(
+        `SELECT id, metadata FROM "${safeSchema}".conversations WHERE id = $1::uuid LIMIT 1`,
+        request.params.id,
+      );
+      if (!convRows[0]) {
+        return reply.code(404).send({ success: false, error: { message: 'Conversa não encontrada' } });
+      }
+
+      // Valida que o bot_option_id existe no tenant (se não for null)
+      let groupLabel: string | null = null;
+      if (bot_option_id) {
+        const optionRows = await tx.$queryRawUnsafe<Array<{ id: string; label: string; parent_option_id: string | null }>>(
+          `SELECT id, label, parent_option_id FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
+          bot_option_id,
+        );
+        if (!optionRows[0]) {
+          return reply.code(404).send({ success: false, error: { message: 'Opção de grupo não encontrada' } });
+        }
+        // bot_department = label da opção pai (se existir) ou da própria opção
+        if (optionRows[0].parent_option_id) {
+          const parentRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+            `SELECT label FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
+            optionRows[0].parent_option_id,
+          );
+          groupLabel = parentRows[0]?.label ?? optionRows[0].label;
+        } else {
+          groupLabel = optionRows[0].label;
+        }
+      }
+
+      const updatedRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `UPDATE "${safeSchema}".conversations
+         SET bot_option_id = $2::uuid,
+             metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+               'bot_option_id', $2::uuid,
+               'bot_department', $3::text
+             )
+         WHERE id = $1::uuid
+         RETURNING id`,
+        request.params.id,
+        bot_option_id,
+        groupLabel ?? '',
+      );
+
+      if (!updatedRows[0]) {
+        return reply.code(404).send({ success: false, error: { message: 'Conversa não encontrada' } });
+      }
+
+      const io = getSocketServer();
+      io.to(`tenant:${request.user.tenantId}`).emit('conversation:updated', {
+        conversationId: request.params.id,
+        bot_option_id,
+        bot_department: groupLabel,
+      });
+
+      return reply.send({
+        success: true,
+        data: { id: request.params.id, bot_option_id, bot_department: groupLabel },
+      });
+    });
   });
 }

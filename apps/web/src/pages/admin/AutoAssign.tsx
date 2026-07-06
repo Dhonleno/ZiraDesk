@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { adminApi, type AutoAssignAgent } from '../../services/api';
@@ -54,6 +54,14 @@ export function AutoAssign() {
 
   const [autoAssignEnabled, setAutoAssignEnabled] = useState(false);
   const [algorithm, setAlgorithm] = useState<'round_robin'>('round_robin');
+
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'auto-assign'],
@@ -282,10 +290,11 @@ export function AutoAssign() {
             <div className="flex items-center justify-between gap-3">
               <Button
                 type="button"
-                onClick={() => {
-                  const confirmed = window.confirm(t('tenantAdmin.autoAssign.resetConfirm'));
-                  if (confirmed) resetMutation.mutate();
-                }}
+                onClick={() => openConfirm(
+                  t('tenantAdmin.autoAssign.resetTitle'),
+                  t('tenantAdmin.autoAssign.resetConfirm'),
+                  () => resetMutation.mutate(),
+                )}
                 disabled={resetMutation.isPending}
                 variant="secondary"
               >
@@ -300,6 +309,28 @@ export function AutoAssign() {
           )}
         </div>
       </div>
+
+      {confirmState.open && (
+        <div className="modal-overlay" style={overlayStyle} onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+          <div className="modal-panel" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span>{confirmState.title}</span>
+              <button className="tb-icon-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', margin: 0 }}>{confirmState.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button className="tb-btn" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('tenantAdmin.common.cancel')}</button>
+              <button className="tb-btn-primary" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}>{t('tenantAdmin.common.confirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
+
+const overlayStyle: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(2,6,23,.64)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 };

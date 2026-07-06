@@ -1,0 +1,10 @@
+{
+  "dpo": {
+    "title": "Delegado de Protección de Datos",
+    "email": "Correo",
+    "phone": "Teléfono",
+    "contact": "Contacto"
+  },
+  "privacyPolicy": "Política de Privacidad",
+  "termsOfService": "Términos del Servicio"
+}

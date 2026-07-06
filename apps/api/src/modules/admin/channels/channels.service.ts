@@ -1,5 +1,6 @@
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
+import { redis } from '../../../config/redis.js';
 import { decryptCredentials, encryptCredentials } from '../../../utils/crypto.js';
 import { hasTenantEmailProvider } from '../../../services/email.service.js';
 import type { CreateChannelInput, UpdateChannelInput } from './channels.schema.js';
@@ -9,6 +10,28 @@ export class NotFoundError extends Error {
     super(`${resource} não encontrado`);
     this.name = 'NotFoundError';
   }
+}
+
+export class ChannelConfigurationError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: 400 | 502 = 400,
+  ) {
+    super(message);
+    this.name = 'ChannelConfigurationError';
+  }
+}
+
+function validateSchemaName(schemaName: string): string {
+  if (!/^[a-z0-9_]+$/.test(schemaName)) {
+    throw new Error('Schema do tenant inválido');
+  }
+
+  return schemaName;
+}
+
+function channelsTable(schemaName: string): string {
+  return `"${validateSchemaName(schemaName)}".channels`;
 }
 
 interface ChannelRow {
@@ -34,6 +57,14 @@ interface ChannelRowPublic {
   created_at: Date;
 }
 
+interface NgrokTunnel {
+  public_url?: unknown;
+  proto?: unknown;
+  config?: {
+    addr?: unknown;
+  };
+}
+
 function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -46,9 +77,10 @@ function extractMetaErrorMessage(payload: unknown): string | null {
   return typeof nested.message === 'string' ? nested.message.trim() : null;
 }
 
-async function ensureChannelsInfrastructure(): Promise<void> {
+async function ensureChannelsInfrastructure(schemaName: string): Promise<void> {
+  const tableRef = channelsTable(schemaName);
   await prisma.$executeRawUnsafe(
-    `CREATE TABLE IF NOT EXISTS channels (
+    `CREATE TABLE IF NOT EXISTS ${tableRef} (
        id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
        type        VARCHAR(30)  NOT NULL,
        name        VARCHAR(100) NOT NULL,
@@ -59,11 +91,11 @@ async function ensureChannelsInfrastructure(): Promise<void> {
     )`,
   );
   await prisma.$executeRawUnsafe(
-    `ALTER TABLE channels
+    `ALTER TABLE ${tableRef}
        ADD COLUMN IF NOT EXISTS last_tested_at TIMESTAMPTZ`,
   );
   await prisma.$executeRawUnsafe(
-    `ALTER TABLE channels
+    `ALTER TABLE ${tableRef}
        ADD COLUMN IF NOT EXISTS last_test_ok BOOLEAN`,
   );
 }
@@ -82,37 +114,228 @@ async function fetchWithTimeout(
   }
 }
 
-async function testWhatsAppChannel(credentials: Record<string, unknown>): Promise<void> {
+async function readMetaResponse(response: Response, fallbackMessage: string): Promise<unknown> {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new ChannelConfigurationError(
+      extractMetaErrorMessage(payload) ?? fallbackMessage,
+      response.status >= 500 ? 502 : 400,
+    );
+  }
+
+  return payload;
+}
+
+async function requestMeta(
+  path: string,
+  accessToken: string,
+  init: RequestInit = {},
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${path}`,
+      {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...init.headers,
+        },
+      },
+    );
+  } catch {
+    throw new ChannelConfigurationError('Não foi possível conectar à Meta para validar o canal', 502);
+  }
+
+  return readMetaResponse(response, `Falha na configuração do WhatsApp (HTTP ${response.status})`);
+}
+
+async function resolveTokenAppId(
+  accessToken: string,
+  appId: string,
+  appSecret: string,
+): Promise<string> {
+  const appAccessToken = `${appId}|${appSecret}`;
+  const payload = await requestMeta(
+    `debug_token?input_token=${encodeURIComponent(accessToken)}`,
+    appAccessToken,
+  ) as { data?: { app_id?: unknown; is_valid?: unknown } };
+  const resolvedAppId = asTrimmedString(payload.data?.app_id);
+
+  if (payload.data?.is_valid !== true || !resolvedAppId) {
+    throw new ChannelConfigurationError('Access Token do WhatsApp inválido');
+  }
+
+  return resolvedAppId;
+}
+
+function isNgrokTunnelForApi(tunnel: NgrokTunnel): boolean {
+  const publicUrl = asTrimmedString(tunnel.public_url);
+  const proto = asTrimmedString(tunnel.proto);
+  const addr = asTrimmedString(tunnel.config?.addr).toLowerCase();
+  const port = String(env.PORT);
+
+  return (
+    proto === 'https'
+    && publicUrl.startsWith('https://')
+    && (
+      addr === `http://localhost:${port}`
+      || addr === `https://localhost:${port}`
+      || addr === `http://127.0.0.1:${port}`
+      || addr === `https://127.0.0.1:${port}`
+    )
+  );
+}
+
+async function detectDevelopmentNgrokUrl(): Promise<string | null> {
+  if (env.NODE_ENV !== 'development') return null;
+
+  try {
+    const response = await fetchWithTimeout('http://127.0.0.1:4040/api/tunnels', {}, 2_000);
+    if (!response.ok) return null;
+
+    const payload = await response.json() as { tunnels?: NgrokTunnel[] };
+    const tunnel = payload.tunnels?.find(isNgrokTunnelForApi);
+    return asTrimmedString(tunnel?.public_url) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function whatsappWebhookUrl(): Promise<string> {
+  const detectedNgrokUrl = await detectDevelopmentNgrokUrl();
+  if (detectedNgrokUrl) {
+    return `${detectedNgrokUrl.replace(/\/+$/, '')}/api/webhooks/whatsapp`;
+  }
+
+  const apiUrl = asTrimmedString(env.API_URL);
+  if (!apiUrl) {
+    throw new ChannelConfigurationError(
+      'URL pública da API não configurada no servidor',
+      502,
+    );
+  }
+  return `${apiUrl.replace(/\/+$/, '')}/api/webhooks/whatsapp`;
+}
+
+async function validateAndConfigureWhatsAppChannel(
+  credentials: Record<string, unknown>,
+): Promise<void> {
   const phoneNumberId = asTrimmedString(
     credentials.phoneNumberId ?? credentials.phone_number_id ?? env.WHATSAPP_PHONE_NUMBER_ID,
+  );
+  const wabaId = asTrimmedString(
+    credentials.wabaId ?? credentials.waba_id ?? env.WHATSAPP_WABA_ID,
   );
   const accessToken = asTrimmedString(
     credentials.accessToken ?? credentials.access_token ?? env.WHATSAPP_ACCESS_TOKEN,
   );
+  const appId = asTrimmedString(credentials.appId ?? credentials.app_id);
+  const appSecret = asTrimmedString(credentials.appSecret ?? credentials.app_secret);
 
-  if (!phoneNumberId || !accessToken) {
-    throw new Error('Credenciais WhatsApp incompletas');
+  if (!phoneNumberId || !wabaId || !accessToken || !appId || !appSecret) {
+    throw new ChannelConfigurationError('Credenciais WhatsApp incompletas');
   }
 
-  const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v19.0/${encodeURIComponent(phoneNumberId)}?fields=id`,
+  if (!/^\d+$/.test(phoneNumberId)) {
+    throw new ChannelConfigurationError('Phone Number ID deve conter apenas números');
+  }
+  if (!/^\d+$/.test(wabaId)) {
+    throw new ChannelConfigurationError('WABA ID deve conter apenas números');
+  }
+  if (!/^\d+$/.test(appId)) {
+    throw new ChannelConfigurationError('App ID deve conter apenas números');
+  }
+
+  const tokenAppId = await resolveTokenAppId(accessToken, appId, appSecret);
+  if (tokenAppId !== appId) {
+    throw new ChannelConfigurationError(
+      'O Access Token não pertence ao App ID informado.',
+    );
+  }
+
+  const callbackUrl = await whatsappWebhookUrl();
+  const subscribedFields = [
+    'messages',
+    'message_template_components_update',
+    'message_template_quality_update',
+    'message_template_status_update',
+    'phone_number_name_update',
+    'phone_number_quality_update',
+    'account_alerts',
+    'account_review_update',
+    'account_update',
+    'security',
+  ];
+  await requestMeta(
+    `${encodeURIComponent(appId)}/subscriptions`,
+    `${appId}|${appSecret}`,
     {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        object: 'whatsapp_business_account',
+        callback_url: callbackUrl,
+        verify_token: env.WHATSAPP_VERIFY_TOKEN,
+        fields: subscribedFields.join(','),
+      }),
     },
   );
 
-  if (!response.ok) {
-    let message = `Falha na validação do WhatsApp (HTTP ${response.status})`;
-    try {
-      const payload = await response.json() as unknown;
-      message = extractMetaErrorMessage(payload) ?? message;
-    } catch {
-      // noop
-    }
-    throw new Error(message);
+  await requestMeta(`${encodeURIComponent(wabaId)}?fields=id`, accessToken);
+  const phoneNumbers = await requestMeta(
+    `${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`,
+    accessToken,
+  ) as { data?: Array<{ id?: unknown }> };
+  const phoneBelongsToWaba = phoneNumbers.data?.some(
+    (phone) => asTrimmedString(phone.id) === phoneNumberId,
+  );
+  if (!phoneBelongsToWaba) {
+    throw new ChannelConfigurationError('O Phone Number ID não pertence à WABA informada');
+  }
+
+  await requestMeta(
+    `${encodeURIComponent(wabaId)}/subscribed_apps`,
+    accessToken,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        override_callback_uri: callbackUrl,
+        verify_token: env.WHATSAPP_VERIFY_TOKEN,
+      }),
+    },
+  );
+  await requestMeta(
+    `${encodeURIComponent(phoneNumberId)}`,
+    accessToken,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhook_configuration: {
+          override_callback_uri: callbackUrl,
+          verify_token: env.WHATSAPP_VERIFY_TOKEN,
+        },
+      }),
+    },
+  );
+
+  const phone = await requestMeta(
+    `${encodeURIComponent(phoneNumberId)}?fields=id,webhook_configuration`,
+    accessToken,
+  ) as { webhook_configuration?: { application?: unknown } };
+  if (asTrimmedString(phone.webhook_configuration?.application) !== callbackUrl) {
+    throw new ChannelConfigurationError(
+      'A Meta não confirmou o callback de entrada do WhatsApp',
+      502,
+    );
   }
 }
 
@@ -125,7 +348,7 @@ async function testInstagramChannel(credentials: Record<string, unknown>): Promi
   }
 
   const response = await fetchWithTimeout(
-    `https://graph.facebook.com/v19.0/${encodeURIComponent(pageId)}?fields=id`,
+    `https://graph.facebook.com/${env.META_GRAPH_VERSION}/${encodeURIComponent(pageId)}?fields=id`,
     {
       method: 'GET',
       headers: {
@@ -153,41 +376,59 @@ async function testEmailChannel(schemaName: string): Promise<void> {
   }
 }
 
-export async function listChannels() {
-  await ensureChannelsInfrastructure();
+export async function listChannels(schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
     `SELECT id, type, name, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       ORDER BY created_at DESC`,
   );
   return rows;
 }
 
-export async function getChannel(id: string) {
-  await ensureChannelsInfrastructure();
+export async function getChannel(id: string, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRow[]>(
     `SELECT id, type, name, credentials, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
   );
   if (!rows[0]) throw new NotFoundError('Canal');
   const { credentials, ...rest } = rows[0];
+  const decrypted = decryptCredentials(credentials);
+  const {
+    accessToken: _accessToken,
+    access_token: _legacyAccessToken,
+    appSecret: _appSecret,
+    app_secret: _legacyAppSecret,
+    ...publicCredentials
+  } = decrypted;
   return {
     ...rest,
-    credentials: decryptCredentials(credentials),
+    credentials: {
+      ...publicCredentials,
+      hasAccessToken: Boolean(_accessToken || _legacyAccessToken),
+      hasAppSecret: Boolean(_appSecret || _legacyAppSecret),
+    },
   };
 }
 
-export async function createChannel(data: CreateChannelInput) {
-  await ensureChannelsInfrastructure();
+export async function createChannel(data: CreateChannelInput, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
+  if (data.type === 'whatsapp') {
+    await validateAndConfigureWhatsAppChannel(data.credentials);
+  }
   const encryptedCredentials = encryptCredentials(data.credentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
   const settingsJson = JSON.stringify(data.settings ?? {});
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `INSERT INTO channels (type, name, credentials, settings)
+    `INSERT INTO ${tableRef} (type, name, credentials, settings)
      VALUES ($1, $2, $3::jsonb, $4::jsonb)
      RETURNING id, type, name, status, settings, last_tested_at, last_test_ok, created_at`,
     data.type,
@@ -198,11 +439,12 @@ export async function createChannel(data: CreateChannelInput) {
   return rows[0]!;
 }
 
-export async function updateChannel(id: string, data: UpdateChannelInput) {
-  await ensureChannelsInfrastructure();
+export async function updateChannel(id: string, data: UpdateChannelInput, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const existingRows = await prisma.$queryRawUnsafe<ChannelRow[]>(
-    `SELECT id, credentials, settings, last_tested_at, last_test_ok
-       FROM channels
+    `SELECT id, type, credentials, settings, last_tested_at, last_test_ok
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
@@ -223,6 +465,29 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
   ) {
     mergedCredentials.accessToken = currentCredentials.accessToken;
   }
+  if (
+    data.credentials
+    && (!Object.prototype.hasOwnProperty.call(data.credentials, 'appSecret')
+      || !String(data.credentials.appSecret ?? '').trim())
+    && currentCredentials.appSecret
+  ) {
+    mergedCredentials.appSecret = currentCredentials.appSecret;
+  }
+
+  if (existingRows[0].type === 'whatsapp' && data.credentials) {
+    await validateAndConfigureWhatsAppChannel(mergedCredentials);
+  }
+
+  if (existingRows[0].type === 'whatsapp') {
+    const oldPhoneId = (currentCredentials.phoneNumberId ?? currentCredentials.phone_number_id ?? '').trim();
+    try {
+      if (oldPhoneId) {
+        await redis.del(`whatsapp:channel:${oldPhoneId}`, `whatsapp:app-secrets:${oldPhoneId}`);
+      }
+    } catch {
+      // silent — cache invalidation is best-effort
+    }
+  }
 
   const encryptedCredentials = encryptCredentials(mergedCredentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
@@ -231,7 +496,7 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
   const mergedSettings = data.settings ? { ...currentSettings, ...data.settings } : currentSettings;
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `UPDATE channels
+    `UPDATE ${tableRef}
      SET name        = COALESCE($1, name),
          credentials = $2::jsonb,
          settings    = $3::jsonb,
@@ -247,10 +512,19 @@ export async function updateChannel(id: string, data: UpdateChannelInput) {
   return rows[0]!;
 }
 
-export async function deleteChannel(id: string) {
-  await ensureChannelsInfrastructure();
+export async function deleteChannel(id: string, schemaName: string) {
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
+  try {
+    const channelKeys = await redis.keys('whatsapp:channel:*');
+    const secretsKeys = await redis.keys('whatsapp:app-secrets:*');
+    const allKeys = [...channelKeys, ...secretsKeys];
+    if (allKeys.length > 0) await redis.del(...allKeys);
+  } catch {
+    // silent — cache invalidation is best-effort
+  }
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
-    `UPDATE channels
+    `UPDATE ${tableRef}
         SET status = 'inactive',
             last_test_ok = false,
             last_tested_at = NOW()
@@ -263,10 +537,11 @@ export async function deleteChannel(id: string) {
 }
 
 export async function testChannel(id: string, schemaName: string) {
-  await ensureChannelsInfrastructure();
+  const tableRef = channelsTable(schemaName);
+  await ensureChannelsInfrastructure(schemaName);
   const rows = await prisma.$queryRawUnsafe<ChannelRow[]>(
     `SELECT id, type, name, credentials, status, settings, last_tested_at, last_test_ok, created_at
-       FROM channels
+       FROM ${tableRef}
       WHERE id = $1::uuid
       LIMIT 1`,
     id,
@@ -281,7 +556,7 @@ export async function testChannel(id: string, schemaName: string) {
   try {
     switch (channel.type) {
       case 'whatsapp':
-        await testWhatsAppChannel(credentials);
+        await validateAndConfigureWhatsAppChannel(credentials);
         connected = true;
         break;
       case 'instagram':
@@ -300,7 +575,7 @@ export async function testChannel(id: string, schemaName: string) {
     }
   } catch (error) {
     await prisma.$executeRawUnsafe(
-      `UPDATE channels
+      `UPDATE ${tableRef}
           SET last_tested_at = NOW(),
               last_test_ok = false
         WHERE id = $1::uuid`,
@@ -310,7 +585,7 @@ export async function testChannel(id: string, schemaName: string) {
   }
 
   await prisma.$executeRawUnsafe(
-    `UPDATE channels
+    `UPDATE ${tableRef}
         SET last_tested_at = NOW(),
             last_test_ok = $2
       WHERE id = $1::uuid`,

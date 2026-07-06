@@ -21,7 +21,7 @@
       "total": "Conversations",
       "tma": "Avg. Handle Time",
       "csat": "Avg. CSAT",
-      "resolved": "Resolved",
+      "closed": "Closed",
       "firstResponse": "First Response"
     },
     "charts": {
@@ -49,7 +49,7 @@
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",
-      "resolved": "Resolved",
+      "closed": "Closed",
       "avgResolution": "Avg. resolution time",
       "volumeByPeriod": "Volume by period",
       "opened": "Opened",
@@ -77,7 +77,12 @@
   "outbound": {
     "badge": "Active",
     "warning": "It will appear in Active until the customer replies",
-    "activated": "Customer replied to the active attendance!"
+    "activated": "Customer replied to the active attendance!",
+    "withinWindow": "Within the 24h window — free message available",
+    "windowExpiredNotice": "24h window expired. Only approved templates are allowed.",
+    "errors": {
+      "windowExpired": "Outside the 24h WhatsApp window. Select an approved template to continue."
+    }
   },
   "activeOutbound": {
     "button": "Active outbound",
@@ -98,43 +103,75 @@
     "lastContact": "Last contact",
     "noHistory": "No previous history"
   },
+  "campaigns": {
+    "detail": {
+      "info": "CAMPAIGN DETAILS",
+      "detailsSection": "CAMPAIGN DETAILS",
+      "channel": "Channel",
+      "template": "Template",
+      "scheduling": "Scheduling",
+      "startedAt": "Started at",
+      "completedAt": "Completed at",
+      "dailyLimit": "Daily limit",
+      "dailyLimitValue": "{{count}} sends",
+      "notes": "Notes",
+      "immediate": "Immediate"
+    }
+  },
   "tabs": {
-    "active": "In service",
-    "activeOutbound": "Active",
-    "queue": "Bot",
-    "return": "Follow-up",
+    "open": "Open",
+    "waiting": "Waiting",
     "closed": "Closed"
   },
-  "subTabs": {
-    "all": "All",
-    "resolved": "Resolved",
-    "closed": "Closed",
-    "outbound": "Follow-up"
-  },
-  "queue": {
-    "assume": "Take over",
-    "empty": "No attendances in queue",
-    "emptyHint": "New customer contacts will appear here"
+  "closeConversation": "Close",
+  "closeModal": {
+    "title": "Close conversation",
+    "reasonLabel": "Closure reason",
+    "typeLabel": "Closure reason",
+    "outcomeLabel": "Outcome",
+    "notesLabel": "Notes (optional)",
+    "reasonPlaceholder": "Select a reason...",
+    "outcomePlaceholder": "Select an outcome...",
+    "notesPlaceholder": "Additional details...",
+    "confirm": "Close",
+    "cancel": "Cancel",
+    "successToast": "Conversation closed",
+    "errorToast": "Error closing conversation",
+    "loadingConfig": "Loading closure reasons...",
+    "emptyConfig": "No active closure reason was found."
   },
   "notifications": {
-    "newMessage": "New message",
+    "newMessage": "New message received",
     "assigned": "New attendance assigned",
     "assignedBody": "was assigned to you",
     "permissionDenied": "Enable browser notifications to be alerted about new attendances",
     "messages": "messages",
-    "markAllRead": "Mark all as read"
+    "markAllRead": "Mark all as read",
+    "clearRead": "Clear read",
+    "clearReadHint": "Removes read notifications",
+    "lgpdRequest": "New LGPD request",
+    "lgpdSlaWarning": "LGPD SLA warning",
+    "lgpdSlaBreached": "LGPD SLA breached",
+    "clearReadSuccess": "Read notifications removed",
+    "loadMore": "Load more notifications",
+    "empty": "No notifications",
+    "types": {
+      "conversation_message": "New message",
+      "conversation_assigned": "Conversation assigned",
+      "ticket_assigned": "Ticket assigned",
+      "ticket_comment": "New comment",
+      "help_requested": "Help requested"
+    }
   },
   "agentRequeued": "{{agentName}} went offline. {{count}} conversation(s) returned to queue.",
   "outboundBadge": "↗ Follow-up",
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Open",
-    "active_outbound": "Active",
-    "in_service": "In service",
-    "pending": "Pending",
-    "resolved": "Resolved",
+    "queue": "In queue",
+    "awaitingChoice": "Awaiting choice",
+    "waiting": "Waiting",
     "closed": "Closed",
-    "bot": "Bot",
     "all": "All",
     "mine": "Mine"
   },
@@ -146,6 +183,7 @@
     "live_chat": "Live Chat"
   },
   "chat": {
+    "composeAriaLabel": "Type your message",
     "inputPlaceholder": "Type your message...",
     "resolvedPlaceholder": "This conversation has been resolved",
     "closedByClient": "This conversation was closed by the customer",
@@ -198,7 +236,31 @@
     "templateNameRequired": "Please provide the WhatsApp template name.",
     "activeOutboundReturnHeader": "Active follow-up return",
     "activeOutboundReturnSub": "Customer replied within the active follow-up window started by {{agent}}.",
-    "activeOutboundFallbackAgent": "assigned agent"
+    "activeOutboundFallbackAgent": "assigned agent",
+    "protocolCopied": "Protocol copied!",
+    "protocolCopyError": "Could not copy protocol",
+    "protocol": "Protocol number",
+    "closedByAgent": "This conversation was closed",
+    "internalNotePlaceholder": "Write an internal note...",
+    "replyingTo": "Replying to {{name}}",
+    "mentionMessage": "Reply to message",
+    "removeReply": "Remove reply",
+    "attachFile": "Attach file",
+    "imageOrVideo": "Image or video",
+    "noAgent": "No agent",
+    "systemLabel": "System",
+    "mentionImage": "[Image]",
+    "mentionAudio": "[Audio]",
+    "mentionVideo": "[Video]",
+    "mentionDocument": "[Document]",
+    "mentionDefault": "[Message]",
+    "mentionSticker": "Sticker",
+    "mentionPhoto": "Photo",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "unseenMessages": "1 new message",
+    "unseenMessages_plural": "{{count}} new messages",
+    "callRecording": "Call recording"
   },
   "resolve": {
     "title": "Resolve conversation",
@@ -214,6 +276,7 @@
     "resolved": "Conversation resolved",
     "resolvedBanner": "This conversation has been resolved",
     "reopen": "Reopen conversation",
+    "reopenError": "Error reopening conversation",
     "ratings": {
       "1": "Very bad",
       "2": "Bad",
@@ -249,12 +312,16 @@
     "systemMessage": "Conversation transferred to {{name}}",
     "agentOffline": "This agent is offline",
     "noAgentsForSkill": "No agents available for this group",
+    "byDepartment": "By department",
+    "noDepartmentsAvailable": "No departments available at the moment",
+    "noAgentsForDepartment": "No agents available for this department",
     "error": "Error transferring conversation"
   },
   "history": {
     "title": "Conversation History",
     "subtitle": "Browse and analyze completed conversations",
     "tabs": {
+      "label": "Conversation history sections",
       "history": "History",
       "goals": "Goals"
     },
@@ -275,6 +342,8 @@
       "7d": "Last 7 days",
       "30d": "Last 30 days",
       "month": "This month",
+      "last_week": "Last week",
+      "last_month": "Last month",
       "custom": "Custom"
     },
     "columns": {
@@ -291,22 +360,35 @@
     },
     "found": "{{count}} conversations found",
     "exportCsv": "Export CSV",
+    "exportError": "Could not export the CSV right now.",
     "noResults": "No conversations found",
     "noResultsHint": "Try adjusting the filters",
     "detail": {
       "title": "Conversation details",
       "transcript": "Transcript",
       "timeline": "Timeline",
-      "csat": "Rating"
+      "csat": "Rating",
+      "close": "Close conversation details",
+      "emptyTimelineTitle": "No events recorded",
+      "emptyTimelineHint": "Conversation events will appear here when they are recorded.",
+      "emptyTranscriptTitle": "No messages recorded",
+      "emptyTranscriptHint": "The transcript will appear when the conversation has messages.",
+      "emptyCsatTitle": "No rating recorded",
+      "emptyCsatHint": "The customer rating will appear here after the response."
     },
     "loadMore": "Load previous messages",
     "loading": "Loading...",
-    "noMore": "Start of the conversation"
+    "noMore": "Start of the conversation",
+    "error": "Error loading messages",
+    "sortAsc": "Sort ascending",
+    "sortDesc": "Sort descending",
+    "sortNone": "No sort"
   },
   "goals": {
     "title": "Goals",
     "subtitle": "Set performance targets for your team",
     "new": "New goal",
+    "removeTitle": "Remove goal",
     "empty": "No goals configured",
     "emptyHint": "Create a goal to track agent performance",
     "name": "Goal name",
@@ -326,12 +408,27 @@
       "csat": "Min CSAT (1-5)",
       "volume": "Min volume"
     },
+    "validation": {
+      "nameRequired": "Enter the goal name.",
+      "nameMax": "Use at most {{max}} characters.",
+      "nameHint": "Up to {{max}} characters.",
+      "agentRequired": "Select an agent for this goal.",
+      "integer": "Use whole numbers only.",
+      "number": "Enter a valid number.",
+      "range": "Enter a value between {{min}} and {{max}}.",
+      "minutesHint": "Optional. Use {{min}} to {{max}} minutes.",
+      "percentHint": "Optional. Use {{min}} to {{max}}%.",
+      "csatHint": "Optional. Use {{min}} to {{max}}.",
+      "volumeHint": "Optional. Use {{min}} to {{max}} conversations.",
+      "fixBeforeSave": "Fix the highlighted fields before saving."
+    },
     "saveSuccess": "Goal saved successfully",
     "deleteSuccess": "Goal removed"
   },
   "performance": {
     "title": "Agent Performance",
     "subtitle": "Track team metrics and goals",
+    "outboundRule": "Active outbound is counted in KPIs only after the customer replies.",
     "columns": {
       "agent": "Agent",
       "volume": "Volume",
@@ -349,7 +446,37 @@
     },
     "exportCsv": "Export CSV",
     "noGoal": "No goal defined",
-    "teamKpis": "Team summary"
+    "teamKpis": "Team summary",
+    "byAgent": "By Agent",
+    "byDepartment": "By Department",
+    "table": {
+      "department": "Department",
+      "viewMode": "Performance view mode"
+    },
+    "loadingAgents": "Loading agent performance...",
+    "loadingDepartments": "Loading department performance...",
+    "emptyAgentsTitle": "No agent performance found",
+    "emptyAgentsHint": "Adjust the period, agent, or group to review the indicators.",
+    "emptyDepartmentsTitle": "No department performance found",
+    "emptyDepartmentsHint": "Adjust the filters to compare department results.",
+    "invalidRange": "Enter a valid custom period before exporting.",
+    "filterByDepartment": "Department",
+    "agentDetail": {
+      "subtitle": "Details for the selected period",
+      "close": "Close",
+      "recentConversations": "Recent conversations",
+      "loading": "Loading conversations...",
+      "noConversations": "No conversations in this period.",
+      "colProtocol": "Protocol",
+      "colContact": "Contact",
+      "colStatus": "Status",
+      "colWait": "Wait",
+      "colDate": "Date"
+    }
+  },
+  "composer": {
+    "pasteRemove": "Remove file",
+    "pasteImageAlt": "Pasted image"
   },
   "media": {
     "upload": "Upload file",
@@ -365,7 +492,18 @@
     "typeNotSupported": "File type not supported",
     "permissionDenied": "Microphone permission denied",
     "uploadError": "Error uploading file",
-    "downloadFile": "Download file"
+    "downloadFile": "Download file",
+    "browserNotSupported": "Browser does not support audio recording.",
+    "sending": "Sending audio...",
+    "converting": "Converting audio... {{pct}}%",
+    "discard": "Discard",
+    "pausePlayback": "Pause",
+    "listenRecording": "Listen to recording",
+    "confirmSend": "Confirm send",
+    "resumeRecording": "Resume recording",
+    "paused": "Paused",
+    "goToReview": "Go to review",
+    "stopAndReview": "Stop and review"
   },
   "skills": {
     "title": "Skills",
@@ -391,7 +529,46 @@
     "avgTime": "AHT",
     "viewConversations": "View conversations",
     "noAgents": "No agents online",
-    "conversations": "conversations"
+    "conversations": "conversations",
+    "tabs": "Monitor tabs",
+    "realtimeTab": "Real Time",
+    "bot": {
+      "tab": "Bot",
+      "cardLabel": "In bot",
+      "total": "{{count}} in bot",
+      "stuck": "{{count}} stuck",
+      "stuckThreshold": "> {{minutes}}min",
+      "refresh": "Refresh",
+      "pull": "Pull",
+      "pullToQueue": "Pull to support",
+      "close": "Close",
+      "closeDrawer": "Close",
+      "viewConversation": "View conversation",
+      "pullSuccess": "Conversation sent to the support queue",
+      "closeSuccess": "Conversation closed",
+      "actionError": "Could not complete the action",
+      "confirmClose": "Are you sure?",
+      "confirmCloseMessage": "The customer will be informed that the conversation was closed.",
+      "closeMessagePlaceholder": "Optional customer message",
+      "emptyTitle": "No conversations in bot right now",
+      "emptySubtitle": "All customers moved to human support or closed",
+      "timeInBot": "Time in bot",
+      "lastMessage": "Last message",
+      "drawerTitle": "Conversation with {{name}}",
+      "drawerSubtitle": "{{protocol}} · {{channel}}",
+      "timeInBotLabel": "Time in bot",
+      "viewFullProfile": "View full profile",
+      "messagesLoading": "Loading history...",
+      "messagesEmpty": "No messages recorded",
+      "contact": "Contact",
+      "phone": "Phone",
+      "protocol": "Protocol",
+      "channel": "Channel",
+      "actions": "Actions",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "loading": "..."
+    }
   },
   "tv": {
     "title": "Live Operations Monitor",
@@ -449,7 +626,10 @@
     "accepted": "{{name}} is helping you",
     "helping": "Helping",
     "endHelp": "End help",
-    "noAgentsAvailable": "No available agents to help"
+    "noAgentsAvailable": "No available agents to help",
+    "endHelpError": "Error ending help session",
+    "requestError": "Could not request help",
+    "sending": "Sending..."
   },
   "info": {
     "contact": "Contact",
@@ -476,7 +656,22 @@
     "messages": "Messages exchanged",
     "attendances": "Attendances",
     "firstContact": "1st contact",
-    "engagement": "Engagement"
+    "engagement": "Engagement",
+    "unknown": "Unknown contact",
+    "linkOrganization": "Link organization",
+    "viewOrganization": "View organization",
+    "openTickets": "Open tickets",
+    "organization": "Organization",
+    "noOrganization": "No organization",
+    "noChannel": "No channel identified",
+    "currentChannel": "Current channel: {{label}} · {{sub}}",
+    "noPreviousConversations": "No previous conversations",
+    "noMessages": "No messages",
+    "edit": "Edit",
+    "addTag": "Add",
+    "tags": "Tags",
+    "noTags": "No tags applied",
+    "conversationCount": "{{count}} conversation(s) · last: {{time}}"
   },
   "form": {
     "client": "Contact",
@@ -500,6 +695,7 @@
     "creating": "Starting...",
     "created": "Conversation started successfully",
     "title": "New conversation",
+    "whatsappWindowExpired": "Protocol not sent to client — contact is outside the 24h WhatsApp window. Use Active Outbound with an approved template to start contact.",
     "errorCreate": "Error creating conversation",
     "errorLoadClients": "Error loading contacts",
     "errorLoadChannels": "Error loading channels",
@@ -507,5 +703,55 @@
     "channelRequired": "Please select a channel",
     "initialMessageRequired": "Type the initial message",
     "initialTemplateNameRequired": "Please provide the template name"
+  },
+  "queue": {
+    "title": "Support queue",
+    "waiting": "waiting",
+    "assume": "Take over",
+    "assignMe": "Assign to me",
+    "assigning": "Taking over...",
+    "unknownContact": "Unnamed contact",
+    "unclassified": "No group",
+    "noSubject": "No subject",
+    "columns": {
+      "contact": "Contact",
+      "group": "Group",
+      "subject": "Subject",
+      "channel": "Channel",
+      "wait": "Wait",
+      "action": "Action"
+    },
+    "assignedSuccess": "Conversation assigned successfully",
+    "assignedError": "Error assigning conversation",
+    "empty": "No conversations in queue",
+    "emptyHint": "New conversations will appear here automatically",
+    "allChannels": "All channels",
+    "waitingTime": "Wait time",
+    "preview": "Preview",
+    "previewTitle": "Conversation with {{name}}",
+    "previewSubtitle": "Preview — read only",
+    "previewClose": "Close",
+    "previewLoading": "Loading messages...",
+    "previewLoadingMedia": "Loading media...",
+    "previewEmpty": "No messages in this conversation",
+    "previewDownload": "Download document"
+  },
+  "visitor": "Visitor",
+  "agentFilter": "Agent filter",
+  "clear": "Clear",
+  "newBadge": "New",
+  "now": "just now",
+  "pii": {
+    "reveal": "Reveal",
+    "hide": "Hide data",
+    "revealing": "Revealing..."
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "conversations": {
+    "changeGroup": "Change group",
+    "loadMore": "Load more"
   }
 }

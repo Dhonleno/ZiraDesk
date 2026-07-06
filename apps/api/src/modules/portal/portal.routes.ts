@@ -1,15 +1,21 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import {
   portalAddCommentSchema,
   portalCreateTicketSchema,
   portalForgotPasswordSchema,
+  portalLgpdConsentSchema,
+  portalLgpdRectificationSchema,
+  portalLgpdRequestSchema,
   portalLoginSchema,
+  portalResetPasswordSchema,
   portalTicketsQuerySchema,
 } from './portal.schema.js';
 import {
   addPortalComment,
   createPortalTicket,
   getPortalTicket,
+  getPortalLgpdState,
   listPortalTicketTypes,
   listPortalTickets,
   portalLogin,
@@ -17,6 +23,13 @@ import {
   PortalAuthError,
   PortalForbiddenError,
   PortalNotFoundError,
+  reopenTicketByContact,
+  requestPortalPasswordReset,
+  resetPortalPassword,
+  submitTicketCsat,
+  submitPortalLgpdRequest,
+  submitPortalLgpdRectificationRequest,
+  updatePortalLgpdConsent,
   verifyPortalToken,
 } from './portal.service.js';
 
@@ -44,6 +57,23 @@ async function portalAuth(request: FastifyRequest, reply: FastifyReply) {
   } catch {
     return reply.code(401).send({ success: false, error: { message: 'Não autorizado' } });
   }
+}
+
+const portalTicketCsatParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+const portalTicketCsatBodySchema = z.object({
+  score: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(1000).optional(),
+});
+
+function resolveCsatTenantSlug(request: FastifyRequest): string | null {
+  const hostName = (request.hostname || request.headers.host || '').split(':')[0]?.toLowerCase() ?? '';
+  const parts = hostName.split('.').filter(Boolean);
+
+  if (parts[0] === 'suporte' && parts[1]) return parts[1];
+  return parts[0] && parts[0] !== 'localhost' && parts[0] !== '127' ? parts[0] : null;
 }
 
 export async function portalRoutes(app: FastifyInstance): Promise<void> {
@@ -82,8 +112,40 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    request.log.info({ event: 'portal.forgot_password.request', email: parsed.data.email }, 'Solicitação de recuperação de senha do portal');
+    try {
+      await requestPortalPasswordReset(request.headers.host ?? '', parsed.data.email);
+    } catch (err) {
+      request.log.error(
+        {
+          event: 'portal.forgot_password.error',
+          email: parsed.data.email,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'Falha ao processar recuperação de senha do portal',
+      );
+    }
+
     return reply.send({ success: true });
+  });
+
+  app.post('/auth/reset-password', async (request, reply) => {
+    const parsed = portalResetPasswordSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      await resetPortalPassword(parsed.data.token, parsed.data.password);
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalAuthError) {
+        return reply.code(400).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.get('/me', { preHandler: [portalAuth] }, async (request, reply) => {
@@ -101,6 +163,78 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
   app.get('/ticket-types', { preHandler: [portalAuth] }, async (request, reply) => {
     const data = await listPortalTicketTypes(request.portalUser!);
     return reply.send({ success: true, data });
+  });
+
+  app.get('/lgpd', { preHandler: [portalAuth] }, async (request, reply) => {
+    try {
+      const data = await getPortalLgpdState(request.portalUser!);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.patch('/lgpd/consent', { preHandler: [portalAuth] }, async (request, reply) => {
+    const parsed = portalLgpdConsentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const data = await updatePortalLgpdConsent(request.portalUser!, parsed.data);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.post('/lgpd/requests', { preHandler: [portalAuth] }, async (request, reply) => {
+    const parsed = portalLgpdRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const data = await submitPortalLgpdRequest(request.portalUser!, parsed.data);
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.patch('/lgpd/contact-data', { preHandler: [portalAuth] }, async (request, reply) => {
+    const parsed = portalLgpdRectificationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+
+    try {
+      const data = await submitPortalLgpdRectificationRequest(request.portalUser!, parsed.data);
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.get('/tickets', { preHandler: [portalAuth] }, async (request, reply) => {
@@ -141,6 +275,46 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send({ success: true, data });
   });
 
+  app.post<{ Params: { id: string } }>('/tickets/:id/csat', async (request, reply) => {
+    const parsedParams = portalTicketCsatParamsSchema.safeParse(request.params);
+    const parsedBody = portalTicketCsatBodySchema.safeParse(request.body);
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.code(400).send({
+        success: false,
+        error: {
+          message: 'Dados inválidos',
+          details: {
+            params: parsedParams.success ? undefined : parsedParams.error.flatten(),
+            body: parsedBody.success ? undefined : parsedBody.error.flatten(),
+          },
+        },
+      });
+    }
+
+    const tenantSlug = resolveCsatTenantSlug(request);
+    if (!tenantSlug) {
+      return reply.code(404).send({ success: false, error: { message: 'Tenant não encontrado' } });
+    }
+
+    try {
+      await submitTicketCsat(
+        parsedParams.data.id,
+        parsedBody.data.score,
+        parsedBody.data.comment,
+        tenantSlug,
+      );
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
   app.post<{ Params: { id: string } }>('/tickets/:id/comments', { preHandler: [portalAuth] }, async (request, reply) => {
     const parsed = portalAddCommentSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -156,6 +330,21 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof PortalNotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.patch<{ Params: { id: string } }>('/tickets/:id/reopen', { preHandler: [portalAuth] }, async (request, reply) => {
+    try {
+      await reopenTicketByContact(request.portalUser!, request.params.id);
+      return reply.send({ success: true });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }

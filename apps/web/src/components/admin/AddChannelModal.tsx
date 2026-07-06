@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { AxiosError } from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useForm, type UseFormRegister } from 'react-hook-form';
@@ -88,8 +89,8 @@ export function AddChannelModal({ open, onClose }: Props) {
       toast.success(t('tenantAdmin.channels.messages.created'));
       handleClose();
     },
-    onError: () => {
-      toast.error(t('tenantAdmin.common.errorSave'));
+    onError: (error: AxiosError<{ error?: { message?: string } }>) => {
+      toast.error(error.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -197,35 +198,20 @@ interface WhatsAppMetaFieldsProps {
 }
 
 function WhatsAppMetaFields({ register }: WhatsAppMetaFieldsProps) {
-  const [copied, setCopied] = useState(false);
-  const webhookUrl = `${window.location.origin}/api/webhooks/whatsapp`;
-
-  function handleCopy() {
-    void navigator.clipboard.writeText(webhookUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
   return (
     <>
       <Input label="Phone Number ID" required placeholder="704423209430762" {...register('phoneNumberId')} />
       <Input label="WABA ID" required placeholder="1922786558561358" {...register('wabaId')} />
+      <Input label="App ID" required placeholder="792394403295356" {...register('appId')} />
+      <Input label="App Secret" type="password" required {...register('appSecret')} />
       <Input label="Access Token" type="password" required {...register('accessToken')} />
-      <Input label="Verify Token" required placeholder="ziradesk-webhook-2025" {...register('verifyToken')} />
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }}>Webhook URL</label>
-        <div className="flex items-center gap-2">
-          <div
-            className="flex-1 h-10 rounded-lg px-3 flex items-center text-sm font-mono overflow-hidden"
-            style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)', color: 'var(--txt-3)' }}
-          >
-            <span className="truncate">{webhookUrl}</span>
-          </div>
-          <Button type="button" variant="secondary" onClick={handleCopy} style={{ minWidth: '72px' }}>
-            {copied ? 'Copiado!' : 'Copiar'}
-          </Button>
-        </div>
+      <div
+        className="rounded-lg p-3"
+        style={{ background: 'var(--teal-dim)', border: '1px solid rgba(0,201,167,.25)' }}
+      >
+        <p className="text-xs" style={{ color: 'var(--teal)' }}>
+          O webhook de entrada será validado e configurado automaticamente ao salvar.
+        </p>
       </div>
     </>
   );

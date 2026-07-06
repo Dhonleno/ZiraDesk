@@ -58,12 +58,19 @@ function OptionModal({
   isSaving,
 }: OptionModalProps) {
   const { t } = useTranslation('admin');
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin', 'departments'],
+    queryFn: adminApi.departments.list,
+    staleTime: 60_000,
+  });
+  const activeDepartments = departments.filter((d) => d.isActive);
   const [number, setNumber] = useState(1);
   const [label, setLabel] = useState('');
   const [tag, setTag] = useState('');
   const [response, setResponse] = useState('');
   const [hasSubmenu, setHasSubmenu] = useState(false);
   const [submenuGreeting, setSubmenuGreeting] = useState('');
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +80,7 @@ function OptionModal({
     setResponse(option?.response ?? 'Transferindo para um atendente. Aguarde...');
     setHasSubmenu(option?.has_submenu ?? false);
     setSubmenuGreeting(option?.submenu_greeting ?? '');
+    setDepartmentId(option?.department_id ?? null);
   }, [open, option]);
 
   if (!open) return null;
@@ -95,6 +103,7 @@ function OptionModal({
             submenu_greeting: hasSubmenu ? submenuGreeting : null,
             response: hasSubmenu ? response || null : response,
             sort_order: option?.sort_order ?? defaultSortOrder,
+            department_id: departmentId,
           };
 
           onSubmit(payload);
@@ -146,6 +155,21 @@ function OptionModal({
             maxLength={50}
           />
           <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{t('tenantAdmin.bot.option.tagHint')}</span>
+        </label>
+
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={labelStyle}>{t('tenantAdmin.bot.departmentLabel')}</span>
+          <select
+            value={departmentId ?? ''}
+            onChange={(event) => setDepartmentId(event.target.value || null)}
+            className="zd-input"
+            style={inputStyle}
+          >
+            <option value="">{t('tenantAdmin.bot.noDepartment')}</option>
+            {activeDepartments.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
         </label>
 
         <label
@@ -293,6 +317,22 @@ function OptionNode({
                 }}
               >
                 tag: {option.tag}
+              </span>
+            ) : null}
+
+            {option.department_name ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  background: 'var(--teal-dim)',
+                  color: 'var(--teal)',
+                  flexShrink: 0,
+                }}
+              >
+                {option.department_name}
               </span>
             ) : null}
           </div>
@@ -619,7 +659,9 @@ export function BotMenu() {
                       </svg>
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('tenantAdmin.bot.noOptions')}</div>
-                    <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Adicione opções para iniciar o fluxo do bot.</div>
+                    <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                      {t('tenantAdmin.botMenu.emptyOptions')}
+                    </div>
                   </div>
                 </div>
               ) : (

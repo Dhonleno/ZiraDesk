@@ -12,6 +12,90 @@
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
+  "language": {
+    "label": "Language",
+    "ptBR": "Portuguese",
+    "enUS": "English",
+    "es": "Spanish"
+  },
+  "home": {
+    "title": "Home",
+    "subtitle": "Operation overview",
+    "refresh": "Refresh",
+    "navLabel": "Home",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "period": {
+      "today": "Today",
+      "7d": "7 days",
+      "30d": "30 days",
+      "month": "Month"
+    },
+    "kpi": {
+      "total": "Conversations",
+      "resolved": "resolved",
+      "open": "Open",
+      "tma": "AHT",
+      "firstResponse": "1st Response",
+      "csat": "CSAT"
+    },
+    "charts": {
+      "volumeByDay": "Volume by day",
+      "total": "Total",
+      "resolved": "Resolved",
+      "byChannel": "By channel",
+      "peakHours": "Heat map",
+      "peakHoursSub": "conversations by weekday and hour",
+      "byDept": "By department",
+      "csatDist": "CSAT distribution",
+      "csatOverTime": "CSAT over time",
+      "csatAvg": "Avg CSAT",
+      "byOrg": "Top organizations",
+      "byOrgSub": "by conversation volume",
+      "topAgents": "Top agents",
+      "noData": "No data for this period"
+    }
+  },
+  "agentHome": {
+    "subtitle": "Your workspace for today",
+    "conversations": {
+      "title": "My conversations",
+      "open": "Open",
+      "waiting": "Waiting",
+      "cta": "View conversations"
+    },
+    "tickets": {
+      "title": "My tickets",
+      "open": "Open",
+      "inProgress": "In progress",
+      "waiting": "Waiting",
+      "dueToday": "Due today",
+      "overdue": "Overdue",
+      "cta": "View tickets"
+    },
+    "metrics": {
+      "title": "My metrics",
+      "cta": "View performance"
+    },
+    "kpi": {
+      "total": "Conversations",
+      "resolved": "resolved",
+      "tma": "AHT",
+      "tme": "FRT",
+      "csat": "CSAT",
+      "sla": "SLA"
+    },
+    "goals": {
+      "title": "Goal progress",
+      "noGoal": "No goal configured"
+    },
+    "charts": {
+      "volumeByDay": "My volume by day"
+    }
+  },
   "phone": {
     "invalid": "Invalid phone number",
     "invalidBR": "Brazilian mobile numbers must include 9 after area code: (XX) 9XXXX-XXXX",
@@ -23,5 +107,11 @@
     "newMessage": "New message",
     "open": "Open",
     "now": "now"
+  },
+  "pii": {
+    "noPermission": "You don't have permission to reveal sensitive data",
+    "maskedHint": "Masked data — click the eye to reveal",
+    "revealTimeRemaining": "Visible for {{seconds}}s",
+    "revealed": "Revealed"
   }
 }

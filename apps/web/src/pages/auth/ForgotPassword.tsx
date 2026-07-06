@@ -1,94 +1,209 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'react-router-dom';
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { forgotPasswordSchema, type ForgotPasswordInput } from '@ziradesk/shared';
-import { api } from '../../services/api';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Card } from '../../components/ui/Card';
 import { BrandLogo } from '../../components/layout/BrandLogo';
+import { Input } from '../../components/ui/Input';
+import { api } from '../../services/api';
+
+function getApiErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const response = (error as { response?: { data?: { error?: string } } }).response;
+  return response?.data?.error ?? null;
+}
 
 export function ForgotPassword() {
   const { t } = useTranslation('auth');
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [tenantSlug, setTenantSlug] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ForgotPasswordInput>({
-    resolver: zodResolver(forgotPasswordSchema),
-  });
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!email) return;
 
-  const onSubmit = async (data: ForgotPasswordInput) => {
-    await api.post('/auth/forgot-password', data);
-    setSent(true);
+    setErrorMessage('');
+    setIsSubmitting(true);
+    try {
+      await api.post('/auth/forgot-password', {
+        email,
+        ...(import.meta.env.DEV && tenantSlug ? { tenantSlug } : {}),
+      });
+      setSent(true);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error) ?? t('forgotPassword.submit'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gray-950 px-4">
-      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-[500px] w-[500px] rounded-full bg-brand-700/10 blur-[120px]" />
+    <main
+      style={{
+        minHeight: '100vh',
+        overflow: 'hidden',
+        background: 'var(--bg)',
+        color: 'var(--txt)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 16,
+        fontFamily: 'var(--font)',
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            width: 500,
+            height: 500,
+            borderRadius: '50%',
+            background: 'var(--teal-dim)',
+            filter: 'blur(120px)',
+          }}
+        />
       </div>
 
-      <div className="relative z-10 w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-2.5">
-          <div className="flex items-center gap-3">
+      <section style={{ position: 'relative', width: '100%', maxWidth: 384, zIndex: 1 }}>
+        <div style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <BrandLogo variant="icon" tone="dark" width={40} height={40} ariaLabel="ZiraDesk" />
-            <span className="text-[30px] leading-none tracking-[-0.5px]" style={{ color: '#F1F5F9' }}>
-              <span style={{ fontWeight: 700 }}>Zira</span>
-              <span style={{ fontWeight: 300, color: '#94A3B8' }}>Desk</span>
+            <span style={{ color: 'var(--txt)', fontSize: 30, lineHeight: 1, letterSpacing: 0 }}>
+              <span style={{ fontWeight: 600 }}>Zira</span>
+              <span style={{ fontWeight: 300, color: 'var(--txt-2)' }}>Desk</span>
             </span>
           </div>
         </div>
 
-        <Card>
-          {sent ? (
-            <div className="flex flex-col items-center gap-4 py-2 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-900/40 border border-green-700">
-                <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 text-green-400" aria-hidden>
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium text-white">{t('forgotPassword.successMessage')}</p>
-              </div>
-              <Link to="/login" className="text-sm text-brand-400 hover:text-brand-300 transition-colors">
-                ← {t('forgotPassword.backToLogin')}
-              </Link>
+        {sent ? (
+          <div
+            style={{
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              background: 'var(--bg-2)',
+              boxShadow: 'var(--shadow-pop)',
+              padding: 24,
+              display: 'grid',
+              gap: 16,
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background: 'var(--teal-dim)',
+                border: '1px solid var(--teal)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" width={24} height={24} aria-hidden>
+                <path d="M20 6L9 17l-5-5" stroke="var(--teal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-              <div>
-                <h1 className="text-lg font-semibold text-white">{t('forgotPassword.title')}</h1>
-                <p className="mt-1 text-sm text-gray-400">{t('forgotPassword.subtitle')}</p>
-              </div>
+            <p style={{ margin: 0, color: 'var(--txt)', fontWeight: 500, fontSize: 15 }}>
+              {t('forgotPassword.success')}
+            </p>
+            <button
+              type="button"
+              className="tb-btn"
+              style={{ width: '100%', minHeight: 40 }}
+              onClick={() => navigate('/login')}
+            >
+              {t('forgotPassword.backToLogin')}
+            </button>
+          </div>
+        ) : (
+          <form
+            onSubmit={(event) => void handleSubmit(event)}
+            noValidate
+            style={{
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              background: 'var(--bg-2)',
+              boxShadow: 'var(--shadow-pop)',
+              padding: 24,
+              display: 'grid',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'grid', gap: 6 }}>
+              <h1 style={{ margin: 0, color: 'var(--txt)', fontSize: 22, fontWeight: 600, letterSpacing: 0 }}>
+                {t('forgotPassword.title')}
+              </h1>
+              <p style={{ margin: 0, color: 'var(--txt-2)', fontSize: 13, lineHeight: 1.5 }}>
+                {t('forgotPassword.subtitle')}
+              </p>
+            </div>
 
+            <Input
+              label={t('forgotPassword.email')}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+
+            {import.meta.env.DEV && (
               <Input
-                label={t('forgotPassword.email')}
-                type="email"
-                autoComplete="email"
-                placeholder="voce@empresa.com"
-                error={errors.email?.message}
-                {...register('email')}
+                label="Workspace (dev)"
+                placeholder="meu-tenant"
+                value={tenantSlug}
+                onChange={(event) => setTenantSlug(event.target.value)}
               />
+            )}
 
-              <Button type="submit" loading={isSubmitting} size="lg" className="w-full">
-                {t('forgotPassword.submit')}
-              </Button>
-
-              <Link
-                to="/login"
-                className="text-center text-sm text-gray-500 hover:text-gray-300 transition-colors"
+            {errorMessage ? (
+              <div
+                role="alert"
+                style={{
+                  border: '1px solid var(--red-dim)',
+                  borderRadius: 'var(--r)',
+                  background: 'var(--red-dim)',
+                  color: 'var(--red)',
+                  fontSize: 12,
+                  padding: '9px 11px',
+                }}
               >
-                ← {t('forgotPassword.backToLogin')}
-              </Link>
-            </form>
-          )}
-        </Card>
-      </div>
-    </div>
+                {errorMessage}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="tb-btn tb-btn-primary"
+              style={{ width: '100%', minHeight: 40 }}
+            >
+              {isSubmitting ? t('forgotPassword.sending') : t('forgotPassword.submit')}
+            </button>
+
+            <button
+              type="button"
+              className="tb-btn"
+              style={{ width: '100%', minHeight: 40 }}
+              onClick={() => navigate('/login')}
+            >
+              {t('forgotPassword.backToLogin')}
+            </button>
+          </form>
+        )}
+      </section>
+    </main>
   );
 }

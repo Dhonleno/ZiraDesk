@@ -1,4 +1,11 @@
 {
+  "bulkSelect": {
+    "selectAllMatching": "Select all {{count}} results",
+    "confirmTitle": "Confirm bulk deletion",
+    "confirmWarning": "This action will permanently delete {{count}} record(s). This cannot be undone.",
+    "confirmInstruction": "Type {{count}} to confirm.",
+    "confirmDelete": "Permanently delete"
+  },
   "organizations": {
     "title": "Organizations",
     "new": "New organization",
@@ -8,6 +15,20 @@
     "noSelectionSub": "Click an organization in the list to view details",
     "loading": "Loading...",
     "total": "{{n}} organizations",
+    "bulkDelete": {
+      "selectPage": "Select page",
+      "selectItem": "Select {{name}}",
+      "selected": "{{count}} selected",
+      "clear": "Clear",
+      "action": "Delete",
+      "title": "Delete organizations",
+      "confirm": "Permanently delete {{count}} organization(s)? Contacts, conversations, and tickets will be preserved but unlinked from the organization.",
+      "confirmAction": "Delete",
+      "cancel": "Cancel",
+      "success": "{{count}} organization(s) deleted",
+      "partial": "Partial operation: {{blocked}} blocked and {{notFound}} not found.",
+      "error": "Could not delete the selected organizations"
+    },
     "type": {
       "company": "Company",
       "person": "Individual"
@@ -20,12 +41,15 @@
       "inactive": "Inactive"
     },
     "filters": {
+      "toggle": "Filters",
       "segment": "Segment",
       "segmentPlaceholder": "Filter by segment",
       "tag": "Tag",
       "tagPlaceholder": "Filter by tag",
       "responsible": "Owner",
       "responsibleAll": "All owners",
+      "clear": "Clear",
+      "apply": "Apply",
       "clearSearch": "Clear",
       "removeFilter": "Remove filter",
       "clearAll": "Clear filters"
@@ -91,6 +115,7 @@
       "delete": "Delete",
       "startConversation": "Start conversation",
       "addContact": "Add contact",
+      "linkContact": "Link contact",
       "assume": "Take ownership",
       "more": "More options",
       "saveNotes": "Save notes",
@@ -171,6 +196,14 @@
     "notes": {
       "placeholder": "Add notes about this organization...",
       "hint": "Notes are saved when you click Save"
+    },
+    "linkContact": {
+      "title": "Link existing contact",
+      "search": "Search contact...",
+      "typeToSearch": "Type at least 2 characters to search",
+      "empty": "No contacts found",
+      "confirm": "Link",
+      "success": "Contact linked successfully"
     }
   },
   "unlinkContact": "Unlink contact",
@@ -180,12 +213,15 @@
   "searchOrganization": "Search organization...",
   "unlinkSuccess": "Contact unlinked successfully",
   "transferSuccess": "Contact transferred successfully",
+  "startConversation": "Start conversation",
+  "noPrimaryContactHint": "Set a primary contact to start conversations directly from the organization.",
   "contacts": {
     "title": "Contacts",
     "standalone": "Standalone contacts",
     "standaloneDesc": "Contacts without a linked organization",
     "subtitle": "{{count}} contacts",
     "new": "New contact",
+    "newCompact": "New",
     "search": "Search contacts...",
     "clearSearch": "Clear",
     "filter": {
@@ -219,6 +255,19 @@
       "notes": "Notes",
       "tagsHint": "Type and press Enter to add"
     },
+    "tagsSection": {
+      "title": "Contact tags",
+      "add": "Add",
+      "empty": "No tags",
+      "remove": "Remove {{name}}",
+      "error": "Could not update contact tags",
+      "picker": {
+        "title": "Select tags",
+        "empty": "No tags available. Create them in Admin → Tags.",
+        "error": "Could not load the tag catalog.",
+        "close": "Close tag picker"
+      }
+    },
     "actions": {
       "link": "Link organization",
       "unlink": "Unlink",
@@ -228,6 +277,20 @@
     },
     "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
     "deleteWarning": "This action cannot be undone.",
+    "bulkDelete": {
+      "selectPage": "Select page",
+      "selectItem": "Select {{name}}",
+      "selected": "{{count}} selected",
+      "clear": "Clear",
+      "action": "Delete",
+      "title": "Delete contacts",
+      "confirm": "Permanently delete {{count}} contact(s)? Contacts with open conversations will be kept.",
+      "confirmAction": "Delete",
+      "cancel": "Cancel",
+      "success": "{{count}} contact(s) deleted",
+      "partial": "Partial operation: {{blocked}} blocked and {{notFound}} not found.",
+      "error": "Could not delete the selected contacts"
+    },
     "hasActiveConversations": "Contact has active conversations.",
     "hasNoActiveChannels": "No active channel available",
     "selectContact": "Select a contact",
@@ -268,5 +331,56 @@
       "submit": "Link",
       "submitting": "Linking..."
     }
-  }
+  },
+  "import": {
+    "button": "Import",
+    "title": "Import contacts",
+    "dropzone": "Drag the file here or click to select",
+    "selectFile": "Select file",
+    "formats": "Accepted formats: CSV, Excel, vCard",
+    "sizeLimit": "Maximum size: 10MB",
+    "downloadTemplate": "Download CSV template",
+    "totalRows": "{{count}} records found",
+    "duplicateAction": "Duplicates",
+    "skip": "Skip duplicates",
+    "update": "Update existing",
+    "confirm": "Confirm import",
+    "inProgress": "Import in progress...",
+    "waitMessage": "You will be notified when the import is complete",
+    "close": "Close",
+    "closeAndRefresh": "Close and refresh",
+    "result": {
+      "total": "Total processed",
+      "inserted": "Inserted",
+      "updated": "Updated",
+      "skipped": "Skipped",
+      "errors": "Errors"
+    },
+    "mapping": {
+      "title": "Column mapping",
+      "ignore": "Ignore"
+    },
+    "fields": {
+      "name": "Name*",
+      "email": "Email",
+      "phone": "Phone",
+      "whatsapp": "WhatsApp",
+      "organization": "Organization",
+      "role": "Role",
+      "department": "Department",
+      "tags": "Tags",
+      "customFields": "Custom fields"
+    },
+    "error": {
+      "sizeLimit": "File too large. Maximum 10MB",
+      "format": "Unsupported format. Use CSV, Excel or vCard",
+      "generic": "Error processing file"
+    }
+  },
+  "pii": {
+    "reveal": "Reveal data",
+    "hide": "Hide data",
+    "revealing": "Revealing..."
+  },
+  "openConversation": "Open conversation"
 }

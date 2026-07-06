@@ -13,24 +13,38 @@ import { EditContactModal } from '../../components/crm/EditContactModal';
 import { LinkOrganizationModal } from '../../components/crm/LinkOrganizationModal';
 import { CrmSidebarHeader } from '../../components/crm/CrmSidebarHeader';
 import { CrmSearchField } from '../../components/crm/CrmSearchField';
+import { CrmBulkSelectionBar } from '../../components/crm/CrmBulkSelectionBar';
+import { CrmBulkDeleteConfirmModal } from '../../components/crm/CrmBulkDeleteConfirmModal';
+import { CrmSelectionCheckbox } from '../../components/crm/CrmSelectionCheckbox';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
+import { maskEmail, maskPhone } from '../../utils/pii-mask';
+import { ContactImportModal } from '../../components/crm/ContactImportModal';
+import { useAuthStore } from '../../stores/auth.store';
+import './Contacts.css';
 
 export function ContactsPage() {
   const { t } = useTranslation('crm');
   const toast = useToast();
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const { id: routeId } = useParams<{ id?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchRaw, setSearchRaw] = useState(searchParams.get('q') ?? '');
   const [filterMode, setFilterMode] = useState<'all' | 'linked' | 'standalone'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editContact, setEditContact] = useState<CrmContact | null>(null);
   const [linkContact, setLinkContact] = useState<CrmContact | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<CrmContact | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectAllMode, setSelectAllMode] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [filterBulkDeleteOpen, setFilterBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(
     searchParams.get('id') ?? routeId ?? null,
   );
@@ -40,6 +54,15 @@ export function ContactsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [filterMode, search]);
+
+  useEffect(() => {
+    setSelectAllMode(false);
+    setSelectedIds(new Set());
+  }, [filterMode, search]);
+
+  useEffect(() => {
+    if (!selectAllMode) setSelectedIds(new Set());
+  }, [currentPage, selectAllMode]);
 
   const { data: listData, isLoading } = useQuery({
     queryKey: ['crm-contacts', search, filterMode, currentPage, 'sidebar'],
@@ -59,6 +82,29 @@ export function ContactsPage() {
     : (listData?.data ?? []);
   const meta = listData?.meta;
   const totalPages = meta?.total_pages ?? 1;
+  const canImportContacts = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'agent';
+  const bulkFilter = {
+    ...(search ? { search } : {}),
+    ...(filterMode === 'standalone' ? { standalone_only: true } : {}),
+    ...(filterMode === 'linked' ? { linked_only: true } : {}),
+  };
+  const allContactsSelected = contacts.length > 0
+    && contacts.every((contact) => (
+      selectAllMode ? !selectedIds.has(contact.id) : selectedIds.has(contact.id)
+    ));
+  const { data: countData, isFetching: isFetchingCount } = useQuery({
+    queryKey: ['crm-contacts-count', search, filterMode],
+    queryFn: () => contactsApi.count({
+      ...bulkFilter,
+      include_without_phone: true,
+    }),
+    enabled: allContactsSelected || selectAllMode,
+    staleTime: 30_000,
+  });
+  const totalMatchingCount = countData?.count ?? 0;
+  const selectedCount = selectAllMode
+    ? Math.max(0, totalMatchingCount - selectedIds.size)
+    : selectedIds.size;
 
   useEffect(() => {
     const id = searchParams.get('id') ?? routeId ?? null;
@@ -134,6 +180,71 @@ export function ContactsPage() {
     }
   }
 
+  function toggleContactSelection(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllContacts() {
+    if (selectAllMode) {
+      setSelectAllMode(false);
+      setSelectedIds(new Set());
+      return;
+    }
+
+    const visibleIds = contacts.map((contact) => contact.id);
+    const allSelected = visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
+  }
+
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const result = await contactsApi.bulkDelete(
+        selectAllMode
+          ? { filter: bulkFilter, exclude_ids: [...selectedIds] }
+          : { ids: [...selectedIds] },
+      );
+      if (result.deleted.length > 0) {
+        toast.success(t('contacts.bulkDelete.success', { count: result.deleted.length }));
+      }
+      if (result.blocked.length > 0 || result.not_found.length > 0) {
+        toast.warning(t('contacts.bulkDelete.partial', {
+          blocked: result.blocked.length,
+          notFound: result.not_found.length,
+        }));
+      }
+
+      const deletedIds = new Set(result.deleted);
+      setSelectAllMode(false);
+      setSelectedIds(new Set(result.blocked.map((item) => item.id)));
+      setBulkDeleteOpen(false);
+      setFilterBulkDeleteOpen(false);
+
+      if (selectedId && deletedIds.has(selectedId)) {
+        setSelectedId(null);
+        const params: Record<string, string> = {};
+        if (searchRaw.trim()) params.q = searchRaw.trim();
+        setSearchParams(params, { replace: true });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+      for (const id of result.deleted) {
+        queryClient.removeQueries({ queryKey: ['crm-contact', id] });
+      }
+    } catch {
+      toast.error(t('contacts.bulkDelete.error'));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', overflow: 'hidden' }}>
@@ -143,15 +254,33 @@ export function ContactsPage() {
           count={meta?.total ?? null}
           subtitle={t('contacts.subtitle', { count: meta?.total ?? 0 })}
           action={(
-            <PermissionGate permission="contacts:edit">
-              <button
-                onClick={() => setIsCreateOpen(true)}
-                className="zd-btn zd-btn-primary"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                {t('contacts.new')}
-              </button>
-            </PermissionGate>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {canImportContacts ? (
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(true)}
+                  className="tb-btn"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                    <path d="M6 8V1.5M3.5 4L6 1.5 8.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 8.5v1.3c0 .4.3.7.7.7h6.6c.4 0 .7-.3.7-.7V8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  {t('import.button')}
+                </button>
+              ) : null}
+              <PermissionGate permission="contacts:edit">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="zd-btn zd-btn-primary"
+                  title={t('contacts.new')}
+                  aria-label={t('contacts.new')}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  {t('contacts.newCompact')}
+                </button>
+              </PermissionGate>
+            </div>
           )}
         />
 
@@ -187,6 +316,38 @@ export function ContactsPage() {
           </div>
         </div>
 
+        <PermissionGate permission="contacts:delete">
+          <CrmBulkSelectionBar
+            visibleCount={contacts.length}
+            selectedCount={selectedCount}
+            allSelected={selectAllMode || allContactsSelected}
+            selectAllLabel={t('contacts.bulkDelete.selectPage')}
+            selectedLabel={t('contacts.bulkDelete.selected', { count: selectedCount })}
+            clearLabel={t('contacts.bulkDelete.clear')}
+            deleteLabel={t('contacts.bulkDelete.action')}
+            showSelectAllMatching={
+              !selectAllMode
+              && allContactsSelected
+              && !isFetchingCount
+              && totalMatchingCount > contacts.length
+            }
+            selectAllMatchingLabel={t('bulkSelect.selectAllMatching', { count: totalMatchingCount })}
+            onToggleAll={toggleAllContacts}
+            onSelectAllMatching={() => {
+              setSelectAllMode(true);
+              setSelectedIds(new Set());
+            }}
+            onClear={() => {
+              setSelectAllMode(false);
+              setSelectedIds(new Set());
+            }}
+            onDelete={() => {
+              if (selectAllMode) setFilterBulkDeleteOpen(true);
+              else setBulkDeleteOpen(true);
+            }}
+          />
+        </PermissionGate>
+
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {isLoading ? (
             <div style={{ padding: 16, color: 'var(--txt-3)', fontSize: 12 }}>{t('contacts.loading')}</div>
@@ -209,6 +370,7 @@ export function ContactsPage() {
               return (
                 <div
                   key={contact.id}
+                  className="contact-list-item"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -218,6 +380,13 @@ export function ContactsPage() {
                     background: selected ? 'var(--bg-2)' : 'transparent',
                   }}
                 >
+                  <PermissionGate permission="contacts:delete">
+                    <CrmSelectionCheckbox
+                      checked={selectAllMode ? !selectedIds.has(contact.id) : selectedIds.has(contact.id)}
+                      label={t('contacts.bulkDelete.selectItem', { name: contact.name })}
+                      onChange={() => toggleContactSelection(contact.id)}
+                    />
+                  </PermissionGate>
                   <button
                     type="button"
                     onClick={() => handleSelectContact(contact.id)}
@@ -229,11 +398,11 @@ export function ContactsPage() {
                         {contact.name}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--txt-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {contact.email ?? contact.whatsapp ?? t('contacts.standalone_badge')}
+                        {maskEmail(contact.email) ?? maskPhone(contact.whatsapp) ?? t('contacts.standalone_badge')}
                       </div>
                     </div>
                   </button>
-                  <div style={{ display: 'flex', gap: 2 }}>
+                  <div className="contact-row-actions">
                     <button className="tb-icon-btn" onClick={() => setEditContact(contact)} title={t('contacts.actions.edit')} aria-label={t('contacts.actions.edit')} style={{ width: 26, height: 26 }}>
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M2 9.5L3.2 8 8.5 2.7l1.8 1.8-5.3 5.3L2 11V9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
                     </button>
@@ -319,6 +488,13 @@ export function ContactsPage() {
       </div>
 
         <CreateContactModal open={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+        <ContactImportModal
+          open={isImportOpen}
+          onClose={() => setIsImportOpen(false)}
+          onRefresh={() => {
+            void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
+          }}
+        />
         <EditContactModal contact={editContact} onClose={() => setEditContact(null)} />
         {linkContact ? (
           <LinkOrganizationModal
@@ -341,6 +517,29 @@ export function ContactsPage() {
           loading={deleting}
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirm(null)}
+        />
+        <ConfirmModal
+          open={bulkDeleteOpen}
+          title={t('contacts.bulkDelete.title')}
+          message={t('contacts.bulkDelete.confirm', { count: selectedCount })}
+          confirmLabel={t('contacts.bulkDelete.confirmAction')}
+          cancelLabel={t('contacts.bulkDelete.cancel')}
+          confirmVariant="danger"
+          loading={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setBulkDeleteOpen(false)}
+        />
+        <CrmBulkDeleteConfirmModal
+          open={filterBulkDeleteOpen}
+          count={selectedCount}
+          title={t('bulkSelect.confirmTitle')}
+          warning={t('bulkSelect.confirmWarning', { count: selectedCount })}
+          instruction={t('bulkSelect.confirmInstruction', { count: selectedCount })}
+          confirmLabel={t('bulkSelect.confirmDelete')}
+          cancelLabel={t('contacts.bulkDelete.cancel')}
+          loading={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setFilterBulkDeleteOpen(false)}
         />
       </div>
     </PageShell>

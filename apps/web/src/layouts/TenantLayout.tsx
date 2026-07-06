@@ -1,21 +1,25 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
-import { adminApi, omnichannelApi } from '../services/api';
+import { useFaviconBadge } from '../hooks/useFaviconBadge';
+import { adminApi, api, omnichannelApi, profileApi } from '../services/api';
 import { connectSocket, disconnectSocket, setPresenceStatus, subscribeToEvent } from '../services/socket';
 import { GlobalSearch } from '../components/ui/GlobalSearch';
 import { NotificationCenter } from '../components/ui/NotificationCenter';
 import { FloatingChatBubble } from '../components/ui/FloatingChatBubble';
 import { OnboardingChecklist } from '../components/onboarding/OnboardingChecklist';
 import { BrandLogo } from '../components/layout/BrandLogo';
+import { LegalDpoLink } from '../components/legal/LegalDpoLink';
 import { useAgentStatus } from '../hooks/useAgentStatus';
+import { useNotification } from '../hooks/useNotification';
 import { PauseModal } from '../components/omnichannel/PauseModal';
 import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
+import { notifySound, shouldShowDesktopNotification } from '../utils/notify';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
 import { PermissionGate } from '../components/ui/PermissionGate';
 
@@ -63,9 +67,126 @@ function ThemeToggle() {
   );
 }
 
+type SupportedLanguage = 'pt-BR' | 'en-US' | 'es';
+
+const LANGUAGE_OPTIONS: Array<{
+  value: SupportedLanguage;
+  labelKey: string;
+  flag: string;
+}> = [
+  { value: 'pt-BR', labelKey: 'language.ptBR', flag: '🇧🇷' },
+  { value: 'en-US', labelKey: 'language.enUS', flag: '🇺🇸' },
+  { value: 'es', labelKey: 'language.es', flag: '🇪🇸' },
+];
+
+const TITLE_UNREAD_PREFIX_RE = /^\(\d+\)\s*/;
+
+function getCurrentZiraDeskTitle(): string {
+  if (typeof document === 'undefined') return 'ZiraDesk';
+
+  const cleanTitle = document.title.replace(TITLE_UNREAD_PREFIX_RE, '').trim();
+  return cleanTitle.startsWith('ZiraDesk') ? cleanTitle : 'ZiraDesk';
+}
+
+function normalizeLanguage(value: string | undefined): SupportedLanguage {
+  if (value === 'en-US' || value?.startsWith('en')) return 'en-US';
+  if (value === 'es' || value?.startsWith('es')) return 'es';
+  return 'pt-BR';
+}
+
+function LanguageSelector() {
+  const { t, i18n } = useTranslation('common');
+  const setUser = useAuthStore((state) => state.setUser);
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const activeLanguage = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+
+  useEffect(() => {
+    const onClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', onClickOutside);
+    return () => window.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const handleSelect = (language: SupportedLanguage) => {
+    setOpen(false);
+    if (language !== activeLanguage) {
+      void i18n.changeLanguage(language);
+    }
+    setUser({ language });
+    void profileApi.update({ language })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        void queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+      })
+      .catch(() => {
+        // A UI já trocou o idioma; localStorage fica como fallback até a próxima sincronização.
+      });
+  };
+
+  return (
+    <div className="language-selector" ref={menuRef}>
+      <button
+        type="button"
+        className="tb-icon-btn"
+        aria-label={t('language.label')}
+        title={t('language.label')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M2.2 8h11.6M8 1.8c1.7 1.7 2.6 3.8 2.6 6.2s-.9 4.5-2.6 6.2C6.3 12.5 5.4 10.4 5.4 8S6.3 3.5 8 1.8Z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="language-menu" role="menu" aria-label={t('language.label')}>
+          {LANGUAGE_OPTIONS.map((option) => {
+            const isActive = option.value === activeLanguage;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={isActive}
+                className={`language-menu-item${isActive ? ' active' : ''}`}
+                onClick={() => handleSelect(option.value)}
+              >
+                <span className="language-menu-label">
+                  <span className="language-menu-flag" aria-hidden>{option.flag}</span>
+                  {t(option.labelKey)}
+                </span>
+                {isActive && (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <path d="M3 7.2l2.5 2.4L11 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Breadcrumb ───────────────────────────────────────────────────────────── */
 function Breadcrumb() {
   const { t } = useTranslation('admin');
+  const { t: tCommon } = useTranslation('common');
   const { pathname } = useLocation();
 
   const isCRM     = pathname.startsWith('/crm');
@@ -75,8 +196,10 @@ function Breadcrumb() {
   const isProfile = pathname.startsWith('/profile');
 
   const routeLabels: Record<string, string> = {
+    '/home': tCommon('home.navLabel'),
     '/monitor': 'Monitor',
     '/omnichannel/monitor': 'Monitor',
+    '/omnichannel/campaigns': 'Campanhas',
     '/omnichannel/metrics': 'Métricas',
     '/omnichannel/history': t('nav.history'),
     '/omnichannel/performance': t('nav.performance'),
@@ -88,6 +211,7 @@ function Breadcrumb() {
     '/admin/roles':       t('roles.title'),
     '/admin/channels':    t('tenantAdmin.nav.channels'),
     '/admin/business-hours': t('tenantAdmin.nav.businessHours'),
+    '/admin/voice-config': t('tenantAdmin.nav.voiceConfig'),
     '/admin/bot': t('tenantAdmin.nav.bot'),
     '/admin/auto-assign': t('tenantAdmin.nav.autoAssign'),
     '/admin/pause-reasons': t('tenantAdmin.nav.pauseReasons'),
@@ -96,6 +220,7 @@ function Breadcrumb() {
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/close-config': t('tenantAdmin.closeConfig.title'),
+    '/admin/lgpd': t('nav.lgpd'),
     '/admin/settings':    t('tenantAdmin.nav.settings'),
   };
 
@@ -165,9 +290,17 @@ function Breadcrumb() {
 }
 
 /* ── Nav items ────────────────────────────────────────────────────────────── */
-type NavItemProps = { to: string; end?: true; title: string; children: React.ReactNode };
+type NavItemProps = {
+  to: string;
+  end?: boolean;
+  title: string;
+  badge?: number;
+  children: React.ReactNode;
+};
 
-function NavItem({ to, end, title, children }: NavItemProps) {
+function NavItem({ to, end, title, badge, children }: NavItemProps) {
+  const badgeValue = badge ?? 0;
+
   return (
     <NavLink
       to={to}
@@ -177,6 +310,11 @@ function NavItem({ to, end, title, children }: NavItemProps) {
       className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
     >
       {children}
+      {badgeValue > 0 && (
+        <span className="nav-badge-dot" aria-hidden>
+          {badgeValue > 1 ? (badgeValue > 99 ? '99+' : badgeValue) : null}
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -219,14 +357,17 @@ function usePauseDuration(startedAt: string | null): string {
 /* ── TenantLayout ─────────────────────────────────────────────────────────── */
 export function TenantLayout() {
   const { t } = useTranslation('admin');
+  const { t: tCommon } = useTranslation('common');
+  const { showNotification } = useNotification();
   const { canAny } = usePermission();
-  const { user, token, logout, isLoggingOut } = useAuth();
+  const { user, token, isAuthenticated, logout, isLoggingOut } = useAuth();
   const setAuth = useAuthStore((state) => state.setAuth);
   const toast = useToast();
   const { pathname } = useLocation();
   const showFloatingBubble = !pathname.startsWith('/omnichannel');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const unreadConversationNotifications = useNotificationStore((state) => state.messageNotifications.length);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -236,9 +377,10 @@ export function TenantLayout() {
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
   const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
-  const canViewMetricsNav = canAny('metrics:view', 'metrics:own');
+  const canViewMetricsNav = canAny('metrics:view');
   const canViewHistoryNav = canAny('metrics:view');
   const canViewPerformanceNav = canAny('metrics:view');
+  const canViewQueue = canAny('conversations:reply', 'conversations:manage');
   const canViewAdminNav = canAny('settings:manage', 'users:manage');
   const isImpersonating = !!impersonatedTenantName;
   const roleLabel =
@@ -260,8 +402,17 @@ export function TenantLayout() {
     endPause,
     isStartingPause,
     isEndingPause,
+    hasLoadedStatus,
   } = useAgentStatus(canToggleAvailability);
   const pauseDuration = usePauseDuration(pauseStartedAt);
+  useFaviconBadge(unreadConversationNotifications > 0);
+
+  useEffect(() => {
+    const baseTitle = getCurrentZiraDeskTitle();
+    document.title = unreadConversationNotifications > 0
+      ? `(${unreadConversationNotifications}) ${baseTitle}`
+      : baseTitle;
+  }, [pathname, unreadConversationNotifications]);
 
   useEffect(() => {
     const tenantName = sessionStorage.getItem('impersonated_tenant_name');
@@ -274,9 +425,37 @@ export function TenantLayout() {
   }, []);
 
   useEffect(() => {
-    if (!canToggleAvailability) return;
+    if (!canToggleAvailability || !hasLoadedStatus) return;
     setPresenceStatus(agentStatus);
-  }, [agentStatus, canToggleAvailability]);
+  }, [agentStatus, canToggleAvailability, hasLoadedStatus]);
+
+  useEffect(() => {
+    if (!canToggleAvailability || !user?.id) return;
+
+    const refreshOwnPresence = (payload: { userId?: string } | undefined) => {
+      if (!payload?.userId || payload.userId !== user.id) return;
+      void queryClient.invalidateQueries({ queryKey: ['agent-status'] });
+    };
+
+    const unsubOnline = subscribeToEvent<{ userId: string }>('agent:online', refreshOwnPresence);
+    const unsubOffline = subscribeToEvent<{ userId: string }>('agent:offline', refreshOwnPresence);
+    const unsubPaused = subscribeToEvent<{ userId: string }>('agent:paused', refreshOwnPresence);
+    const unsubResumed = subscribeToEvent<{ userId: string }>('agent:resumed', refreshOwnPresence);
+
+    return () => {
+      unsubOnline();
+      unsubOffline();
+      unsubPaused();
+      unsubResumed();
+    };
+  }, [canToggleAvailability, queryClient, user?.id]);
+
+  useQuery({
+    queryKey: ['my-profile'],
+    queryFn: profileApi.get,
+    staleTime: 5 * 60_000,
+    enabled: isAuthenticated,
+  });
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
@@ -284,6 +463,43 @@ export function TenantLayout() {
     staleTime: 5 * 60_000,
     enabled: canAccessAdminData,
   });
+
+  const { data: convCounts } = useQuery({
+    queryKey: ['conversation-counts'],
+    queryFn: () => api.get('/omnichannel/conversations/counts')
+      .then((r) => r.data.data as {
+        open: number;
+        waiting: number;
+        mine: number;
+        queue: number;
+        active: number;
+        closed: number;
+        return?: number;
+      }),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    enabled: isAuthenticated,
+  });
+  const queueCount = convCounts?.queue ?? 0;
+
+  const { data: backendNotifications = [] } = useQuery({
+    queryKey: ['notifications', 'nav-badge'],
+    queryFn: () => api.get('/notifications')
+      .then((r) => r.data.data as Array<{
+        id: string;
+        type: string;
+        read: boolean;
+      }>),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    enabled: isAuthenticated,
+  });
+
+  const ticketUnreadCount = backendNotifications.filter(
+    (n) => !n.read && (
+      n.type === 'ticket_assigned' || n.type === 'ticket_comment'
+    ),
+  ).length;
 
   const setAvailabilityMutation = useMutation({
     mutationFn: (nextAvailability: boolean) =>
@@ -299,31 +515,15 @@ export function TenantLayout() {
   });
 
   useEffect(() => {
+    if (canToggleAvailability && !hasLoadedStatus) return undefined;
     if (token && user?.tenantId) {
       connectSocket(token, user.tenantId);
     }
     return () => { disconnectSocket(); };
-  }, [token, user?.tenantId]);
+  }, [token, user?.tenantId, canToggleAvailability, hasLoadedStatus]);
 
   useEffect(() => {
     if (!user?.id) return;
-
-    const playNotificationSound = () => {
-      try {
-        const ctx = new AudioContext();
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.06;
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.start();
-        oscillator.stop(ctx.currentTime + 0.12);
-      } catch {
-        // sem suporte de audio no navegador
-      }
-    };
 
     const unsubHelpRequested = subscribeToEvent<{
       conversationId: string;
@@ -354,7 +554,7 @@ export function TenantLayout() {
           });
         },
       });
-      playNotificationSound();
+      notifySound('help');
     });
 
     return () => {
@@ -407,6 +607,38 @@ export function TenantLayout() {
       unsubActiveOutboundReplied();
     };
   }, [queryClient, t, toast]);
+
+  useEffect(() => {
+    if (!['owner', 'admin', 'supervisor'].includes(user?.role ?? '')) return;
+
+    const unsubCreated = subscribeToEvent<{
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      conversation?: {
+        assigned_to?: string | null;
+        assignedTo?: string | null;
+        assignedAgentId?: string | null;
+      };
+    }>('conversation:created', (data) => {
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+
+      if (!assignedTo) {
+        notifySound('message');
+      }
+    });
+
+    return () => {
+      unsubCreated();
+    };
+  }, [user?.role]);
 
   useEffect(() => {
     if (!user?.id || pathname.startsWith('/omnichannel')) return;
@@ -507,16 +739,36 @@ export function TenantLayout() {
       }
     };
 
+    const handleAssigned = (_data: { conversationId?: string }) => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+
+      const hidden = typeof document !== 'undefined' && document.hidden === true;
+      if (hidden) {
+        if (shouldShowDesktopNotification()) {
+          showNotification(
+            t('notifications.assigned', { ns: 'omnichannel' }),
+            t('notifications.assignedBody', { ns: 'omnichannel' }),
+            '/icon-192.png',
+          );
+        }
+      } else {
+        notifySound('assignment');
+      }
+    };
+
     const unsubA = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleIncomingMessage);
     const unsubB = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleIncomingMessage);
     const unsubUpdated = subscribeToEvent<ConversationUpdatedEventPayload>('conversation:updated', handleConversationUpdated);
+    const unsubAssigned = subscribeToEvent<{ conversationId?: string }>('conversation:assigned', handleAssigned);
 
     return () => {
       unsubA();
       unsubB();
       unsubUpdated();
+      unsubAssigned();
     };
-  }, [pathname, t, user?.id, user?.role]);
+  }, [pathname, queryClient, showNotification, t, user?.id, user?.role]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -561,6 +813,7 @@ export function TenantLayout() {
       } else {
         await setAvailabilityMutation.mutateAsync(true);
       }
+      setPresenceStatus('online');
       setShowStatusMenu(false);
     } catch {
       toast.error(t('tenantAdmin.common.errorSave'));
@@ -570,6 +823,7 @@ export function TenantLayout() {
   const handleStartPause = async (payload: { reason: string; notes?: string }) => {
     try {
       await startPause(payload);
+      setPresenceStatus('paused');
       setShowPauseModal(false);
       toast.success(t('tenantAdmin.pause.messages.started'));
     } catch {
@@ -688,6 +942,8 @@ export function TenantLayout() {
 
           <ThemeToggle />
 
+          <LanguageSelector />
+
           <button
             className="topbar-search-btn"
             onClick={() => setSearchOpen(true)}
@@ -704,7 +960,7 @@ export function TenantLayout() {
           <NotificationCenter />
 
           {/* Conversations-specific topbar actions */}
-          {pathname.startsWith('/omnichannel') && (
+          {pathname === '/omnichannel/conversations' && (
             <PermissionGate permission="conversations:reply">
               <>
                 <button
@@ -866,8 +1122,30 @@ export function TenantLayout() {
             boxShadow: 'inset -1px 0 0 rgba(255,255,255,.02)',
           }}
         >
+          {/* Início */}
+          {isManager && (
+            <NavItem to="/home" title={tCommon('home.navLabel')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
+          {!isManager && user?.role === 'agent' && (
+            <NavItem to="/agent-home" title={tCommon('home.navLabel')}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M3 8.2 9 3l6 5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M5 7.5V15h3.2v-4.2h1.6V15H13V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
+
           {/* Atendimentos */}
-          <NavItem to="/omnichannel/conversations" title="Atendimentos">
+          <NavItem
+            to="/omnichannel/conversations"
+            title={t('nav.conversations', { defaultValue: 'Atendimentos' })}
+            badge={unreadConversationNotifications}
+          >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 4.5h10a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H8l-3.5 2v-2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"
@@ -878,6 +1156,17 @@ export function TenantLayout() {
               <path d="M6 7.5h6M6 10h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
           </NavItem>
+
+          {/* Fila */}
+          {canViewQueue && (
+            <NavItem to="/omnichannel/queue" title={t('nav.queue')} badge={queueCount}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                <path d="M2 5h14M2 9h10M2 13h7"
+                  stroke="currentColor" strokeWidth="1.4"
+                  strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </NavItem>
+          )}
 
           {/* Monitor */}
           {isManager && (
@@ -936,7 +1225,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Tickets */}
-          <NavItem to="/tickets" title="Tickets">
+          <NavItem to="/tickets" title={t('nav.tickets', { defaultValue: 'Tickets' })} badge={ticketUnreadCount}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 5h10a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z"
@@ -945,6 +1234,14 @@ export function TenantLayout() {
                 strokeLinejoin="round"
               />
               <path d="M7 7.5h4M7 10.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          </NavItem>
+
+          {/* Campanhas */}
+          <NavItem to="/omnichannel/campaigns" title="Campanhas">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M2 6.5c0-1.1.9-2 2-2h2l2-2.5 2 2.5h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M9 4v2.5M6.5 10h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </NavItem>
 
@@ -1018,7 +1315,17 @@ export function TenantLayout() {
 
         {/* Content area */}
         <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Outlet />
+          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+            <Outlet />
+          </div>
+          <footer className="app-legal-footer">
+            <span>Powered by ZiraDesk</span>
+            <span className="app-legal-footer-separator" aria-hidden>•</span>
+            <Link to="/politica-de-privacidade" className="legal-footer-link">Política de Privacidade</Link>
+            <span className="app-legal-footer-separator" aria-hidden>•</span>
+            <Link to="/termos-de-uso" className="legal-footer-link">Termos de Uso</Link>
+            <LegalDpoLink prefix={<span className="app-legal-footer-separator" aria-hidden>•</span>} />
+          </footer>
         </main>
       </div>
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />

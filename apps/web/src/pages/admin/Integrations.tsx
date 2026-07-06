@@ -128,7 +128,7 @@ export function Integrations() {
     onError: () => toast.error(t('tenantAdmin.integrations.redmine.testError')),
   });
 
-  const webhookUrl = `https://api.ziradesk.com.br/webhooks/redmine/${tenant?.slug ?? 'tenant-slug'}`;
+  const webhookUrl = `https://api.ziradesk.com/webhooks/redmine/${tenant?.slug ?? 'tenant-slug'}`;
 
   const canSave =
     form.redmineUrl.trim().length > 0 &&
@@ -311,7 +311,9 @@ export function Integrations() {
                 }}
               />
               <Button variant="ghost" size="sm" type="button" onClick={() => setShowApiKey((v) => !v)}>
-                {showApiKey ? 'Ocultar' : 'Mostrar'}
+                {showApiKey
+                  ? t('tenantAdmin.integrations.hide')
+                  : t('tenantAdmin.integrations.show')}
               </Button>
             </div>
           </div>

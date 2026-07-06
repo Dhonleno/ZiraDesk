@@ -7,6 +7,9 @@ import { prisma } from '../../../config/database.js';
 import { seedCloseConfig } from '../../../database/seeds/closeConfig.seed.js';
 import { seedQuickReplies } from '../../../database/seeds/quickReplies.seed.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
+import { ensureWebhooksInfrastructure } from '../../admin/webhooks/webhooks.service.js';
+import { ensureQueueNotificationsInfrastructure } from '../../omnichannel/queue/queue-notifications.infrastructure.js';
+import { ensureCampaignsInfrastructure } from '../../omnichannel/campaigns/campaigns.infrastructure.js';
 import {
   listUsers,
   inviteUser,
@@ -66,6 +69,26 @@ function toSchemaName(slug: string): string {
   return `tenant_${slug.replace(/-/g, '_')}`;
 }
 
+export async function ensureTenantVoiceConfigInfrastructure(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.tenant_voice_config (
+      id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id             TEXT UNIQUE NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+      twilio_phone_number   VARCHAR(20) UNIQUE NOT NULL,
+      default_bot_menu_id   UUID,
+      ivr_enabled           BOOLEAN NOT NULL DEFAULT true,
+      ring_timeout_seconds  INTEGER NOT NULL DEFAULT 20,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_tenant_voice_config_phone
+    ON public.tenant_voice_config(twilio_phone_number)
+  `);
+}
+
 async function createTenantTables(schemaName: string): Promise<void> {
   // Cada execução é separada para rastreabilidade de erros
   await prisma.$executeRawUnsafe(`
@@ -79,10 +102,12 @@ async function createTenantTables(schemaName: string): Promise<void> {
       bio         TEXT,
       phone       VARCHAR(30),
       status      VARCHAR(20)   NOT NULL DEFAULT 'active',
+      must_change_password BOOLEAN NOT NULL DEFAULT false,
       last_seen_at TIMESTAMPTZ,
       language    VARCHAR(10)   NOT NULL DEFAULT 'pt-BR',
       notification_sound BOOLEAN NOT NULL DEFAULT true,
       notification_desktop BOOLEAN NOT NULL DEFAULT true,
+      notification_sound_variant VARCHAR(20) NOT NULL DEFAULT 'default',
       settings    JSONB         NOT NULL DEFAULT '{}',
       created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
@@ -371,6 +396,49 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".departments (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".agent_departments (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      department_id UUID NOT NULL REFERENCES "${schemaName}".departments(id) ON DELETE CASCADE,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, department_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_departments_user"
+    ON "${schemaName}".agent_departments(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_departments_department"
+    ON "${schemaName}".agent_departments(department_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "${schemaName}".bot_options
+      ADD COLUMN IF NOT EXISTS department_id UUID
+      REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_options_department"
+    ON "${schemaName}".bot_options(department_id)
+    WHERE department_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
     INSERT INTO "${schemaName}".bot_menus (is_active, greeting, footer)
     SELECT false,
            'Olá! Bem-vindo ao nosso atendimento. Como posso ajudá-lo?',
@@ -401,6 +469,10 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TYPE "${schemaName}".conversation_status AS ENUM ('open', 'waiting', 'closed')
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
@@ -410,12 +482,17 @@ async function createTenantTables(schemaName: string): Promise<void> {
       external_id     VARCHAR(255),
       protocol_number VARCHAR(20)  UNIQUE,
       conversation_type VARCHAR(20) NOT NULL DEFAULT 'inbound',
-      status          VARCHAR(20)  NOT NULL DEFAULT 'open',
+      status          "${schemaName}".conversation_status NOT NULL DEFAULT 'open',
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       assigned_at     TIMESTAMPTZ,
+      bot_option_id   UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE SET NULL,
       close_type_id   VARCHAR(30) REFERENCES "${schemaName}".conversation_close_types(id) ON DELETE SET NULL,
       close_outcome_id VARCHAR(30) REFERENCES "${schemaName}".conversation_close_outcomes(id) ON DELETE SET NULL,
       closed_at       TIMESTAMPTZ,
+      closed_by_user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
+      closure_reason  JSONB,
+      waiting_expires_at TIMESTAMPTZ,
+      queue_entered_at TIMESTAMPTZ,
       subject         VARCHAR(255),
       last_message    TEXT,
       last_message_at TIMESTAMPTZ,
@@ -439,6 +516,88 @@ async function createTenantTables(schemaName: string): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "idx_conversations_close_outcome"
     ON "${schemaName}".conversations(close_outcome_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_closed_by_status"
+    ON "${schemaName}".conversations(closed_by_user_id, status)
+    WHERE status = 'closed'
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "${schemaName}".conversations
+      ADD COLUMN IF NOT EXISTS department_id UUID
+      REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_department"
+    ON "${schemaName}".conversations(department_id)
+    WHERE department_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_status"
+    ON "${schemaName}".conversations(status)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_assigned_to"
+    ON "${schemaName}".conversations(assigned_to)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_contact_id"
+    ON "${schemaName}".conversations(contact_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_channel_id"
+    ON "${schemaName}".conversations(channel_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_last_message_at"
+    ON "${schemaName}".conversations(last_message_at DESC)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_autoassign"
+    ON "${schemaName}".conversations(status, assigned_to, queue_entered_at ASC NULLS LAST)
+    WHERE status = 'open' AND assigned_to IS NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_created_at"
+    ON "${schemaName}".conversations(created_at DESC)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".conversation_assignments (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID NOT NULL REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      agent_id        UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      released_at     TIMESTAMPTZ,
+      release_reason  VARCHAR(30),
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_conversation"
+      ON "${schemaName}".conversation_assignments(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_agent"
+      ON "${schemaName}".conversation_assignments(agent_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conv_assignments_agent_released"
+      ON "${schemaName}".conversation_assignments(agent_id, released_at)
+      WHERE released_at IS NOT NULL
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -481,23 +640,56 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".call_records (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
-      agent_id UUID REFERENCES "${schemaName}".users(id),
-      call_sid VARCHAR(50) UNIQUE NOT NULL,
-      to_phone VARCHAR(30),
-      from_phone VARCHAR(30),
-      status VARCHAR(30) DEFAULT 'initiated',
-      duration INTEGER,
-      recording_url TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+    CREATE INDEX IF NOT EXISTS "idx_messages_conversation_id"
+    ON "${schemaName}".messages(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".call_records (
+      id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+      conversation_id UUID          REFERENCES "${schemaName}".conversations(id) ON DELETE CASCADE,
+      contact_id      UUID          REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
+      agent_id        UUID          REFERENCES "${schemaName}".users(id),
+      direction       VARCHAR(10)   NOT NULL DEFAULT 'outbound',
+      call_sid        VARCHAR(50)   UNIQUE NOT NULL,
+      to_phone        VARCHAR(60),
+      from_phone      VARCHAR(120),
+      status          VARCHAR(30)   DEFAULT 'initiated',
+      bot_option_id   UUID          REFERENCES "${schemaName}".bot_options(id) ON DELETE SET NULL,
+      duration        INTEGER,
+      recording_url   TEXT,
+      created_at      TIMESTAMPTZ   DEFAULT NOW()
     )
   `);
 
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "idx_call_records_conversation"
     ON "${schemaName}".call_records(conversation_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_call_records_contact"
+    ON "${schemaName}".call_records(contact_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".call_ivr_sessions (
+      id                UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+      call_sid          VARCHAR(50)   UNIQUE NOT NULL,
+      from_phone        VARCHAR(60)   NOT NULL,
+      contact_id        UUID          REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
+      bot_option_id     UUID          REFERENCES "${schemaName}".bot_options(id) ON DELETE SET NULL,
+      candidate_agents  JSONB         NOT NULL DEFAULT '[]',
+      current_attempt   INTEGER       NOT NULL DEFAULT 0,
+      status            VARCHAR(30)   NOT NULL DEFAULT 'ivr',
+      created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_call_ivr_sessions_call_sid"
+    ON "${schemaName}".call_ivr_sessions(call_sid)
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -567,6 +759,28 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".contact_tags (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(50) NOT NULL,
+      color       VARCHAR(7) NOT NULL,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(name)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".contact_tag_assignments (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      contact_id  UUID REFERENCES "${schemaName}".contacts(id) ON DELETE CASCADE,
+      tag_id      UUID REFERENCES "${schemaName}".contact_tags(id) ON DELETE CASCADE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(contact_id, tag_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".ticket_types (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(80) NOT NULL,
@@ -587,8 +801,22 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".ticket_categories (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      color       VARCHAR(7),
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".tickets (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_number   SERIAL       NOT NULL,
       contact_id      UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL,
       organization_id UUID REFERENCES "${schemaName}".organizations(id) ON DELETE SET NULL,
       conversation_id UUID REFERENCES "${schemaName}".conversations(id) ON DELETE SET NULL,
@@ -599,10 +827,22 @@ async function createTenantTables(schemaName: string): Promise<void> {
       source          VARCHAR(30)  NOT NULL DEFAULT 'manual',
       email_message_id VARCHAR(500),
       status          VARCHAR(30)  NOT NULL DEFAULT 'open',
+      waiting_reason  VARCHAR(30),
+      sla_paused_at              TIMESTAMPTZ,
+      sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
+      escalated                  BOOLEAN NOT NULL DEFAULT false,
+      escalated_at               TIMESTAMPTZ,
+      csat_score       SMALLINT CHECK (csat_score BETWEEN 1 AND 5),
+      csat_comment     TEXT,
+      csat_sent_at     TIMESTAMPTZ,
+      csat_responded_at TIMESTAMPTZ,
+      csat_expires_at  TIMESTAMPTZ,
       priority        VARCHAR(20)  NOT NULL DEFAULT 'medium',
       category        VARCHAR(100),
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       resolved_at     TIMESTAMPTZ,
+      resolution_notes TEXT,
+      closed_at        TIMESTAMPTZ,
       due_date        TIMESTAMPTZ,
       tags            TEXT[]       NOT NULL DEFAULT '{}',
       custom_fields   JSONB        NOT NULL DEFAULT '{}',
@@ -744,6 +984,22 @@ async function createTenantTables(schemaName: string): Promise<void> {
     )
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".outbound_webhooks (
+      id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      name              VARCHAR(100) NOT NULL,
+      url               VARCHAR(500) NOT NULL,
+      secret            VARCHAR(255),
+      events            TEXT[]       NOT NULL DEFAULT '{}',
+      headers           JSONB        DEFAULT '{}',
+      is_active         BOOLEAN      DEFAULT true,
+      last_triggered_at TIMESTAMPTZ,
+      last_status       INTEGER,
+      created_at        TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ  DEFAULT NOW()
+    )
+  `);
+
   // AI Agent — habilitar pgvector (database-level, idempotente)
   await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS vector`);
 
@@ -802,10 +1058,22 @@ async function createTenantTables(schemaName: string): Promise<void> {
   );
 }
 
+export async function provisionTenantSchema(schemaName: string): Promise<void> {
+  await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+  await createTenantTables(schemaName);
+  await ensureQueueNotificationsInfrastructure(schemaName);
+  await ensureWebhooksInfrastructure(schemaName);
+  await ensureCampaignsInfrastructure(schemaName);
+  await seedCloseConfig(prisma, schemaName);
+  await seedQuickReplies(prisma, schemaName);
+}
+
 export async function createTenant(data: CreateTenantInput): Promise<{
   tenant: { id: string; name: string; slug: string; schemaName: string };
   tempPassword: string;
 }> {
+  await ensureTenantVoiceConfigInfrastructure();
+
   const existing = await prisma.tenant.findUnique({ where: { slug: data.slug } });
   if (existing) throw new ConflictError('Subdomínio já está em uso');
 
@@ -832,20 +1100,16 @@ export async function createTenant(data: CreateTenantInput): Promise<{
     });
     tenantId = tenant.id;
 
-    await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
     schemaCreated = true;
-
-    await createTenantTables(schemaName);
-    await seedCloseConfig(prisma, schemaName);
-    await seedQuickReplies(prisma, schemaName);
+    await provisionTenantSchema(schemaName);
 
     // Gera senha temporária (12 chars base64url)
     const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
     const passwordHash = await bcrypt.hash(tempPassword, 12);
 
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings)
-       VALUES ($1, $2, $3, 'owner', 'active', 'pt-BR', '{}')`,
+      `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings, must_change_password)
+       VALUES ($1, $2, $3, 'owner', 'active', 'pt-BR', '{}', true)`,
       data.ownerName,
       data.ownerEmail,
       passwordHash,
@@ -908,16 +1172,27 @@ export async function listTenants(query: ListTenantsQuery) {
   const tenantsWithUsage = await Promise.all(
     tenants.map(async (tenant) => {
       const schemaRef = quoteIdent(tenant.schemaName);
-      const usage = await prisma.$queryRawUnsafe<Array<{ users_count: number; conversations_this_month: number }>>(
-        `SELECT
-           (SELECT COUNT(*)::int FROM ${schemaRef}.users WHERE status = 'active') AS users_count,
-           (SELECT COUNT(*)::int
-              FROM ${schemaRef}.conversations
-             WHERE created_at >= date_trunc('month', now())
-               AND created_at < date_trunc('month', now()) + interval '1 month') AS conversations_this_month`,
-      );
+      let row = { users_count: 0, conversations_this_month: 0 };
 
-      const row = usage[0] ?? { users_count: 0, conversations_this_month: 0 };
+      try {
+        const usage = await prisma.$queryRawUnsafe<Array<{ users_count: number; conversations_this_month: number }>>(
+          `SELECT
+             (SELECT COUNT(*)::int FROM ${schemaRef}.users WHERE status = 'active') AS users_count,
+             (SELECT COUNT(*)::int
+                FROM ${schemaRef}.conversations
+               WHERE created_at >= date_trunc('month', now())
+                 AND created_at < date_trunc('month', now()) + interval '1 month') AS conversations_this_month`,
+        );
+
+        row = usage[0] ?? row;
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        const missingSchema = message.includes(tenant.schemaName.toLowerCase()) && message.includes('does not exist');
+        if (!missingSchema) {
+          throw error;
+        }
+      }
+
       return {
         ...tenant,
         usersCount: Number(row.users_count ?? 0),
@@ -1110,5 +1385,5 @@ export async function resetTenantUserPasswordAsSuperAdmin(tenantId: string, user
   });
 
   if (!tenant) throw new NotFoundError('Tenant');
-  return resetUserPassword(userId, tenant.schemaName, { allowOwner: true });
+  return resetUserPassword(userId, tenant.id, tenant.schemaName, { allowOwner: true });
 }

@@ -1,5 +1,78 @@
 # Changelog — ZiraDesk
 
+## [0.9.1] — Ajustes de Deploy Contabo
+### Alterado
+- Deploy de producao movido para workflow dedicado `.github/workflows/deploy-contabo.yml`
+- Fluxo de deploy da VPS passou a usar `api-migrate` para `prisma migrate deploy`
+- `docker-compose.production.yml` sobe apenas `postgres`, `redis`, `api`, `web` e `nginx` como servicos persistentes
+
+### Corrigido
+- Removida dependencia de `pnpm dlx` em runtime durante o deploy da Contabo
+- Imagem final da API passou a embarcar o Prisma Client gerado no build
+- Falha de restart da API em producao por `@prisma/client did not initialize yet`
+
+### Documentacao
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md` sincronizado com o workflow real da Contabo
+- `docs/technical/DEPLOY.md` convertido para refletir a infra atual
+- `ARQUITETURA_TECNICA.md` ajustado para VPS Contabo, dominios `.com` e portal desativado no Nginx
+
+## [0.9.0] — Sprint de Estabilização
+### Adicionado
+- Abstração de storage com interface `StorageProvider`
+- `R2StorageProvider` via `@aws-sdk/client-s3` (Cloudflare R2)
+- `LocalStorageProvider` mantém comportamento de dev
+- 78 testes de integração cobrindo: auth, middleware tenant, omnichannel webhooks, tickets, CRM, notifications, portal, super-admin, admin, calls, search, redmine, templates
+- Portal: `POST /auth/forgot-password` e `POST /auth/reset-password`
+- CI gate no GitHub Actions: testes obrigatórios antes do deploy Railway
+
+### Alterado
+- `settings.service.ts`, `profile.routes.ts`, `tickets.service.ts`: uploads migrados de disco local para `StorageProvider`
+- Zero referências hardcoded a `public/uploads` no código
+
+### Corrigido (correções de produção expostas pelos testes)
+- Logout agora invalida sessão de fato (`auth:force_logout_after`)
+- Tenant suspenso retorna 402 corretamente
+- JWT de tenant A rejeitado em rotas de tenant B (403)
+- HMAC inválido em webhooks retorna 401
+- Webhooks WhatsApp/Instagram ignoram credenciais corrompidas sem quebrar
+- `schemaName` propagado em tickets (`updateTicket`, `deleteTicket`, `attachments`)
+- `schemaName` propagado em CRM (`organizations`, `contacts`)
+- Vazamento de schema em eventos de tickets corrigido
+- `channels.service.ts` e `channels.routes.ts` usam schema qualificado
+- `tenants.service.ts` resiliente a schemas temporários durante agregação
+
+### Documentação
+- Sprint 3 (CRM) e Sprint 4 (Tickets) marcados como ✅ (estavam ❌)
+- `ARQUITETURA_TECNICA.md` sincronizado com código real
+- Nova seção 14: módulos além do MVP original
+- Nova seção 15: dívida técnica conhecida
+
+## [0.8.0] — Reestruturação do Omnichannel
+### Adicionado
+- Novo ciclo de status de conversas: `open`, `waiting` e `closed`.
+- Migration multitenant para migrar status legados e adicionar `closure_reason`, `waiting_expires_at` e `queue_entered_at`.
+- Nova fila operacional em `GET /api/omnichannel/queue`, com atribuição manual em `POST /api/omnichannel/queue/:id/assign-me`.
+- Novo encerramento único em `POST /api/omnichannel/conversations/:id/close`, gravando motivo, desfecho, observações, agente e data de encerramento.
+- Modal de encerramento consumindo os motivos/desfechos ativos cadastrados em `/api/omnichannel/close-config`.
+- Job de expiração de conversas `waiting`, encerrando automaticamente envios ativos sem resposta.
+- Separação de grupo e assunto do bot na fila de atendimento.
+
+### Alterado
+- Envio ativo passa a usar `status = waiting` com `conversation_type = outbound`.
+- Conversas sem agente continuam com `status = open`, mas são tratadas como fila quando `assigned_to IS NULL`.
+- Aba **Aberto** exibe apenas atendimentos atribuídos a agentes humanos.
+- Página **Fila de atendimentos** exibe somente conversas abertas sem agente e mostra o tempo de espera na coluna **Espera**.
+- Botão de encerramento simplificado para **Encerrar**.
+- `omnichannelApi` passou a usar `closeConversation`, `getQueue`, `getQueueCount` e `assignMe`.
+
+### Removido
+- Fluxos legados baseados em `pending`, `resolved`, `bot`, `active_outbound` e `in_service`.
+- Endpoint legado `/api/omnichannel/conversations/:id/resolve`.
+- Modal legado `ResolveModal`.
+
+### Compatibilidade
+- Esta versão altera contrato de API e persistência. Rodar a migration Prisma antes do deploy da API/web.
+
 ## [0.7.0] — Sessão atual — Evolução pós-MVP
 ### Adicionado
 - RBAC completo: middleware backend (requirePermission/requireAnyPermission),

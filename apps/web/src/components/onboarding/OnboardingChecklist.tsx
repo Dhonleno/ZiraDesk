@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { onboardingApi } from '../../services/api';
+import { useAuthStore } from '../../stores/auth.store';
 
 interface Step {
   key: string;
@@ -13,10 +14,30 @@ interface Step {
 const STORAGE_KEY = 'zd-onboarding-minimized';
 const DONE_KEY = 'zd-onboarding-complete';
 
+function readStoredFlag(key: string) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredFlag(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // Storage can be unavailable in restricted browsing contexts.
+  }
+}
+
 export function OnboardingChecklist() {
   const navigate = useNavigate();
-  const [minimized, setMinimized] = useState(() => localStorage.getItem(STORAGE_KEY) === '1');
-  const [hidden, setHidden] = useState(() => localStorage.getItem(DONE_KEY) === '1');
+  const user = useAuthStore((state) => state.user);
+  const storageScope = `${user?.tenantId ?? 'tenant'}:${user?.id ?? 'user'}`;
+  const minimizedKey = `${STORAGE_KEY}:${storageScope}`;
+  const doneKey = `${DONE_KEY}:${storageScope}`;
+  const [minimized, setMinimized] = useState(() => readStoredFlag(minimizedKey));
+  const [hidden, setHidden] = useState(() => readStoredFlag(doneKey));
   const [celebrate, setCelebrate] = useState(false);
 
   const { data } = useQuery({
@@ -38,25 +59,40 @@ export function OnboardingChecklist() {
   const shouldShow = Boolean(data?.is_new_tenant) && completion < 80 && !hidden;
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, minimized ? '1' : '0');
-  }, [minimized]);
+    setMinimized(readStoredFlag(minimizedKey));
+    setHidden(readStoredFlag(doneKey));
+    setCelebrate(false);
+  }, [doneKey, minimizedKey]);
+
+  useEffect(() => {
+    writeStoredFlag(minimizedKey, minimized);
+  }, [minimized, minimizedKey]);
 
   useEffect(() => {
     if (!data || completed < steps.length || hidden) return;
     setCelebrate(true);
     const id = window.setTimeout(() => {
-      localStorage.setItem(DONE_KEY, '1');
+      writeStoredFlag(doneKey, true);
+      setCelebrate(false);
       setHidden(true);
     }, 1600);
     return () => window.clearTimeout(id);
-  }, [completed, data, hidden, steps.length]);
+  }, [completed, data, doneKey, hidden, steps.length]);
+
+  function minimizeChecklist() {
+    setCelebrate(false);
+    setMinimized(true);
+  }
 
   if (!shouldShow && !celebrate) return null;
 
   if (minimized && !celebrate) {
     return (
       <button
+        type="button"
         onClick={() => setMinimized(false)}
+        aria-expanded="false"
+        aria-label="Expandir primeiros passos"
         style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 60, background: 'var(--bg-2)', border: '1px solid var(--line-2)', color: 'var(--txt)', borderRadius: 'var(--r-pill)', padding: '9px 13px', boxShadow: 'var(--shadow-pop)', cursor: 'pointer', fontSize: 12 }}
       >
         Onboarding {completed}/{steps.length}
@@ -92,7 +128,7 @@ export function OnboardingChecklist() {
             <strong style={{ fontSize: 14 }}>Primeiros passos</strong>
             <div style={{ color: 'var(--txt-3)', fontSize: 12 }}>{completed} de {steps.length} completos</div>
           </div>
-          <button onClick={() => setMinimized(true)} aria-label="Minimizar onboarding" style={{ width: 28, height: 28, borderRadius: 'var(--r)', border: 'none', background: 'transparent', color: 'var(--txt-3)', cursor: 'pointer' }}>
+          <button type="button" onClick={minimizeChecklist} aria-expanded="true" aria-label="Minimizar primeiros passos" title="Minimizar" style={{ width: 32, height: 32, borderRadius: 'var(--r)', border: 'none', background: 'transparent', color: 'var(--txt-3)', cursor: 'pointer' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M3 7h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
         </div>

@@ -21,7 +21,7 @@
       "total": "Atendimentos",
       "tma": "TMA",
       "csat": "CSAT Médio",
-      "resolved": "Resolvidos",
+      "closed": "Encerrados",
       "firstResponse": "1ª Resposta"
     },
     "charts": {
@@ -49,7 +49,7 @@
       "open": "Abertos",
       "inProgress": "Em andamento",
       "waiting": "Aguardando",
-      "resolved": "Resolvidos",
+      "closed": "Encerrados",
       "avgResolution": "Tempo médio de resolução",
       "volumeByPeriod": "Volume por período",
       "opened": "Abertos",
@@ -77,7 +77,12 @@
   "outbound": {
     "badge": "Ativo",
     "warning": "Aparecerá em Ativos até o cliente responder",
-    "activated": "Cliente respondeu ao atendimento ativo!"
+    "activated": "Cliente respondeu ao atendimento ativo!",
+    "withinWindow": "Dentro da janela de 24h — mensagem livre disponível",
+    "windowExpiredNotice": "Janela de 24h expirada. Apenas templates aprovados são permitidos.",
+    "errors": {
+      "windowExpired": "Fora da janela de 24h do WhatsApp. Selecione um template aprovado para continuar."
+    }
   },
   "activeOutbound": {
     "button": "Envio ativo",
@@ -98,43 +103,75 @@
     "lastContact": "Último contato",
     "noHistory": "Sem histórico anterior"
   },
+  "campaigns": {
+    "detail": {
+      "info": "DETALHES DA CAMPANHA",
+      "detailsSection": "DETALHES DA CAMPANHA",
+      "channel": "Canal",
+      "template": "Template",
+      "scheduling": "Agendamento",
+      "startedAt": "Iniciado em",
+      "completedAt": "Concluído em",
+      "dailyLimit": "Limite diário",
+      "dailyLimitValue": "{{count}} disparos",
+      "notes": "Notas",
+      "immediate": "Imediato"
+    }
+  },
   "tabs": {
-    "active": "Em atendimento",
-    "activeOutbound": "Ativos",
-    "queue": "Bot",
-    "return": "Retorno",
+    "open": "Aberto",
+    "waiting": "Aguardando",
     "closed": "Encerrados"
   },
-  "subTabs": {
-    "all": "Todos",
-    "resolved": "Resolvidos",
-    "closed": "Fechados",
-    "outbound": "Retorno"
-  },
-  "queue": {
-    "assume": "Assumir",
-    "empty": "Nenhum atendimento na fila",
-    "emptyHint": "Quando clientes entrarem em contato aparecerão aqui"
+  "closeConversation": "Encerrar",
+  "closeModal": {
+    "title": "Encerrar atendimento",
+    "reasonLabel": "Motivo do encerramento",
+    "typeLabel": "Motivo do encerramento",
+    "outcomeLabel": "Desfecho",
+    "notesLabel": "Observações (opcional)",
+    "reasonPlaceholder": "Selecione o motivo...",
+    "outcomePlaceholder": "Selecione o desfecho...",
+    "notesPlaceholder": "Detalhes adicionais...",
+    "confirm": "Encerrar",
+    "cancel": "Cancelar",
+    "successToast": "Atendimento encerrado",
+    "errorToast": "Erro ao encerrar atendimento",
+    "loadingConfig": "Carregando motivos de encerramento...",
+    "emptyConfig": "Nenhum motivo de encerramento ativo foi encontrado."
   },
   "notifications": {
-    "newMessage": "Nova mensagem",
+    "newMessage": "Nova mensagem recebida",
     "assigned": "Novo atendimento atribuído",
     "assignedBody": "foi atribuído a você",
     "permissionDenied": "Ative as notificações do navegador para ser avisado de novos atendimentos",
     "messages": "mensagens",
-    "markAllRead": "Marcar todas como lidas"
+    "markAllRead": "Marcar todas como lidas",
+    "clearRead": "Limpar lidas",
+    "clearReadHint": "Remove notificações já lidas",
+    "lgpdRequest": "Nova solicitação LGPD",
+    "lgpdSlaWarning": "Alerta de SLA LGPD",
+    "lgpdSlaBreached": "SLA LGPD violado",
+    "clearReadSuccess": "Notificações lidas removidas",
+    "loadMore": "Carregar mais notificações",
+    "empty": "Nenhuma notificação",
+    "types": {
+      "conversation_message": "Nova mensagem",
+      "conversation_assigned": "Atendimento atribuído",
+      "ticket_assigned": "Ticket atribuído",
+      "ticket_comment": "Novo comentário",
+      "help_requested": "Pedido de ajuda"
+    }
   },
   "agentRequeued": "{{agentName}} ficou offline. {{count}} atendimento(s) retornaram para a fila.",
   "outboundBadge": "↗ Retorno",
   "botBadge": "🤖 Bot",
   "status": {
     "open": "Aberto",
-    "active_outbound": "Ativo",
-    "in_service": "Em atendimento",
-    "pending": "Aguardando",
-    "resolved": "Resolvido",
-    "closed": "Fechado",
-    "bot": "Bot",
+    "queue": "Na fila",
+    "awaitingChoice": "Aguardando escolha",
+    "waiting": "Aguardando",
+    "closed": "Encerrado",
     "all": "Todos",
     "mine": "Meus"
   },
@@ -146,6 +183,7 @@
     "live_chat": "Chat"
   },
   "chat": {
+    "composeAriaLabel": "Digite sua mensagem",
     "inputPlaceholder": "Digite sua mensagem...",
     "resolvedPlaceholder": "Esta conversa foi resolvida",
     "closedByClient": "Este atendimento foi encerrado pelo cliente",
@@ -198,7 +236,31 @@
     "templateNameRequired": "Informe o nome do template WhatsApp.",
     "activeOutboundReturnHeader": "Retorno de envio ativo",
     "activeOutboundReturnSub": "Cliente retornou dentro da validade do envio ativo iniciado por {{agent}}.",
-    "activeOutboundFallbackAgent": "agente responsável"
+    "activeOutboundFallbackAgent": "agente responsável",
+    "protocolCopied": "Protocolo copiado!",
+    "protocolCopyError": "Não foi possível copiar o protocolo",
+    "protocol": "Número do protocolo",
+    "closedByAgent": "Este atendimento foi encerrado",
+    "internalNotePlaceholder": "Escreva uma nota interna...",
+    "replyingTo": "Respondendo {{name}}",
+    "mentionMessage": "Mencionar mensagem",
+    "removeReply": "Remover menção",
+    "attachFile": "Anexar arquivo",
+    "imageOrVideo": "Imagem ou vídeo",
+    "noAgent": "Sem agente",
+    "systemLabel": "Sistema",
+    "mentionImage": "[Imagem]",
+    "mentionAudio": "[Áudio]",
+    "mentionVideo": "[Vídeo]",
+    "mentionDocument": "[Documento]",
+    "mentionDefault": "[Mensagem]",
+    "mentionSticker": "Figurinha",
+    "mentionPhoto": "Foto",
+    "today": "Hoje",
+    "yesterday": "Ontem",
+    "unseenMessages": "1 nova mensagem",
+    "unseenMessages_plural": "{{count}} novas mensagens",
+    "callRecording": "Gravação da chamada"
   },
   "resolve": {
     "title": "Resolver atendimento",
@@ -214,6 +276,7 @@
     "resolved": "Atendimento resolvido",
     "resolvedBanner": "Este atendimento foi resolvido",
     "reopen": "Reabrir atendimento",
+    "reopenError": "Erro ao reabrir atendimento",
     "ratings": {
       "1": "Muito ruim",
       "2": "Ruim",
@@ -249,12 +312,16 @@
     "systemMessage": "Atendimento transferido para {{name}}",
     "agentOffline": "Este agente está offline",
     "noAgentsForSkill": "Nenhum agente disponível para este grupo",
+    "byDepartment": "Por departamento",
+    "noDepartmentsAvailable": "Nenhum departamento disponível no momento",
+    "noAgentsForDepartment": "Nenhum agente disponível para este departamento",
     "error": "Erro ao transferir conversa"
   },
   "history": {
     "title": "Histórico de Atendimentos",
     "subtitle": "Consulte e analise atendimentos realizados",
     "tabs": {
+      "label": "Seções do histórico de atendimentos",
       "history": "Histórico",
       "goals": "Metas"
     },
@@ -275,6 +342,8 @@
       "7d": "Últimos 7 dias",
       "30d": "Últimos 30 dias",
       "month": "Este mês",
+      "last_week": "Semana anterior",
+      "last_month": "Mês anterior",
       "custom": "Personalizado"
     },
     "columns": {
@@ -291,22 +360,35 @@
     },
     "found": "{{count}} atendimentos encontrados",
     "exportCsv": "Exportar CSV",
+    "exportError": "Não foi possível exportar o CSV agora.",
     "noResults": "Nenhum atendimento encontrado",
     "noResultsHint": "Tente ajustar os filtros",
     "detail": {
       "title": "Detalhes do atendimento",
       "transcript": "Transcrição",
       "timeline": "Linha do tempo",
-      "csat": "Avaliação"
+      "csat": "Avaliação",
+      "close": "Fechar detalhes do atendimento",
+      "emptyTimelineTitle": "Sem eventos registrados",
+      "emptyTimelineHint": "Os eventos do atendimento aparecerão aqui quando forem registrados.",
+      "emptyTranscriptTitle": "Sem mensagens registradas",
+      "emptyTranscriptHint": "A transcrição aparecerá quando houver mensagens no atendimento.",
+      "emptyCsatTitle": "Sem avaliação registrada",
+      "emptyCsatHint": "A avaliação do cliente aparecerá aqui após a resposta."
     },
     "loadMore": "Carregar mensagens anteriores",
     "loading": "Carregando...",
-    "noMore": "Início da conversa"
+    "noMore": "Início da conversa",
+    "error": "Erro ao carregar mensagens",
+    "sortAsc": "Ordenar crescente",
+    "sortDesc": "Ordenar decrescente",
+    "sortNone": "Sem ordenação"
   },
   "goals": {
     "title": "Metas",
     "subtitle": "Defina parâmetros de performance para sua equipe",
     "new": "Nova meta",
+    "removeTitle": "Remover meta",
     "empty": "Nenhuma meta configurada",
     "emptyHint": "Crie uma meta para acompanhar a performance dos agentes",
     "name": "Nome da meta",
@@ -326,12 +408,27 @@
       "csat": "CSAT mínimo (1-5)",
       "volume": "Volume mínimo"
     },
+    "validation": {
+      "nameRequired": "Informe o nome da meta.",
+      "nameMax": "Use no máximo {{max}} caracteres.",
+      "nameHint": "Até {{max}} caracteres.",
+      "agentRequired": "Selecione um agente para esta meta.",
+      "integer": "Use apenas números inteiros.",
+      "number": "Informe um número válido.",
+      "range": "Informe um valor entre {{min}} e {{max}}.",
+      "minutesHint": "Opcional. Use {{min}} a {{max}} minutos.",
+      "percentHint": "Opcional. Use {{min}} a {{max}}%.",
+      "csatHint": "Opcional. Use {{min}} a {{max}}.",
+      "volumeHint": "Opcional. Use {{min}} a {{max}} atendimentos.",
+      "fixBeforeSave": "Corrija os campos destacados antes de salvar."
+    },
     "saveSuccess": "Meta salva com sucesso",
     "deleteSuccess": "Meta removida"
   },
   "performance": {
     "title": "Performance de Agentes",
     "subtitle": "Acompanhe métricas e metas da equipe",
+    "outboundRule": "Envio ativo só entra nos indicadores após resposta do cliente.",
     "columns": {
       "agent": "Agente",
       "volume": "Volume",
@@ -349,7 +446,37 @@
     },
     "exportCsv": "Exportar CSV",
     "noGoal": "Sem meta definida",
-    "teamKpis": "Resumo da equipe"
+    "teamKpis": "Resumo da equipe",
+    "byAgent": "Por Agente",
+    "byDepartment": "Por Departamento",
+    "table": {
+      "department": "Departamento",
+      "viewMode": "Modo de visualização da performance"
+    },
+    "loadingAgents": "Carregando performance dos agentes...",
+    "loadingDepartments": "Carregando performance por departamento...",
+    "emptyAgentsTitle": "Nenhuma performance de agente encontrada",
+    "emptyAgentsHint": "Ajuste o período, agente ou grupo para revisar os indicadores.",
+    "emptyDepartmentsTitle": "Nenhuma performance por departamento encontrada",
+    "emptyDepartmentsHint": "Ajuste os filtros para comparar os resultados por departamento.",
+    "invalidRange": "Informe um período personalizado válido para exportar.",
+    "filterByDepartment": "Departamento",
+    "agentDetail": {
+      "subtitle": "Detalhes do período selecionado",
+      "close": "Fechar",
+      "recentConversations": "Atendimentos recentes",
+      "loading": "Carregando atendimentos...",
+      "noConversations": "Nenhum atendimento no período.",
+      "colProtocol": "Protocolo",
+      "colContact": "Contato",
+      "colStatus": "Status",
+      "colWait": "TME",
+      "colDate": "Data"
+    }
+  },
+  "composer": {
+    "pasteRemove": "Remover arquivo",
+    "pasteImageAlt": "Imagem colada"
   },
   "media": {
     "upload": "Enviar arquivo",
@@ -365,7 +492,18 @@
     "typeNotSupported": "Tipo de arquivo não suportado",
     "permissionDenied": "Permissão de microfone negada",
     "uploadError": "Erro ao enviar arquivo",
-    "downloadFile": "Baixar arquivo"
+    "downloadFile": "Baixar arquivo",
+    "browserNotSupported": "Navegador não suporta gravação de áudio.",
+    "sending": "Enviando áudio...",
+    "converting": "Convertendo áudio... {{pct}}%",
+    "discard": "Descartar",
+    "pausePlayback": "Pausar",
+    "listenRecording": "Ouvir gravação",
+    "confirmSend": "Confirmar envio",
+    "resumeRecording": "Retomar gravação",
+    "paused": "Pausado",
+    "goToReview": "Ir para revisão",
+    "stopAndReview": "Parar e revisar"
   },
   "skills": {
     "title": "Habilidades",
@@ -391,7 +529,46 @@
     "avgTime": "TMA",
     "viewConversations": "Ver atendimentos",
     "noAgents": "Nenhum agente online",
-    "conversations": "atendimentos"
+    "conversations": "atendimentos",
+    "tabs": "Abas do monitor",
+    "realtimeTab": "Tempo Real",
+    "bot": {
+      "tab": "Bot",
+      "cardLabel": "No bot",
+      "total": "{{count}} no bot",
+      "stuck": "{{count}} presas",
+      "stuckThreshold": "> {{minutes}}min",
+      "refresh": "Atualizar",
+      "pull": "Puxar",
+      "pullToQueue": "Puxar para atendimento",
+      "close": "Encerrar",
+      "closeDrawer": "Fechar",
+      "viewConversation": "Ver conversa",
+      "pullSuccess": "Conversa enviada para a fila de atendimento",
+      "closeSuccess": "Conversa encerrada",
+      "actionError": "Não foi possível executar a ação",
+      "confirmClose": "Tem certeza?",
+      "confirmCloseMessage": "O cliente será informado que o atendimento foi encerrado.",
+      "closeMessagePlaceholder": "Mensagem opcional para o cliente",
+      "emptyTitle": "Nenhuma conversa no bot agora",
+      "emptySubtitle": "Todos os clientes passaram para atendimento humano ou encerraram",
+      "timeInBot": "Tempo no bot",
+      "lastMessage": "Última mensagem",
+      "drawerTitle": "Conversa com {{name}}",
+      "drawerSubtitle": "{{protocol}} · {{channel}}",
+      "timeInBotLabel": "Tempo no bot",
+      "viewFullProfile": "Ver perfil completo",
+      "messagesLoading": "Carregando histórico...",
+      "messagesEmpty": "Sem mensagens registradas",
+      "contact": "Contato",
+      "phone": "Telefone",
+      "protocol": "Protocolo",
+      "channel": "Canal",
+      "actions": "Ações",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar",
+      "loading": "..."
+    }
   },
   "tv": {
     "title": "Monitor em Tempo Real",
@@ -449,7 +626,10 @@
     "accepted": "{{name}} está te ajudando",
     "helping": "Ajudando",
     "endHelp": "Encerrar ajuda",
-    "noAgentsAvailable": "Nenhum agente disponível para ajudar"
+    "noAgentsAvailable": "Nenhum agente disponível para ajudar",
+    "endHelpError": "Erro ao encerrar ajuda",
+    "requestError": "Não foi possível solicitar ajuda",
+    "sending": "Enviando..."
   },
   "info": {
     "contact": "Contato",
@@ -476,7 +656,22 @@
     "messages": "Mensagens trocadas",
     "attendances": "Atendimentos",
     "firstContact": "1º contato",
-    "engagement": "Engajamento"
+    "engagement": "Engajamento",
+    "unknown": "Contato não identificado",
+    "linkOrganization": "Vincular organização",
+    "viewOrganization": "Ver organização",
+    "openTickets": "Tickets abertos",
+    "organization": "Organização",
+    "noOrganization": "Sem organização",
+    "noChannel": "Nenhum canal identificado",
+    "currentChannel": "Canal atual: {{label}} · {{sub}}",
+    "noPreviousConversations": "Nenhum atendimento anterior",
+    "noMessages": "Sem mensagens",
+    "edit": "Editar",
+    "addTag": "Adicionar",
+    "tags": "Etiquetas",
+    "noTags": "Nenhuma etiqueta aplicada",
+    "conversationCount": "{{count}} conversa(s) · último: {{time}}"
   },
   "form": {
     "client": "Contato",
@@ -500,6 +695,7 @@
     "creating": "Iniciando...",
     "created": "Atendimento iniciado com sucesso",
     "title": "Novo atendimento",
+    "whatsappWindowExpired": "Protocolo não enviado ao cliente — contato fora da janela de 24h do WhatsApp. Use Envio Ativo com template para iniciar contato.",
     "errorCreate": "Erro ao criar atendimento",
     "errorLoadClients": "Erro ao buscar contatos",
     "errorLoadChannels": "Erro ao buscar canais",
@@ -507,5 +703,55 @@
     "channelRequired": "Selecione um canal",
     "initialMessageRequired": "Digite a mensagem inicial",
     "initialTemplateNameRequired": "Informe o nome do template"
+  },
+  "queue": {
+    "title": "Fila de atendimentos",
+    "waiting": "aguardando",
+    "assume": "Atender",
+    "assignMe": "Atender",
+    "assigning": "Assumindo...",
+    "unknownContact": "Contato sem nome",
+    "unclassified": "Sem grupo",
+    "noSubject": "Sem assunto",
+    "columns": {
+      "contact": "Contato",
+      "group": "Grupo",
+      "subject": "Assunto",
+      "channel": "Canal",
+      "wait": "Espera",
+      "action": "Ação"
+    },
+    "assignedSuccess": "Atendimento assumido com sucesso",
+    "assignedError": "Erro ao assumir atendimento",
+    "empty": "Nenhum atendimento na fila",
+    "emptyHint": "Novos atendimentos aparecerão aqui automaticamente",
+    "allChannels": "Todos os canais",
+    "waitingTime": "Tempo na fila",
+    "preview": "Visualizar",
+    "previewTitle": "Conversa com {{name}}",
+    "previewSubtitle": "Pré-visualização — somente leitura",
+    "previewClose": "Fechar",
+    "previewLoading": "Carregando mensagens...",
+    "previewLoadingMedia": "Carregando mídia...",
+    "previewEmpty": "Nenhuma mensagem nesta conversa",
+    "previewDownload": "Baixar documento"
+  },
+  "visitor": "Visitante",
+  "agentFilter": "Filtro por agente",
+  "clear": "Limpar",
+  "newBadge": "Novo",
+  "now": "agora",
+  "pii": {
+    "reveal": "Revelar",
+    "hide": "Ocultar dados",
+    "revealing": "Revelando..."
+  },
+  "common": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
+  },
+  "conversations": {
+    "changeGroup": "Alterar grupo",
+    "loadMore": "Carregar mais"
   }
 }

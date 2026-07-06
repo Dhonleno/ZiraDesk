@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { verifyMetaSignature } from '../../middleware/meta-signature.js';
 import { decryptCredentials } from '../../utils/crypto.js';
 import { getSocketServer } from '../../socket/index.js';
@@ -33,6 +34,7 @@ interface ChannelRow {
 
 interface ConversationRow {
   id: string;
+  status?: string | null;
 }
 
 async function findTenantByPageId(pageId: string) {
@@ -41,12 +43,30 @@ async function findTenantByPageId(pageId: string) {
   );
 
   for (const tenant of tenants) {
-    const channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
-      `SELECT id, credentials FROM "${tenant.schema_name}".channels WHERE type = 'instagram' AND status = 'active'`,
-    );
+    let channels: ChannelRow[];
+    try {
+      channels = await prisma.$queryRawUnsafe<ChannelRow[]>(
+        `SELECT id, credentials FROM "${tenant.schema_name}".channels WHERE type = 'instagram' AND status = 'active'`,
+      );
+    } catch (error) {
+      logger.warn(
+        { tenantId: tenant.id, schemaName: tenant.schema_name, err: error },
+        '[Instagram] Failed to query channels for tenant schema',
+      );
+      continue;
+    }
 
     for (const channel of channels) {
-      const creds = decryptCredentials(channel.credentials);
+      let creds: Record<string, string>;
+      try {
+        creds = decryptCredentials(channel.credentials);
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, channelId: channel.id, err: error },
+          '[Instagram] Invalid channel credentials payload',
+        );
+        continue;
+      }
       if (creds['page_id'] === pageId) {
         return { tenant, channel, credentials: creds };
       }
@@ -116,8 +136,10 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           }
 
           const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-            `SELECT id FROM conversations
-             WHERE contact_id = $1 AND channel_id = $2 AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+            `SELECT id, status FROM conversations
+             WHERE contact_id = $1::uuid
+               AND channel_id = $2::uuid
+               AND status IN ('open', 'waiting')
              ORDER BY created_at DESC
              LIMIT 1`,
             contactId,
@@ -125,12 +147,23 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           );
 
           let conversationId: string;
+          let changedFromWaiting = false;
           if (convRows[0]) {
             conversationId = convRows[0].id;
+            if (convRows[0].status === 'waiting') {
+              await tx.$executeRawUnsafe(
+                `UPDATE conversations
+                 SET status = 'open',
+                     waiting_expires_at = NULL
+                 WHERE id = $1::uuid`,
+                conversationId,
+              );
+              changedFromWaiting = true;
+            }
           } else {
             const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
               `INSERT INTO conversations (contact_id, channel_id, channel_type, conversation_type, status, metadata)
-               VALUES ($1, $2, 'instagram', 'inbound', 'open', '{"type": "inbound"}'::jsonb)
+               VALUES ($1::uuid, $2::uuid, 'instagram', 'inbound', 'open', '{"type": "inbound"}'::jsonb)
                RETURNING id`,
               contactId,
               channel.id,
@@ -142,7 +175,7 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             [{ id: string; content: string; created_at: Date; sender_type: string }]
           >(
             `INSERT INTO messages (conversation_id, sender_type, sender_id, content, content_type, external_id, status)
-             VALUES ($1, 'client', $2, $3, 'text', $4, 'delivered')
+             VALUES ($1::uuid, 'client', $2::uuid, $3, 'text', $4, 'delivered')
              RETURNING id, content, created_at, sender_type`,
             conversationId,
             contactId,
@@ -155,12 +188,33 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
             `UPDATE conversations
              SET last_message = $1,
                  last_message_at = NOW()
-             WHERE id = $2`,
+             WHERE id = $2::uuid`,
             text.slice(0, 255),
             conversationId,
           );
 
-          return { conversationId, message };
+          const assignmentRows = await tx.$queryRawUnsafe<Array<{
+            assigned_to: string | null;
+            contact_name: string | null;
+            status: string | null;
+          }>>(
+            `SELECT c.assigned_to, c.status, ct.name AS contact_name
+             FROM conversations c
+             LEFT JOIN contacts ct ON ct.id = c.contact_id
+             WHERE c.id = $1::uuid
+             LIMIT 1`,
+            conversationId,
+          );
+          const assignment = assignmentRows[0];
+
+          return {
+            conversationId,
+            message,
+            assignedUserId: assignment?.assigned_to ?? null,
+            contactName: assignment?.contact_name ?? `Instagram user ${senderId}`,
+            conversationStatus: assignment?.status ?? null,
+            changedFromWaiting,
+          };
         });
 
         const io = getSocketServer();
@@ -174,6 +228,50 @@ export async function instagramWebhookRoutes(app: FastifyInstance): Promise<void
           message: result.message,
           conversation: conversation ?? undefined,
         });
+        if (result.changedFromWaiting) {
+          io.to(`tenant:${tenant.id}`).emit('conversation:status_changed', {
+            conversationId: result.conversationId,
+            status: 'open',
+          });
+        }
+
+        const senderType = result.message.sender_type;
+        const preview = text.trim();
+        if (result.assignedUserId && senderType === 'client') {
+          const notificationPreview = preview.substring(0, 100) || `Mensagem de ${result.contactName}`;
+
+          await prisma.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+            await tx.$executeRawUnsafe(
+              `INSERT INTO audit_logs (
+                 user_id, action, entity, entity_id, new_data, created_at
+               ) VALUES (
+                 $1::uuid,
+                 'conversation.message',
+                 'conversation',
+                 $2::uuid,
+                 $3::jsonb,
+                 NOW()
+               )`,
+              result.assignedUserId,
+              result.conversationId,
+              JSON.stringify({
+                assigned_to: result.assignedUserId,
+                contact_name: result.contactName,
+                preview: notificationPreview,
+                channel: 'instagram',
+              }),
+            );
+          });
+
+          io.to(`agent:${result.assignedUserId}`).emit('notification:new', {
+            type: 'conversation.message',
+            title: `Nova mensagem de ${result.contactName}`,
+            message: notificationPreview.substring(0, 80),
+            conversationId: result.conversationId,
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
     }
 

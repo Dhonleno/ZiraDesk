@@ -213,10 +213,56 @@ export async function generateConversationProtocol(
   return callGenerateProtocol(db, schemaName);
 }
 
-export function buildProtocolMessage(protocolNumber: string): string {
+type ProtocolMessageContext = 'customer_initiated' | 'agent_initiated';
+
+interface BuildProtocolMessageOptions {
+  context?: ProtocolMessageContext;
+  startedAt?: Date | string;
+  timeZone?: string;
+}
+
+function formatStartedAtLabel(startedAt?: Date | string, timeZone?: string): string | null {
+  if (!startedAt) return null;
+  const date = startedAt instanceof Date ? startedAt : new Date(startedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  try {
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      ...(timeZone ? { timeZone } : {}),
+    });
+    return formatter.format(date);
+  } catch {
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(date);
+  }
+}
+
+export function buildProtocolMessage(
+  protocolNumber: string,
+  options: BuildProtocolMessageOptions = {},
+): string {
+  const context = options.context ?? 'customer_initiated';
+  if (context === 'agent_initiated') {
+    const startedAtLabel = formatStartedAtLabel(options.startedAt, options.timeZone);
+    const startedAtLine = startedAtLabel
+      ? `Em ${startedAtLabel}.`
+      : 'Em contato ativo da nossa equipe.';
+
+    return (
+      '*Atendimento iniciado por nossa equipe*\n' +
+      `${startedAtLine}\n\n` +
+      '*Protocolo do atendimento*\n' +
+      `\`\`\`${protocolNumber}\`\`\`\n\n` +
+      'Guarde este numero para consultas.'
+    );
+  }
+
   return (
-    'Olá! Seu atendimento foi iniciado com sucesso.\n\n' +
-    `📋 *Protocolo:* ${protocolNumber}\n\n` +
-    'Guarde este número para acompanhar seu atendimento.'
+    '*Protocolo do atendimento*\n' +
+    `\`\`\`${protocolNumber}\`\`\`\n\n` +
+    'Use este número para consultar este atendimento.'
   );
 }

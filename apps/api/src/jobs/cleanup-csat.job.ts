@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 
 interface CsatCleanupJobData {}
@@ -14,7 +14,7 @@ const CSAT_CLEANUP_EVERY_MS = 3_600_000;
 const CSAT_CLEANUP_JOB_ID = 'cleanup-expired-csat-hourly';
 
 export const csatCleanupQueue = new Queue<CsatCleanupJobData>('ziradesk-csat-cleanup', {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 async function cleanupExpiredCsat(): Promise<void> {
@@ -62,7 +62,7 @@ export const csatCleanupWorker = new Worker<CsatCleanupJobData>(
   async () => {
     await cleanupExpiredCsat();
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 csatCleanupWorker.on('failed', (job, err) => {
@@ -81,3 +81,4 @@ void csatCleanupQueue.add(
 ).catch((err) => {
   logger.error({ err: err instanceof Error ? err.message : String(err) }, '[CSAT Cleanup] Failed to schedule hourly cleanup job');
 });
+

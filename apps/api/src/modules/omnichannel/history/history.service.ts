@@ -15,6 +15,8 @@ interface HistoryFilters {
   dateFromLocal: string;
   dateToLocal: string;
   timezone: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 interface HistoryRow {
@@ -174,12 +176,8 @@ function channelLabel(channelType: string): string {
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
     open: 'Aberto',
-    active_outbound: 'Ativo',
-    in_service: 'Em atendimento',
-    pending: 'Aguardando',
-    resolved: 'Resolvido',
+    waiting: 'Aguardando',
     closed: 'Fechado',
-    bot: 'Bot',
   };
   return map[status] ?? status;
 }
@@ -275,6 +273,18 @@ function buildHistoryWhereClause(filters: Omit<HistoryFilters, 'page' | 'perPage
   return { whereSql, params };
 }
 
+const SORT_COLUMN_MAP: Record<string, string> = {
+  created_at:       'c.created_at',
+  protocol_number:  'c.protocol_number',
+  contact_name:     'ct.name',
+  assigned_name:    'u.name',
+  channel_type:     'c.channel_type',
+  status:           'c.status',
+  duration_seconds: 'duration_seconds',
+  wait_seconds:     'wait_seconds',
+  csat_score:       'c.csat_score',
+};
+
 export async function listHistory(filters: HistoryFilters, tenantId?: string) {
   const schemaName = await resolveSchemaName(tenantId);
   if (!schemaName) {
@@ -291,6 +301,10 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
   const usersRef = `${safeSchema}.users`;
 
   const { whereSql, params } = buildHistoryWhereClause(filters);
+
+  const sortCol = SORT_COLUMN_MAP[filters.sortBy ?? 'created_at'] ?? 'c.created_at';
+  const sortDir = filters.sortOrder === 'asc' ? 'ASC' : 'DESC';
+  const nullsClause = sortDir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
 
   const limitToken = `$${params.length + 1}`;
   const offsetToken = `$${params.length + 2}`;
@@ -320,7 +334,7 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
      ${whereSql}
-     ORDER BY c.created_at DESC
+     ORDER BY ${sortCol} ${sortDir} ${nullsClause}
      LIMIT ${limitToken}::integer OFFSET ${offsetToken}::integer`,
     ...params,
     filters.perPage,
@@ -457,6 +471,12 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
      LEFT JOIN ${usersRef} u ON u.id = al.user_id
      WHERE al.entity = 'conversation'
        AND al.entity_id = $1::uuid
+       AND al.action NOT IN (
+         'conversation.message',
+         'conversation.queue.notified',
+         'conversation.resolved',
+         'conversation.pii.accessed'
+       )
      ORDER BY al.created_at ASC`,
     conversationId,
   );
@@ -498,6 +518,54 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
       title = 'Atendimento resolvido';
     } else if (entry.action === 'conversation.closed') {
       title = 'Atendimento fechado';
+    } else if (entry.action === 'conversation.queue.notified') {
+      title = 'Notificação de fila enviada';
+      const position = entry.new_data?.position;
+      description = position != null
+        ? `Posição na fila: ${position}`
+        : (entry.user_name ? `Por ${entry.user_name}` : null);
+    } else if (entry.action === 'conversation.pii.accessed') {
+      title = 'Dados do contato acessados';
+      description = entry.user_name ? `Por ${entry.user_name}` : null;
+    } else if (entry.action === 'conversation.created') {
+      title = 'Atendimento criado';
+    } else if (entry.action === 'conversation.message') {
+      title = 'Mensagem recebida';
+      description = typeof entry.new_data?.preview === 'string' && entry.new_data.preview.trim()
+        ? entry.new_data.preview.trim()
+        : description;
+    } else if (entry.action === 'conversation.queue.agent_assumed') {
+      title = 'Agente assumiu atendimento';
+      description = typeof entry.new_data?.agent_name === 'string' && entry.new_data.agent_name.trim()
+        ? `Responsável: ${entry.new_data.agent_name.trim()}`
+        : description;
+    } else if (entry.action === 'conversation.queue.expired_24h') {
+      title = 'Fila expirada por 24h';
+      description = entry.new_data?.action === 'close'
+        ? 'Atendimento encerrado automaticamente'
+        : description;
+    } else if (entry.action === 'conversation.bot.pulled') {
+      title = 'Atendimento puxado do bot';
+    } else if (entry.action === 'conversation.bot.closed') {
+      title = 'Atendimento encerrado pelo bot';
+      const closureReason = entry.new_data?.closure_reason;
+      description = closureReason
+        && typeof closureReason === 'object'
+        && 'notes' in closureReason
+        && typeof closureReason.notes === 'string'
+        && closureReason.notes.trim()
+        ? closureReason.notes.trim()
+        : description;
+    } else if (entry.action === 'message.failed') {
+      title = 'Falha no envio de mensagem';
+      description = entry.new_data?.error_message
+        ? String(entry.new_data.error_message)
+        : 'Mensagem não pôde ser entregue';
+    } else if (entry.action === 'help.requested') {
+      title = 'Ajuda solicitada';
+      description = typeof entry.new_data?.target_name === 'string' && entry.new_data.target_name.trim()
+        ? `Solicitou ajuda de ${entry.new_data.target_name.trim()}`
+        : null;
     }
 
     timeline.push({

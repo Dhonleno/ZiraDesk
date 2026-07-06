@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { indexArticle, getAIAgentConfig } from '../modules/ai/ai.service.js';
 import { decryptCredentials } from '../utils/crypto.js';
@@ -12,7 +12,7 @@ interface KnowledgeIndexJobData {
 }
 
 export const knowledgeIndexQueue = new Queue<KnowledgeIndexJobData>('ziradesk-knowledge-index', {
-  connection: redis,
+  connection: bullmqConnection,
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 3000 },
@@ -36,9 +36,10 @@ export const knowledgeIndexWorker = new Worker<KnowledgeIndexJobData>(
 
     await indexArticle(prisma, schemaName, articleId, apiKey);
   },
-  { connection: redis, concurrency: 2 },
+  { connection: bullmqConnection, concurrency: 2 },
 );
 
 knowledgeIndexWorker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, err: err instanceof Error ? err.message : String(err) }, '[KnowledgeIndex] Job failed');
 });
+

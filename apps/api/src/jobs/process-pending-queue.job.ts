@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { getSocketServer } from '../socket/index.js';
 import { autoAssignNextQueuedConversation } from '../modules/omnichannel/conversations/auto-assign.service.js';
@@ -17,7 +17,7 @@ const PROCESS_INTERVAL_MS = 2 * 60 * 1000;
 const MAX_ASSIGN_PER_TENANT = 5;
 
 export const processPendingQueueQueue = new Queue<ProcessPendingQueueJobData>('ziradesk-process-pending-queue', {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 async function processPendingQueueForAllTenants(): Promise<void> {
@@ -64,7 +64,7 @@ export const processPendingQueueWorker = new Worker<ProcessPendingQueueJobData>(
   async () => {
     await processPendingQueueForAllTenants();
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 processPendingQueueWorker.on('failed', (job, err) => {
@@ -83,3 +83,4 @@ void processPendingQueueQueue.add(
 ).catch((err) => {
   logger.error({ err: err instanceof Error ? err.message : String(err) }, '[PendingQueue] Failed to schedule job');
 });
+

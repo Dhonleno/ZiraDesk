@@ -5,6 +5,8 @@ export interface NotificationConversationLike {
 
 export function isConversationBotControlled(conversation: NotificationConversationLike | null | undefined): boolean {
   if (!conversation) return false;
-  if (conversation.status === 'bot') return true;
-  return conversation.metadata?.['ai_agent_active'] === true;
+  const metadata = conversation.metadata ?? {};
+  return metadata['ai_agent_active'] === true
+    || metadata['ai_agent_active'] === 'true'
+    || metadata['bot_stage'] === 'waiting_choice';
 }

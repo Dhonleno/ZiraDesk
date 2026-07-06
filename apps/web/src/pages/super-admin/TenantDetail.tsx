@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api } from '../../services/api';
+import { api, superAdminApi } from '../../services/api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { UsageRow, formatBytes } from '../../components/usage/UsageRow';
 import { useToast } from '../../stores/toast.store';
 
 type TenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
@@ -60,13 +61,6 @@ interface TenantUserInviteResponse {
   };
 }
 
-interface TenantUserResetPasswordResponse {
-  success: boolean;
-  data: {
-    tempPassword: string;
-  };
-}
-
 const statusVariant: Record<TenantStatus, 'success' | 'info' | 'warning' | 'error' | 'neutral'> = {
   active: 'success',
   trial: 'info',
@@ -94,10 +88,6 @@ export function TenantDetail() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<TenantUserRole>('admin');
   const [resetUser, setResetUser] = useState<TenantUser | null>(null);
-  const [credential, setCredential] = useState<{
-    userName: string;
-    tempPassword: string;
-  } | null>(null);
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['super-admin', 'tenant', id],
@@ -116,6 +106,12 @@ export function TenantDetail() {
       });
       return res.data;
     },
+    enabled: Boolean(id),
+  });
+
+  const { data: usage, isLoading: isUsageLoading, isError: isUsageError } = useQuery({
+    queryKey: ['super-admin', 'tenant-usage', id],
+    queryFn: () => superAdminApi.getTenantUsage(id!),
     enabled: Boolean(id),
   });
 
@@ -143,12 +139,11 @@ export function TenantDetail() {
       });
       return res.data.data;
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       setInviteOpen(false);
       setInviteName('');
       setInviteEmail('');
       setInviteRole('admin');
-      setCredential({ userName: result.user.name, tempPassword: result.tempPassword });
       void qc.invalidateQueries({ queryKey: ['super-admin', 'tenant-users', id] });
       toast.success(t('superAdmin.tenants.access.messages.userCreated'));
     },
@@ -159,18 +154,15 @@ export function TenantDetail() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async (user: TenantUser) => {
-      const res = await api.post<TenantUserResetPasswordResponse>(
-        `/super-admin/tenants/${id!}/users/${user.id}/reset-password`,
-      );
-      return { user, tempPassword: res.data.data.tempPassword };
+      await api.post(`/super-admin/tenants/${id!}/users/${user.id}/reset-password`);
+      return user;
     },
-    onSuccess: ({ user, tempPassword }) => {
+    onSuccess: (user) => {
       setResetUser(null);
-      setCredential({ userName: user.name, tempPassword });
-      toast.success(t('superAdmin.tenants.access.messages.passwordReset'));
+      toast.success(t('superAdmin.tenants.access.resetEmailSent', { name: user.name }));
     },
-    onError: (err: { response?: { data?: { error?: { message?: string } } } }) => {
-      toast.error(err.response?.data?.error?.message ?? t('tenantAdmin.common.errorSave'));
+    onError: () => {
+      toast.error(t('tenantAdmin.common.errorSave'));
     },
   });
 
@@ -213,7 +205,7 @@ export function TenantDetail() {
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-white">{tenant.name}</h1>
           <div className="mt-2 flex items-center gap-2">
-            <span className="font-mono text-sm text-gray-500">{tenant.slug}.ziradesk.com.br</span>
+            <span className="font-mono text-sm text-gray-500">{tenant.slug}.ziradesk.com</span>
             <Badge variant={statusVariant[tenant.status]}>
               {t(`superAdmin.tenants.status.${tenant.status}`)}
             </Badge>
@@ -250,6 +242,61 @@ export function TenantDetail() {
         {tenant.trialEndsAt && (
           <InfoRow label="Trial até" value={new Date(tenant.trialEndsAt).toLocaleDateString('pt-BR')} />
         )}
+      </div>
+
+      <div className="rounded-xl border border-line bg-bg-2 p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-sm font-semibold" style={{ color: 'var(--txt)' }}>
+              {t('tenantDetail.usage.title')}
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: 'var(--txt-3)' }}>
+              {t('tenantDetail.usage.subtitle')}
+            </p>
+          </div>
+          {usage && (
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+              {t('tenantDetail.usage.period', { period: usage.period })}
+            </span>
+          )}
+        </div>
+
+        {isUsageLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="h-8 animate-pulse rounded-md" style={{ background: 'var(--bg-3)' }} />
+            ))}
+          </div>
+        ) : isUsageError ? (
+          <div className="rounded-lg px-4 py-5 text-sm" style={{ border: '1px solid var(--line)', color: 'var(--txt-3)' }}>
+            {t('tenantDetail.usage.error')}
+          </div>
+        ) : usage ? (
+          <div className="space-y-3">
+            <UsageRow
+              label={t('tenantDetail.usage.messages_sent')}
+              used={usage.metrics.messages_sent.used}
+              limit={usage.metrics.messages_sent.limit}
+              unlimitedLabel={t('tenantDetail.usage.unlimited')}
+              ofLabel={t('tenantDetail.usage.of')}
+            />
+            <UsageRow
+              label={t('tenantDetail.usage.storage_bytes')}
+              used={usage.metrics.storage_bytes.used}
+              limit={usage.metrics.storage_bytes.limit}
+              format={formatBytes}
+              unlimitedLabel={t('tenantDetail.usage.unlimited')}
+              ofLabel={t('tenantDetail.usage.of')}
+            />
+            <UsageRow
+              label={t('tenantDetail.usage.active_users')}
+              used={usage.metrics.active_users.used}
+              limit={usage.metrics.active_users.limit}
+              unlimitedLabel={t('tenantDetail.usage.unlimited')}
+              ofLabel={t('tenantDetail.usage.of')}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-line bg-bg-2 p-5">
@@ -446,40 +493,6 @@ export function TenantDetail() {
         </div>
       </Modal>
 
-      <Modal
-        open={!!credential}
-        onClose={() => setCredential(null)}
-        title={t('superAdmin.tenants.access.credentialsTitle')}
-        maxWidth="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm" style={{ color: 'var(--txt-2)' }}>
-            {t('superAdmin.tenants.access.credentialsDescription', {
-              name: credential?.userName ?? '',
-            })}
-          </p>
-          <div
-            className="rounded-lg px-4 py-3"
-            style={{
-              border: '1px solid rgba(0,201,167,.25)',
-              background: 'rgba(0,201,167,.08)',
-            }}
-          >
-            <p className="m-0 text-xs uppercase tracking-wide" style={{ color: 'var(--txt-3)' }}>
-              {t('tenantAdmin.users.messages.tempPassword')}
-            </p>
-            <p className="mt-1 mb-0 font-mono text-lg" style={{ color: 'var(--teal)' }}>
-              {credential?.tempPassword}
-            </p>
-          </div>
-          <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
-            {t('tenantAdmin.users.messages.tempPasswordHint')}
-          </p>
-          <div className="flex justify-end pt-2">
-            <Button onClick={() => setCredential(null)}>{t('tenantAdmin.common.close')}</Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

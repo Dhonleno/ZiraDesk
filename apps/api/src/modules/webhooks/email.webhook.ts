@@ -49,10 +49,10 @@ function quoteIdent(identifier: string): string {
 
 function extractTenantFromEmail(address: string): string | null {
   const normalized = address.trim().toLowerCase();
-  const supportMatch = normalized.match(/^suporte@([^.]+)\.ziradesk\.com\.br$/);
+  const supportMatch = normalized.match(/^suporte@([^.]+)\.ziradesk\.com$/);
   if (supportMatch?.[1]) return supportMatch[1];
 
-  const plusMatch = normalized.match(/^tickets\+([^@]+)@ziradesk\.com\.br$/);
+  const plusMatch = normalized.match(/^tickets\+([^@]+)@ziradesk\.com$/);
   if (plusMatch?.[1]) return plusMatch[1];
 
   return null;
@@ -290,6 +290,81 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
     ticket.id,
   );
 
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    assigned_to: string | null;
+    status: string | null;
+  }>>(
+    `SELECT id, assigned_to, status
+     FROM ${schema}.conversations
+     WHERE contact_id = $1::uuid
+       AND channel_type = 'email'
+       AND status IN ('open', 'waiting')
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    contact.id,
+  );
+  const linkedConversation = conversationRows[0];
+  const assignedUserId = linkedConversation?.assigned_to ?? null;
+  if (linkedConversation?.status === 'waiting') {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${schema}.conversations
+       SET status = 'open',
+           waiting_expires_at = NULL
+       WHERE id = $1::uuid`,
+      linkedConversation.id,
+    );
+    try {
+      getSocketServer().to(`tenant:${tenant.id}`).emit('conversation:status_changed', {
+        conversationId: linkedConversation.id,
+        status: 'open',
+      });
+    } catch {
+      // socket pode não estar disponível em testes
+    }
+  }
+  if (linkedConversation && assignedUserId) {
+    const previewSource = (description || inbound.subject || '').trim();
+    const notificationPreview = previewSource.substring(0, 100) || 'Nova mensagem';
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (
+             user_id, action, entity, entity_id, new_data, created_at
+           ) VALUES (
+             $1::uuid,
+             'conversation.message',
+             'conversation',
+             $2::uuid,
+             $3::jsonb,
+             NOW()
+           )`,
+        assignedUserId,
+        linkedConversation.id,
+        JSON.stringify({
+          assigned_to: assignedUserId,
+          contact_name: contact.name ?? 'Cliente',
+          preview: notificationPreview,
+          channel: 'email',
+        }),
+      );
+    });
+
+    try {
+      const clientName = contact.name ?? 'Cliente';
+      getSocketServer().to(`agent:${assignedUserId}`).emit('notification:new', {
+        type: 'conversation.message',
+        title: `Nova mensagem de ${clientName}`,
+        message: notificationPreview.substring(0, 80),
+        conversationId: linkedConversation.id,
+        createdAt: new Date().toISOString(),
+      });
+    } catch {
+      // socket pode não estar disponível em testes
+    }
+  }
+
   try {
     getSocketServer().to(`tenant:${tenant.id}`).emit('ticket:created', {
       ticket: {
@@ -310,7 +385,7 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   if (env.RESEND_API_KEY && sendConfirmation) {
     const resend = new Resend(env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `suporte@${tenant.slug}.ziradesk.com.br`,
+      from: `suporte@${tenant.slug}.ziradesk.com`,
       to: senderEmail,
       subject: `Re: ${inbound.subject || 'Ticket recebido'}`,
       html: `

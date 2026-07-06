@@ -4,9 +4,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { omnichannelApi, adminApi, contactsApi } from '../../services/api';
+import { omnichannelApi, contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
+import { avatarClass } from '../../utils/avatar';
 
 const schema = z.object({
   contact_id: z.string().min(1),
@@ -29,6 +30,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   const [contactSearch, setContactSearch] = useState('');
   const [contactLabel, setContactLabel] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
   const debouncedSearch = useDebounce(contactSearch, 300);
 
   const {
@@ -45,9 +47,10 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
   const selectedChannelId = watch('channel_id');
 
   const { data: channels = [] } = useQuery({
-    queryKey: ['admin-channels'],
-    queryFn: () => adminApi.listChannels(),
+    queryKey: ['omnichannel-conversation-channels'],
+    queryFn: () => omnichannelApi.listConversationChannels(),
   });
+  const activeChannels = channels.filter((channel) => channel.status === 'active');
 
   const { data: contactsResult } = useQuery({
     queryKey: ['crm-contacts-search', debouncedSearch],
@@ -65,20 +68,35 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
         ...(data.subject?.trim() ? { subject: data.subject.trim() } : {}),
         ...(data.initial_message?.trim() ? { initial_message: data.initial_message.trim() } : {}),
       }),
-    onSuccess: (conv) => {
+    onSuccess: ({ conversation }) => {
+      setDuplicateExistingId(null);
       toast.success(t('form.created'));
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['conversation-counts'] });
-      onCreated(conv.id);
+      onCreated(conversation.id);
       onClose();
     },
-    onError: () => toast.error(t('form.errorCreate')),
+    onError: (error: unknown) => {
+      const response = (error as { response?: { status?: number; data?: { error?: unknown; existingId?: string } } })?.response;
+      if (response?.status === 409 && response.data?.error === 'DUPLICATE_OPEN_CONVERSATION' && response.data.existingId) {
+        setDuplicateExistingId(response.data.existingId);
+        return;
+      }
+      const errorObj = (response?.data as { error?: { code?: string } } | undefined)?.error;
+      if (errorObj?.code === 'WHATSAPP_WINDOW_EXPIRED') {
+        toast.warning(t('form.whatsappWindowExpired'), { durationMs: 10000 });
+        return;
+      }
+      setDuplicateExistingId(null);
+      toast.error(t('form.errorCreate'));
+    },
   });
 
   const onSubmit = handleSubmit((data) => createMutation.mutate(data));
 
   const handleSelectContact = useCallback(
     (id: string, name: string) => {
+      setDuplicateExistingId(null);
       setValue('contact_id', id, { shouldValidate: true });
       setContactLabel(name);
       setShowContactDropdown(false);
@@ -95,6 +113,21 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!selectedChannelId && activeChannels.length === 1) {
+      setValue('channel_id', activeChannels[0]!.id, { shouldValidate: true });
+      return;
+    }
+
+    if (
+      selectedChannelId
+      && activeChannels.length > 0
+      && !activeChannels.some((channel) => channel.id === selectedChannelId)
+    ) {
+      setValue('channel_id', '', { shouldValidate: true });
+    }
+  }, [activeChannels, selectedChannelId, setValue]);
 
   return (
     <div
@@ -202,17 +235,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 {selectedContactId ? (
                   <>
                     <div
+                      className={avatarClass(contactLabel)}
                       style={{
                         width: 24,
                         height: 24,
                         borderRadius: '50%',
-                        background: 'linear-gradient(135deg,#667eea,#764ba2)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 10,
-                        fontWeight: 600,
-                        color: '#fff',
+                        fontWeight: 500,
                         flexShrink: 0,
                       }}
                     >
@@ -248,7 +280,7 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                         setShowContactDropdown(true);
                       }}
                       onFocus={() => setShowContactDropdown(true)}
-                      style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
+                      style={{ flex: 1, background: 'none', border: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
                     />
                   </>
                 )}
@@ -297,17 +329,16 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                       }}
                     >
                       <div
+                        className={avatarClass(contact.name)}
                         style={{
                           width: 28,
                           height: 28,
                           borderRadius: '50%',
-                          background: 'linear-gradient(135deg,#667eea,#764ba2)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: 11,
-                          fontWeight: 600,
-                          color: '#fff',
+                          fontWeight: 500,
                           flexShrink: 0,
                         }}
                       >
@@ -344,13 +375,12 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: selectedChannelId ? 'var(--txt)' : 'var(--txt-3)',
-                outline: 'none',
                 cursor: 'pointer',
                 appearance: 'none',
               }}
             >
               <option value="">{t('form.channelPlaceholder')}</option>
-              {channels.filter((channel) => channel.status === 'active').map((channel) => (
+              {activeChannels.map((channel) => (
                 <option key={channel.id} value={channel.id} style={{ background: 'var(--bg-3)' }}>
                   {channel.name} ({channel.type})
                 </option>
@@ -360,6 +390,44 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
               <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{t('form.channelRequired')}</p>
             )}
           </div>
+
+          {duplicateExistingId && (
+            <div
+              style={{
+                display: 'grid',
+                gap: 8,
+                border: '1px solid rgba(245,158,11,.28)',
+                borderRadius: 'var(--r)',
+                background: 'var(--amber-dim)',
+                color: 'var(--amber)',
+                padding: '10px 12px',
+                fontSize: 12,
+                lineHeight: 1.45,
+              }}
+            >
+              <span>Já existe uma conversa aberta com este contato neste canal.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onCreated(duplicateExistingId);
+                  onClose();
+                }}
+                style={{
+                  width: 'fit-content',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--teal)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: 'var(--font)',
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                Abrir conversa existente
+              </button>
+            </div>
+          )}
 
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -378,7 +446,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: 'var(--txt)',
-                outline: 'none',
               }}
             />
           </div>
@@ -400,7 +467,6 @@ export function CreateConversationModal({ onClose, onCreated }: Props) {
                 fontSize: 13,
                 fontFamily: 'var(--font)',
                 color: 'var(--txt)',
-                outline: 'none',
                 resize: 'vertical',
                 lineHeight: 1.5,
               }}

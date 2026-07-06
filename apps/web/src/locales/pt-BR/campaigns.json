@@ -1,0 +1,203 @@
+{
+  "title": "Campanhas",
+  "new": "+ Nova campanha",
+  "badge": "{{count}} campanha",
+  "badge_plural": "{{count}} campanhas",
+  "empty": {
+    "title": "Nenhuma campanha criada",
+    "description": "Crie sua primeira campanha para disparar mensagens em massa pelo WhatsApp.",
+    "action": "+ Nova campanha"
+  },
+  "status": {
+    "draft": "Rascunho",
+    "scheduled": "Agendada",
+    "running": "Em andamento",
+    "paused": "Pausada",
+    "completed": "Concluída",
+    "completedWithFailures": "Concluída com falhas",
+    "completedWithFailuresShort": "c/ falhas",
+    "completedWithFailuresDetail": "Concluída com {{count}} falha(s)",
+    "cancelled": "Cancelada",
+    "all": "Todas"
+  },
+  "kpi": {
+    "total": "Total de campanhas",
+    "running": "Em andamento",
+    "completed": "Concluídas",
+    "deliveryRate": "Taxa de entrega"
+  },
+  "table": {
+    "name": "Nome",
+    "status": "Status",
+    "contacts": "Contatos",
+    "sent": "Enviados",
+    "delivered": "Entregues",
+    "read": "Lidos",
+    "replied": "Responderam",
+    "repliedShort": "Respostas",
+    "createdBy": "Criador",
+    "scheduled": "Agendado/Iniciado",
+    "actions": "Ações"
+  },
+  "failedContacts": "{{count}} contato(s) com falha no envio",
+  "actions": {
+    "view": "Ver detalhes",
+    "duplicate": "Duplicar",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "cancel": "Cancelar",
+    "launch": "Lançar",
+    "addContacts": "Adicionar contatos",
+    "confirmCancel": "Confirmar cancelamento",
+    "retryFailed": "Criar rascunho com falhas",
+    "failedDraftCreated": "Rascunho criado com os contatos que falharam.",
+    "failedDraftError": "Não foi possível criar o rascunho com as falhas.",
+    "cancelTitle": "Cancelar campanha",
+    "cancelConfirm": "Tem certeza que deseja cancelar esta campanha?",
+    "cancelScheduledTitle": "Cancelar campanha agendada",
+    "cancelScheduledConfirm": "Tem certeza que deseja cancelar esta campanha agendada?",
+    "cancelConfirmNamed": "Cancelar a campanha \"{{name}}\"?"
+  },
+  "common": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
+  },
+  "create": {
+    "title": "Nova campanha",
+    "step1": {
+      "title": "Configurações",
+      "name": "Nome da campanha",
+      "namePlaceholder": "Ex: Promoção de outubro",
+      "channel": "Canal WhatsApp",
+      "channelPlaceholder": "Selecione um canal",
+      "template": "Template aprovado",
+      "templatePlaceholder": "Selecione um template",
+      "publicTestTemplateBlocked": "O template hello_world é exclusivo dos números públicos de teste da Meta e não pode ser usado em campanhas.",
+      "preview": "Prévia do template",
+      "variables": "Variáveis do template",
+      "variable": "Variável {{n}}",
+      "varType": "Tipo",
+      "varContactField": "Campo do contato",
+      "varFixed": "Valor fixo",
+      "varContactName": "Nome do contato",
+      "varContactPhone": "Telefone do contato",
+      "varFixedPlaceholder": "Digite o valor fixo",
+      "dailyLimit": "Limite diário de disparos",
+      "notes": "Notas (opcional)",
+      "notesPlaceholder": "Observações internas sobre esta campanha"
+    },
+    "step2": {
+      "title": "Agendamento",
+      "scheduleToggle": "Agendar para depois",
+      "scheduleDate": "Data e hora",
+      "immediateHint": "A campanha será iniciada imediatamente ao lançar.",
+      "scheduledHint": "A campanha será iniciada em {{date}}."
+    },
+    "step3": {
+      "title": "Revisão",
+      "summary": "Resumo da campanha",
+      "channel": "Canal",
+      "template": "Template",
+      "scheduling": "Agendamento",
+      "immediate": "Imediato (ao lançar)",
+      "dailyLimit": "Limite diário",
+      "notes": "Notas",
+      "noNotes": "Sem notas",
+      "confirm": "Criar rascunho"
+    },
+    "next": "Próximo",
+    "back": "Voltar",
+    "saving": "Salvando..."
+  },
+  "retry": {
+    "title": "Reenviar contatos com falha",
+    "confirm": "Criar rascunho para reenvio",
+    "success": "Rascunho criado com os contatos que falharam.",
+    "error": "Não foi possível criar o rascunho para reenvio."
+  },
+  "addContacts": {
+    "selectAll": "Selecionar todos",
+    "confirm": "Adicionar selecionados",
+    "confirmWithCount": "Adicionar {{count}} selecionado(s)",
+    "allStatuses": "Todos os status",
+    "allTags": "Todas as tags",
+    "noPhone": "Sem telefone"
+  },
+  "contactsModal": {
+    "selectAll": "Selecionar todos (visíveis)",
+    "selectAllMatching": "Selecionar todos que correspondem ao filtro ({{count}})",
+    "addAllMatching": "Adicionar {{count}} contato(s)"
+  },
+  "contacts": {
+    "title": "Adicionar contatos",
+    "search": "Buscar por nome ou telefone...",
+    "selected": "{{count}} selecionado",
+    "selected_plural": "{{count}} selecionados",
+    "noPhone": "Sem telefone — não pode ser adicionado",
+    "alreadyAdded": "Já na campanha",
+    "add": "Adicionar selecionados",
+    "adding": "Adicionando...",
+    "noResults": "Nenhum contato encontrado",
+    "loadMore": "Carregar mais"
+  },
+  "launch": {
+    "title": "Lançar campanha",
+    "warningImmediate": "Você está prestes a disparar para {{count}} contato.",
+    "warningImmediate_plural": "Você está prestes a disparar para {{count}} contatos.",
+    "scheduledInfo": "A campanha será iniciada em {{date}}.",
+    "immediateInfo": "A campanha será iniciada agora.",
+    "typeToConfirm": "Digite CONFIRMAR para habilitar o botão",
+    "confirmWord": "CONFIRMAR",
+    "confirm": "Lançar campanha",
+    "launching": "Lançando..."
+  },
+  "exportCsv": "Exportar CSV",
+  "exportPdf": "Exportar PDF",
+  "exporting": "Exportando...",
+  "exportError": "Erro ao exportar. Tente novamente.",
+  "detail": {
+    "breadcrumb": "Campanhas",
+    "refresh": "Atualizar",
+    "metrics": {
+      "title": "Métricas em tempo real",
+      "sent": "Enviados",
+      "delivered": "Entregues",
+      "read": "Lidos",
+      "replied": "Responderam",
+      "failed": "Falharam"
+    },
+    "funnel": {
+      "title": "Funil de entrega"
+    },
+    "contacts": {
+      "title": "Contatos da campanha",
+      "filterAll": "Todos",
+      "filterPending": "Pendentes",
+      "filterQueued": "Na fila",
+      "filterSent": "Enviados",
+      "filterDelivered": "Entregues",
+      "filterRead": "Lidos",
+      "filterReplied": "Responderam",
+      "filterFailed": "Falharam",
+      "colContact": "Contato",
+      "colPhone": "Telefone",
+      "colStatus": "Status",
+      "colSentAt": "Enviado",
+      "colDeliveredAt": "Entregue",
+      "colReadAt": "Lido",
+      "colRepliedAt": "Respondeu",
+      "colError": "Erro",
+      "noResults": "Nenhum contato neste filtro",
+      "contactStatus": {
+        "pending": "Pendente",
+        "queued": "Na fila",
+        "sent": "Enviado",
+        "delivered": "Entregue",
+        "read": "Lido",
+        "replied": "Respondeu",
+        "failed": "Falhou",
+        "opted_out": "Descadastrado"
+      }
+    }
+  }
+}

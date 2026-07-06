@@ -2,9 +2,19 @@ import './config/env.js'; // valida env antes de qualquer coisa
 import './jobs/send-message.job.js'; // inicia o worker de mensagens
 import './jobs/inactivity.job.js'; // inicia o worker de inatividade
 import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
+import './jobs/waiting-expiry.job.js'; // fecha conversas waiting expiradas
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import './jobs/process-pending-queue.job.js'; // processa conversas pending periodicamente
+import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
+import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas a cada 6h)
+import './jobs/ticket-sla.job.js'; // monitora SLA de tickets e escala prioridade
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
+import './jobs/recalculate-queue-positions.job.js'; // recalcula posições na fila e notifica clientes
+import './jobs/queue-expire-24h.job.js'; // encerra conversas sem atendimento após 24h na fila
+import './jobs/campaign-send.job.js'; // processa disparos de campanhas
+import './jobs/campaign-scheduler.job.js'; // agenda campanhas programadas
+import './jobs/contact-import.job.js'; // processa importação assíncrona de contatos
+import './jobs/usage-snapshot.job.js'; // persiste snapshots diarios de uso
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
@@ -25,11 +35,13 @@ import { notificationsRoutes } from './modules/notifications/notifications.route
 import { searchRoutes } from './modules/search/search.routes.js';
 import { callsRoutes } from './modules/calls/calls.routes.js';
 import { portalModuleRoutes } from './modules/portal/index.js';
+import { legalModuleRoutes } from './modules/legal/index.js';
 import { redmineWebhookRoutes } from './modules/integrations/redmine/redmine.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { createSocketServer } from './socket/index.js';
 import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
 import { logger } from './config/logger.js';
+import { getStorage } from './lib/storage/index.js';
 
 const app = Fastify({
   ignoreTrailingSlash: true,
@@ -43,7 +55,7 @@ const app = Fastify({
 
 function corsOrigin() {
   if (env.NODE_ENV !== 'production') return '*';
-  return ['https://app.ziradesk.com.br', /\.ziradesk\.com\.br$/];
+  return ['https://app.ziradesk.com', /\.ziradesk\.com$/];
 }
 
 function rateLimitMax(requestUrl: string) {
@@ -84,22 +96,24 @@ async function bootstrap(): Promise<void> {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  await app.register(rateLimit, {
-    max: (request) => rateLimitMax(request.url),
-    timeWindow: '1 minute',
-    keyGenerator: (request) => {
-      if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
-        return request.ip;
-      }
-      return request.headers.authorization ?? request.ip;
-    },
-    allowList: (request) => request.url === '/health',
-    errorResponseBuilder: () => ({
-      statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Muitas requisições. Tente novamente em instantes.',
-    }),
-  });
+  if (process.env.NODE_ENV !== 'test') {
+    await app.register(rateLimit, {
+      max: (request) => rateLimitMax(request.url),
+      timeWindow: '1 minute',
+      keyGenerator: (request) => {
+        if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
+          return request.ip;
+        }
+        return request.headers.authorization ?? request.ip;
+      },
+      allowList: (request) => request.url === '/health',
+      errorResponseBuilder: () => ({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Muitas requisições. Tente novamente em instantes.',
+      }),
+    });
+  }
 
   await app.register(cookie, {
     secret: env.JWT_SECRET,
@@ -118,6 +132,7 @@ async function bootstrap(): Promise<void> {
   // Webhooks sem auth JWT e sem tenant middleware — registrar primeiro
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });
+  await app.register(legalModuleRoutes, { prefix: '/api/legal' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
@@ -129,6 +144,30 @@ async function bootstrap(): Promise<void> {
   await app.register(notificationsRoutes, { prefix: '/api/notifications' });
   await app.register(searchRoutes, { prefix: '/api/search' });
   await app.register(callsRoutes, { prefix: '/api/calls' });
+
+  // Rota pública para servir uploads locais (logos e avatares).
+  // Ticket attachments são servidos via rota autenticada própria.
+  app.get('/api/files/*', async (request, reply) => {
+    const key = (request.params as { '*': string })['*'] ?? '';
+    if (key.startsWith('tickets/')) {
+      return reply.code(403).send({ error: 'Acesso negado' });
+    }
+    try {
+      const buffer = await getStorage().download(key);
+      const ext = key.split('.').pop() ?? '';
+      const mime =
+        ext === 'png' ? 'image/png' :
+        ext === 'webp' ? 'image/webp' :
+        ext === 'svg' ? 'image/svg+xml' :
+        ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+        'application/octet-stream';
+      reply.header('Content-Type', mime);
+      reply.header('Cache-Control', 'public, max-age=86400');
+      return reply.send(buffer);
+    } catch {
+      return reply.code(404).send({ error: 'Arquivo não encontrado' });
+    }
+  });
 
   app.get('/health', async (_request, reply) => {
     const services = {

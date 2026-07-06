@@ -4,6 +4,7 @@
       "all": "All",
       "save": "Save",
       "cancel": "Cancel",
+      "confirm": "Confirm",
       "back": "Back",
       "edit": "Edit",
       "remove": "Remove",
@@ -18,7 +19,60 @@
       "noResults": "No results found",
       "errorSave": "Error saving",
       "errorLoad": "Error loading data",
-      "close": "Close"
+      "close": "Close",
+      "previous": "Previous",
+      "next": "Next",
+      "timeAgo": {
+        "justNow": "just now",
+        "minutesAgo": "{{count}} min ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}} days ago"
+      }
+    },
+    "queueConfig": {
+      "title": "Queue Notifications",
+      "subtitle": "Configure messages sent automatically during queue attendance",
+      "enabled": "Queue notifications active",
+      "enabledHint": "When enabled, the customer receives a message with their position upon joining the queue",
+      "positionMessage": "Queue position message",
+      "positionMessageHint": "Use {{position}} to display the customer's position in the queue",
+      "throttle": "Minimum interval between notifications (seconds)",
+      "throttleHint": "Prevents repeated notifications in a short time interval",
+      "agentAssumeMessage": "Message when assuming attendance",
+      "agentAssumeMessageHint": "Use {{agent_name}} to display the agent's name. Sent when an agent takes over the conversation",
+      "expire24hAction": "Action when 24h window expires",
+      "expire24hClose": "Close conversation",
+      "expire24hKeepOpen": "Keep open",
+      "expire24hMessage": "Inactivity closure message",
+      "defaultPositionMessage": "You are number {{position}} in the queue. Please wait, an agent will assist you shortly.",
+      "defaultAgentAssumeMessage": "Hello! My name is {{agent_name}}, I will continue your service. How can I help you?",
+      "defaultExpireMessage": "Hello, unfortunately we were unable to assist at this time. Please contact us again when you can.",
+      "positionPlaceholder": "Use {{position}} to display position",
+      "agentNamePlaceholder": "Use {{agent_name}} to display agent name",
+      "expireActions": {
+        "close": "Close conversation",
+        "notify": "Send message and close"
+      },
+      "saved": "Settings saved successfully",
+      "messages": {
+        "saved": "Settings saved successfully"
+      }
+    },
+    "lgpd": {
+      "messages": {
+        "consentUpdated": "Consent updated successfully",
+        "exportDone": "Export completed",
+        "anonymized": "Data anonymized successfully",
+        "retentionSaved": "Retention settings saved"
+      },
+      "users": {
+        "empty": "No users found",
+        "anonymizedBadge": "Anonymized"
+      },
+      "userRequests": {
+        "empty": "No requests found"
+      },
+      "system": "System"
     },
     "nav": {
       "conversations": "Conversations",
@@ -26,6 +80,7 @@
       "users": "Users",
       "channels": "Channels",
       "businessHours": "Business hours",
+      "voiceConfig": "Voice Configuration",
       "bot": "Support bot",
       "autoAssign": "Automatic Distribution",
       "skills": "Skills",
@@ -33,6 +88,7 @@
       "quickReplies": "Quick Replies",
       "templates": "Templates",
       "ticketTypes": "Ticket Types",
+      "ticketCategories": "Ticket Categories",
       "conversationTags": "Tags",
       "closeConfig": "Conversation Closing",
       "aiAgent": "AI Agent",
@@ -49,6 +105,7 @@
       "roundRobin": "Round-robin",
       "agents": "Available agents",
       "reset": "Reset round-robin queue",
+      "resetTitle": "Reset settings",
       "resetConfirm": "This will reset counters. Confirm?",
       "activeConversations": "{{count}} active conversation(s)",
       "lastAssigned": "Last: {{time}}",
@@ -189,7 +246,54 @@
         "closesAt": "Closes at {{time}}"
       },
       "save": "Save settings",
-      "saved": "Business hours saved"
+      "saved": "Business hours saved",
+      "saveError": "Error saving hours",
+      "shift": {
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "fullDay": "Full day",
+        "add": "Add shift",
+        "remove": "Remove"
+      },
+      "holiday": {
+        "noHolidays": "No holidays registered",
+        "date": "Date",
+        "name": "Name",
+        "actions": "Actions",
+        "closed": "Closed",
+        "special": "Special hours",
+        "specialHours": "Special hours: {{open}} to {{close}}",
+        "national": "National ({{country}})",
+        "custom": "Custom",
+        "required": "Enter the holiday date and name.",
+        "specialHoursRequired": "Enter opening and closing times for special hours.",
+        "importNational": "Import national holidays ({{country}})",
+        "imported": "Holidays imported: {{count}}"
+      },
+      "defaultAbsence": "Hello! We are currently outside business hours. We will be back soon.",
+      "always247": "24/7 attendance",
+      "holidays": "Holidays",
+      "addHoliday": "Add holiday",
+      "holidayDate": "Holiday date",
+      "holidayName": "Holiday name"
+    },
+    "voiceConfig": {
+      "title": "Voice Configuration",
+      "subtitle": "Configure the phone number to receive calls",
+      "sectionTitle": "Incoming calls",
+      "twilioPhoneNumber": "Twilio Number",
+      "twilioPhoneNumberHint": "International format, e.g. +5562999999999",
+      "defaultBotMenu": "Bot menu for IVR",
+      "noBotMenu": "No menu selected",
+      "ivrEnabled": "Enable voice menu (IVR)",
+      "ringTimeout": "Ring time per agent (seconds)",
+      "saved": "Configuration saved successfully",
+      "errors": {
+        "duplicatePhone": "This number is already used by another tenant",
+        "invalidPhone": "Enter a valid number in E.164 format",
+        "timeoutRange": "Enter a value between 5 and 60 seconds",
+        "save": "Error saving voice configuration"
+      }
     },
     "bot": {
       "title": "Support Bot",
@@ -223,11 +327,81 @@
         "tagHint": "Used to filter conversations by department",
         "response": "Response when selected"
       },
+      "departmentLabel": "Department",
+      "noDepartment": "No department",
       "messages": {
         "saved": "Bot configured successfully",
         "optionAdded": "Option added",
         "optionUpdated": "Option updated",
         "optionDeleted": "Option removed"
+      }
+    },
+    "botMenu": {
+      "emptyOptions": "Add options to start the bot flow."
+    },
+    "skills": {
+      "title": "Skills",
+      "subtitle": "Define which bot options each agent can handle",
+      "noBotOptions": "No bot options registered",
+      "noBotOptionsHint": "Configure the bot first to define skills",
+      "goToBot": "Configure Bot",
+      "agentNoSkills": "No skills defined",
+      "assign": "Assign skills",
+      "assignTitle": "Skills — {{name}}",
+      "assignHint": "Select which bot options this agent can handle",
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermediate",
+        "senior": "Senior"
+      },
+      "agentsCount": "{{count}} agent(s)",
+      "saved": "Skill saved successfully",
+      "deleted": "Skill removed successfully",
+      "agents": "Agents",
+      "searchAgent": "Search agent...",
+      "noAgentsFound": "No agents found",
+      "noAgents": "No active agents",
+      "close": "Close",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "departments": {
+      "title": "Departments",
+      "subtitle": "Organize your team into departments and assign agents to each one",
+      "new": "New department",
+      "newTitle": "New department",
+      "editTitle": "Edit department",
+      "empty": "No departments registered",
+      "emptyAgents": "No agents in this department",
+      "noSelection": "Select a department to view agents",
+      "active": "Active",
+      "inactive": "Inactive",
+      "agentCount": "{{count}} agent(s)",
+      "agents": "Agents",
+      "addAgent": "Add agent",
+      "addAgentTitle": "Add agent to department",
+      "addAgentConfirm": "Add {{count}} agent(s)",
+      "removeAgent": "Remove",
+      "searchAgent": "Search agent...",
+      "noUsersFound": "No users found",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleting": "Deleting...",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "created": "Department created successfully",
+      "updated": "Department updated successfully",
+      "deleted": "Department deleted successfully",
+      "agentAdded": "Agent(s) added successfully",
+      "agentRemoved": "Agent removed from department",
+      "confirmDelete": "Delete department",
+      "confirmDeleteBody": "This action cannot be undone. The department will be permanently removed.",
+      "hasAgentsWarning": "Remove agents before deleting the department",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "isActive": "Active department"
       }
     },
     "users": {
@@ -269,6 +443,12 @@
         "createdAt": "Member since",
         "actions": "Actions"
       },
+      "pagination": {
+        "of": "of",
+        "page": "Page",
+        "previous": "Previous",
+        "next": "Next"
+      },
       "messages": {
         "invited": "User invited successfully",
         "inviteSuccess": "Invite sent successfully",
@@ -276,14 +456,13 @@
         "updated": "User updated",
         "deactivated": "User deactivated",
         "cantDeleteSelf": "You cannot remove yourself",
-        "tempPassword": "Temporary password",
         "reactivated": "User reactivated successfully",
         "tempPasswordTitle": "User created - temporary password",
         "tempPasswordDesc": "The invite email could not be sent to {{name}}. Share the password below manually.",
         "emailNotConfiguredWarning": "Configure RESEND_API_KEY on the server to send invite emails automatically.",
         "passwordReset": "Password for {{name}} has been reset",
-        "tempPasswordHint": "The user must change the password on first login.",
-        "resetPasswordConfirm": "Reset the password for {{name}} ({{email}})? A new temporary password will be generated.",
+        "resetLinkSent": "Reset link sent to {{email}}",
+        "resetPasswordConfirm": "A reset link will be sent to {{name}}'s email ({{email}}).",
         "inviteEmailNotConfigured": "Invite created, but email delivery is not configured. Set RESEND_API_KEY in the API environment.",
         "inviteEmailDomainNotVerified": "Invite created, but sender email is invalid. Check RESEND_FROM_EMAIL and your verified domain in Resend.",
         "inviteEmailDeliveryFailed": "We could not send the invite email right now. Check provider settings and try again."
@@ -319,6 +498,14 @@
       "clickToAdd": "Click to add",
       "testSuccess": "Channel connected",
       "testFail": "Connection failed",
+      "deactivated": "Channel deactivated",
+      "activated": "Channel activated",
+      "columnChannel": "Channel",
+      "configure": "Configure",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "smtpLabel": "SMTP - Corporate email",
+      "edit": "Edit",
       "types": {
         "whatsapp": "WhatsApp",
         "instagram": "Instagram DM",
@@ -355,6 +542,7 @@
       "content": "Content",
       "contentPlaceholder": "Text that will be inserted into the chat...",
       "category": "Category",
+      "availableVariables": "Available variables:",
       "categories": {
         "greeting": "Greeting",
         "service": "Service",
@@ -383,10 +571,14 @@
       "new": "New template",
       "newTitle": "New template",
       "editTitle": "Edit template",
+      "rename": "Rename",
+      "metaManagedHint": "This template was approved by Meta. Only the display name can be changed.",
       "sync": "Sync with Meta",
+      "syncNever": "Never synced",
       "syncSuccess": "{{count}} template(s) synced successfully",
       "syncError": "Error syncing with Meta",
       "savedSuccess": "Template saved successfully",
+      "submittedSuccess": "Template submitted to Meta for review",
       "deletedSuccess": "Template removed successfully",
       "deleteTitle": "Remove template",
       "deleteConfirm": "Are you sure you want to remove this template?",
@@ -405,20 +597,165 @@
         "AUTHENTICATION": "Authentication"
       },
       "statusLabel": "Status",
+      "pendingReview": "Will be submitted for review",
+      "statusManagedHint": "Defined and updated by Meta",
       "status": {
         "approved": "Approved",
         "pending": "Pending",
-        "rejected": "Rejected"
+        "rejected": "Rejected",
+        "paused": "Paused",
+        "disabled": "Disabled",
+        "in_appeal": "In appeal",
+        "pending_deletion": "Pending deletion"
       },
       "body": "Message body",
       "bodyRequired": "Provide the message body",
+      "bodyTooLong": "The body must contain at most 1,024 characters",
+      "bodyVariablesHint": "Use sequential variables: {{1}}, {{2}}, {{3}}",
+      "variablesFormat": "Use sequential variables: {{1}}, {{2}}, {{3}}",
       "header": "Header (optional)",
+      "headerRequired": "Provide the header text",
+      "headerTooLong": "The header must contain at most 60 characters",
+      "headerVariablesUnsupported": "The header cannot contain variables in this form",
+      "headerType": {
+        "label": "Header type",
+        "none": "None",
+        "text": "Text",
+        "image": "Image",
+        "video": "Video",
+        "document": "Document"
+      },
+      "upload": {
+        "button": "Select file",
+        "loading": "Uploading to Meta...",
+        "error": "Upload failed. Check the file and try again.",
+        "remove": "Remove file",
+        "limitImage": "Max 5MB. Accepted formats: JPEG, PNG",
+        "limitVideo": "Max 16MB. Accepted format: MP4",
+        "limitDocument": "Max 100MB. Accepted format: PDF",
+        "success": "File uploaded to Meta",
+        "required": "Select and upload the header media",
+        "invalidFormat": "File format is not allowed for this header",
+        "tooLarge": "The file exceeds the allowed size",
+        "channelRequired": "Select the channel before uploading the file",
+        "retry": "Try again"
+      },
       "footer": "Footer (optional)",
+      "footerTooLong": "The footer must contain at most 60 characters",
+      "footerVariablesUnsupported": "The footer cannot contain variables",
       "variables": "Variables",
       "variableExample": "Variable {{index}} example",
+      "variableExampleRequired": "Provide an example for this variable",
+      "submitForReview": "Submit for review",
       "preview": "Preview",
-      "empty": "No templates registered",
-      "emptyHint": "Create a template or sync with Meta"
+      "table": {
+        "name": "Name",
+        "language": "Language",
+        "category": "Category",
+        "status": "Status",
+        "lastSync": "Last sync",
+        "actions": "Actions",
+        "showing": "Showing",
+        "of": "of",
+        "page": "Page"
+      },
+      "empty": {
+        "title": "No templates found",
+        "subtitle": "Create a template or sync with Meta"
+      },
+      "buttons": {
+        "title": "Buttons (optional)",
+        "hint": "Add up to 10 buttons. Max: 3 quick reply, 2 URL, 1 phone.",
+        "add": "Add button",
+        "untitled": "Untitled button",
+        "type": {
+          "quickReply": "Quick reply",
+          "url": "URL link",
+          "phone": "Phone"
+        },
+        "textPlaceholder": "Button text (max 25)",
+        "urlPlaceholder": "https://example.com or https://example.com/{{1}}",
+        "urlExampleLabel": "Example for URL variable",
+        "errors": {
+          "maxQuickReply": "Maximum of 3 quick reply buttons",
+          "maxUrl": "Maximum of 2 URL buttons",
+          "maxPhone": "Maximum of 1 phone button",
+          "invalidPhone": "Invalid format. Use +5511999999999"
+        }
+      }
+    },
+    "ticketCategories": {
+      "title": "Ticket Categories",
+      "subtitle": "Manage your workspace ticket categories",
+      "new": "New category",
+      "saved": "Category saved successfully",
+      "deleted": "Category removed successfully",
+      "deleteError": "This category is in use by existing tickets",
+      "modalTitle": {
+        "new": "New ticket category",
+        "edit": "Edit ticket category"
+      },
+      "fields": {
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "description": "Description",
+        "color": "Color",
+        "active": "Active"
+      },
+      "list": {
+        "order": "Order",
+        "name": "Name",
+        "description": "Description",
+        "color": "Color",
+        "status": "Status",
+        "actions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "empty": {
+        "title": "No categories found",
+        "subtitle": "Create categories to organize your tickets"
+      }
+    },
+    "ticketTypes": {
+      "title": "Ticket Types",
+      "subtitle": "Manage your workspace ticket types",
+      "new": "New type",
+      "saved": "Type saved successfully",
+      "deleted": "Type removed successfully",
+      "deleteError": "Error removing type",
+      "modalTitle": {
+        "new": "New ticket type",
+        "edit": "Edit ticket type"
+      },
+      "fields": {
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "nameTooLong": "Maximum 60 characters",
+        "description": "Description",
+        "color": "Color",
+        "icon": "Icon",
+        "active": "Active",
+        "requireDueDateForUrgent": "Require a due date when priority is urgent",
+        "requireCategoryForWaiting": "Require a category when status is waiting"
+      },
+      "list": {
+        "order": "Order",
+        "name": "Name",
+        "status": "Status",
+        "actions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive",
+        "yes": "Yes",
+        "no": "No",
+        "urgentRequiresDueDate": "Urgent requires due date: {{value}}",
+        "waitingRequiresCategory": "Waiting requires category: {{value}}"
+      },
+      "modal": {
+        "save": "Save",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      }
     },
     "tags": {
       "title": "Tags",
@@ -440,6 +777,9 @@
         "added": "Tag applied",
         "removed": "Tag removed from conversation"
       }
+    },
+    "conversationTags": {
+      "columnOrder": "Order"
     },
     "closeConfig": {
       "title": "Conversation Closing",
@@ -490,7 +830,16 @@
       "statusIndexed": "Indexed",
       "statusError": "Error",
       "sourceType": "Source",
+      "sourceManual": "Manual",
+      "sourceUrl": "URL",
+      "sourceFile": "File",
+      "assistantLabel": "Assistant",
+      "recommendationText": "We recommend using a model with good reasoning capability and long context.",
+      "fileSizeLimit": "Maximum 10MB. Accepted formats: PDF, TXT, DOCX",
+      "columnStatus": "Status",
+      "columnChunks": "Chunks",
       "noArticles": "No articles in the knowledge base",
+      "deleteTitle": "Remove source",
       "deleteConfirm": "Remove this article from the knowledge base?",
       "disabledNotice": "AI Agent is disabled.",
       "disabledHint": "Configure and enable to start responding automatically. The knowledge base can be prepared before enabling.",
@@ -510,6 +859,7 @@
       "editTitle": "Edit webhook",
       "empty": "No webhooks configured",
       "name": "Name",
+      "namePlaceholder": "My webhook",
       "url": "Destination URL",
       "secret": "Secret (optional)",
       "secretHint": "Used to sign the payload with HMAC-SHA256",
@@ -554,6 +904,8 @@
     "integrations": {
       "title": "Integrations",
       "subtitle": "Connect ZiraDesk with external tools",
+      "hide": "Hide",
+      "show": "Show",
       "redmine": {
         "title": "Redmine",
         "description": "Sync tickets and comments with Redmine",
@@ -617,6 +969,7 @@
       "settings:manage": "Settings — Manage",
       "users:manage": "Users — Manage",
       "channels:manage": "Channels — Manage",
+      "lgpd:manage": "LGPD — Manage",
       "contacts:view": "Contacts — View",
       "contacts:edit": "Contacts — Edit",
       "contacts:delete": "Contacts — Delete",
@@ -640,28 +993,52 @@
       "viewer": "Viewer"
     }
   },
+  "tags": {
+    "subtitle": "Manage tags used in conversations and contacts",
+    "tabs": {
+      "conversations": "Conversations",
+      "contacts": "Contacts"
+    },
+    "columns": {
+      "name": "Name",
+      "color": "Color / preview",
+      "order": "Order",
+      "actions": "Actions"
+    }
+  },
+  "contactTags": {
+    "new": "New tag",
+    "saved": "Tag saved successfully",
+    "deleted": "Tag removed successfully"
+  },
   "nav": {
     "admin": "Administration",
     "users": "Users",
     "permissions": "Permissions and Access",
     "channels": "Channels",
     "businessHours": "Business Hours",
+    "voiceConfig": "Voice Configuration",
     "supportBot": "Support Bot",
     "autoDistribution": "Auto Distribution",
     "skills": "Skills",
+    "departments": "Departments",
     "pauseReasons": "Pause Reasons",
     "quickReplies": "Quick Replies",
     "templates": "Templates",
     "ticketTypes": "Ticket Types",
+    "ticketCategories": "Ticket Categories",
     "tags": "Tags",
     "conversationClosing": "Conversation Closing",
     "aiAgent": "AI Agent",
     "integrations": "Integrations",
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
+    "queueConfig": "Queue Notifications",
     "settings": "Settings",
+    "lgpd": "LGPD",
     "history": "History",
     "performance": "Performance",
+    "queue": "Queue",
     "groups": {
       "team": "Team",
       "attendance": "Attendance",
@@ -671,6 +1048,25 @@
       "settings": "Settings",
       "history": "History",
       "performance": "Performance"
+    }
+  },
+  "queueConfig": {
+    "title": "Queue Notifications",
+    "subtitle": "Configure automatic messages sent to customers while waiting in queue",
+    "enabled": "Notify customers in queue",
+    "enabledHint": "Sends automatic position and agent-assumed notifications via WhatsApp",
+    "positionMessage": "Queue position message",
+    "positionMessageHint": "Use {{position}} to include the customer's position",
+    "throttle": "Minimum interval between notifications (seconds)",
+    "throttleHint": "Min 30s, max 600s. Prevents spam to the customer",
+    "agentAssumeMessage": "Greeting when agent assumes",
+    "agentAssumeMessageHint": "Use {{agent_name}} to include the agent's name",
+    "expire24hAction": "After 24h without service",
+    "expire24hClose": "Close conversation",
+    "expire24hKeepOpen": "Keep open",
+    "expire24hMessage": "Message when closing after 24h",
+    "messages": {
+      "saved": "Queue settings saved successfully"
     }
   },
   "attendanceRules": {
@@ -685,8 +1081,12 @@
       "limits": "Operational Limits"
     },
     "csatEnabled": "Send CSAT automatically",
+    "csatScopeHint": "CSAT is sent when inbound WhatsApp and Email conversations are closed. Active outbound does not trigger CSAT.",
     "csatMessage": "CSAT opening message",
-    "csatExpiration": "Link expiration (hours)",
+    "csatMessagePlaceholder": "Leave empty to use the system default message.",
+    "csatMessageHint": "This text is sent as the first rating prompt. If empty, the system default template is used.",
+    "csatDisabledHint": "CSAT is disabled. No satisfaction survey will be sent after closing conversations.",
+    "csatExpiration": "CSAT response window (hours)",
     "emailAddress": "Support email address",
     "emailConfirmation": "Send confirmation to customer",
     "inactivityEnabled": "Enable inactivity monitoring",
@@ -732,6 +1132,250 @@
     "imageMaxSize": "Image size must be up to 2MB.",
     "addressCopied": "Address copied",
     "addressCopyError": "Unable to copy address"
+  },
+  "lgpd": {
+    "title": "LGPD",
+    "subtitle": "Manage consent, export, anonymization and data retention policies.",
+    "loading": "Loading...",
+    "emptyContacts": "No contacts found",
+    "emptyRequests": "No LGPD requests found",
+    "anonymizeTitle": "Anonymize data",
+    "confirmAnonymize": "Anonymize contact {{name}}? This action cannot be undone.",
+    "anonymizeReasonPrompt": "Provide an anonymization reason",
+    "anonymizeDefaultReason": "LGPD request via admin panel",
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "actions": {
+      "export": "Export",
+      "anonymize": "Anonymize"
+    },
+    "consentStatus": {
+      "pending": "Pending",
+      "granted": "Granted",
+      "denied": "Denied",
+      "revoked": "Revoked"
+    },
+    "requestTypes": {
+      "access": "Access",
+      "consent_update": "Consent update",
+      "anonymization": "Anonymization",
+      "rectification": "Rectification",
+      "external_anonymization": "External anonymization"
+    },
+    "retention": {
+      "title": "Retention policy",
+      "subtitle": "When enabled, the daily routine anonymizes eligible contacts with no open conversations.",
+      "enabled": "Enable automatic retention",
+      "days": "Retention days"
+    },
+    "contacts": {
+      "title": "Contacts and consent",
+      "subtitle": "Adjust consent status and execute data subject actions.",
+      "searchPlaceholder": "Search contact by name, email or phone...",
+      "apply": "Update",
+      "total": "{{count}} contact(s)",
+      "columns": {
+        "name": "Contact",
+        "email": "Email",
+        "consent": "Consent",
+        "updatedAt": "Updated at",
+        "actions": "Actions"
+      }
+    },
+    "requests": {
+      "title": "Contact LGPD requests",
+      "subtitle": "Recent history of processed contact requests.",
+      "columns": {
+        "when": "Date",
+        "contact": "Contact",
+        "type": "Type",
+        "status": "Status",
+        "by": "Requested by",
+        "actions": "Actions"
+      },
+      "showDiff": "Show diff",
+      "hideDiff": "Hide diff",
+      "noDiff": "No differences detected for the informed fields.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rejectReasonPrompt": "Provide the rejection reason",
+      "rejectReasonRequired": "Provide a reason to reject the request"
+    },
+    "rectification": {
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "document": "Document"
+      }
+    },
+    "rejectModal": {
+      "title": "Reject request",
+      "reasonLabel": "Rejection reason",
+      "reasonPlaceholder": "Describe why this request is being rejected...",
+      "minCharsError": "The reason must be at least 10 characters.",
+      "cancelButton": "Cancel",
+      "confirmButton": "Confirm rejection"
+    },
+    "tabs": {
+      "contacts": "Contacts",
+      "users": "Users",
+      "external": "External Requests"
+    },
+    "external": {
+      "formTitle": "Anonymize by external identifier",
+      "formSubtitle": "Use when the data subject was never registered as a contact. The WhatsApp number (external_id) and message content will be anonymized.",
+      "externalIdPlaceholder": "WhatsApp number (e.g. +5511999999999)",
+      "reasonPlaceholder": "Reason for anonymization",
+      "submitBtn": "Anonymize",
+      "processing": "Processing...",
+      "confirmAnonymize": "Anonymize all conversations and messages for {{id}}? This action cannot be undone.",
+      "anonymized": "{{conversations}} conversation(s) and {{messages}} message(s) anonymized successfully.",
+      "listTitle": "External request history",
+      "listSubtitle": "Anonymization requests from data subjects not registered as contacts.",
+      "empty": "No external requests found",
+      "total": "{{count}} request(s)",
+      "filter": {
+        "all": "All",
+        "pending": "Pending",
+        "processed": "Processed",
+        "rejected": "Rejected"
+      },
+      "columns": {
+        "result": "Result"
+      },
+      "resultSummary": "{{conversations}} conv., {{messages}} msg."
+    },
+    "users": {
+      "title": "Users and consent",
+      "subtitle": "Adjust consent status and execute LGPD actions on tenant users.",
+      "searchPlaceholder": "Search user by name or email...",
+      "apply": "Update",
+      "total": "{{count}} user(s)",
+      "columns": {
+        "name": "User",
+        "email": "Email",
+        "role": "Role",
+        "consent": "Consent",
+        "updatedAt": "Updated at",
+        "actions": "Actions"
+      }
+    },
+    "userRequests": {
+      "title": "User LGPD requests",
+      "subtitle": "Recent history of LGPD requests from tenant users.",
+      "columns": {
+        "when": "Date",
+        "user": "User",
+        "type": "Type",
+        "status": "Status",
+        "by": "Requested by"
+      }
+    },
+    "messages": {
+      "consentUpdated": "Consent updated",
+      "retentionSaved": "Retention policy saved",
+      "exportDone": "Export generated successfully",
+      "anonymized": "Contact anonymized successfully",
+      "userConsentUpdated": "User consent updated",
+      "userExportDone": "Export generated successfully",
+      "userAnonymized": "User anonymized successfully",
+      "requestApproved": "Request approved successfully",
+      "requestRejected": "Request rejected"
+    },
+    "confirmAnonymizeUser": "Anonymize user {{name}}? This action cannot be undone.",
+    "anonymizeUserReasonPrompt": "Provide an anonymization reason for this user",
+    "dashboard": {
+      "title": "LGPD Status",
+      "pending": "Pending",
+      "expiring7d": "Expires in 7 days",
+      "expiring24h": "Expires in 24h",
+      "breached": "SLA breached",
+      "oldestPending": "Oldest pending requests",
+      "noOldestPending": "No pending requests",
+      "slaDeadline": "Deadline",
+      "process": "Process"
+    },
+    "processModal": {
+      "title": "Process LGPD request",
+      "subtitle": "Select action and add notes before confirming.",
+      "action": "Action",
+      "approve": "Approve",
+      "reject": "Reject",
+      "notes": "Notes",
+      "notesPlaceholder": "Describe what was done or the reason...",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "processing": "Processing..."
+    },
+    "privacy": {
+      "title": "Privacy and LGPD",
+      "subtitle": "Manage your consent and request actions on your personal data.",
+      "consent": {
+        "title": "Consent",
+        "help": "Your consent for processing personal data registered on this platform.",
+        "statusLabel": "Consent status",
+        "save": "Save",
+        "updatedAt": "Updated at",
+        "source": "Source",
+        "lastExport": "Last export"
+      },
+      "request": {
+        "title": "Request an action on my data",
+        "help": "Request access or anonymization of your data. The request will be processed by the administrator.",
+        "type": "Request type",
+        "reason": "Reason (optional)",
+        "reasonPlaceholder": "Describe the reason for your request...",
+        "submit": "Submit request",
+        "types": {
+          "access": "Access my data",
+          "anonymization": "Anonymize my data"
+        }
+      },
+      "export": {
+        "title": "Export my data",
+        "help": "Download a JSON file with all your registered personal data.",
+        "button": "Export my data"
+      },
+      "history": {
+        "title": "Request history",
+        "requestedAt": "Requested at",
+        "empty": "No requests found"
+      },
+      "messages": {
+        "consentSaved": "Consent saved successfully",
+        "consentError": "Error saving consent",
+        "requestCreated": "Request submitted successfully",
+        "requestError": "Error submitting request",
+        "exportDone": "Export generated successfully"
+      }
+    }
+  },
+  "usage": {
+    "title": "Plan usage",
+    "period": "Period: {{period}}",
+    "messages_sent": "Messages sent",
+    "storage_bytes": "Storage",
+    "active_users": "Active users",
+    "unlimited": "Unlimited",
+    "of": "of",
+    "used": "used"
+  },
+  "tenantDetail": {
+    "usage": {
+      "title": "Plan usage",
+      "subtitle": "Current tenant consumption for the active period.",
+      "period": "Period: {{period}}",
+      "messages_sent": "Messages sent",
+      "storage_bytes": "Storage",
+      "active_users": "Active users",
+      "unlimited": "Unlimited",
+      "of": "of",
+      "used": "used",
+      "error": "Unable to load plan usage."
+    }
   },
   "superAdmin": {
     "title": "Super Admin",
@@ -796,8 +1440,7 @@
         "subtitle": "Create logins and reset passwords without impersonating.",
         "createLogin": "Create login",
         "empty": "No access found for this tenant.",
-        "credentialsTitle": "Temporary password generated",
-        "credentialsDescription": "Share this temporary password with {{name}}.",
+        "resetEmailSent": "Password reset email sent to {{name}}.",
         "table": {
           "actions": "Actions"
         },
@@ -865,6 +1508,8 @@
     "plans": {
       "title": "Plans",
       "new": "New Plan",
+      "edit": "Edit",
+      "editPlan": "Edit plan",
       "fields": {
         "name": "Name",
         "slug": "Slug",
@@ -872,6 +1517,7 @@
         "priceYear": "Annual price",
         "maxUsers": "Max users",
         "maxContacts": "Max contacts",
+        "maxMessages": "Monthly message limit",
         "features": "Features",
         "isActive": "Active"
       },

@@ -74,8 +74,8 @@ function slaColor(pct: number | string | null | undefined): string {
   const n = Number(pct);
   if (isNaN(n)) return 'var(--txt-2)';
   if (n >= 80) return 'var(--teal)';
-  if (n >= 50) return '#F59E0B';
-  return '#EF4444';
+  if (n >= 50) return 'var(--amber)';
+  return 'var(--red)';
 }
 
 function StatCard({
@@ -102,7 +102,7 @@ function StatCard({
       <div
         style={{
           fontSize: 10,
-          fontWeight: 700,
+          fontWeight: 600,
           textTransform: 'uppercase',
           letterSpacing: '0.07em',
           color: 'var(--txt-3)',
@@ -114,7 +114,7 @@ function StatCard({
       <div
         style={{
           fontSize: 26,
-          fontWeight: 700,
+          fontWeight: 600,
           color,
           fontFamily: 'var(--mono)',
           lineHeight: 1,

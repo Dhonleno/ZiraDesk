@@ -1,5 +1,11 @@
 {
   "title": "Support Center",
+  "nav": {
+    "ariaLabel": "Support center navigation",
+    "dashboard": "Dashboard",
+    "tickets": "Tickets",
+    "privacy": "Privacy"
+  },
   "login": {
     "title": "Support Center",
     "subtitle": "Sign in to track your tickets",
@@ -9,10 +15,13 @@
     "loading": "Signing in..."
   },
   "dashboard": {
-    "greeting": "Hi, {{name}}! 👋",
+    "greeting": "Hi, {{name}}.",
+    "customerFallback": "Customer",
     "subtitle": "Track your support tickets",
     "newTicket": "+ New ticket",
-    "recent": "Recent tickets"
+    "recent": "Recent tickets",
+    "emptyTitle": "No recent tickets",
+    "emptySubtitle": "Create a new ticket to start your support request."
   },
   "stats": {
     "open": "Open",
@@ -20,13 +29,62 @@
     "resolved": "Resolved"
   },
   "ticket": {
+    "pageTitle": "My tickets",
+    "pageSubtitle": "Track your requests progress",
+    "tabs": {
+      "all": "All",
+      "open": "Open",
+      "in_progress": "In progress",
+      "resolved": "Resolved"
+    },
+    "emptyFiltered": "No tickets for the selected filter",
     "new": "New ticket",
+    "createTitle": "New ticket",
+    "titlePlaceholder": "Issue summary",
     "title": "Title",
+    "typePlaceholder": "Select ticket type",
+    "typeFallback": "Ticket",
     "type": "Type",
     "description": "Description",
+    "descriptionPlaceholder": "Describe what is happening",
+    "descriptionTitle": "Description",
+    "noDescription": "No description",
+    "commentsTitle": "Comments",
+    "commentPlaceholder": "Add comment",
+    "commenterFallback": "Team",
+    "backToTickets": "Back to tickets",
+    "loading": "Loading ticket...",
+    "details": {
+      "type": "Type",
+      "priority": "Priority",
+      "assignee": "Assignee",
+      "createdAt": "Created at",
+      "assigneeFallback": "Unassigned"
+    },
+    "status": {
+      "open": "Open",
+      "in_progress": "In progress",
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "priorityLabel": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
     "submit": "Submit ticket",
+    "submitLoading": "Submitting...",
     "addComment": "Add comment",
-    "noComments": "No comments yet"
+    "addCommentLoading": "Submitting comment...",
+    "noComments": "No comments yet",
+    "messages": {
+      "createSuccess": "Ticket created successfully",
+      "createError": "Failed to create ticket",
+      "commentSuccess": "Comment added",
+      "commentError": "Failed to add comment"
+    }
   },
   "access": {
     "title": "Portal Access",
@@ -37,5 +95,70 @@
     "created": "Access created successfully!",
     "emailRequired": "Contact must have an email",
     "lastLogin": "Last login: {{date}}"
+  },
+  "lgpd": {
+    "title": "Privacy and LGPD",
+    "subtitle": "Manage your consent and data requests",
+    "messages": {
+      "consentSaved": "Consent updated successfully",
+      "consentError": "Unable to update consent",
+      "requestCreated": "LGPD request submitted successfully",
+      "requestError": "Unable to submit request",
+      "rectificationCreated": "Data rectification request submitted successfully",
+      "rectificationError": "Unable to submit data rectification request",
+      "rectificationNoChanges": "Provide at least one change before submitting"
+    },
+    "consent": {
+      "title": "Consent",
+      "help": "Choose how your data can be processed in our support channels.",
+      "statusLabel": "Consent status",
+      "save": "Save consent",
+      "updatedAt": "Updated at",
+      "source": "Source",
+      "lastExport": "Last export",
+      "status": {
+        "pending": "Pending",
+        "granted": "Granted",
+        "denied": "Denied",
+        "revoked": "Revoked"
+      }
+    },
+    "request": {
+      "title": "New request",
+      "help": "You can request access to your data or anonymization.",
+      "type": "Request type",
+      "reason": "Reason (optional)",
+      "reasonPlaceholder": "Describe important details for your request",
+      "includeMessages": "Include message history",
+      "submit": "Submit request",
+      "types": {
+        "access": "Data access",
+        "anonymization": "Data anonymization",
+        "consent_update": "Consent update",
+        "rectification": "Data rectification"
+      }
+    },
+    "rectification": {
+      "title": "Correct data",
+      "help": "Request corrections to your registration data.",
+      "submit": "Request correction",
+      "warning": "Your request will be reviewed by the controller within 15 days",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "document": "Document"
+      }
+    },
+    "history": {
+      "title": "Request history",
+      "requestedAt": "Requested at",
+      "empty": "No LGPD requests recorded yet",
+      "status": {
+        "pending": "Pending",
+        "processed": "Processed",
+        "rejected": "Rejected"
+      }
+    }
   }
 }

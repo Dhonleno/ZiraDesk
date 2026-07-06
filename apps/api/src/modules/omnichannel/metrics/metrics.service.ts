@@ -98,9 +98,9 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
     }>>(
       `SELECT
          COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status = 'resolved') AS resolved,
-         COUNT(*) FILTER (WHERE status IN ('open', 'pending')) AS open,
-         COUNT(*) FILTER (WHERE status = 'bot') AS bot
+         COUNT(*) FILTER (WHERE status = 'closed') AS resolved,
+         COUNT(*) FILTER (WHERE status = 'open') AS open,
+         COUNT(*) FILTER (WHERE status = 'waiting') AS bot
        FROM conversations
        ${whereSql}`,
       ...params,
@@ -119,7 +119,7 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
          )) / 60))::integer AS avg_minutes
        FROM conversations
        ${whereSql}
-       ${whereSql ? 'AND' : 'WHERE'} status = 'resolved'
+       ${whereSql ? 'AND' : 'WHERE'} status = 'closed'
        AND resolved_at IS NOT NULL`,
       ...params,
     );
@@ -183,7 +183,7 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 
     const total = totalRows[0];
     const csat = csatRows[0];
-    const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status IN ('resolved', 'closed')`];
+    const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status = 'closed'`];
     const byTypeParams: unknown[] = [];
     addCommonFilters(byTypeWhere, byTypeParams, filters, 'c');
     const byTypeWhereSql = byTypeWhere.length ? `WHERE ${byTypeWhere.join(' AND ')}` : '';
@@ -285,7 +285,7 @@ export async function getVolumeByPeriod(filters: MetricsFilters, schemaName: str
       `SELECT
          DATE(created_at) AS date,
          COUNT(*) AS total,
-         COUNT(*) FILTER (WHERE status = 'resolved') AS resolved
+         COUNT(*) FILTER (WHERE status = 'closed') AS resolved
        FROM conversations
        ${whereSql}
        GROUP BY DATE(created_at)
@@ -322,19 +322,19 @@ export async function getByAgent(filters: MetricsFilters, schemaName: string, db
          u.name AS agent_name,
          u.id AS agent_id,
          COUNT(c.id) AS total,
-         COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
-         ROUND(AVG(EXTRACT(EPOCH FROM (
-           c.resolved_at - COALESCE(
-             CASE
-               WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at
-               ELSE NULL
-             END,
-             c.created_at
-           )
-         )) / 60))::integer AS avg_minutes,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved,
+         ROUND(AVG(
+           EXTRACT(EPOCH FROM (ca.released_at - ca.assigned_at)) / 60
+         ) FILTER (
+           WHERE ca.released_at IS NOT NULL
+         ))::integer AS avg_minutes,
          ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat
        FROM conversations c
        JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN conversation_assignments ca
+         ON ca.conversation_id = c.id
+         AND ca.agent_id = u.id
+         AND ca.release_reason = 'closed'
        ${whereSql}
        GROUP BY u.id, u.name
        ORDER BY total DESC`,
@@ -402,6 +402,56 @@ export async function getByDepartment(filters: MetricsFilters, schemaName: strin
   });
 }
 
+export async function getByOrganization(
+  filters: MetricsFilters,
+  schemaName: string,
+  db: MetricsDbClient = prisma,
+  limit = 10,
+): Promise<Array<{
+  organization_id: string;
+  organization_name: string;
+  total: number;
+  resolved: number;
+}>> {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const where: string[] = ['c.organization_id IS NOT NULL'];
+    const params: unknown[] = [];
+    addCommonFilters(where, params, filters, 'c');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const limitParam = Math.max(1, Math.min(100, Math.trunc(limit)));
+
+    const rows = await tx.$queryRawUnsafe<Array<{
+      organization_id: string;
+      organization_name: string;
+      total: bigint;
+      resolved: bigint;
+    }>>(
+      `SELECT
+         o.id AS organization_id,
+         o.name AS organization_name,
+         COUNT(c.id) AS total,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved
+       FROM conversations c
+       INNER JOIN organizations o ON o.id = c.organization_id
+       ${whereSql}
+       GROUP BY o.id, o.name
+       ORDER BY total DESC
+       LIMIT $${params.length + 1}::integer`,
+      ...params,
+      limitParam,
+    );
+
+    return rows.map((row) => ({
+      organization_id: row.organization_id,
+      organization_name: row.organization_name,
+      total: toNumber(row.total),
+      resolved: toNumber(row.resolved),
+    }));
+  });
+}
+
 export async function getPeakHours(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
   await ensureMetricsInfrastructure(schemaName);
 
@@ -456,7 +506,7 @@ export async function getMyStats(
     }>>(
       `SELECT
          COUNT(c.id) AS total,
-         COUNT(c.id) FILTER (WHERE c.status = 'resolved') AS resolved,
+         COUNT(c.id) FILTER (WHERE c.status = 'closed') AS resolved,
          ROUND(AVG(EXTRACT(EPOCH FROM (
            c.resolved_at - COALESCE(
              CASE WHEN c.conversation_type = 'outbound' THEN c.outbound_returned_at ELSE NULL END,
@@ -481,7 +531,7 @@ export async function getMyStats(
        ) fr ON true
        WHERE c.assigned_to = $1::uuid
          AND c.conversation_type IS DISTINCT FROM 'outbound'
-         AND (c.metadata->>'origin') IS DISTINCT FROM 'active_outbound'
+         AND (c.metadata->>'origin') IS DISTINCT FROM 'outbound'
          AND c.created_at >= (($2::date)::timestamp AT TIME ZONE $4::text)
          AND c.created_at < ((($3::date + INTERVAL '1 day')::timestamp) AT TIME ZONE $4::text)`,
       agentId,
@@ -533,6 +583,46 @@ export async function getCsatDistribution(filters: MetricsFilters, schemaName: s
 
     return rows.map((row) => ({
       score: row.score,
+      total: toNumber(row.total),
+    }));
+  });
+}
+
+export async function getCsatOverTime(
+  filters: MetricsFilters,
+  schemaName: string,
+  db: MetricsDbClient = prisma,
+  timezone = 'UTC',
+): Promise<Array<{ date: string; avg_score: number; total: number }>> {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const where: string[] = ['c.csat_score IS NOT NULL'];
+    const params: unknown[] = [];
+    addCommonFilters(where, params, filters, 'c');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const timezoneParam = params.length + 1;
+
+    const rows = await tx.$queryRawUnsafe<Array<{
+      date: Date | string;
+      avg_score: number | null;
+      total: bigint;
+    }>>(
+      `SELECT
+         DATE(c.created_at AT TIME ZONE $${timezoneParam}::text) AS date,
+         ROUND(AVG(c.csat_score)::numeric, 2)::float AS avg_score,
+         COUNT(*) AS total
+       FROM conversations c
+       ${whereSql}
+       GROUP BY DATE(c.created_at AT TIME ZONE $${timezoneParam}::text)
+       ORDER BY date ASC`,
+      ...params,
+      timezone,
+    );
+
+    return rows.map((row) => ({
+      date: row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10),
+      avg_score: row.avg_score === null ? 0 : Number(row.avg_score),
       total: toNumber(row.total),
     }));
   });

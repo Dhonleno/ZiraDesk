@@ -65,8 +65,34 @@
       "resolve": "Resolver",
       "close": "Cerrar",
       "reopen": "Reabrir",
+      "cancel": "Cancelar",
       "edit": "Editar",
       "delete": "Eliminar"
+    },
+    "resolve": {
+      "title": "Resolver ticket",
+      "subtitle": "Describe cómo se resolvió el problema antes de finalizar.",
+      "notesLabel": "Notas de resolución",
+      "notesPlaceholder": "Describe qué se hizo para resolver este ticket...",
+      "notesRequired": "Las notas de resolución son obligatorias"
+    },
+    "waiting": {
+      "title": "Motivo de espera",
+      "subtitle": "Seleccione el motivo por el que el ticket está en espera.",
+      "confirm": "Confirmar",
+      "reasons": {
+        "customer": "Esperando al cliente",
+        "internal": "Esperando al equipo interno",
+        "third_party": "Esperando a terceros"
+      }
+    },
+    "close": {
+      "title": "Cerrar ticket",
+      "subtitle": "El ticket se cerrará definitivamente. Se puede reabrir si es necesario."
+    },
+    "reopen": {
+      "title": "Reabrir ticket",
+      "subtitle": "El ticket volverá al estado Abierto y podrá ser atendido nuevamente."
     },
     "chooseFile": "Elegir archivos",
     "noFileSelected": "Ningún archivo",
@@ -170,6 +196,7 @@
       "history": "Historial",
       "write": "Escribir",
       "preview": "Vista previa",
+      "saveDescription": "Guardar descripción",
       "newTagPlaceholder": "+ Etiqueta",
       "systemUser": "Sistema",
       "sections": {

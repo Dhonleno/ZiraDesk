@@ -22,10 +22,12 @@ interface TenantSettings {
   inactivity_close_minutes?: number;
   inactivity_warning_message?: string;
   inactivity_close_message?: string;
-  active_outbound_validity_mode?: 'end_of_day' | 'hours';
+  active_outbound_validity_mode?: 'end_of_day' | 'hours' | 'unlimited';
   active_outbound_validity_hours?: number;
   bot_assigned_message?: string;
   max_conversations_per_agent?: number | null;
+  lgpd_retention_enabled?: boolean;
+  lgpd_retention_days?: number;
   created_at?: string;
   plan?: {
     id: string;
@@ -47,6 +49,8 @@ export interface MyProfile {
   language: 'pt-BR' | 'en-US' | 'es' | string;
   notification_sound: boolean;
   notification_desktop: boolean;
+  notification_sound_variant: 'default' | 'soft' | 'sharp';
+  must_change_password: boolean;
   status: string;
   created_at: string;
 }
@@ -59,6 +63,50 @@ export interface TenantUser {
   status: string;
   last_seen_at: string | null;
   created_at: string;
+  lgpd_consent_status?: 'pending' | 'granted' | 'denied' | 'revoked' | string;
+  lgpd_consent_at?: string | null;
+  lgpd_consent_source?: string | null;
+  lgpd_last_export_at?: string | null;
+  lgpd_anonymized_at?: string | null;
+  lgpd_anonymization_reason?: string | null;
+}
+
+export interface UserLgpdRequest {
+  id: string;
+  user_id: string | null;
+  user_name?: string | null;
+  subject_type: string;
+  request_type: 'access' | 'consent_update' | 'anonymization' | string;
+  status: string;
+  requested_by: string | null;
+  requested_by_name?: string | null;
+  processed_by: string | null;
+  processed_by_name?: string | null;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface UserLgpdExportPayload {
+  generated_at: string;
+  request_id: string;
+  user: TenantUser;
+  tickets: Array<Record<string, unknown>>;
+  conversations: Array<Record<string, unknown>>;
+  audit_logs: Array<Record<string, unknown>>;
+  lgpd_requests: UserLgpdRequest[];
+}
+
+export interface ProfileLgpdState {
+  consent: {
+    status: string;
+    updated_at: string | null;
+    source: string | null;
+    last_export_at: string | null;
+    anonymized_at: string | null;
+  };
+  requests: UserLgpdRequest[];
 }
 
 interface Channel {
@@ -110,6 +158,15 @@ interface AdminStats {
   total_messages: number;
 }
 
+export interface UsageSummary {
+  period: string;
+  metrics: {
+    messages_sent: { used: number; limit: number };
+    storage_bytes: { used: number; limit: number };
+    active_users: { used: number; limit: number };
+  };
+}
+
 interface PaginatedUsers {
   data: TenantUser[];
   meta: { total: number; page: number; per_page: number; total_pages: number };
@@ -131,9 +188,8 @@ interface InviteUserPayload {
 
 export interface InviteUserResultData {
   user: TenantUser;
-  tempPassword: string | null;
   emailSent: boolean;
-  warning?: 'EMAIL_NOT_CONFIGURED';
+  tempPassword?: string | null;
 }
 
 interface CreateChannelPayload {
@@ -250,6 +306,8 @@ export interface BotOption {
   submenu_greeting: string | null;
   parent_option_id: string | null;
   sort_order: number;
+  department_id: string | null;
+  department_name: string | null;
   created_at: string;
   children?: BotOption[];
 }
@@ -274,6 +332,7 @@ export interface BotOptionPayload {
   submenu_greeting?: string | null;
   parent_option_id?: string | null;
   sort_order?: number;
+  department_id?: string | null;
 }
 
 export interface AutoAssignAgent {
@@ -329,6 +388,35 @@ export interface TicketType {
   updated_at: string;
 }
 
+export interface VoiceConfig {
+  id: string;
+  tenantId: string;
+  twilioPhoneNumber: string;
+  defaultBotMenuId: string | null;
+  ivrEnabled: boolean;
+  ringTimeoutSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateVoiceConfigPayload {
+  twilioPhoneNumber: string;
+  defaultBotMenuId?: string | null;
+  ivrEnabled?: boolean;
+  ringTimeoutSeconds?: number;
+}
+
+export interface TicketCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ConversationCloseConfigItem {
   id: string;
   label: string;
@@ -362,7 +450,7 @@ export interface AgentSkill {
   name: string;
   tag: string | null;
   parent_label: string | null;
-  level: 'junior' | 'intermediate' | 'senior';
+  level?: 'junior' | 'intermediate' | 'senior';
 }
 
 export interface AgentWithSkills {
@@ -441,6 +529,7 @@ export interface TvConversationCard {
   createdAt: string;
   status: string;
   waitTime: number | null;
+  queueEnteredAt: string | null;
 }
 
 export interface TvDashboardData {
@@ -449,6 +538,28 @@ export interface TvDashboardData {
   stats: TvStatsSummary;
   agentCards: TvAgentCard[];
   conversationCards: TvConversationCard[];
+}
+
+export interface MonitorBotConversation {
+  id: string;
+  contact_id: string | null;
+  protocol_number: string | null;
+  created_at: string;
+  metadata: Record<string, unknown> | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_whatsapp: string | null;
+  channel_name: string | null;
+  channel_type: string;
+  minutes_in_bot: number;
+}
+
+export interface MonitorBotData {
+  conversations: MonitorBotConversation[];
+  total: number;
+  stuck: number;
 }
 
 export interface ConversationHelper {
@@ -660,11 +771,88 @@ export interface CrmContact {
   portal_enabled?: boolean;
   portal_last_login?: string | null;
   portal_invited_at?: string | null;
+  lgpd_consent_status?: 'pending' | 'granted' | 'denied' | 'revoked' | string;
+  lgpd_consent_at?: string | null;
+  lgpd_consent_source?: string | null;
+  lgpd_last_export_at?: string | null;
+  lgpd_anonymized_at?: string | null;
+  lgpd_anonymization_reason?: string | null;
   tags: string[];
   custom_fields: Record<string, unknown>;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ContactTag {
+  id: string;
+  name: string;
+  color: string;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ContactImportFormat = 'csv' | 'xlsx' | 'vcf';
+export type ContactImportDuplicateAction = 'skip' | 'update';
+
+export interface ContactImportPreview {
+  importId: string;
+  format: ContactImportFormat;
+  totalRows: number;
+  columns: string[];
+  preview: Array<Record<string, string>>;
+}
+
+export interface ContactImportMapping {
+  name: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  organization_name?: string;
+  role?: string;
+  department?: string;
+  tags?: string;
+  custom_fields?: string;
+}
+
+export interface ContactImportResult {
+  jobId: string;
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+}
+
+export interface LgpdRequest {
+  id: string;
+  contact_id: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_document?: string | null;
+  request_type: 'access' | 'consent_update' | 'anonymization' | string;
+  status: string;
+  requested_by: string | null;
+  requested_by_name?: string | null;
+  processed_by: string | null;
+  processed_by_name?: string | null;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface LgpdExportPayload {
+  generated_at: string;
+  request_id: string;
+  contact: CrmContact;
+  organization: Record<string, unknown> | null;
+  conversations: Array<Record<string, unknown>>;
+  tickets: Array<Record<string, unknown>>;
+  messages: Array<Record<string, unknown>>;
+  lgpd_requests: LgpdRequest[];
 }
 
 export interface CrmOrganizationStats {
@@ -716,12 +904,47 @@ interface ListOrganizationsParams {
   sort_order?: 'asc' | 'desc';
 }
 
+export interface OrganizationFilterParams {
+  search?: string;
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
+  segment?: string;
+  responsible_id?: string;
+  tag?: string;
+}
+
 interface ListContactsParams {
   page?: number;
   per_page?: number;
   organization_id?: string;
   search?: string;
   standalone_only?: boolean;
+  tags?: string[];
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
+}
+
+export interface ContactFilterParams {
+  search?: string;
+  status?: 'lead' | 'prospect' | 'client' | 'inactive';
+  tags?: string[];
+  organization_id?: string;
+  standalone_only?: boolean;
+  linked_only?: boolean;
+  include_without_phone?: boolean;
+}
+
+export type AddCampaignContactsPayload =
+  | { contact_ids: string[] }
+  | { filter: ContactFilterParams; exclude_ids?: string[] };
+
+export type CrmBulkDeletePayload<TFilter> =
+  | { ids: string[] }
+  | { filter: TFilter; exclude_ids?: string[] };
+
+export interface CrmBulkDeleteResult {
+  requested: number;
+  deleted: string[];
+  blocked: Array<{ id: string; reason: string }>;
+  not_found: string[];
 }
 
 // ── CRM API ───────────────────────────────────────────────────────────────────
@@ -730,6 +953,10 @@ export const organizationsApi = {
   list: async (params?: ListOrganizationsParams): Promise<{ data: CrmOrganization[]; meta: CrmListMeta }> => {
     const res = await api.get<{ success: boolean; data: CrmOrganization[]; meta: CrmListMeta }>('/crm/organizations', { params });
     return { data: res.data.data, meta: res.data.meta };
+  },
+  count: async (params?: OrganizationFilterParams): Promise<{ count: number }> => {
+    const res = await api.get<{ count: number }>('/crm/organizations/count', { params });
+    return res.data;
   },
   get: async (id: string): Promise<CrmOrganization> => {
     const res = await api.get<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}`);
@@ -744,6 +971,15 @@ export const organizationsApi = {
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/organizations/${id}`),
+  bulkDelete: async (
+    payload: CrmBulkDeletePayload<OrganizationFilterParams>,
+  ): Promise<CrmBulkDeleteResult> => {
+    const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
+      '/crm/organizations/bulk-delete',
+      payload,
+    );
+    return res.data.data;
+  },
   getStats: async (id: string): Promise<CrmOrganizationStats> => {
     const res = await api.get<{ success: boolean; data: CrmOrganizationStats }>(`/crm/organizations/${id}/stats`);
     return res.data.data;
@@ -760,12 +996,53 @@ export const organizationsApi = {
     const res = await api.get(`/crm/organizations/${id}/tickets`);
     return res.data;
   },
+  revealPii: async (id: string): Promise<CrmOrganization> => {
+    const res = await api.post<{ success: boolean; data: CrmOrganization }>(`/crm/organizations/${id}/pii/reveal`);
+    return res.data.data;
+  },
 };
 
 export const contactsApi = {
   list: async (params?: ListContactsParams): Promise<{ data: CrmContact[]; meta: CrmListMeta }> => {
-    const res = await api.get<{ success: boolean; data: CrmContact[]; meta: CrmListMeta }>('/crm/contacts', { params });
+    const { tags, ...rest } = params ?? {};
+    const res = await api.get<{ success: boolean; data: CrmContact[]; meta: CrmListMeta }>('/crm/contacts', {
+      params: {
+        ...rest,
+        ...(tags?.length ? { tags: tags.join(',') } : {}),
+      },
+    });
     return { data: res.data.data, meta: res.data.meta };
+  },
+  count: async (params?: ContactFilterParams): Promise<{ count: number }> => {
+    const { tags, ...rest } = params ?? {};
+    const res = await api.get<{ count: number }>('/crm/contacts/count', {
+      params: {
+        ...rest,
+        ...(tags?.length ? { tags: tags.join(',') } : {}),
+      },
+    });
+    return res.data;
+  },
+  listTags: async (): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>('/crm/contacts/tags');
+    return res.data.data;
+  },
+  getTags: async (id: string): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>(`/crm/contacts/${id}/tags`);
+    return res.data.data;
+  },
+  addTag: async (id: string, tagId: string): Promise<{ contact_id: string; tag_id: string }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { contact_id: string; tag_id: string };
+    }>(`/crm/contacts/${id}/tags`, { tag_id: tagId });
+    return res.data.data;
+  },
+  removeTag: async (id: string, tagId: string): Promise<{ removed: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+      `/crm/contacts/${id}/tags/${tagId}`,
+    );
+    return res.data.data;
   },
   get: async (id: string): Promise<CrmContact> => {
     const res = await api.get<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`);
@@ -782,17 +1059,106 @@ export const contactsApi = {
     }>(`/crm/contacts/${id}/stats`);
     return res.data.data;
   },
-  create: async (payload: Partial<CrmContact>): Promise<CrmContact> => {
+  create: async (payload: Partial<CrmContact> & { tag_ids?: string[] }): Promise<CrmContact> => {
     const res = await api.post<{ success: boolean; data: CrmContact }>('/crm/contacts', payload);
     return res.data.data;
   },
-  update: async (id: string, payload: Partial<CrmContact>): Promise<CrmContact> => {
+  previewImport: async (file: File): Promise<ContactImportPreview> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<{ success: boolean; data: ContactImportPreview }>('/crm/contacts/import/preview', form);
+    return res.data.data;
+  },
+  confirmImport: async (payload: {
+    importId: string;
+    mapping: ContactImportMapping;
+    duplicateAction: ContactImportDuplicateAction;
+  }): Promise<{ jobId: string; message: string }> => {
+    const res = await api.post<{ success: boolean; data: { jobId: string; message: string } }>(
+      '/crm/contacts/import/confirm',
+      payload,
+    );
+    return res.data.data;
+  },
+  update: async (
+    id: string,
+    payload: Partial<CrmContact> & { tag_ids?: string[] },
+  ): Promise<CrmContact> => {
     const res = await api.patch<{ success: boolean; data: CrmContact }>(`/crm/contacts/${id}`, payload);
     return res.data.data;
   },
   delete: async (id: string) => api.delete(`/crm/contacts/${id}`),
+  bulkDelete: async (
+    payload: CrmBulkDeletePayload<Omit<ContactFilterParams, 'include_without_phone'>>,
+  ): Promise<CrmBulkDeleteResult> => {
+    const res = await api.post<{ success: boolean; data: CrmBulkDeleteResult }>(
+      '/crm/contacts/bulk-delete',
+      payload,
+    );
+    return res.data.data;
+  },
   linkOrganization: async (id: string, organization_id: string) =>
     api.post(`/crm/contacts/${id}/link-organization`, { organization_id }),
+  listLgpdRequests: async (params?: {
+    page?: number;
+    per_page?: number;
+    contact_id?: string;
+    request_type?: 'access' | 'consent_update' | 'anonymization' | 'rectification';
+    status?: string;
+  }): Promise<{ data: LgpdRequest[]; meta: CrmListMeta }> => {
+    const res = await api.get<{ success: boolean; data: LgpdRequest[]; meta: CrmListMeta }>(
+      '/crm/contacts/lgpd/requests',
+      { params },
+    );
+    return { data: res.data.data, meta: res.data.meta };
+  },
+  updateLgpdConsent: async (
+    id: string,
+    payload: { status: 'pending' | 'granted' | 'denied' | 'revoked'; source?: string },
+  ): Promise<{ contact: CrmContact; request: LgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { contact: CrmContact; request: LgpdRequest } }>(
+      `/crm/contacts/${id}/lgpd/consent`,
+      payload,
+    );
+    return res.data.data;
+  },
+  exportLgpdData: async (
+    id: string,
+    params?: { include_messages?: boolean },
+  ): Promise<LgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: LgpdExportPayload }>(
+      `/crm/contacts/${id}/lgpd/export`,
+      { params },
+    );
+    return res.data.data;
+  },
+  anonymizeLgpd: async (
+    id: string,
+    payload?: { reason?: string; redact_messages?: boolean },
+  ): Promise<{ contact: CrmContact; request: LgpdRequest; summary: { conversations_updated: number; messages_redacted: number } }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: {
+        contact: CrmContact;
+        request: LgpdRequest;
+        summary: { conversations_updated: number; messages_redacted: number };
+      };
+    }>(`/crm/contacts/${id}/lgpd/anonymize`, payload);
+    return res.data.data;
+  },
+  approveLgpdRequest: async (id: string): Promise<{ id: string; status: string; contact: CrmContact }> => {
+    const res = await api.post<{ success: boolean; data: { id: string; status: string; contact: CrmContact } }>(
+      `/crm/contacts/lgpd/requests/${id}/approve`,
+    );
+    return res.data.data;
+  },
+  rejectLgpdRequest: async (id: string, payload: { reason: string }): Promise<{ id: string; status: string }> => {
+    const res = await api.post<{ success: boolean; data: { id: string; status: string } }>(
+      `/crm/contacts/lgpd/requests/${id}/reject`,
+      payload,
+    );
+    return res.data.data;
+  },
   portalAccess: {
     create: async (contactId: string): Promise<{
       temp_password: string;
@@ -811,6 +1177,10 @@ export const contactsApi = {
       );
       return res.data.data;
     },
+  },
+  revealPii: async (contactId: string): Promise<CrmContact> => {
+    const res = await api.post<{ success: boolean; data: CrmContact }>(`/crm/contacts/${contactId}/pii/reveal`);
+    return res.data.data;
   },
 };
 
@@ -912,12 +1282,44 @@ export interface UpdateRedmineIntegrationPayload {
 
 export type WhatsAppTemplateCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
 export type WhatsAppTemplateLanguage = 'pt_BR' | 'en_US' | 'es';
-export type WhatsAppTemplateStatus = 'approved' | 'pending' | 'rejected';
+export type WhatsAppTemplateStatus =
+  | 'approved'
+  | 'pending'
+  | 'rejected'
+  | 'paused'
+  | 'disabled'
+  | 'in_appeal'
+  | 'pending_deletion';
+export type WhatsAppTemplateHeaderType = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+export type WhatsAppTemplateInputHeaderType = 'none' | 'text' | 'image' | 'video' | 'document';
 
 export interface WhatsAppTemplateVariable {
   index: string;
   example: string;
 }
+
+export interface WhatsAppTemplateButtonQuickReply {
+  type: 'QUICK_REPLY';
+  text: string;
+}
+
+export interface WhatsAppTemplateButtonUrl {
+  type: 'URL';
+  text: string;
+  url: string;
+  example?: string[];
+}
+
+export interface WhatsAppTemplateButtonPhone {
+  type: 'PHONE_NUMBER';
+  text: string;
+  phone_number: string;
+}
+
+export type WhatsAppTemplateButton =
+  | WhatsAppTemplateButtonQuickReply
+  | WhatsAppTemplateButtonUrl
+  | WhatsAppTemplateButtonPhone;
 
 export interface WhatsAppTemplate {
   id: string;
@@ -928,8 +1330,12 @@ export interface WhatsAppTemplate {
   category: WhatsAppTemplateCategory;
   body: string;
   header: string | null;
+  header_type: WhatsAppTemplateHeaderType;
+  header_example_url: string | null;
   footer: string | null;
   variables: WhatsAppTemplateVariable[];
+  components: Array<Record<string, unknown>>;
+  buttons: Array<Record<string, unknown>>;
   status: WhatsAppTemplateStatus;
   meta_template_id: string | null;
   last_synced_at: string | null;
@@ -944,10 +1350,12 @@ export interface CreateWhatsAppTemplatePayload {
   language: WhatsAppTemplateLanguage;
   category: WhatsAppTemplateCategory;
   body: string;
-  header?: string;
+  headerType: WhatsAppTemplateInputHeaderType;
+  headerText?: string;
+  headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
-  status?: WhatsAppTemplateStatus;
+  buttons?: WhatsAppTemplateButton[];
 }
 
 export interface UpdateWhatsAppTemplatePayload {
@@ -957,10 +1365,27 @@ export interface UpdateWhatsAppTemplatePayload {
   language?: WhatsAppTemplateLanguage;
   category?: WhatsAppTemplateCategory;
   body?: string;
-  header?: string;
+  headerType?: WhatsAppTemplateInputHeaderType;
+  headerText?: string;
+  headerHandle?: string;
   footer?: string;
   variables?: WhatsAppTemplateVariable[];
-  status?: WhatsAppTemplateStatus;
+  buttons?: WhatsAppTemplateButton[];
+}
+
+export interface WhatsAppTemplateMediaUpload {
+  header_handle: string;
+  mime_type: string;
+  filename: string;
+}
+
+interface QueueConfigSettings {
+  queue_notifications_enabled: boolean;
+  queue_message_template: string;
+  queue_throttle_seconds: number;
+  agent_assume_template: string;
+  expire_24h_action: 'close' | 'keep_open';
+  expire_24h_message: string;
 }
 
 export const adminApi = {
@@ -971,6 +1396,11 @@ export const adminApi = {
 
   getSettings: async (): Promise<TenantSettings> => {
     const res = await api.get<{ success: boolean; data: TenantSettings }>('/admin/settings');
+    return res.data.data;
+  },
+
+  getUsage: async (): Promise<UsageSummary> => {
+    const res = await api.get<{ success: boolean; data: UsageSummary }>('/admin/usage');
     return res.data.data;
   },
 
@@ -987,6 +1417,50 @@ export const adminApi = {
       form,
     );
     return res.data.data;
+  },
+
+  getQueueConfig: async () => {
+    const res = await api.get<{ success: boolean; data: QueueConfigSettings }>('/admin/queue-config');
+    return res.data.data;
+  },
+
+  updateQueueConfig: async (data: Partial<QueueConfigSettings>) => {
+    const res = await api.patch<{ success: boolean; data: QueueConfigSettings }>('/admin/queue-config', data);
+    return res.data.data;
+  },
+
+  departments: {
+    list: async (): Promise<Department[]> => {
+      const res = await api.get<{ success: boolean; data: Department[] }>('/admin/departments');
+      return res.data.data;
+    },
+
+    create: async (data: { name: string; description?: string }): Promise<Department> => {
+      const res = await api.post<{ success: boolean; data: Department }>('/admin/departments', data);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: Partial<{ name: string; description: string; isActive: boolean }>): Promise<Department> => {
+      const res = await api.patch<{ success: boolean; data: Department }>(`/admin/departments/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<void> => {
+      await api.delete(`/admin/departments/${id}`);
+    },
+
+    listAgents: async (departmentId: string): Promise<DepartmentAgent[]> => {
+      const res = await api.get<{ success: boolean; data: DepartmentAgent[] }>(`/admin/departments/${departmentId}/agents`);
+      return res.data.data;
+    },
+
+    addAgent: async (departmentId: string, userId: string): Promise<void> => {
+      await api.post(`/admin/departments/${departmentId}/agents`, { userId });
+    },
+
+    removeAgent: async (departmentId: string, userId: string): Promise<void> => {
+      await api.delete(`/admin/departments/${departmentId}/agents/${userId}`);
+    },
   },
 
   autoAssign: {
@@ -1045,8 +1519,130 @@ export const adminApi = {
   },
 
   resetUserPassword: async (id: string) => {
-    const res = await api.post<{ success: boolean; data: { tempPassword: string } }>(`/admin/users/${id}/reset-password`);
+    const res = await api.post<{ success: boolean; data: { message: string } }>(`/admin/users/${id}/reset-password`);
     return res.data;
+  },
+
+  listUserLgpdRequests: async (params?: {
+    page?: number; per_page?: number; user_id?: string;
+    request_type?: string; status?: string;
+  }): Promise<{ data: UserLgpdRequest[]; meta: { total: number; page: number; per_page: number; total_pages: number } }> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdRequest[]; meta: { total: number; page: number; per_page: number; total_pages: number } }>(
+      '/admin/users/lgpd/requests',
+      { params },
+    );
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  updateUserLgpdConsent: async (id: string, payload: { status: string; source?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      `/admin/users/${id}/lgpd/consent`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  exportUserLgpdData: async (id: string, params?: { include_audit_logs?: boolean }): Promise<UserLgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdExportPayload }>(
+      `/admin/users/${id}/lgpd/export`,
+      { params },
+    );
+    return res.data.data;
+  },
+
+  anonymizeUserLgpd: async (id: string, payload: { reason?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.post<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      `/admin/users/${id}/lgpd/anonymize`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  anonymizeByExternalId: async (payload: {
+    external_id: string;
+    reason: string;
+  }): Promise<{ request_id: string; summary: { conversations_anonymized: number; messages_redacted: number } }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { request_id: string; summary: { conversations_anonymized: number; messages_redacted: number } };
+    }>('/admin/omnichannel/conversations/anonymize-by-external-id', payload);
+    return res.data.data;
+  },
+
+  listExternalLgpdRequests: async (params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+  }): Promise<{
+    data: Array<{
+      id: string;
+      subject_type: string;
+      request_type: string;
+      status: string;
+      requested_by: string | null;
+      requested_by_name: string | null;
+      payload: Record<string, unknown>;
+      result: Record<string, unknown>;
+      requested_at: string;
+      processed_at: string | null;
+    }>;
+    meta: { total: number; page: number; per_page: number; total_pages: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: Array<{
+        id: string;
+        subject_type: string;
+        request_type: string;
+        status: string;
+        requested_by: string | null;
+        requested_by_name: string | null;
+        payload: Record<string, unknown>;
+        result: Record<string, unknown>;
+        requested_at: string;
+        processed_at: string | null;
+      }>;
+      meta: { total: number; page: number; per_page: number; total_pages: number };
+    }>('/admin/omnichannel/conversations/external-requests', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  getLgpdDashboard: async (): Promise<{
+    total_pending: number;
+    expiring_7d: number;
+    expiring_24h: number;
+    breached: number;
+    oldest_pending: Array<{
+      id: string;
+      subject_type: string;
+      request_type: string;
+      status: string;
+      requested_at: string;
+      sla_deadline: string | null;
+      subject_label: string;
+    }>;
+  }> => {
+    const res = await api.get<{ success: boolean; data: {
+      total_pending: number;
+      expiring_7d: number;
+      expiring_24h: number;
+      breached: number;
+      oldest_pending: Array<{
+        id: string;
+        subject_type: string;
+        request_type: string;
+        status: string;
+        requested_at: string;
+        sla_deadline: string | null;
+        subject_label: string;
+      }>;
+    } }>('/admin/lgpd/dashboard');
+    return res.data.data;
+  },
+
+  processLgpdRequest: async (id: string, payload: { action: 'approve' | 'reject'; notes?: string | undefined }): Promise<{ id: string; status: string }> => {
+    const res = await api.patch<{ success: boolean; data: { id: string; status: string } }>(`/admin/lgpd/requests/${id}`, payload);
+    return res.data.data;
   },
 
   listChannels: async (): Promise<Channel[]> => {
@@ -1145,6 +1741,18 @@ export const adminApi = {
 
     updateSettings: async (data: Partial<TenantSettings>): Promise<TenantSettings> => {
       const res = await api.patch<{ success: boolean; data: TenantSettings }>('/admin/settings', data);
+      return res.data.data;
+    },
+  },
+
+  voiceConfig: {
+    get: async (): Promise<VoiceConfig | null> => {
+      const res = await api.get<{ success: boolean; data: VoiceConfig | null }>('/admin/voice-config');
+      return res.data.data;
+    },
+
+    update: async (data: UpdateVoiceConfigPayload): Promise<VoiceConfig> => {
+      const res = await api.patch<{ success: boolean; data: VoiceConfig }>('/admin/voice-config', data);
       return res.data.data;
     },
   },
@@ -1256,6 +1864,43 @@ export const adminApi = {
     },
   },
 
+  ticketCategories: {
+    list: async (): Promise<TicketCategory[]> => {
+      const res = await api.get<{ success: boolean; data: TicketCategory[] }>('/admin/ticket-categories');
+      return res.data.data;
+    },
+
+    create: async (data: {
+      name: string;
+      description?: string;
+      color?: string;
+      is_active?: boolean;
+      sort_order?: number;
+    }): Promise<TicketCategory> => {
+      const res = await api.post<{ success: boolean; data: TicketCategory }>('/admin/ticket-categories', data);
+      return res.data.data;
+    },
+
+    update: async (
+      id: string,
+      data: Partial<{
+        name: string;
+        description: string;
+        color: string | null;
+        is_active: boolean;
+        sort_order: number;
+      }>,
+    ): Promise<TicketCategory> => {
+      const res = await api.patch<{ success: boolean; data: TicketCategory }>(`/admin/ticket-categories/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<TicketCategory> => {
+      const res = await api.delete<{ success: boolean; data: TicketCategory }>(`/admin/ticket-categories/${id}`);
+      return res.data.data;
+    },
+  },
+
   closeConfig: {
     listTypes: async (): Promise<ConversationCloseConfigItem[]> => {
       const res = await api.get<{ success: boolean; data: ConversationCloseConfigItem[] }>(
@@ -1358,9 +2003,9 @@ export const adminApi = {
 
     assignSkill: async (
       userId: string,
-      payload: { bot_option_id: string; level: 'junior' | 'intermediate' | 'senior' },
+      payload: { bot_option_id: string },
     ) => {
-      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string; level: string } }>(
+      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string } }>(
         `/admin/skills/agents/${userId}`,
         payload,
       );
@@ -1492,6 +2137,17 @@ export const adminApi = {
       return res.data.data;
     },
 
+    uploadMedia: async (channelId: string, file: File): Promise<WhatsAppTemplateMediaUpload> => {
+      const form = new FormData();
+      form.append('channelId', channelId);
+      form.append('file', file);
+      const res = await api.post<{ success: boolean; data: WhatsAppTemplateMediaUpload }>(
+        '/admin/templates/media-upload',
+        form,
+      );
+      return res.data.data;
+    },
+
     remove: async (id: string): Promise<WhatsAppTemplate> => {
       const res = await api.delete<{ success: boolean; data: WhatsAppTemplate }>(`/admin/templates/${id}`);
       return res.data.data;
@@ -1549,6 +2205,69 @@ export const adminApi = {
   },
 };
 
+interface TenantLgpdMetrics {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  counts: { total: number; pending: number; processed: number; rejected: number; breached: number; near_sla: number };
+  avg_response_hours: number | null;
+  breached_requests: Array<{
+    id: string;
+    subject_type: string;
+    request_type: string;
+    requested_at: string;
+    sla_deadline: string | null;
+    days_overdue: number;
+  }>;
+}
+
+export const superAdminApi = {
+  updatePlan: async (
+    id: string,
+    data: Partial<{
+      name: string;
+      priceMonth: number;
+      priceYear: number;
+      maxUsers: number;
+      maxContacts: number;
+      maxMessages: number;
+      features: Record<string, boolean>;
+    }>,
+  ): Promise<void> => {
+    await api.patch(`/super-admin/plans/${id}`, data);
+  },
+
+  getTenantUsage: async (tenantId: string): Promise<UsageSummary> => {
+    const res = await api.get<{ success: boolean; data: UsageSummary }>(`/super-admin/tenants/${tenantId}/usage`);
+    return res.data.data;
+  },
+
+  getLgpdMetrics: async (): Promise<{
+    tenants: TenantLgpdMetrics[];
+    summary: {
+      total_tenants: number;
+      tenants_with_pending: number;
+      tenants_with_breaches: number;
+      global_pending: number;
+      global_breached: number;
+      global_near_sla: number;
+    };
+  }> => {
+    const res = await api.get<{ success: boolean; data: {
+      tenants: TenantLgpdMetrics[];
+      summary: {
+        total_tenants: number;
+        tenants_with_pending: number;
+        tenants_with_breaches: number;
+        global_pending: number;
+        global_breached: number;
+        global_near_sla: number;
+      };
+    } }>('/super-admin/metrics/lgpd');
+    return res.data.data;
+  },
+};
+
 export const conversationTags = {
   list: async (): Promise<ConversationTag[]> => {
     const res = await api.get<{ success: boolean; data: ConversationTag[] }>('/admin/conversation-tags');
@@ -1601,6 +2320,31 @@ export const conversationTags = {
   },
 };
 
+export const contactTags = {
+  list: async (): Promise<ContactTag[]> => {
+    const res = await api.get<{ success: boolean; data: ContactTag[] }>('/admin/contact-tags');
+    return res.data.data;
+  },
+
+  create: async (data: { name: string; color: string; sort_order?: number }): Promise<ContactTag> => {
+    const res = await api.post<{ success: boolean; data: ContactTag }>('/admin/contact-tags', data);
+    return res.data.data;
+  },
+
+  update: async (
+    id: string,
+    data: Partial<{ name: string; color: string; sort_order: number }>,
+  ): Promise<ContactTag> => {
+    const res = await api.patch<{ success: boolean; data: ContactTag }>(`/admin/contact-tags/${id}`, data);
+    return res.data.data;
+  },
+
+  delete: async (id: string): Promise<ContactTag> => {
+    const res = await api.delete<{ success: boolean; data: ContactTag }>(`/admin/contact-tags/${id}`);
+    return res.data.data;
+  },
+};
+
 export interface CallRecord {
   id: string;
   conversation_id: string;
@@ -1636,9 +2380,11 @@ export const callsApi = {
 
 export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TicketWaitingReason = 'customer' | 'internal' | 'third_party';
 
 export interface Ticket {
   id:              string;
+  ticket_number:   number;
   contact_id?:     string | null;
   organization_id?: string | null;
   conversation_id: string | null;
@@ -1652,6 +2398,7 @@ export interface Ticket {
   title:           string;
   description:     string | null;
   status:          TicketStatus;
+  waiting_reason:  TicketWaitingReason | null;
   priority:        TicketPriority;
   category:        string | null;
   assigned_to:     string | null;
@@ -1803,6 +2550,7 @@ export interface CreateTicketPayload {
   title:           string;
   description?:    string;
   status?:         TicketStatus;
+  waiting_reason?: TicketWaitingReason | null;
   priority?:       TicketPriority;
   category?:       string;
   type_id?:        string | null;
@@ -1849,6 +2597,12 @@ export interface TransferSkill {
   online_agents_count: number;
 }
 
+export interface TransferDepartment {
+  id: string;
+  name: string;
+  online_agents_count: number;
+}
+
 export interface OmnichannelConversation {
   id: string;
   status: string;
@@ -1878,8 +2632,11 @@ export interface OmnichannelConversation {
   assigned_to: string | null;
   assigned_at: string | null;
   assigned_name: string | null;
+  queue_entered_at?: string | null;
   channel_id: string | null;
   channel_name: string | null;
+  bot_option_id?: string | null;
+  bot_department?: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
   tags?: ConversationTag[];
@@ -1890,6 +2647,7 @@ export interface OmnichannelMessage {
   conversation_id: string;
   sender_type: 'agent' | 'client' | 'bot' | 'system';
   sender_id: string | null;
+  sender_name?: string | null;
   content: string;
   content_type: 'text' | 'image' | 'audio' | 'video' | 'document' | string;
   media_url?: string | null;
@@ -1917,8 +2675,7 @@ export interface ListConversationsParams {
   page?: number;
   perPage?: number;
   per_page?: number;
-  tab?: 'active' | 'queue' | 'return' | 'closed' | 'active_outbound';
-  sub_status?: 'resolved' | 'closed' | 'outbound';
+  tab?: 'open' | 'waiting' | 'closed';
   search?: string;
   status?: string;
   assigned_to_me?: boolean;
@@ -1926,6 +2683,18 @@ export interface ListConversationsParams {
   contact_id?: string;
   organization_id?: string;
   tag_id?: string;
+}
+
+export interface OmnichannelConversationsMeta {
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export interface OmnichannelConversationsPage {
+  data: OmnichannelConversation[];
+  meta: OmnichannelConversationsMeta;
 }
 
 export interface CreateConversationPayload {
@@ -1942,6 +2711,18 @@ export interface CreateConversationPayload {
   };
 }
 
+async function listOmnichannelConversationsPage(
+  params?: ListConversationsParams,
+): Promise<OmnichannelConversationsPage> {
+  const res = await api.get<{
+    success: boolean;
+    data: OmnichannelConversation[];
+    meta: OmnichannelConversationsMeta;
+  }>('/omnichannel/conversations', { params });
+
+  return { data: res.data.data, meta: res.data.meta };
+}
+
 export interface ActiveOutboundTemplate extends WhatsAppTemplate {}
 
 export interface CreateActiveOutboundPayload {
@@ -1953,6 +2734,11 @@ export interface CreateActiveOutboundPayload {
   subject?: string;
   message?: string;
   useTemplate?: boolean;
+}
+
+export interface WhatsAppWindowStatus {
+  withinWindow: boolean;
+  lastClientMessageAt: string | null;
 }
 
 export interface SendMessagePayload {
@@ -1991,7 +2777,7 @@ export interface MetricsFiltersParams {
   department?: string;
 }
 
-export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
+export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'last_week' | 'last_month' | 'custom';
 
 export interface HistoryFiltersParams {
   page?: number;
@@ -2005,6 +2791,9 @@ export interface HistoryFiltersParams {
   period?: HistoryPeriodPreset;
   date_from?: string;
   date_to?: string;
+  sort_by?: 'created_at' | 'protocol_number' | 'contact_name' | 'assigned_name'
+          | 'channel_type' | 'status' | 'duration_seconds' | 'wait_seconds' | 'csat_score';
+  sort_order?: 'asc' | 'desc';
 }
 
 export interface OmnichannelHistoryConversation {
@@ -2131,8 +2920,32 @@ export interface PerformanceFiltersParams {
   date_to?: string;
   agent_id?: string;
   bot_option_id?: string;
+  department_id?: string;
   page?: number;
   per_page?: number;
+}
+
+export interface DepartmentFilterOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  agentCount: number;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  agentCount: number;
+  createdAt: string;
+}
+
+export interface DepartmentAgent {
+  id: string;
+  name: string;
+  role: string;
+  avatar_url: string | null;
 }
 
 export interface OmnichannelPerformanceGoal {
@@ -2161,13 +2974,13 @@ export interface OmnichannelPerformanceAgent {
   sla_breach: number;
   goal: OmnichannelPerformanceGoal | null;
   goal_status: {
-    tma: PerformanceMetricStatus;
-    tme: PerformanceMetricStatus;
-    sla: PerformanceMetricStatus;
-    csat: PerformanceMetricStatus;
-    volume: PerformanceMetricStatus;
-    overall: PerformanceMetricStatus;
-  };
+    tma: PerformanceMetricStatus | null;
+    tme: PerformanceMetricStatus | null;
+    sla: PerformanceMetricStatus | null;
+    csat: PerformanceMetricStatus | null;
+    volume: PerformanceMetricStatus | null;
+    overall: PerformanceMetricStatus | null;
+  } | null;
 }
 
 export interface OmnichannelPerformanceResponse {
@@ -2180,6 +2993,19 @@ export interface OmnichannelPerformanceResponse {
     sla_percent: number | null;
     total_volume: number;
   };
+}
+
+export interface PerformanceByGroupRow {
+  group_name: string;
+  total_conversations: number;
+  avg_tma_minutes: number | null;
+  avg_tme_minutes: number | null;
+  avg_csat: number | null;
+  sla_percent: number | null;
+}
+
+export interface PerformanceByGroupResponse {
+  data: PerformanceByGroupRow[];
 }
 
 export interface MetricsOverviewData {
@@ -2237,6 +3063,19 @@ export interface MetricsCsatPoint {
   total: number;
 }
 
+export interface MetricsCsatOverTimePoint {
+  date: string;
+  avg_score: number;
+  total: number;
+}
+
+export interface MetricsByOrganizationPoint {
+  organization_id: string;
+  organization_name: string;
+  total: number;
+  resolved: number;
+}
+
 export interface MetricsByTypePoint {
   typeId: string;
   label: string;
@@ -2264,12 +3103,34 @@ export interface ConversationWindowStatus {
 
 export interface NotificationItem {
   id: string;
-  type: 'ticket_assigned' | 'conversation_assigned' | 'ticket_comment';
+  type:
+    | 'ticket_assigned'
+    | 'conversation_assigned'
+    | 'ticket_comment'
+    | 'conversation_message'
+    | 'message_failed'
+    | 'help_requested'
+    | 'lgpd_request_received'
+    | 'lgpd_sla_warning'
+    | 'lgpd_sla_breached';
   title: string;
   message: string;
   read: boolean;
   created_at: string;
   href: string;
+  data?: Record<string, unknown>;
+}
+
+export interface NotificationsMeta {
+  total: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
+}
+
+export interface NotificationsListResponse {
+  data: NotificationItem[];
+  meta: NotificationsMeta;
 }
 
 export interface GlobalSearchResult {
@@ -2299,6 +3160,18 @@ export const omnichannelApi = {
     const res = await api.get<{ success: boolean; data: TvDashboardData }>('/omnichannel/tv');
     return res.data.data;
   },
+  monitorBot: async (): Promise<MonitorBotData> => {
+    const res = await api.get<{ success: boolean; data: MonitorBotData }>('/omnichannel/monitor/bot');
+    return res.data.data;
+  },
+  pullMonitorBotConversation: async (conversationId: string): Promise<void> => {
+    await api.post(`/omnichannel/monitor/bot/${conversationId}/pull`);
+  },
+  closeMonitorBotConversation: async (conversationId: string, message?: string): Promise<void> => {
+    await api.post(`/omnichannel/monitor/bot/${conversationId}/close`, {
+      message: message?.trim() || undefined,
+    });
+  },
 
   metrics: {
     getOverview: async (params?: MetricsFiltersParams): Promise<MetricsOverviewData> => {
@@ -2306,6 +3179,10 @@ export const omnichannelApi = {
       return res.data.data;
     },
     getVolume: async (params?: MetricsFiltersParams): Promise<MetricsVolumePoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsVolumePoint[] }>('/omnichannel/metrics/volume', { params });
+      return res.data.data;
+    },
+    getVolumeByPeriod: async (params?: MetricsFiltersParams): Promise<MetricsVolumePoint[]> => {
       const res = await api.get<{ success: boolean; data: MetricsVolumePoint[] }>('/omnichannel/metrics/volume', { params });
       return res.data.data;
     },
@@ -2327,6 +3204,14 @@ export const omnichannelApi = {
     },
     getCsat: async (params?: MetricsFiltersParams): Promise<MetricsCsatPoint[]> => {
       const res = await api.get<{ success: boolean; data: MetricsCsatPoint[] }>('/omnichannel/metrics/csat', { params });
+      return res.data.data;
+    },
+    getCsatOverTime: async (params?: MetricsFiltersParams): Promise<MetricsCsatOverTimePoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsCsatOverTimePoint[] }>('/omnichannel/metrics/csat-over-time', { params });
+      return res.data.data;
+    },
+    getByOrganization: async (params?: MetricsFiltersParams): Promise<MetricsByOrganizationPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsByOrganizationPoint[] }>('/omnichannel/metrics/by-organization', { params });
       return res.data.data;
     },
   },
@@ -2386,6 +3271,11 @@ export const omnichannelApi = {
     };
   },
 
+  listPerformanceByGroup: async (params?: PerformanceFiltersParams): Promise<PerformanceByGroupResponse> => {
+    const res = await api.get<{ success: boolean } & PerformanceByGroupResponse>('/omnichannel/performance/by-group', { params });
+    return { data: res.data.data };
+  },
+
   exportPerformanceCsv: async (params?: PerformanceFiltersParams): Promise<Blob> => {
     const res = await api.get<Blob>('/omnichannel/performance', {
       params: { ...params, export: 'csv' },
@@ -2394,10 +3284,16 @@ export const omnichannelApi = {
     return res.data;
   },
 
+  listConversationsPage: listOmnichannelConversationsPage,
+
   listConversations: async (params?: ListConversationsParams): Promise<OmnichannelConversation[]> => {
-    const res = await api.get<{ success: boolean; data: OmnichannelConversation[] }>(
-      '/omnichannel/conversations',
-      { params },
+    const page = await listOmnichannelConversationsPage(params);
+    return page.data;
+  },
+
+  listConversationChannels: async (): Promise<Array<Pick<Channel, 'id' | 'type' | 'name' | 'status'>>> => {
+    const res = await api.get<{ success: boolean; data: Array<Pick<Channel, 'id' | 'type' | 'name' | 'status'>> }>(
+      '/omnichannel/conversations/channels',
     );
     return res.data.data;
   },
@@ -2423,12 +3319,12 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  createConversation: async (payload: CreateConversationPayload): Promise<OmnichannelConversation> => {
+  createConversation: async (payload: CreateConversationPayload): Promise<{ conversation: OmnichannelConversation }> => {
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       '/omnichannel/conversations',
       payload,
     );
-    return res.data.data;
+    return { conversation: res.data.data };
   },
 
   listActiveOutboundTemplates: async (channelId?: string): Promise<ActiveOutboundTemplate[]> => {
@@ -2448,6 +3344,14 @@ export const omnichannelApi = {
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       '/omnichannel/active-outbound',
       payload,
+    );
+    return res.data.data;
+  },
+
+  getWindowStatus: async (contactId: string, channelId: string): Promise<WhatsAppWindowStatus> => {
+    const res = await api.get<{ success: boolean; data: WhatsAppWindowStatus }>(
+      '/omnichannel/active-outbound/window-status',
+      { params: { contactId, channelId } },
     );
     return res.data.data;
   },
@@ -2509,7 +3413,7 @@ export const omnichannelApi = {
   updateConversation: async (
     conversationId: string,
     payload: {
-      status?: 'open' | 'active_outbound' | 'in_service' | 'pending' | 'resolved' | 'bot' | 'closed';
+      status?: 'open' | 'waiting' | 'closed';
       assignedTo?: string | null;
       csat_score?: number;
       csat_comment?: string;
@@ -2522,40 +3426,15 @@ export const omnichannelApi = {
     return res.data.data;
   },
 
-  resolve: async (
+  closeConversation: async (
     conversationId: string,
-    payload?: { csat_score?: number; csat_comment?: string },
+    data: { reason: string; notes?: string; closeTypeId?: string; closeOutcomeId?: string },
   ): Promise<OmnichannelConversation> => {
-    const body: {
-      status: 'resolved';
-      csat_score?: number;
-      csat_comment?: string;
-    } = {
-      status: 'resolved',
-    };
-    if (payload?.csat_score !== undefined) body.csat_score = payload.csat_score;
-    if (payload?.csat_comment !== undefined) body.csat_comment = payload.csat_comment;
-    return omnichannelApi.updateConversation(conversationId, body);
-  },
-
-  resolveConversation: async (
-    conversationId: string,
-    payload: {
-      closeTypeId: string;
-      closeOutcomeId: string;
-      csatMode: 'resolve' | 'close';
-      internalNote?: string;
-    },
-  ): Promise<OmnichannelConversation> => {
-    const res = await api.patch<{ success: boolean; data: OmnichannelConversation }>(
-      `/omnichannel/conversations/${conversationId}/resolve`,
-      payload,
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/conversations/${conversationId}/close`,
+      data,
     );
     return res.data.data;
-  },
-
-  close: async (conversationId: string): Promise<OmnichannelConversation> => {
-    return omnichannelApi.updateConversation(conversationId, { status: 'closed' });
   },
 
   reopen: async (conversationId: string): Promise<OmnichannelConversation> => {
@@ -2572,12 +3451,17 @@ export const omnichannelApi = {
 
   transfer: async (
     conversationId: string,
-    target: { userId: string; skillId?: undefined } | { userId?: undefined; skillId: string },
+    target:
+      | { userId: string; skillId?: undefined; departmentId?: undefined }
+      | { userId?: undefined; skillId: string; departmentId?: undefined }
+      | { userId?: undefined; skillId?: undefined; departmentId: string },
     reason?: string,
   ): Promise<OmnichannelConversation> => {
     const body = target.userId
       ? { user_id: target.userId, reason }
-      : { skill_id: target.skillId, reason };
+      : target.skillId
+        ? { skill_id: target.skillId, reason }
+        : { department_id: target.departmentId, reason };
     const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
       `/omnichannel/conversations/${conversationId}/transfer`,
       body,
@@ -2593,6 +3477,11 @@ export const omnichannelApi = {
 
   getTransferSkills: async (): Promise<TransferSkill[]> => {
     const res = await api.get<{ success: boolean; data: TransferSkill[] }>('/omnichannel/transfer/skills');
+    return res.data.data;
+  },
+
+  getTransferDepartments: async (): Promise<TransferDepartment[]> => {
+    const res = await api.get<{ success: boolean; data: TransferDepartment[] }>('/omnichannel/transfer/departments');
     return res.data.data;
   },
 
@@ -2636,7 +3525,227 @@ export const omnichannelApi = {
     );
     return res.data.data;
   },
+
+  getQueue: (params?: { channel_type?: string; page?: number }) =>
+    api.get('/omnichannel/queue', { params }).then((r) => r.data),
+
+  getQueueCount: () =>
+    api.get('/omnichannel/queue', { params: { limit: 1 } }).then((r) => r.data.meta as { total: number }),
+
+  assignMe: async (id: string): Promise<OmnichannelConversation> => {
+    const res = await api.post<{ success: boolean; data: OmnichannelConversation }>(
+      `/omnichannel/queue/${id}/assign-me`,
+    );
+    return res.data.data;
+  },
 };
+
+// ── Campaign types ────────────────────────────────────────────────────────────
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
+export type CampaignContactStatus = 'pending' | 'queued' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed' | 'opted_out';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  channel_id: string | null;
+  template_id: string | null;
+  template_variables: Record<string, string>;
+  template_header_media_url: string | null;
+  template_header_media_filename: string | null;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  total_contacts: number;
+  sent_count: number;
+  delivered_count: number;
+  read_count: number;
+  replied_count: number;
+  failed_count: number;
+  daily_limit: number;
+  created_by: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_name?: string | null;
+  template_name?: string | null;
+  channel_name?: string | null;
+}
+
+export interface CampaignContact {
+  id: string;
+  campaign_id: string;
+  contact_id: string;
+  status: CampaignContactStatus;
+  message_id: string | null;
+  conversation_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  replied_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+}
+
+export interface CampaignReport {
+  campaign: Campaign;
+  breakdown: Array<{
+    date: string;
+    sent: number;
+    delivered: number;
+    read: number;
+    replied: number;
+    failed: number;
+  }>;
+}
+
+export const campaignsApi = {
+  list: async (params?: { page?: number; limit?: number; status?: string }): Promise<{
+    data: Campaign[];
+    meta: { total: number; page: number; limit: number; total_pages: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: Campaign[];
+      meta: { total: number; page: number; limit: number; total_pages: number };
+    }>('/omnichannel/campaigns', { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  get: async (id: string): Promise<Campaign> => {
+    const res = await api.get<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}`);
+    return res.data.data;
+  },
+
+  create: async (data: {
+    name: string;
+    channel_id: string;
+    template_id: string;
+    template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>('/omnichannel/campaigns', data);
+    return res.data.data;
+  },
+
+  update: async (id: string, data: {
+    name?: string;
+    template_id?: string;
+    template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.patch<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}`, data);
+    return res.data.data;
+  },
+
+  addContacts: async (
+    id: string,
+    payload: AddCampaignContactsPayload,
+  ): Promise<{ added: number; total_contacts: number }> => {
+    const res = await api.post<{ success: boolean; data: { added: number; total_contacts: number } }>(
+      `/omnichannel/campaigns/${id}/contacts`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  removeContact: async (id: string, contactId: string): Promise<void> => {
+    await api.delete(`/omnichannel/campaigns/${id}/contacts/${contactId}`);
+  },
+
+  listContacts: async (id: string, params?: { page?: number; limit?: number }): Promise<{
+    data: CampaignContact[];
+    meta: { total: number; page: number; limit: number };
+  }> => {
+    const res = await api.get<{
+      success: boolean;
+      data: CampaignContact[];
+      meta: { total: number; page: number; limit: number };
+    }>(`/omnichannel/campaigns/${id}/contacts`, { params });
+    return { data: res.data.data, meta: res.data.meta };
+  },
+
+  launch: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/launch`);
+    return res.data.data;
+  },
+
+  pause: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/pause`);
+    return res.data.data;
+  },
+
+  resume: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/resume`);
+    return res.data.data;
+  },
+
+  cancel: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/cancel`);
+    return res.data.data;
+  },
+
+  duplicate: async (id: string): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(`/omnichannel/campaigns/${id}/duplicate`);
+    return res.data.data;
+  },
+
+  duplicateFailed: async (id: string, data: {
+    name: string;
+    template_id: string;
+    template_variables?: Record<string, string>;
+    template_header_media_url?: string | null;
+    template_header_media_filename?: string | null;
+    scheduled_at?: string | null;
+    daily_limit?: number;
+    notes?: string | null;
+  }): Promise<Campaign> => {
+    const res = await api.post<{ success: boolean; data: Campaign }>(
+      `/omnichannel/campaigns/${id}/duplicate-failed`,
+      data,
+    );
+    return res.data.data;
+  },
+
+  report: async (id: string): Promise<CampaignReport> => {
+    const res = await api.get<{ success: boolean; data: CampaignReport }>(`/omnichannel/campaigns/${id}/report`);
+    return res.data.data;
+  },
+
+  stats: async (): Promise<{ total: number; running: number; completed: number; avg_delivery_rate: number }> => {
+    const res = await api.get<{ success: boolean; data: { total: number; running: number; completed: number; avg_delivery_rate: number } }>('/omnichannel/campaigns/stats');
+    return res.data.data;
+  },
+
+  exportCsv: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/campaigns/${id}/export/csv`, {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
+
+  exportPdf: async (id: string): Promise<Blob> => {
+    const res = await api.get<Blob>(`/omnichannel/campaigns/${id}/export/pdf`, {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
+};
+
+// ── Agent status API ──────────────────────────────────────────────────────────
 
 export const agentStatusApi = {
   getStatus: async (): Promise<AgentPauseStatus> => {
@@ -2656,9 +3765,16 @@ export const agentStatusApi = {
 };
 
 export const notificationsApi = {
-  list: async (): Promise<NotificationItem[]> => {
-    const res = await api.get<{ success: boolean; data: NotificationItem[] }>('/notifications');
-    return res.data.data;
+  list: async (params?: { page?: number; per_page?: number }): Promise<NotificationsListResponse> => {
+    const res = await api.get<{
+      success: boolean;
+      data: NotificationItem[];
+      meta: NotificationsMeta;
+    }>('/notifications', { params });
+    return {
+      data: res.data.data,
+      meta: res.data.meta,
+    };
   },
 
   markRead: async (id: string) => {
@@ -2666,8 +3782,25 @@ export const notificationsApi = {
     return res.data.data;
   },
 
+  markConversationRead: async (conversationId: string) => {
+    const res = await api.patch<{ success: boolean; data: { read: number } }>(
+      `/notifications/conversations/${conversationId}/read`,
+    );
+    return res.data.data;
+  },
+
   markAllRead: async () => {
     const res = await api.patch<{ success: boolean; data: { read: number } }>('/notifications/read-all');
+    return res.data.data;
+  },
+
+  deleteOne: async (id: string) => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean } }>(`/notifications/${id}`);
+    return res.data.data;
+  },
+
+  deleteAllRead: async () => {
+    const res = await api.delete<{ success: boolean; data: { deleted: number } }>('/notifications');
     return res.data.data;
   },
 };
@@ -2685,12 +3818,18 @@ export const profileApi = {
     language: 'pt-BR' | 'en-US' | 'es';
     notification_sound: boolean;
     notification_desktop: boolean;
+    notification_sound_variant: 'default' | 'soft' | 'sharp';
   }>): Promise<MyProfile> => {
     const res = await api.patch<{ success: boolean; data: MyProfile }>('/auth/me', payload);
     return res.data.data;
   },
 
-  updatePassword: async (payload: { current_password: string; new_password: string }): Promise<void> => {
+  updatePassword: async (payload: {
+    current_password?: string | undefined;
+    new_password?: string | undefined;
+    currentPassword?: string | undefined;
+    newPassword?: string | undefined;
+  }): Promise<void> => {
     await api.patch('/auth/me/password', payload);
   },
 
@@ -2699,6 +3838,32 @@ export const profileApi = {
     form.append('file', file);
 
     const res = await api.post<{ success: boolean; data: { avatar_url: string } }>('/auth/me/avatar', form);
+    return res.data.data;
+  },
+
+  getLgpdState: async (): Promise<ProfileLgpdState> => {
+    const res = await api.get<{ success: boolean; data: ProfileLgpdState }>('/auth/me/lgpd');
+    return res.data.data;
+  },
+
+  updateLgpdConsent: async (payload: { status: string; source?: string }): Promise<{ user: TenantUser; request: UserLgpdRequest }> => {
+    const res = await api.patch<{ success: boolean; data: { user: TenantUser; request: UserLgpdRequest } }>(
+      '/auth/me/lgpd/consent',
+      payload,
+    );
+    return res.data.data;
+  },
+
+  exportLgpdData: async (params?: { include_audit_logs?: boolean }): Promise<UserLgpdExportPayload> => {
+    const res = await api.get<{ success: boolean; data: UserLgpdExportPayload }>(
+      '/auth/me/lgpd/export',
+      { params },
+    );
+    return res.data.data;
+  },
+
+  createAnonymizeRequest: async (payload: { reason?: string }): Promise<UserLgpdRequest> => {
+    const res = await api.post<{ success: boolean; data: UserLgpdRequest }>('/auth/me/lgpd/anonymize-request', payload);
     return res.data.data;
   },
 };
@@ -3047,6 +4212,42 @@ export interface PortalTicketDetail extends PortalTicket {
   comments: PortalTicketComment[];
 }
 
+export type PortalLgpdConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked';
+export type PortalLgpdRequestType = 'access' | 'anonymization' | 'consent_update' | 'rectification';
+export type PortalLgpdRequestStatus = 'pending' | 'processed' | 'rejected';
+
+export interface PortalLgpdRequest {
+  id: string;
+  request_type: PortalLgpdRequestType | string;
+  status: PortalLgpdRequestStatus | string;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  requested_at: string;
+  processed_at: string | null;
+}
+
+export interface PortalLgpdState {
+  consent: {
+    status: PortalLgpdConsentStatus | string;
+    at: string | null;
+    source: string | null;
+    last_export_at: string | null;
+    anonymized_at: string | null;
+    anonymization_reason: string | null;
+  };
+  requests: PortalLgpdRequest[];
+}
+
+export interface LegalDpoInfo {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  privacyPolicyUrl: string | null;
+  termsUrl: string | null;
+  companyLegalName: string | null;
+  companyCnpj: string | null;
+}
+
 function resolvePortalTenantSlug(): string {
   if (typeof window === 'undefined') return 'demo';
   const host = window.location.hostname.toLowerCase();
@@ -3055,6 +4256,11 @@ function resolvePortalTenantSlug(): string {
   if (host === 'localhost' || host === '127.0.0.1') return 'demo';
   return 'demo';
 }
+
+const legalHttp = axios.create({
+  baseURL: '/api/legal',
+  withCredentials: false,
+});
 
 const portalHttp = axios.create({
   baseURL: '/api/portal',
@@ -3137,5 +4343,79 @@ export const portalApi = {
 
   addComment: async (ticketId: string, content: string): Promise<void> => {
     await portalHttp.post(`/tickets/${ticketId}/comments`, { content }, withPortalAuth());
+  },
+
+  getLgpdState: async (): Promise<PortalLgpdState> => {
+    const res = await portalHttp.get<{ success: boolean; data: PortalLgpdState }>('/lgpd', withPortalAuth());
+    return res.data.data;
+  },
+
+  updateLgpdConsent: async (payload: { status: PortalLgpdConsentStatus; source?: string }): Promise<{
+    status: PortalLgpdConsentStatus | string;
+    consent_at: string | null;
+    source: string | null;
+    request_id: string;
+  }> => {
+    const res = await portalHttp.patch<{
+      success: boolean;
+      data: {
+        status: PortalLgpdConsentStatus | string;
+        consent_at: string | null;
+        source: string | null;
+        request_id: string;
+      };
+    }>('/lgpd/consent', payload, withPortalAuth());
+    return res.data.data;
+  },
+
+  createLgpdRequest: async (payload: {
+    request_type: Extract<PortalLgpdRequestType, 'access' | 'anonymization'>;
+    reason?: string;
+    include_messages?: boolean;
+  }): Promise<{
+    id: string;
+    request_type: PortalLgpdRequestType | string;
+    status: PortalLgpdRequestStatus | string;
+    requested_at: string;
+  }> => {
+    const res = await portalHttp.post<{
+      success: boolean;
+      data: {
+        id: string;
+        request_type: PortalLgpdRequestType | string;
+        status: PortalLgpdRequestStatus | string;
+        requested_at: string;
+      };
+    }>('/lgpd/requests', payload, withPortalAuth());
+    return res.data.data;
+  },
+  requestContactDataRectification: async (payload: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    document?: string;
+  }): Promise<{
+    id: string;
+    request_type: PortalLgpdRequestType | string;
+    status: PortalLgpdRequestStatus | string;
+    requested_at: string;
+  }> => {
+    const res = await portalHttp.patch<{
+      success: boolean;
+      data: {
+        id: string;
+        request_type: PortalLgpdRequestType | string;
+        status: PortalLgpdRequestStatus | string;
+        requested_at: string;
+      };
+    }>('/lgpd/contact-data', payload, withPortalAuth());
+    return res.data.data;
+  },
+};
+
+export const legalApi = {
+  getDpo: async (): Promise<LegalDpoInfo> => {
+    const res = await legalHttp.get<LegalDpoInfo>('/dpo');
+    return res.data;
   },
 };

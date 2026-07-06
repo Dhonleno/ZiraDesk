@@ -12,6 +12,90 @@
   "filter": "Filtrar",
   "noResults": "No se encontraron resultados",
   "required": "Campo obligatorio",
+  "language": {
+    "label": "Idioma",
+    "ptBR": "Portugués",
+    "enUS": "Inglés",
+    "es": "Español"
+  },
+  "home": {
+    "title": "Inicio",
+    "subtitle": "Resumen de la operación",
+    "refresh": "Actualizar",
+    "navLabel": "Inicio",
+    "greeting": {
+      "morning": "Buenos días",
+      "afternoon": "Buenas tardes",
+      "evening": "Buenas noches"
+    },
+    "period": {
+      "today": "Hoy",
+      "7d": "7 días",
+      "30d": "30 días",
+      "month": "Mes"
+    },
+    "kpi": {
+      "total": "Atenciones",
+      "resolved": "resueltas",
+      "open": "Abiertas",
+      "tma": "TMA",
+      "firstResponse": "1ª Respuesta",
+      "csat": "CSAT"
+    },
+    "charts": {
+      "volumeByDay": "Volumen por día",
+      "total": "Total",
+      "resolved": "Resueltos",
+      "byChannel": "Por canal",
+      "peakHours": "Mapa de calor",
+      "peakHoursSub": "conversaciones por día y hora",
+      "byDept": "Por departamento",
+      "csatDist": "Distribución CSAT",
+      "csatOverTime": "CSAT en el tiempo",
+      "csatAvg": "CSAT promedio",
+      "byOrg": "Top organizaciones",
+      "byOrgSub": "por volumen de atenciones",
+      "topAgents": "Top agentes",
+      "noData": "Sin datos en el período"
+    }
+  },
+  "agentHome": {
+    "subtitle": "Tu espacio de trabajo de hoy",
+    "conversations": {
+      "title": "Mis atenciones",
+      "open": "Abiertas",
+      "waiting": "En espera",
+      "cta": "Ver atenciones"
+    },
+    "tickets": {
+      "title": "Mis tickets",
+      "open": "Abiertos",
+      "inProgress": "En progreso",
+      "waiting": "En espera",
+      "dueToday": "Vencen hoy",
+      "overdue": "Vencidos",
+      "cta": "Ver tickets"
+    },
+    "metrics": {
+      "title": "Mis métricas",
+      "cta": "Ver rendimiento"
+    },
+    "kpi": {
+      "total": "Atenciones",
+      "resolved": "resueltas",
+      "tma": "TMA",
+      "tme": "TME",
+      "csat": "CSAT",
+      "sla": "SLA"
+    },
+    "goals": {
+      "title": "Progreso de metas",
+      "noGoal": "Ninguna meta configurada"
+    },
+    "charts": {
+      "volumeByDay": "Mi volumen por día"
+    }
+  },
   "phone": {
     "invalid": "Número de teléfono inválido",
     "invalidBR": "El móvil brasileño debe tener 9 después del DDD: (XX) 9XXXX-XXXX",
@@ -23,5 +107,11 @@
     "newMessage": "Nuevo mensaje",
     "open": "Abrir",
     "now": "ahora"
+  },
+  "pii": {
+    "noPermission": "No tienes permiso para revelar datos sensibles",
+    "maskedHint": "Datos enmascarados — haz clic en el ojo para revelar",
+    "revealTimeRemaining": "Visible por {{seconds}}s",
+    "revealed": "Revelado"
   }
 }

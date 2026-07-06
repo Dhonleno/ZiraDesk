@@ -1,5 +1,24 @@
 import { z } from 'zod';
 
+function emptyToUndefined(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function optionalTrimmedString() {
+  return z.preprocess(emptyToUndefined, z.string().optional());
+}
+
+function optionalEmail(envName: string) {
+  return z.preprocess(emptyToUndefined, z.string().email(`${envName} deve ser um e-mail válido`).optional());
+}
+
+function optionalUrl(envName: string) {
+  return z.preprocess(emptyToUndefined, z.string().url(`${envName} deve ser uma URL válida`).optional());
+}
+
 const envSchema = z.object({
   DATABASE_URL: z.string().url('DATABASE_URL deve ser uma URL válida'),
   REDIS_URL: z.string().url('REDIS_URL deve ser uma URL válida'),
@@ -13,6 +32,8 @@ const envSchema = z.object({
   WHATSAPP_WABA_ID: z.string(),
   WHATSAPP_ACCESS_TOKEN: z.string(),
   WHATSAPP_VERIFY_TOKEN: z.string(),
+  META_APP_SECRET: z.string().min(1, 'META_APP_SECRET é obrigatório'),
+  META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v23.0'),
   TWILIO_ACCOUNT_SID: z.string(),
   TWILIO_AUTH_TOKEN: z.string(),
   TWILIO_PHONE_NUMBER: z.string(),
@@ -24,6 +45,22 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
+  // Storage
+  STORAGE_PROVIDER: z.enum(['local', 'r2']).default('local'),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  R2_PUBLIC_URL: z.string().url().optional(),
+  // LGPD / DPO
+  DPO_NAME: optionalTrimmedString(),
+  DPO_EMAIL: optionalEmail('DPO_EMAIL'),
+  DPO_PHONE: optionalTrimmedString(),
+  PRIVACY_POLICY_URL: optionalUrl('PRIVACY_POLICY_URL'),
+  TERMS_OF_SERVICE_URL: optionalUrl('TERMS_OF_SERVICE_URL'),
+  COMPANY_LEGAL_NAME: optionalTrimmedString(),
+  COMPANY_CNPJ: optionalTrimmedString(),
+  SUPER_ADMIN_EMAIL: optionalEmail('SUPER_ADMIN_EMAIL'),
 });
 
 const parsed = envSchema.safeParse(process.env);

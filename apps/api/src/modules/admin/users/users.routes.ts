@@ -3,7 +3,15 @@ import type { AuthUser } from '@ziradesk/shared';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requirePermission } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
-import { inviteUserSchema, updateUserSchema, listUsersQuerySchema } from './users.schema.js';
+import {
+  inviteUserSchema,
+  updateUserSchema,
+  listUsersQuerySchema,
+  updateUserLgpdConsentSchema,
+  exportUserLgpdQuerySchema,
+  anonymizeUserLgpdSchema,
+  listUserLgpdRequestsQuerySchema,
+} from './users.schema.js';
 import {
   listUsers,
   getUser,
@@ -18,9 +26,19 @@ import {
   RoleUpdateError,
   InviteEmailError,
 } from './users.service.js';
+import {
+  updateUserLgpdConsent,
+  exportUserLgpdData,
+  anonymizeUserForLgpd,
+  listUserLgpdRequests,
+  NotFoundError as LgpdNotFoundError,
+  ForbiddenError as LgpdForbiddenError,
+} from './users.lgpd.service.js';
+import { ensureUsersLgpdInfrastructure } from './users.infrastructure.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const usersManageGuard = [...guard, requirePermission('users:manage')];
+const lgpdManageGuard = [...guard, requirePermission('lgpd:manage')];
 
 function resolveSchemaName(request: FastifyRequest): string | null {
   const authUser = request.user as AuthUser;
@@ -28,7 +46,7 @@ function resolveSchemaName(request: FastifyRequest): string | null {
 }
 
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', { preHandler: usersManageGuard }, async (request, reply) => {
+  app.get('/', { preHandler: guard }, async (request, reply) => {
     const schemaName = resolveSchemaName(request);
     if (!schemaName) {
       return reply.code(500).send({
@@ -148,9 +166,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    const tenantId = request.user.tenantId;
+    if (!tenantId) {
+      return reply.code(500).send({ success: false, error: { message: 'Tenant não identificado' } });
+    }
+
     try {
-      const result = await resetUserPassword(request.params.id, schemaName);
-      return reply.send({ success: true, data: result });
+      await resetUserPassword(request.params.id, tenantId, schemaName);
+      return reply.send({ success: true, data: { message: 'E-mail de redefinição enviado' } });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
@@ -179,5 +202,70 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ success: false, error: { message: err.message } });
       throw err;
     }
+  });
+
+  app.patch<{ Params: { id: string } }>('/:id/lgpd/consent', { preHandler: lgpdManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = updateUserLgpdConsentSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    try {
+      const result = await updateUserLgpdConsent(request.params.id, parsed.data, request.user.id, schemaName);
+      return reply.send({ success: true, data: result });
+    } catch (err) {
+      if (err instanceof LgpdNotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof LgpdForbiddenError) return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.get<{ Params: { id: string } }>('/:id/lgpd/export', { preHandler: lgpdManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = exportUserLgpdQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Query inválida' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    try {
+      const data = await exportUserLgpdData(request.params.id, request.user.id, { includeAuditLogs: parsed.data.include_audit_logs }, schemaName);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof LgpdNotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/lgpd/anonymize', { preHandler: lgpdManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = anonymizeUserLgpdSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Dados inválidos' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    try {
+      const result = await anonymizeUserForLgpd(request.params.id, request.user.id, parsed.data, request.user.id, schemaName);
+      return reply.send({ success: true, data: result });
+    } catch (err) {
+      if (err instanceof LgpdNotFoundError) return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof LgpdForbiddenError) return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.get('/lgpd/requests', { preHandler: lgpdManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = listUserLgpdRequestsQuerySchema.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Query inválida' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const result = await listUserLgpdRequests(parsed.data, schemaName);
+    return reply.send({ success: true, ...result });
   });
 }

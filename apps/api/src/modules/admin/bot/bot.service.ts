@@ -36,6 +36,8 @@ interface RawBotOptionRow {
   submenu_greeting: string | null;
   parent_option_id: string | null;
   sort_order: number;
+  department_id: string | null;
+  department_name: string | null;
   created_at: Date;
 }
 
@@ -179,11 +181,13 @@ export function formatBotMenu(menu: BotMenu): string {
 
 async function getFlatOptionsByMenuId(db: BotDbClient, menuId: string): Promise<RawBotOptionRow[]> {
   return db.$queryRawUnsafe<RawBotOptionRow[]>(
-    `SELECT id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-            parent_option_id, sort_order, created_at
-     FROM bot_options
-     WHERE bot_menu_id = $1::uuid
-     ORDER BY sort_order ASC, number ASC`,
+    `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
+            d.name AS department_name, bo.created_at
+     FROM bot_options bo
+     LEFT JOIN departments d ON d.id = bo.department_id
+     WHERE bo.bot_menu_id = $1::uuid
+     ORDER BY bo.sort_order ASC, bo.number ASC`,
     menuId,
   );
 }
@@ -194,12 +198,13 @@ async function getOptionsByParent(
   parentId: string | null,
 ): Promise<BotOption[]> {
   const rows = await db.$queryRawUnsafe<RawBotOptionRow[]>(
-    `SELECT id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-            parent_option_id, sort_order, created_at
-     FROM bot_options
-     WHERE bot_menu_id = $1::uuid
-       AND (($2::uuid IS NULL AND parent_option_id IS NULL) OR parent_option_id = $2::uuid)
-     ORDER BY sort_order ASC, number ASC`,
+    `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
+            NULL::text AS department_name, bo.created_at
+     FROM bot_options bo
+     WHERE bo.bot_menu_id = $1::uuid
+       AND (($2::uuid IS NULL AND bo.parent_option_id IS NULL) OR bo.parent_option_id = $2::uuid)
+     ORDER BY bo.sort_order ASC, bo.number ASC`,
     menuId,
     parentId,
   );
@@ -209,10 +214,11 @@ async function getOptionsByParent(
 
 async function getOptionById(db: BotDbClient, optionId: string): Promise<BotOption | null> {
   const rows = await db.$queryRawUnsafe<RawBotOptionRow[]>(
-    `SELECT id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-            parent_option_id, sort_order, created_at
-     FROM bot_options
-     WHERE id = $1::uuid
+    `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
+            NULL::text AS department_name, bo.created_at
+     FROM bot_options bo
+     WHERE bo.id = $1::uuid
      LIMIT 1`,
     optionId,
   );
@@ -267,6 +273,7 @@ export async function ensureBotInfrastructure(
 ): Promise<void> {
   const botMenusRef = tableRef('bot_menus', schemaName);
   const botOptionsRef = tableRef('bot_options', schemaName);
+  const conversationsRef = tableRef('conversations', schemaName);
 
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ${botMenusRef} (
@@ -329,6 +336,28 @@ export async function ensureBotInfrastructure(
            'Digite o numero da opcao desejada.'
     WHERE NOT EXISTS (SELECT 1 FROM ${botMenusRef})
   `);
+
+  const conversationTableName = schemaName
+    ? `${schemaName}.conversations`
+    : 'conversations';
+  const conversationTableRows = await db.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    'SELECT to_regclass($1::text) IS NOT NULL AS exists',
+    conversationTableName,
+  );
+
+  if (conversationTableRows[0]?.exists) {
+    await db.$executeRawUnsafe(`
+      ALTER TABLE ${conversationsRef}
+      ADD COLUMN IF NOT EXISTS bot_option_id UUID
+      REFERENCES ${botOptionsRef}(id) ON DELETE SET NULL
+    `);
+
+    await db.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_bot_option_id
+      ON ${conversationsRef}(bot_option_id)
+      WHERE bot_option_id IS NOT NULL
+    `);
+  }
 }
 
 export async function getMenu(db: BotDbClient = prisma): Promise<BotMenu> {
@@ -424,7 +453,7 @@ export async function addOption(data: CreateBotOptionInput): Promise<BotOption> 
      )
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, created_at`,
+               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
     menuId,
     parentOptionId,
     data.number,
@@ -477,6 +506,10 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
     throw new ConflictError('Resposta e obrigatoria para opcoes sem submenu');
   }
 
+  const nextDepartmentId = data.department_id === undefined
+    ? current.department_id
+    : (data.department_id ?? null);
+
   const rows = await prisma.$queryRawUnsafe<RawBotOptionRow[]>(
     `UPDATE bot_options
      SET number = $1,
@@ -486,10 +519,11 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
          has_submenu = $5,
          submenu_greeting = $6,
          parent_option_id = $7::uuid,
-         sort_order = COALESCE($8::integer, sort_order)
+         sort_order = COALESCE($8::integer, sort_order),
+         department_id = $10::uuid
      WHERE id = $9::uuid
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, created_at`,
+               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
     nextNumber,
     data.label?.trim() ?? null,
     data.tag === undefined ? current.tag : normalizeOptionalText(data.tag),
@@ -501,6 +535,7 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
     nextParentOptionId,
     data.sort_order ?? null,
     id,
+    nextDepartmentId,
   );
 
   return normalizeOption(rows[0]!);
@@ -513,7 +548,7 @@ export async function deleteOption(id: string): Promise<BotOption> {
     `DELETE FROM bot_options
      WHERE id = $1::uuid
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, created_at`,
+               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
     id,
   );
 
@@ -582,14 +617,19 @@ async function handleTransferToAgent(
   db: BotDbClient,
 ): Promise<BotResponse> {
   const responseText = option?.response?.trim() || 'Transferindo para um atendente. Aguarde...';
+  const parentOption = option?.parent_option_id ? await getOptionById(db, option.parent_option_id) : null;
+  const botGroup = parentOption?.label ?? option?.label ?? null;
+  const botSubject = option?.label ?? option?.tag ?? null;
 
   await updateBotMetadata(
     conversationId,
     {
       bot_stage: 'done',
       bot_option_id: option?.id ?? null,
-      bot_department: option?.label ?? null,
-      bot_tag: option?.tag ?? null,
+      bot_group: botGroup,
+      bot_subject: botSubject,
+      bot_department: botGroup,
+      bot_tag: botSubject,
       bot_path: [],
       bot_current_parent: null,
       bot_current_menu_text: null,
@@ -600,17 +640,23 @@ async function handleTransferToAgent(
   await db.$executeRawUnsafe(
     `UPDATE conversations
      SET status = 'open',
+         queue_entered_at = COALESCE(queue_entered_at, NOW()),
+         bot_option_id = $1::uuid,
+         department_id = $5::uuid,
          metadata = COALESCE(metadata, '{}'::jsonb)
            || jsonb_build_object(
              'bot_option_id', $1::uuid,
              'bot_department', $2::text,
-             'bot_tag', $3::text
+             'bot_tag', $3::text,
+             'bot_group', $2::text,
+             'bot_subject', $3::text
            )
      WHERE id = $4::uuid`,
     option?.id ?? null,
-    option?.label ?? '',
-    option?.tag ?? '',
+    botGroup ?? '',
+    botSubject ?? '',
     conversationId,
+    option?.department_id ?? null,
   );
 
   return { type: 'choice', text: responseText, option };

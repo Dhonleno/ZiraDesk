@@ -3,7 +3,7 @@ import { settingsRoutes } from './settings/settings.routes.js';
 import { usersRoutes } from './users/users.routes.js';
 import { channelsRoutes } from './channels/channels.routes.js';
 import { quickRepliesRoutes } from './quick-replies/quick-replies.routes.js';
-import { statsRoutes } from './stats/stats.routes.js';
+import { registerUsageRoute, statsRoutes } from './stats/stats.routes.js';
 import { onboardingRoutes } from './onboarding/onboarding.routes.js';
 import { businessHoursRoutes } from './business-hours/business-hours.routes.js';
 import { botRoutes } from './bot/bot.routes.js';
@@ -11,13 +11,20 @@ import { adminAutoAssignRoutes } from './auto-assign/index.js';
 import { adminPauseReasonsRoutes } from './pause-reasons/index.js';
 import { adminSkillsRoutes } from './skills/index.js';
 import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
+import { contactTagsRoutes } from './contact-tags/contact-tags.routes.js';
 import { adminTicketTypesRoutes } from './ticket-types/index.js';
+import { adminTicketCategoriesRoutes } from './ticket-categories/index.js';
 import { closeConfigRoutes } from './close-config/close-config.routes.js';
 import { aiAdminRoutes } from './ai/ai-admin.routes.js';
 import { webhooksRoutes } from './webhooks/webhooks.routes.js';
 import { redmineAdminRoutes } from './redmine/redmine.routes.js';
 import { templatesRoutes } from './templates/templates.routes.js';
 import { smtpRoutes } from './smtp/smtp.routes.js';
+import { omnichannelLgpdRoutes } from './omnichannel-lgpd/omnichannel-lgpd.routes.js';
+import { adminLgpdRoutes } from './lgpd/lgpd.routes.js';
+import { queueConfigRoutes } from './queue-config/queue-config.routes.js';
+import { voiceConfigRoutes } from './voice-config/voice-config.routes.js';
+import { adminDepartmentsRoutes } from './departments/index.js';
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(settingsRoutes, { prefix: '/settings' });
@@ -29,9 +36,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(adminSkillsRoutes);
   await app.register(adminPauseReasonsRoutes);
   await app.register(adminTicketTypesRoutes);
+  await app.register(adminTicketCategoriesRoutes);
   await app.register(closeConfigRoutes, { prefix: '/close-config' });
   await app.register(conversationTagsAdminRoutes, { prefix: '/conversation-tags' });
+  await app.register(contactTagsRoutes, { prefix: '/contact-tags' });
   await app.register(quickRepliesRoutes, { prefix: '/quick-replies' });
+  await app.register(registerUsageRoute);
   await app.register(statsRoutes, { prefix: '/stats' });
   await app.register(onboardingRoutes);
   await app.register(aiAdminRoutes, { prefix: '/ai' });
@@ -39,4 +49,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(redmineAdminRoutes, { prefix: '/integrations/redmine' });
   await app.register(templatesRoutes, { prefix: '/templates' });
   await app.register(smtpRoutes, { prefix: '/smtp' });
+  await app.register(omnichannelLgpdRoutes, { prefix: '/omnichannel' });
+  await app.register(adminLgpdRoutes, { prefix: '/lgpd' });
+  await app.register(queueConfigRoutes, { prefix: '/queue-config' });
+  await app.register(voiceConfigRoutes, { prefix: '/voice-config' });
+  await app.register(adminDepartmentsRoutes);
 }

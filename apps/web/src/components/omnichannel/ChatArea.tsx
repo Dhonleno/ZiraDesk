@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   adminApi,
   omnichannelApi,
@@ -12,8 +14,9 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { emitSocketEvent, subscribeToEvent } from '../../services/socket';
+import { avatarClass } from '../../utils/avatar';
 import { ConversationTimer } from './ConversationTimer';
-import { ResolveModal, type ResolvePayload } from './ResolveModal';
+import { CloseConversationModal } from './CloseConversationModal';
 import { TransferModal } from './TransferModal';
 import { MediaUpload, type MediaUploadHandle, type SentMediaPayload } from './MediaUpload';
 import { AudioRecorder, type AudioRecorderHandle } from './AudioRecorder';
@@ -26,6 +29,9 @@ import { usePermission } from '../../hooks/usePermission';
 
 type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
+type MessageListEntry =
+  | { kind: 'date'; key: string; date: string }
+  | { kind: 'message'; key: string; message: Message };
 type MentionData = NonNullable<NonNullable<Message['metadata']>['mention']>;
 type CallRecordingMetadata = {
   recording_url: string;
@@ -41,27 +47,48 @@ interface MessageStatusSocketEvent {
   status: Exclude<MessageDeliveryStatus, 'pending'>;
 }
 
+interface MessageFailedSocketEvent {
+  conversationId: string;
+  messageId: string;
+  reason?: string;
+}
+
 interface ConversationClosedSocketEvent {
   conversationId: string;
   reason?: string;
 }
 
 const QUICK_REPLY_VARIABLE_PATTERN = /\{\{(nome|empresa|protocolo|agente|data|hora)\}\}/g;
+const ALLOWED_PASTED_MEDIA_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 function resolveVariables(text: string, context: {
   contactName?: string | null;
   organizationName?: string | null;
   protocolNumber?: string | null;
   agentName?: string | null;
+  locale?: string;
 }) {
   const now = new Date();
+  const locale = context.locale ?? 'pt-BR';
   return text
     .replace(/\{\{nome\}\}/g, context.contactName ?? '')
     .replace(/\{\{empresa\}\}/g, context.organizationName ?? '')
     .replace(/\{\{protocolo\}\}/g, context.protocolNumber ?? '')
     .replace(/\{\{agente\}\}/g, context.agentName ?? '')
-    .replace(/\{\{data\}\}/g, now.toLocaleDateString('pt-BR'))
-    .replace(/\{\{hora\}\}/g, now.toLocaleTimeString('pt-BR', {
+    .replace(/\{\{data\}\}/g, now.toLocaleDateString(locale))
+    .replace(/\{\{hora\}\}/g, now.toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
     }));
@@ -99,47 +126,41 @@ function highlightQuickReplyVariables(text: string) {
   return parts;
 }
 
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#667eea,#764ba2)',
-  'linear-gradient(135deg,#f093fb,#f5576c)',
-  'linear-gradient(135deg,#4facfe,#00f2fe)',
-  'linear-gradient(135deg,#43e97b,#38f9d7)',
-  'linear-gradient(135deg,#fa709a,#fee140)',
-  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
-];
-
-function avatarGradient(name: string | null) {
-  const idx = (name?.charCodeAt(0) ?? 0) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx] ?? AVATAR_GRADIENTS[0];
-}
-
 const CH_BADGE: Record<string, { bg: string; color: string; border: string; label: string }> = {
-  whatsapp: { bg: 'rgba(37,211,102,.15)', color: '#25D366', border: 'rgba(37,211,102,.25)', label: 'WhatsApp' },
+  whatsapp: { bg: 'var(--channel-whatsapp-dim)', color: 'var(--channel-whatsapp)', border: 'rgba(37,211,102,.25)', label: 'WhatsApp' },
   email: { bg: 'var(--blue-dim)', color: 'var(--blue)', border: 'rgba(96,165,250,.25)', label: 'E-mail' },
   live_chat: { bg: 'var(--bg-5)', color: 'var(--txt-2)', border: 'var(--line-2)', label: 'Chat' },
 };
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  open: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
-  active_outbound: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
-  in_service: { color: 'var(--teal)', bg: 'var(--teal-dim)', border: 'rgba(0,201,167,.25)' },
-  pending: { color: 'var(--blue)', bg: 'var(--blue-dim)', border: 'rgba(96,165,250,.25)' },
-  resolved: { color: 'var(--txt-3)', bg: 'var(--bg-4)', border: 'var(--line)' },
+  open: { color: 'var(--teal)', bg: 'var(--teal-dim)', border: 'rgba(0,201,167,.25)' },
+  queue: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
+  awaitingChoice: { color: 'var(--purple)', bg: 'var(--purple-dim)', border: 'rgba(167,139,250,.25)' },
+  waiting: { color: 'var(--amber)', bg: 'var(--amber-dim)', border: 'rgba(245,158,11,.25)' },
   closed: { color: 'var(--txt-3)', bg: 'var(--bg-4)', border: 'var(--line)' },
 };
 
-function formatTime(dateStr: string) {
-  return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function getConversationStage(conversation: Conversation | undefined): string | null {
+  if (!conversation) return null;
+  if (conversation.status === 'closed' || conversation.status === 'waiting') return conversation.status;
+  if (conversation.status === 'open' && !conversation.assigned_to) {
+    return conversation.metadata?.['bot_stage'] === 'waiting_choice' ? 'awaitingChoice' : 'queue';
+  }
+  return conversation.status;
 }
 
-function formatDate(dateStr: string) {
+function formatTime(dateStr: string, locale: string) {
+  return new Date(dateStr).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string, locale: string) {
   const d = new Date(dateStr);
   const today = new Date();
-  if (d.toDateString() === today.toDateString()) return 'Hoje';
+  if (d.toDateString() === today.toDateString()) return todayLabel;
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+  if (d.toDateString() === yesterday.toDateString()) return yesterdayLabel;
+  return d.toLocaleDateString(locale, { day: '2-digit', month: 'long' });
 }
 
 function revokeIfBlobUrl(url: string | null | undefined) {
@@ -154,21 +175,16 @@ const COMMON_EMOJIS = [
   '📞', '💬', '✔️', '⚡', '🎯', '💡',
 ] as const;
 
-function buildMentionPreview(content: string | null | undefined, contentType: string): string {
+function buildMentionPreview(content: string | null | undefined, contentType: string, t: TFunction): string {
   const normalized = (content ?? '').trim();
   if (normalized) return normalized.slice(0, 255);
 
   switch (contentType) {
-    case 'image':
-      return '[Imagem]';
-    case 'audio':
-      return '[Áudio]';
-    case 'video':
-      return '[Vídeo]';
-    case 'document':
-      return '[Documento]';
-    default:
-      return '[Mensagem]';
+    case 'image': return t('chat.mentionImage');
+    case 'audio': return t('chat.mentionAudio');
+    case 'video': return t('chat.mentionVideo');
+    case 'document': return t('chat.mentionDocument');
+    default: return t('chat.mentionDefault');
   }
 }
 
@@ -211,13 +227,19 @@ function formatCallRecordingDuration(seconds: number | undefined): string {
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-function mentionTypeLabel(mention: MentionData): string {
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mentionTypeLabel(mention: MentionData, t: TFunction): string {
   if (mention.content_type === 'image') {
-    return mention.media_subtype === 'sticker' ? 'Figurinha' : 'Foto';
+    return mention.media_subtype === 'sticker' ? t('chat.mentionSticker') : t('chat.mentionPhoto');
   }
-  if (mention.content_type === 'video') return 'Vídeo';
-  if (mention.content_type === 'audio') return 'Áudio';
-  if (mention.content_type === 'document') return 'Documento';
+  if (mention.content_type === 'video') return t('chat.mentionVideo');
+  if (mention.content_type === 'audio') return t('chat.mentionAudio');
+  if (mention.content_type === 'document') return t('chat.mentionDocument');
   return mention.content;
 }
 
@@ -287,6 +309,7 @@ function ToolbarButton({ icon, tooltip, onClick, active = false, activeColor = '
     <button
       type="button"
       title={tooltip}
+      aria-label={tooltip}
       onClick={onClick}
       style={{
         width: 32,
@@ -320,6 +343,7 @@ function ToolbarButton({ icon, tooltip, onClick, active = false, activeColor = '
 
 interface Props {
   conversationId: string;
+  onClosed?: () => void;
 }
 
 function requiresWhatsappTemplateMessage(
@@ -327,7 +351,9 @@ function requiresWhatsappTemplateMessage(
   withinActiveOutboundWindow: boolean,
 ): boolean {
   if (!conversation || conversation.channel_type !== 'whatsapp') return false;
-  return conversation.status === 'active_outbound' && !withinActiveOutboundWindow;
+  return conversation.status === 'waiting'
+    && conversation.conversation_type === 'outbound'
+    && !withinActiveOutboundWindow;
 }
 
 function extractTemplateNameFromPlaceholder(content: string | null | undefined): string | null {
@@ -378,8 +404,8 @@ function applyTemplateParamsToBody(body: string, params: string[]): string {
   });
 }
 
-export function ChatArea({ conversationId }: Props) {
-  const { t } = useTranslation('omnichannel');
+export function ChatArea({ conversationId, onClosed }: Props) {
+  const { t, i18n } = useTranslation('omnichannel');
   const { t: tAdmin } = useTranslation('admin');
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentAuthToken = useAuthStore((state) => state.token);
@@ -388,13 +414,13 @@ export function ChatArea({ conversationId }: Props) {
   const { can } = usePermission();
   const [content, setContent] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [totalMessages, setTotalMessages] = useState(0);
+  const [, setTotalMessages] = useState(0);
   const [isMessagesLoading, setIsMessagesLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [localMediaUrls, setLocalMediaUrls] = useState<Record<string, string>>({});
@@ -413,10 +439,14 @@ export function ChatArea({ conversationId }: Props) {
   const [isAssuming, setIsAssuming] = useState(false);
   const [isConversationClosed, setIsConversationClosed] = useState(false);
   const [mentioningMessage, setMentioningMessage] = useState<MentionData | null>(null);
+  const [pastedFile, setPastedFile] = useState<File | null>(null);
+  const [pastedPreviewUrl, setPastedPreviewUrl] = useState<string | null>(null);
+  const [isPastedFileSending, setIsPastedFileSending] = useState(false);
   const toast = useToast();
   const qc = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const quickRepliesRef = useRef<HTMLDivElement>(null);
   const shortcutDropdownRef = useRef<HTMLDivElement>(null);
@@ -431,10 +461,31 @@ export function ChatArea({ conversationId }: Props) {
   const nextScrollBehaviorRef = useRef<ScrollBehavior>('smooth');
   const localMediaUrlsRef = useRef<Record<string, string>>({});
   const messagesRef = useRef<Message[]>([]);
+  const isAutoLoadingOlderRef = useRef(false);
   const pendingIncomingNoticeRef = useRef(false);
   const [isMediaActive, setIsMediaActive] = useState(false);
   const [isAudioActive, setIsAudioActive] = useState(false);
   const hasValidSession = Boolean(conversationId) && isAuthenticated && Boolean(currentAuthToken);
+
+  const clearPastedFile = useCallback(() => {
+    setPastedFile(null);
+    setPastedPreviewUrl(null);
+  }, []);
+
+  useEffect(() => {
+    if (!pastedFile || !pastedFile.type.startsWith('image/')) {
+      setPastedPreviewUrl(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(pastedFile);
+    setPastedPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [pastedFile]);
+
+  useEffect(() => {
+    clearPastedFile();
+  }, [clearPastedFile, conversationId]);
 
   const shouldRetryQuery = useCallback((failureCount: number, error: unknown) => {
     const status = (error as { response?: { status?: number } })?.response?.status;
@@ -559,14 +610,16 @@ export function ChatArea({ conversationId }: Props) {
     retry: shouldRetryQuery,
   });
 
-  const isActiveOutboundConversation = data?.conversation?.status === 'active_outbound';
+  const isWaitingOutboundConversation =
+    data?.conversation?.status === 'waiting'
+    && data.conversation.conversation_type === 'outbound';
   const {
     data: conversationWindowStatus,
     isSuccess: isConversationWindowLoaded,
   } = useQuery({
     queryKey: ['conversation-window', conversationId],
     queryFn: () => omnichannelApi.getConversationWindowStatus(conversationId),
-    enabled: hasValidSession && isActiveOutboundConversation,
+    enabled: hasValidSession && isWaitingOutboundConversation,
     retry: shouldRetryQuery,
   });
   const activeOutboundWindowStatus: ConversationWindowStatus = conversationWindowStatus ?? {
@@ -600,11 +653,6 @@ export function ChatArea({ conversationId }: Props) {
   const templatesQueryEnabled = hasValidSession && isActiveConversationWhatsapp && Boolean(activeChannelId);
   const {
     data: templatesData,
-    isLoading: isTemplatesLoading,
-    isFetching: isTemplatesFetching,
-    isError: isTemplatesError,
-    error: templatesError,
-    status: templatesStatus,
   } = useQuery({
     queryKey: ['templates', activeChannelId],
     queryFn: () => omnichannelApi.listTemplates(activeChannelId!),
@@ -624,51 +672,11 @@ export function ChatArea({ conversationId }: Props) {
     return map;
   }, [templates]);
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const conversation = activeConversation as
-      | (Conversation & { channelId?: string | null; channel?: unknown })
-      | undefined;
-    if (!conversation?.id) return;
-
-    console.debug('[Templates Debug]', {
-      conversationId: conversation?.id,
-      channelId: conversation?.channel_id ?? conversation?.channelId,
-      channel_id: conversation?.channel_id,
-      channel: conversation?.channel,
-      templatesQueryEnabled,
-      templatesStatus,
-      isTemplatesLoading,
-      isTemplatesFetching,
-      isTemplatesError,
-      templatesError,
-      templatesData,
-      rawConversation: conversation,
-    });
-    console.debug('[ChatArea templates query]', {
-      queryEnabled: templatesQueryEnabled,
-      resolvedChannelId: activeChannelId,
-      templatesCount: templates.length,
-      templatesData,
-    });
-  }, [
-    activeChannelId,
-    activeConversation,
-    templatesQueryEnabled,
-    templatesStatus,
-    isTemplatesLoading,
-    isTemplatesFetching,
-    isTemplatesError,
-    templatesError,
-    templatesData,
-    templates.length,
-  ]);
-
   const notifyMessagesLoadError = useCallback(() => {
     const now = Date.now();
     if (now - lastMessagesErrorAtRef.current < 2500) return;
     lastMessagesErrorAtRef.current = now;
-    toast.error(t('history.error', { defaultValue: 'Erro ao carregar mensagens' }));
+    toast.error(t('history.error'));
   }, [t, toast]);
 
   const loadLatestMessages = useCallback(async (preserveOlder: boolean) => {
@@ -864,12 +872,6 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     });
 
-    const unsubResolved = subscribeToEvent<{ conversationId: string }>('conversation:resolved', (event) => {
-      if (event.conversationId !== conversationId) return;
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    });
-
     const unsubTransferred = subscribeToEvent<{ conversationId: string }>('conversation:transferred', (event) => {
       if (event.conversationId !== conversationId) return;
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
@@ -949,6 +951,33 @@ export function ChatArea({ conversationId }: Props) {
       );
     });
 
+    const unsubMessageFailed = subscribeToEvent<MessageFailedSocketEvent>('conversation:message_failed', (event) => {
+      if (event.conversationId !== conversationId) return;
+      const reason = event.reason ?? 'Falha desconhecida';
+      const patchMessage = (msg: Message): Message => {
+        if (msg.id !== event.messageId) return msg;
+        return {
+          ...msg,
+          status: 'failed',
+          metadata: {
+            ...(msg.metadata ?? {}),
+            failure_reason: reason,
+          },
+        };
+      };
+      setMessages((prev) => prev.map(patchMessage));
+      qc.setQueryData(
+        ['conversation', conversationId],
+        (old: { conversation: Conversation; messages: Message[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map(patchMessage),
+          };
+        },
+      );
+    });
+
     const unsubSocketConnect = subscribeToEvent('connect', () => {
       emitSocketEvent('conversation:join', joinPayload);
       void loadLatestMessages(true);
@@ -959,7 +988,6 @@ export function ChatArea({ conversationId }: Props) {
     return () => {
       unsubNew();
       unsubIncoming();
-      unsubResolved();
       unsubTransferred();
       unsubUpdated();
       unsubClosed();
@@ -969,6 +997,7 @@ export function ChatArea({ conversationId }: Props) {
       unsubHelpDeclined();
       unsubCallStatus();
       unsubMessageStatus();
+      unsubMessageFailed();
       unsubSocketConnect();
       emitSocketEvent('conversation:leave', joinPayload);
     };
@@ -980,7 +1009,7 @@ export function ChatArea({ conversationId }: Props) {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       void loadLatestMessages(true);
-    }, 10_000);
+    }, 60_000);
 
     return () => {
       window.clearInterval(timer);
@@ -1076,17 +1105,19 @@ export function ChatArea({ conversationId }: Props) {
     },
   });
 
-  const endMutation = useMutation({
-    mutationFn: async (payload: ResolvePayload) => {
-      return omnichannelApi.resolveConversation(conversationId, payload);
+  const closeMutation = useMutation({
+    mutationFn: async (payload: { reason: string; notes?: string }) => {
+      return omnichannelApi.closeConversation(conversationId, payload);
     },
     onSuccess: () => {
-      setShowResolveModal(false);
-      toast.success(t('chat.endSuccess', { defaultValue: 'Atendimento encerrado' }));
+      setShowCloseModal(false);
+      setIsConversationClosed(true);
+      toast.success(t('closeModal.successToast'));
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
+      onClosed?.();
     },
-    onError: () => toast.error(t('chat.endError', { defaultValue: 'Erro ao encerrar atendimento' })),
+    onError: () => toast.error(t('closeModal.errorToast')),
   });
 
   const reopenMutation = useMutation({
@@ -1096,24 +1127,9 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => toast.error(t('resolve.reopenError', { defaultValue: 'Erro ao reabrir atendimento' })),
+    onError: () => toast.error(t('resolve.reopenError')),
   });
 
-  const transferSystemMessage = useMutation({
-    mutationFn: (agentName: string) =>
-      omnichannelApi.sendMessage(conversationId, {
-        content: t('transfer.systemMessage', { name: agentName }),
-        contentType: 'text',
-        isInternal: true,
-      }),
-    onSuccess: () => {
-      shouldAutoScrollNextRef.current = true;
-      nextScrollBehaviorRef.current = 'smooth';
-      void loadLatestMessages(true);
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
 
   const endHelpMutation = useMutation({
     mutationFn: () => omnichannelApi.endHelp(conversationId),
@@ -1121,17 +1137,33 @@ export function ChatArea({ conversationId }: Props) {
       void qc.invalidateQueries({ queryKey: ['conversation', conversationId, 'helpers'] });
       toast.success(t('help.endHelp'));
     },
-    onError: () => toast.error('Erro ao encerrar ajuda'),
+    onError: () => toast.error(t('help.endHelpError')),
   });
 
-  async function handleLoadOlder() {
+  const handleLoadOlder = useCallback(async () => {
     if (isLoadingMore || !hasMore || messages.length === 0) return;
     const firstMessageId = messages[0]?.id;
     if (!firstMessageId) return;
 
     const container = messagesContainerRef.current;
-    const previousHeight = container?.scrollHeight ?? 0;
-    const previousTop = container?.scrollTop ?? 0;
+    const containerRect = container?.getBoundingClientRect();
+    const messageNodes = container
+      ? Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]'))
+      : [];
+    let anchorMessageId: string | null = null;
+    let anchorOffset = 0;
+    if (container && containerRect) {
+      const firstVisible = messageNodes.find((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.bottom >= containerRect.top;
+      });
+      if (firstVisible) {
+        anchorMessageId = firstVisible.dataset.messageId ?? null;
+        anchorOffset = firstVisible.getBoundingClientRect().top - containerRect.top;
+      }
+    }
+
+    isAutoLoadingOlderRef.current = true;
 
     setIsLoadingMore(true);
     try {
@@ -1147,19 +1179,63 @@ export function ChatArea({ conversationId }: Props) {
 
       window.requestAnimationFrame(() => {
         if (!container) return;
-        const heightDiff = container.scrollHeight - previousHeight;
-        container.scrollTop = previousTop + heightDiff;
+        if (!anchorMessageId) return;
+        const anchorElement = container.querySelector<HTMLElement>(`[data-message-id="${anchorMessageId}"]`);
+        const latestContainerRect = container.getBoundingClientRect();
+        if (!anchorElement) return;
+        const newOffset = anchorElement.getBoundingClientRect().top - latestContainerRect.top;
+        container.scrollTop += (newOffset - anchorOffset);
       });
     } catch {
       notifyMessagesLoadError();
     } finally {
       setIsLoadingMore(false);
+      isAutoLoadingOlderRef.current = false;
     }
-  }
+  }, [conversationId, hasMore, isLoadingMore, messages]);
 
-  function handleSend() {
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const sentinel = topSentinelRef.current;
+    if (!container || !sentinel) return;
+    if (!hasMore || isLoadingMore || isAutoLoadingOlderRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        if (isAutoLoadingOlderRef.current || isLoadingMore || !hasMore) return;
+        void handleLoadOlder();
+      },
+      {
+        root: container,
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [handleLoadOlder, hasMore, isLoadingMore, messages.length]);
+
+  async function handleSend() {
     if (!canSendMessage) return;
-    if (sendMutation.isPending) return;
+    if (sendMutation.isPending || isPastedFileSending) return;
+
+    if (pastedFile) {
+      setIsPastedFileSending(true);
+      try {
+        const sent = await mediaUploadRef.current?.sendFile(pastedFile, content.trim());
+        if (sent) {
+          setContent('');
+          window.requestAnimationFrame(resizeComposer);
+        }
+      } finally {
+        clearPastedFile();
+        setIsPastedFileSending(false);
+      }
+      return;
+    }
+
     if (
       requiresWhatsappTemplateMessage(
         data?.conversation as Conversation | undefined,
@@ -1239,6 +1315,7 @@ export function ChatArea({ conversationId }: Props) {
       organizationName: data?.conversation?.organization_name ?? '',
       protocolNumber: data?.conversation?.protocol_number ?? '',
       agentName: currentUserName ?? '',
+      locale: i18n.language,
     });
 
     applyComposerText(resolved);
@@ -1277,8 +1354,20 @@ export function ChatArea({ conversationId }: Props) {
 
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleSend();
+      void handleSend();
     }
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(event.clipboardData.items);
+    const fileItem = items.find((item) => item.kind === 'file');
+    if (!fileItem) return;
+
+    const file = fileItem.getAsFile();
+    if (!file || !ALLOWED_PASTED_MEDIA_TYPES.has(file.type)) return;
+
+    event.preventDefault();
+    setPastedFile(file);
   }
 
   function handleContentChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -1315,7 +1404,7 @@ export function ChatArea({ conversationId }: Props) {
       message_id: message.id,
       sender_type: message.sender_type,
       sender_label: senderLabel,
-      content: buildMentionPreview(message.content, message.content_type),
+      content: buildMentionPreview(message.content, message.content_type, t),
       content_type: message.content_type,
       external_id: null,
       media_id: extractMessageMediaId(message),
@@ -1335,9 +1424,9 @@ export function ChatArea({ conversationId }: Props) {
   async function copyProtocol(protocolNumber: string) {
     try {
       await navigator.clipboard.writeText(protocolNumber);
-      toast.success('Protocolo copiado!');
+      toast.success(t('chat.protocolCopied'));
     } catch {
-      toast.error('Não foi possível copiar o protocolo');
+      toast.error(t('chat.protocolCopyError'));
     }
   }
 
@@ -1345,7 +1434,7 @@ export function ChatArea({ conversationId }: Props) {
     if (!currentUserId) return;
     setIsAssuming(true);
     try {
-      const updated = await omnichannelApi.assign(conversationId, currentUserId);
+      const updated = await omnichannelApi.assignMe(conversationId);
 
       // Usa dados reais do DB (retornados com JOIN pela rota) para atualizar o cache
       qc.setQueryData(
@@ -1361,18 +1450,20 @@ export function ChatArea({ conversationId }: Props) {
       window.dispatchEvent(new CustomEvent('omnichannel:conversation-assumed', {
         detail: { conversationId },
       }));
-      toast.success('Atendimento assumido!');
+      toast.success(t('chat.assumeSuccess'));
     } catch {
-      toast.error('Erro ao assumir atendimento');
+      toast.error(t('chat.assumeError'));
     } finally {
       setIsAssuming(false);
     }
   }
 
   const conv = data?.conversation as Conversation | undefined;
-  const isResolved = conv?.status === 'resolved' || conv?.status === 'closed';
-  const isClosedForComposer = isResolved || isConversationClosed;
+  const isClosed = conv?.status === 'closed';
+  const isClosedForComposer = isClosed || isConversationClosed;
   const isUnassigned = !conv?.assigned_to;
+  const isAwaitingBotChoice = conv?.metadata?.['bot_stage'] === 'waiting_choice';
+  const isAiAgentActive = conv?.metadata?.['ai_agent_active'] === true;
   const isAssignedToMe = !!conv?.assigned_to && conv.assigned_to === currentUserId;
   const isAssignedToOther = !!conv?.assigned_to && conv.assigned_to !== currentUserId;
   const acceptedHelpers = helpers.filter((helper) => helper.status === 'accepted');
@@ -1381,41 +1472,27 @@ export function ChatArea({ conversationId }: Props) {
   const canManageConversation = can('conversations:manage');
   const canReplyConversation = can('conversations:reply');
   const canSendMessage = canReplyConversation && (isAssignedToMe || isHelper) && !isClosedForComposer;
-  const canAssume = isUnassigned && !isClosedForComposer;
+  const canAssume = conv?.status === 'open' && isUnassigned && !isAwaitingBotChoice && !isAiAgentActive && !isClosedForComposer;
   const canTransfer = canManageConversation && (isAssignedToMe || canManageConversation) && !isClosedForComposer;
   const isComposerAttachmentActive = isMediaActive || isAudioActive;
-  const displayName = conv?.contact_name ?? 'Visitante';
+  const displayName = conv?.contact_name ?? t('visitor');
   const organizationName = conv?.organization_name?.trim() ?? null;
   const avatarName = conv?.contact_name ?? null;
   const chBadge = CH_BADGE[conv?.channel_type ?? ''];
-  const statusStyle = STATUS_STYLE[conv?.status ?? ''];
+  const conversationStage = getConversationStage(conv);
+  const statusStyle = STATUS_STYLE[conversationStage ?? ''];
   const isWhatsappConversation = conv?.channel_type === 'whatsapp';
-  const isActiveOutbound = conv?.status === 'active_outbound';
-  const isActiveOutboundWhatsappConversation = isWhatsappConversation && isActiveOutbound;
-  const shouldForceTemplate = isActiveOutbound && !withinActiveOutboundWindow;
+  const isWaitingOutbound = conv?.status === 'waiting' && conv.conversation_type === 'outbound';
+  const showConversationTimer = Boolean(conv?.assigned_at)
+    && conv?.status !== 'closed'
+    && !isWaitingOutbound;
+  const shouldForceTemplate = isWaitingOutbound && !withinActiveOutboundWindow;
   const isTemplateMode = isWhatsappConversation && shouldForceTemplate;
   const channelLabel = conv?.channel_type === 'whatsapp' ? 'WhatsApp' : conv?.channel_type === 'email' ? 'E-mail' : 'Chat';
   const hasTypedContent = content.trim().length > 0;
-  const canSubmitComposer = useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent;
-  const showRecordAction = !useTemplateMessage && !hasTypedContent;
-  const activeOutboundReturn = useMemo(() => {
-    if (!conv?.metadata || typeof conv.metadata !== 'object') return null;
-    const metadata = conv.metadata as Record<string, unknown>;
-    if (metadata.active_outbound_returned !== true) return null;
-
-    const originAgentName = typeof metadata.active_outbound_origin_agent_name === 'string'
-      ? metadata.active_outbound_origin_agent_name
-      : null;
-    const returnedAt = typeof metadata.active_outbound_returned_at === 'string'
-      ? metadata.active_outbound_returned_at
-      : null;
-
-    return {
-      originAgentName,
-      returnedAt,
-    };
-  }, [conv?.metadata]);
-
+  const canSubmitComposer = Boolean(pastedFile)
+    || (useTemplateMessage ? templateName.trim().length > 0 : hasTypedContent);
+  const showRecordAction = !useTemplateMessage && !hasTypedContent && !pastedFile;
   useEffect(() => {
     if (isWhatsappConversation) return;
     setUseTemplateMessage(false);
@@ -1428,7 +1505,7 @@ export function ChatArea({ conversationId }: Props) {
 
   useEffect(() => {
     if (!isWhatsappConversation) return;
-    if (conv?.status === 'active_outbound' && !isConversationWindowLoaded) return;
+    if (isWaitingOutbound && !isConversationWindowLoaded) return;
 
     setUseTemplateMessage((current) => (current === isTemplateMode ? current : isTemplateMode));
     if (isTemplateMode) {
@@ -1440,14 +1517,14 @@ export function ChatArea({ conversationId }: Props) {
     isConversationWindowLoaded,
     isWhatsappConversation,
     isTemplateMode,
-    conv?.status,
+    isWaitingOutbound,
   ]);
 
   useEffect(() => {
-    if (conv?.status === 'active_outbound') return;
+    if (isWaitingOutbound) return;
     setUseTemplateMessage(false);
     setTemplateError(null);
-  }, [conv?.status]);
+  }, [isWaitingOutbound]);
 
   useEffect(() => {
     if (!useTemplateMessage || !templateName) {
@@ -1476,19 +1553,393 @@ export function ChatArea({ conversationId }: Props) {
     });
   }, [templateName, templateParamValues.length, templatePreview, templates, useTemplateMessage]);
 
-  const grouped = useMemo(() => {
-    const list: Array<{ date: string; msgs: Message[] }> = [];
+  const messageEntries = useMemo<MessageListEntry[]>(() => {
+    const todayLabel = t('chat.today');
+    const yesterdayLabel = t('chat.yesterday');
+    const locale = i18n.language;
+    const list: MessageListEntry[] = [];
+    let previousDateLabel: string | null = null;
     for (const msg of messages) {
-      const date = formatDate(msg.created_at);
-      const last = list[list.length - 1];
-      if (last && last.date === date) {
-        last.msgs.push(msg);
-      } else {
-        list.push({ date, msgs: [msg] });
+      const dateLabel = formatDate(msg.created_at, todayLabel, yesterdayLabel, locale);
+      if (previousDateLabel !== dateLabel) {
+        list.push({
+          kind: 'date',
+          key: `date-${dateLabel}-${msg.id}`,
+          date: dateLabel,
+        });
+        previousDateLabel = dateLabel;
       }
+      list.push({ kind: 'message', key: msg.id, message: msg });
     }
     return list;
-  }, [messages]);
+  }, [messages, t, i18n.language]);
+  const shouldVirtualizeMessages = messageEntries.length >= 50;
+  const messageVirtualizer = useVirtualizer({
+    count: shouldVirtualizeMessages ? messageEntries.length : 0,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize: () => 88,
+    measureElement: (element) => element?.getBoundingClientRect().height ?? 88,
+    overscan: 5,
+  });
+
+  const renderMessageRow = useCallback((msg: Message) => {
+    const isAgent = msg.sender_type === 'agent';
+    const isBot = msg.sender_type === 'bot';
+    const isAIMessage = isBot && msg.metadata?.source === 'ai_agent';
+    const isSystem = msg.sender_type === 'system';
+    const isCallRecording = msg.content_type === 'call_recording';
+    const isAudioMessage = msg.content_type === 'audio' && !isCallRecording;
+    const callRecordingMeta = parseCallRecordingMetadata(msg);
+    const isCompanySide = isAgent;
+    const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
+    const templateNameFromPlaceholder = extractTemplateNameFromPlaceholder(msg.content);
+    const templateNameFromMetadata = (
+      msg.metadata
+      && typeof msg.metadata === 'object'
+      && typeof (msg.metadata as Record<string, unknown>).whatsapp_template === 'object'
+      && (msg.metadata as Record<string, unknown>).whatsapp_template
+      && typeof ((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name === 'string'
+    )
+      ? String(((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name)
+      : null;
+    const resolvedTemplateName = templateNameFromMetadata || templateNameFromPlaceholder;
+    const templateFromCatalog = resolvedTemplateName ? templatesByName.get(resolvedTemplateName) : undefined;
+    const isTemplateMessage = msg.content_type === 'template' || Boolean(templateNameFromPlaceholder);
+    const templateBody = templateFromCatalog?.body ?? msg.content;
+    const templateParams = extractTemplateParamsFromMessageMetadata(msg.metadata);
+    const resolvedTemplateBody = isTemplateMessage
+      ? applyTemplateParamsToBody(templateBody ?? '', templateParams)
+      : msg.content;
+    const showTemplateLabel = Boolean(isTemplateMessage && resolvedTemplateName);
+    const showMessageContent = Boolean(resolvedTemplateBody) && !hideAudioLabel && !isCallRecording;
+    const agentDisplayName =
+      (isAgent ? msg.sender_name : null)
+      ?? conv?.assigned_name
+      ?? currentUserName
+      ?? t('chat.noAgent');
+    const contactDisplayName = displayName;
+    const organizationDisplayName = conv?.organization_name?.trim();
+    const clientLabel = organizationDisplayName
+      ? `${contactDisplayName} - ${organizationDisplayName}`
+      : contactDisplayName;
+    const senderLabel = isSystem
+      ? t('chat.systemLabel')
+      : isAIMessage
+        ? 'IA'
+        : isBot
+          ? '🤖 Bot'
+          : isAgent
+            ? agentDisplayName
+            : clientLabel;
+    const senderLabelColor = isSystem
+      ? 'var(--txt-3)'
+      : isAIMessage
+        ? 'var(--teal)'
+        : isBot
+          ? 'var(--txt-2)'
+          : isAgent
+            ? 'var(--txt-2)'
+            : 'var(--txt-3)';
+    const mention = msg.metadata?.mention ?? null;
+    const canMentionThisMessage = canSendMessage && !msg.is_internal;
+    const failureReason = typeof msg.metadata?.failure_reason === 'string'
+      ? msg.metadata.failure_reason
+      : typeof (msg.metadata as Record<string, unknown> | undefined)?.whatsapp_send_error_message === 'string'
+        ? String((msg.metadata as Record<string, unknown>).whatsapp_send_error_message)
+        : null;
+    const isFailedMessage = resolveMessageDeliveryStatus(msg) === 'failed';
+
+    if (isSystem && !isCallRecording) {
+      return (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            margin: '8px 0',
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+          <span
+            style={{
+              color: 'var(--txt-2)',
+              fontSize: 11,
+              whiteSpace: 'nowrap',
+              lineHeight: 1.4,
+            }}
+          >
+            {msg.content}
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'flex-end',
+          marginBottom: 4,
+          justifyContent: 'flex-start',
+          flexDirection: isCompanySide ? 'row-reverse' : 'row',
+        }}
+      >
+        <div
+          className={(!isAIMessage && !isBot) ? avatarClass(isAgent ? (conv?.assigned_name ?? 'A') : (avatarName ?? displayName)) : undefined}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: isAIMessage
+              ? 'var(--teal-dim)'
+              : isBot
+                ? 'var(--purple-dim)'
+                : undefined,
+            border: isAIMessage
+              ? '1px solid rgba(0,201,167,.28)'
+              : isBot
+                ? '1px solid rgba(167,139,250,.3)'
+                : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 10,
+            fontWeight: 500,
+            color: isAIMessage ? 'var(--teal)' : isBot ? 'var(--purple)' : undefined,
+            flexShrink: 0,
+            marginBottom: 2,
+          }}
+        >
+          {isAIMessage ? (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M7 1.5l1.2 3.3L11.5 6l-3.3 1.2L7 10.5l-1.2-3.3L2.5 6l3.3-1.2L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+              <path d="M11.5 10l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
+            </svg>
+          ) : isBot ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
+              <rect x="6" y="2" width="4" height="3" rx="1" stroke="currentColor" strokeWidth="1.3" />
+              <circle cx="6" cy="9" r="1" fill="currentColor" />
+              <circle cx="10" cy="9" r="1" fill="currentColor" />
+              <path d="M6 11.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <path d="M1 8h2M13 8h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+          ) : isAgent ? (
+            (conv?.assigned_name ?? 'A').charAt(0).toUpperCase()
+          ) : (
+            displayName.charAt(0).toUpperCase()
+          )}
+        </div>
+
+        <div style={{ maxWidth: '65%', display: 'flex', flexDirection: 'column', alignItems: isCompanySide ? 'flex-end' : 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                color: senderLabelColor,
+                alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
+                maxWidth: '100%',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={senderLabel}
+            >
+              {senderLabel}
+            </span>
+            {canMentionThisMessage && (
+              <button
+                type="button"
+                onClick={() => handleMentionMessage(msg, senderLabel)}
+                title={t('chat.mentionMessage')}
+                aria-label={t('chat.mentionMessage')}
+                style={{
+                  border: '1px solid var(--line)',
+                  background: 'var(--bg-4)',
+                  color: 'var(--txt-3)',
+                  borderRadius: 999,
+                  padding: '1px 6px',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  lineHeight: 1.5,
+                }}
+              >
+                ↩
+              </button>
+            )}
+          </div>
+          <div
+            style={{
+              padding: isAudioMessage ? '4px 6px' : '9px 13px',
+              minWidth: isAudioMessage ? 240 : undefined,
+              borderRadius: 12,
+              borderTopLeftRadius: isCompanySide ? 12 : 0,
+              borderTopRightRadius: isCompanySide ? 0 : 12,
+              fontSize: 13,
+              lineHeight: 1.55,
+              wordBreak: 'break-word',
+              background: msg.is_internal
+                ? 'var(--amber-dim)'
+                : isFailedMessage
+                  ? 'var(--red-dim)'
+                  : isAgent
+                  ? 'var(--teal-dim)'
+                  : isAIMessage
+                    ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
+                    : isBot
+                      ? 'var(--bg-4)'
+                      : 'var(--bg-3)',
+              color: msg.is_internal ? 'var(--amber)' : 'var(--txt)',
+              border: msg.is_internal
+                ? '1px solid rgba(245,158,11,.3)'
+                : isFailedMessage
+                  ? '1px solid rgba(248,113,113,.34)'
+                  : isAgent
+                  ? '1px solid rgba(0,201,167,.22)'
+                  : isBot
+                    ? '1px solid var(--line)'
+                    : '1px solid var(--line-2)',
+            }}
+          >
+            {mention && (
+              <div
+                style={{
+                  marginBottom: 7,
+                  padding: '6px 8px',
+                  borderLeft: '3px solid rgba(0,201,167,.65)',
+                  background: 'rgba(0,0,0,.12)',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--teal)', marginBottom: 2 }}>
+                  {mention.sender_label}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {mention.media_id && mention.content_type === 'image' && (
+                    <MentionMediaThumb
+                      conversationId={conversationId}
+                      mediaId={mention.media_id}
+                    />
+                  )}
+                  <div style={{ fontSize: 12, opacity: 0.9, whiteSpace: 'pre-wrap' }}>
+                    {mention.content_type === 'text' ? mention.content : mentionTypeLabel(mention, t)}
+                  </div>
+                </div>
+              </div>
+            )}
+            {msg.is_internal && (
+              <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {t('chat.internalNote')}
+              </div>
+            )}
+            {isCallRecording && callRecordingMeta ? (
+              <div className="call-recording-msg">
+                <div className="recording-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                </div>
+                <div className="recording-info">
+                  <span className="recording-label">{t('chat.callRecording')}</span>
+                  <span className="recording-duration">
+                    {formatCallRecordingDuration(callRecordingMeta.duration)}
+                  </span>
+                </div>
+                <audio controls src={callRecordingMeta.recording_url}>
+                  <source src={callRecordingMeta.recording_url} />
+                </audio>
+              </div>
+            ) : null}
+            {msg.content_type !== 'text' && msg.content_type !== 'template' && !isCallRecording && (
+              <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
+                <MessageMedia
+                  message={msg}
+                  conversationId={conversationId}
+                  localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
+                  isOutgoing={msg.sender_type === 'agent'}
+                />
+              </div>
+            )}
+            {showMessageContent
+              ? msg.content_type === 'text' || isTemplateMessage
+                ? <span style={{ whiteSpace: 'pre-wrap' }}>{resolvedTemplateBody}</span>
+                : resolvedTemplateBody
+              : null}
+            {showTemplateLabel && (
+              <div style={{ marginTop: 4, fontSize: 11, color: 'var(--txt-3)' }}>
+                Template: {resolvedTemplateName}
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 10,
+              fontFamily: 'var(--mono)',
+              color: 'var(--txt-3)',
+              textAlign: isCompanySide ? 'right' : 'left',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
+            }}
+          >
+            <span>{formatTime(msg.created_at, i18n.language)}</span>
+            {isFailedMessage && (
+              <span
+                title={`Falha no envio: ${failureReason ?? 'Falha desconhecida'}`}
+                aria-label={`Falha no envio: ${failureReason ?? 'Falha desconhecida'}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: 'var(--red)',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M7 2l5.2 9H1.8L7 2z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 5.2v2.8M7 10.3h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+              </span>
+            )}
+            {isAgent && (
+              <MessageStatus status={resolveMessageDeliveryStatus(msg)} />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }, [
+    avatarName,
+    canSendMessage,
+    conv?.assigned_name,
+    conv?.organization_name,
+    conversationId,
+    currentUserName,
+    displayName,
+    handleMentionMessage,
+    i18n.language,
+    localMediaUrls,
+    t,
+    templatesByName,
+  ]);
+
+  const renderEntry = useCallback((entry: MessageListEntry) => {
+    if (entry.kind === 'date') {
+      return (
+        <div className="chat-date-separator">
+          <span className="chat-date-separator-label">{entry.date}</span>
+        </div>
+      );
+    }
+    return renderMessageRow(entry.message);
+  }, [renderMessageRow]);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -1506,17 +1957,16 @@ export function ChatArea({ conversationId }: Props) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
           <div
+            className={avatarClass(avatarName ?? displayName)}
             style={{
               width: 36,
               height: 36,
               borderRadius: '50%',
-              background: avatarGradient(avatarName),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 13,
-              fontWeight: 600,
-              color: '#fff',
+              fontWeight: 500,
               flexShrink: 0,
             }}
           >
@@ -1578,7 +2028,8 @@ export function ChatArea({ conversationId }: Props) {
               {conv?.protocol_number && (
                 <button
                   type="button"
-                  title="Número do protocolo"
+                  title={t('chat.protocol')}
+                  aria-label={t('chat.protocol')}
                   onClick={() => void copyProtocol(conv.protocol_number!)}
                   style={{
                     fontFamily: 'var(--mono)',
@@ -1603,10 +2054,10 @@ export function ChatArea({ conversationId }: Props) {
                     event.currentTarget.style.background = 'var(--bg-4)';
                   }}
                 >
-                  📋 {conv.protocol_number}
+                  {conv.protocol_number}
                 </button>
               )}
-              {conv?.assigned_at && conv.status !== 'resolved' && conv.status !== 'closed' && (
+              {showConversationTimer && conv?.assigned_at && (
                 <>
                   <span style={{ color: 'var(--txt-2)', fontSize: 11 }}>·</span>
                   <ConversationTimer assignedAt={conv.assigned_at} />
@@ -1626,12 +2077,9 @@ export function ChatArea({ conversationId }: Props) {
                     border: `1px solid ${statusStyle.border}`,
                   }}
                 >
-                  {conv?.status ? t(`status.${conv.status}`, { defaultValue: conv.status }) : ''}
+                  {conversationStage ? t(`status.${conversationStage}`) : ''}
                 </span>
               )}
-              <span style={{ color: 'var(--txt-3)' }}>
-                {t('history.total', { count: totalMessages, defaultValue: `${totalMessages} mensagens` })}
-              </span>
               {helperIndicator && (
                 <div className="helper-indicator">
                   <span>{helperIndicator.helper_name ?? t('help.helping')}</span>
@@ -1658,7 +2106,14 @@ export function ChatArea({ conversationId }: Props) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
           {canAssume ? (
             <button
               onClick={() => void handleAssume()}
@@ -1671,7 +2126,7 @@ export function ChatArea({ conversationId }: Props) {
                 borderRadius: 'var(--r)',
                 background: 'var(--teal)',
                 border: 'none',
-                color: '#0a1a18',
+                color: 'var(--on-teal)',
                 fontSize: 13,
                 fontWeight: 600,
                 fontFamily: 'var(--font)',
@@ -1684,7 +2139,7 @@ export function ChatArea({ conversationId }: Props) {
                 <circle cx="7" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
                 <path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
               </svg>
-              {isAssuming ? 'Assumindo...' : 'Assumir atendimento'}
+              {isAssuming ? t('chat.assuming') : t('chat.assumeButton')}
             </button>
           ) : (
             <>
@@ -1693,7 +2148,8 @@ export function ChatArea({ conversationId }: Props) {
                   type="button"
                   className="tb-icon-btn"
                   onClick={() => setShowTagDropdown((value) => !value)}
-                  title={t('tags.manage', { defaultValue: 'Gerenciar etiquetas' })}
+                  title={t('tags.manage')}
+                  aria-label={t('tags.manage')}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <path
@@ -1721,20 +2177,11 @@ export function ChatArea({ conversationId }: Props) {
               <PermissionGate permission="conversations:manage">
                 {canTransfer && (
                   <button
+                    type="button"
+                    className="tb-icon-btn"
                     title={t('chat.transfer')}
+                    aria-label={t('chat.transfer')}
                     onClick={() => setShowTransferModal(true)}
-                    style={{
-                      width: 30,
-                      height: 30,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'none',
-                      border: 'none',
-                      borderRadius: 'var(--r)',
-                      color: 'var(--txt-3)',
-                      cursor: 'pointer',
-                    }}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                       <path d="M9 3l4 4-4 4M13 7H5M1 7h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -1743,12 +2190,13 @@ export function ChatArea({ conversationId }: Props) {
                 )}
               </PermissionGate>
 
-              {isAssignedToMe && !isResolved && (
+              {isAssignedToMe && !isClosed && (
                 <button
                   type="button"
                   className="tb-icon-btn"
                   onClick={() => setShowHelpModal(true)}
                   title={t('help.request')}
+                  aria-label={t('help.request')}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
@@ -1764,26 +2212,19 @@ export function ChatArea({ conversationId }: Props) {
               )}
 
               <PermissionGate permission="conversations:manage">
-                {isAssignedToMe && !isResolved && (
+                {isAssignedToMe && !isClosed && (
                   <button
-                    onClick={() => setShowResolveModal(true)}
-                    disabled={endMutation.isPending}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      padding: '5px 11px',
-                      borderRadius: 'var(--r)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      border: '1px solid var(--teal)',
-                      background: 'var(--teal)',
-                      color: '#0E1A18',
-                      opacity: endMutation.isPending ? 0.55 : 1,
-                    }}
+                    type="button"
+                    className="tb-btn danger"
+                    onClick={() => setShowCloseModal(true)}
+                    disabled={closeMutation.isPending}
+                    title={t('closeConversation')}
+                    aria-label={t('closeConversation')}
                   >
-                    {t('chat.end', { defaultValue: 'Encerrar' })}
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                      <path d="M3 3l6 6M9 3 3 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                    {t('closeConversation')}
                   </button>
                 )}
               </PermissionGate>
@@ -1791,31 +2232,6 @@ export function ChatArea({ conversationId }: Props) {
           )}
         </div>
       </div>
-
-      {activeOutboundReturn && (
-        <div
-          style={{
-            margin: '8px 20px 0',
-            padding: '8px 10px',
-            borderRadius: 'var(--r)',
-            border: '1px solid rgba(245,158,11,.28)',
-            background: 'rgba(245,158,11,.10)',
-            color: 'var(--amber)',
-            display: 'grid',
-            gap: 2,
-          }}
-        >
-          <strong style={{ fontSize: 11, fontWeight: 600 }}>
-            {t('chat.activeOutboundReturnHeader')}
-          </strong>
-          <span style={{ fontSize: 11, color: 'var(--txt-2)' }}>
-            {t('chat.activeOutboundReturnSub', {
-              agent: activeOutboundReturn.originAgentName ?? t('chat.activeOutboundFallbackAgent'),
-            })}
-            {activeOutboundReturn.returnedAt ? ` · ${formatTime(activeOutboundReturn.returnedAt)}` : ''}
-          </span>
-        </div>
-      )}
 
       <div
         style={{
@@ -1838,27 +2254,7 @@ export function ChatArea({ conversationId }: Props) {
             scrollbarColor: 'var(--bg-4) transparent',
           }}
         >
-        {hasMore && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
-            <button
-              type="button"
-              disabled={isLoadingMore}
-              onClick={() => void handleLoadOlder()}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 'var(--r-pill)',
-                background: 'var(--bg-3)',
-                border: '1px solid var(--line-2)',
-                color: 'var(--txt-2)',
-                fontSize: 12,
-                cursor: 'pointer',
-                opacity: isLoadingMore ? 0.65 : 1,
-              }}
-            >
-              {isLoadingMore ? t('history.loading') : t('history.loadMore')}
-            </button>
-          </div>
-        )}
+        <div ref={topSentinelRef} style={{ height: 1 }} />
         {!hasMore && messages.length > 0 && (
           <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--txt-3)', marginBottom: 8 }}>
             {t('history.noMore')}
@@ -1898,315 +2294,51 @@ export function ChatArea({ conversationId }: Props) {
           </div>
         ) : messages.length === 0 ? (
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--txt-3)', padding: '32px 0' }}>{t('chat.noMessages')}</p>
+        ) : shouldVirtualizeMessages ? (
+          <div
+            style={{
+              height: messageVirtualizer.getTotalSize(),
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {messageVirtualizer.getVirtualItems().map((virtualRow) => {
+              const entry = messageEntries[virtualRow.index];
+              if (!entry) return null;
+              return (
+                <div
+                  key={entry.key}
+                  data-index={virtualRow.index}
+                  ref={messageVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {entry.kind === 'message' ? (
+                    <div data-entry-type="message" data-message-id={entry.message.id}>
+                      {renderMessageRow(entry.message)}
+                    </div>
+                  ) : (
+                    <div data-entry-type="date">
+                      {renderEntry(entry)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
-          grouped.map(({ date, msgs }) => (
-            <div key={date}>
-              <div className="chat-date-separator">
-                <span className="chat-date-separator-label">{date}</span>
-              </div>
-
-              {msgs.map((msg) => {
-                const isAgent = msg.sender_type === 'agent';
-                const isBot = msg.sender_type === 'bot';
-                const isAIMessage = isBot && msg.metadata?.source === 'ai_agent';
-                const isSystem = msg.sender_type === 'system';
-                const isCallRecording = msg.content_type === 'call_recording';
-                const isAudioMessage = msg.content_type === 'audio' && !isCallRecording;
-                const callRecordingMeta = parseCallRecordingMetadata(msg);
-                const isCompanySide = isAgent;
-                const hideAudioLabel = msg.content_type === 'audio' && msg.sender_type === 'client';
-                const templateNameFromPlaceholder = extractTemplateNameFromPlaceholder(msg.content);
-                const templateNameFromMetadata = (
-                  msg.metadata
-                  && typeof msg.metadata === 'object'
-                  && typeof (msg.metadata as Record<string, unknown>).whatsapp_template === 'object'
-                  && (msg.metadata as Record<string, unknown>).whatsapp_template
-                  && typeof ((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name === 'string'
-                )
-                  ? String(((msg.metadata as Record<string, unknown>).whatsapp_template as Record<string, unknown>).name)
-                  : null;
-                const resolvedTemplateName = templateNameFromMetadata || templateNameFromPlaceholder;
-                const templateFromCatalog = resolvedTemplateName ? templatesByName.get(resolvedTemplateName) : undefined;
-                const isTemplateMessage = msg.content_type === 'template' || Boolean(templateNameFromPlaceholder);
-                const templateBody = templateFromCatalog?.body ?? msg.content;
-                const templateParams = extractTemplateParamsFromMessageMetadata(msg.metadata);
-                const resolvedTemplateBody = isTemplateMessage
-                  ? applyTemplateParamsToBody(templateBody ?? '', templateParams)
-                  : msg.content;
-                const showTemplateLabel = Boolean(isTemplateMessage && resolvedTemplateName);
-                const showMessageContent = Boolean(resolvedTemplateBody) && !hideAudioLabel && !isCallRecording;
-                const agentDisplayName = conv?.assigned_name ?? currentUserName ?? 'Sem agente';
-                const contactDisplayName = displayName;
-                const organizationDisplayName = conv?.organization_name?.trim();
-                const clientLabel = organizationDisplayName
-                  ? `${contactDisplayName} - ${organizationDisplayName}`
-                  : contactDisplayName;
-                const senderLabel = isSystem
-                  ? 'Sistema'
-                  : isAIMessage
-                    ? 'IA'
-                    : isBot
-                      ? '🤖 Bot'
-                      : isAgent
-                        ? agentDisplayName
-                        : clientLabel;
-                const senderLabelColor = isSystem
-                  ? 'var(--txt-3)'
-                  : isAIMessage
-                    ? 'var(--teal)'
-                    : isBot
-                      ? 'var(--txt-2)'
-                      : isAgent
-                        ? 'var(--teal)'
-                        : 'var(--txt-3)';
-                const mention = msg.metadata?.mention ?? null;
-                const canMentionThisMessage = canSendMessage && !msg.is_internal;
-
-                if (isSystem && !isCallRecording && !msg.is_internal) {
-                  return (
-                    <div
-                      key={msg.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        margin: '8px 0',
-                        background: 'transparent',
-                        border: 'none',
-                        boxShadow: 'none',
-                      }}
-                    >
-                      <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                      <span
-                        style={{
-                          color: 'var(--txt-2)',
-                          fontSize: 11,
-                          whiteSpace: 'nowrap',
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {msg.content}
-                      </span>
-                      <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={msg.id}
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      alignItems: 'flex-end',
-                      marginBottom: 4,
-                      justifyContent: 'flex-start',
-                      flexDirection: isCompanySide ? 'row-reverse' : 'row',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: isAIMessage
-                          ? 'var(--teal-dim)'
-                          : isBot
-                            ? 'var(--purple-dim)'
-                            : isAgent
-                              ? 'linear-gradient(135deg,var(--teal),#00A88C)'
-                              : avatarGradient(avatarName),
-                        border: isAIMessage
-                          ? '1px solid rgba(0,201,167,.28)'
-                          : isBot
-                            ? '1px solid rgba(167,139,250,.3)'
-                            : 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 10,
-                        fontWeight: 600,
-                        color: isAIMessage ? 'var(--teal)' : isBot ? 'var(--purple)' : '#fff',
-                        flexShrink: 0,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {isAIMessage ? (
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                          <path d="M7 1.5l1.2 3.3L11.5 6l-3.3 1.2L7 10.5l-1.2-3.3L2.5 6l3.3-1.2L7 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-                          <path d="M11.5 10l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
-                        </svg>
-                      ) : isBot ? (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                          <rect x="3" y="5" width="10" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                          <rect x="6" y="2" width="4" height="3" rx="1" stroke="currentColor" strokeWidth="1.3" />
-                          <circle cx="6" cy="9" r="1" fill="currentColor" />
-                          <circle cx="10" cy="9" r="1" fill="currentColor" />
-                          <path d="M6 11.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                          <path d="M1 8h2M13 8h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                        </svg>
-                      ) : isAgent ? (
-                        (conv?.assigned_name ?? 'A').charAt(0).toUpperCase()
-                      ) : (
-                        displayName.charAt(0).toUpperCase()
-                      )}
-                    </div>
-
-                    <div style={{ maxWidth: '65%', display: 'flex', flexDirection: 'column', alignItems: isCompanySide ? 'flex-end' : 'flex-start' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            letterSpacing: '0.02em',
-                            color: senderLabelColor,
-                            alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
-                            maxWidth: '100%',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          title={senderLabel}
-                        >
-                          {senderLabel}
-                        </span>
-                        {canMentionThisMessage && (
-                          <button
-                            type="button"
-                            onClick={() => handleMentionMessage(msg, senderLabel)}
-                            title="Mencionar mensagem"
-                            style={{
-                              border: '1px solid var(--line)',
-                              background: 'var(--bg-4)',
-                              color: 'var(--txt-3)',
-                              borderRadius: 999,
-                              padding: '1px 6px',
-                              fontSize: 10,
-                              cursor: 'pointer',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            ↩
-                          </button>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          padding: isAudioMessage ? '4px 6px' : '9px 13px',
-                          minWidth: isAudioMessage ? 240 : undefined,
-                          borderRadius: 12,
-                          borderTopLeftRadius: isCompanySide ? 12 : 0,
-                          borderTopRightRadius: isCompanySide ? 0 : 12,
-                          fontSize: 13,
-                          lineHeight: 1.55,
-                          wordBreak: 'break-word',
-                          background: msg.is_internal
-                            ? 'var(--amber-dim)'
-                            : isAgent
-                              ? 'linear-gradient(135deg,#0f5a50,#0b4740)'
-                              : isAIMessage
-                                ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
-                                : isBot
-                                  ? 'var(--bg-4)'
-                                  : 'var(--bg-3)',
-                          color: msg.is_internal ? 'var(--amber)' : isAgent ? '#eafff9' : 'var(--txt)',
-                          border: msg.is_internal
-                            ? '1px solid rgba(245,158,11,.3)'
-                            : isAgent
-                              ? '1px solid rgba(0,201,167,.28)'
-                              : isBot
-                                ? '1px solid var(--line)'
-                                : '1px solid var(--line-2)',
-                        }}
-                      >
-                        {mention && (
-                          <div
-                            style={{
-                              marginBottom: 7,
-                              padding: '6px 8px',
-                              borderLeft: '3px solid rgba(0,201,167,.65)',
-                              background: 'rgba(0,0,0,.12)',
-                              borderRadius: 8,
-                            }}
-                          >
-                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', marginBottom: 2 }}>
-                              {mention.sender_label}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {mention.media_id && mention.content_type === 'image' && (
-                                <MentionMediaThumb
-                                  conversationId={conversationId}
-                                  mediaId={mention.media_id}
-                                />
-                              )}
-                              <div style={{ fontSize: 12, opacity: 0.9, whiteSpace: 'pre-wrap' }}>
-                                {mention.content_type === 'text' ? mention.content : mentionTypeLabel(mention)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {msg.is_internal && (
-                          <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                            {t('chat.internalNote')}
-                          </div>
-                        )}
-                        {isCallRecording && callRecordingMeta ? (
-                          <div className="call-recording-msg">
-                            <div className="recording-icon">📞</div>
-                            <div className="recording-info">
-                              <span className="recording-label">Gravação da chamada</span>
-                              <span className="recording-duration">
-                                {formatCallRecordingDuration(callRecordingMeta.duration)}
-                              </span>
-                            </div>
-                            <audio controls src={callRecordingMeta.recording_url}>
-                              <source src={callRecordingMeta.recording_url} />
-                            </audio>
-                          </div>
-                        ) : null}
-                        {msg.content_type !== 'text' && msg.content_type !== 'template' && !isCallRecording && (
-                          <div style={{ marginBottom: showMessageContent ? 6 : 0 }}>
-                            <MessageMedia
-                              message={msg}
-                              conversationId={conversationId}
-                              localMediaUrl={msg.media_url ? localMediaUrls[msg.media_url] : undefined}
-                              isOutgoing={msg.sender_type === 'agent'}
-                            />
-                          </div>
-                        )}
-                        {showMessageContent
-                          ? msg.content_type === 'text' || isTemplateMessage
-                            ? <span style={{ whiteSpace: 'pre-wrap' }}>{resolvedTemplateBody}</span>
-                            : resolvedTemplateBody
-                          : null}
-                        {showTemplateLabel && (
-                          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--txt-3)' }}>
-                            Template: {resolvedTemplateName}
-                          </div>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontSize: 10,
-                          fontFamily: 'var(--mono)',
-                          color: 'var(--txt-3)',
-                          textAlign: isCompanySide ? 'right' : 'left',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
-                        }}
-                      >
-                        <span>{formatTime(msg.created_at)}</span>
-                        {isAgent && (
-                          <MessageStatus status={resolveMessageDeliveryStatus(msg)} />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+          messageEntries.map((entry) => (
+            <div
+              key={entry.key}
+              data-entry-type={entry.kind}
+              {...(entry.kind === 'message' ? { 'data-message-id': entry.message.id } : {})}
+            >
+              {renderEntry(entry)}
             </div>
           ))
         )}
@@ -2241,7 +2373,7 @@ export function ChatArea({ conversationId }: Props) {
             }}
           >
             <span aria-hidden>↓</span>
-            {unseenMessageCount === 1 ? '1 nova mensagem' : `${unseenMessageCount} novas mensagens`}
+            {t('chat.unseenMessages', { count: unseenMessageCount })}
           </button>
         )}
       </div>
@@ -2255,7 +2387,7 @@ export function ChatArea({ conversationId }: Props) {
           position: 'relative',
         }}
       >
-        {isActiveOutboundWhatsappConversation && isConversationWindowLoaded && (
+        {isWhatsappConversation && isWaitingOutbound && isConversationWindowLoaded && (
           <div
             style={{
               margin: '-12px -16px 10px',
@@ -2284,7 +2416,10 @@ export function ChatArea({ conversationId }: Props) {
               conversationId={conversationId}
               disabled={!canSendMessage}
               mentionMessageId={mentioningMessage?.message_id ?? null}
-              onActiveChange={setIsMediaActive}
+              onActiveChange={(active) => {
+                setIsMediaActive(active);
+                if (active) clearPastedFile();
+              }}
               onSent={async (payload) => {
                 registerLocalMediaPreview(payload);
                 setMentioningMessage(null);
@@ -2327,13 +2462,16 @@ export function ChatArea({ conversationId }: Props) {
               background: 'var(--bg-3)',
               boxShadow: '0 12px 30px rgba(0,0,0,.35)',
               zIndex: 25,
+              maxHeight: 'min(420px, calc(100vh - 220px))',
+              display: 'flex',
+              flexDirection: 'column',
               overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)' }}>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', fontSize: 12, fontWeight: 600, color: 'var(--txt-2)', flexShrink: 0 }}>
               ⚡ {tAdmin('tenantAdmin.quickReplies.chat.title')}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column', overflowY: 'auto' }}>
               {quickReplies.length > 0 ? quickReplies.map((reply) => (
                 <button
                   key={reply.id}
@@ -2438,7 +2576,7 @@ export function ChatArea({ conversationId }: Props) {
                 {canSendMessage && (
                   <>
                     <ToolbarButton
-                      tooltip="Anexar arquivo"
+                      tooltip={t('chat.attachFile')}
                       onClick={() => mediaUploadRef.current?.openPicker('application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain')}
                       icon={(
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -2447,7 +2585,7 @@ export function ChatArea({ conversationId }: Props) {
                       )}
                     />
                     <ToolbarButton
-                      tooltip="Imagem ou vídeo"
+                      tooltip={t('chat.imageOrVideo')}
                       onClick={() => mediaUploadRef.current?.openPicker('image/jpeg,image/png,image/webp,video/mp4')}
                       icon={(
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -2542,7 +2680,7 @@ export function ChatArea({ conversationId }: Props) {
                     <div style={{ width: 3, borderRadius: 999, background: 'var(--teal)', alignSelf: 'stretch' }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, color: 'var(--teal)', fontWeight: 600, marginBottom: 2 }}>
-                        Respondendo {mentioningMessage.sender_label}
+                        {t('chat.replyingTo', { name: mentioningMessage.sender_label })}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {mentioningMessage.media_id && mentioningMessage.content_type === 'image' && (
@@ -2552,14 +2690,15 @@ export function ChatArea({ conversationId }: Props) {
                           />
                         )}
                         <div style={{ fontSize: 12, color: 'var(--txt-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {mentioningMessage.content_type === 'text' ? mentioningMessage.content : mentionTypeLabel(mentioningMessage)}
+                          {mentioningMessage.content_type === 'text' ? mentioningMessage.content : mentionTypeLabel(mentioningMessage, t)}
                         </div>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setMentioningMessage(null)}
-                      title="Remover menção"
+                      title={t('chat.removeReply')}
+                      aria-label={t('chat.removeReply')}
                       style={{
                         width: 22,
                         height: 22,
@@ -2615,7 +2754,6 @@ export function ChatArea({ conversationId }: Props) {
                           fontSize: 12,
                           fontFamily: 'var(--mono)',
                           color: 'var(--txt)',
-                          outline: 'none',
                         }}
                       >
                         <option value="">{t('chat.selectTemplate')}</option>
@@ -2650,7 +2788,6 @@ export function ChatArea({ conversationId }: Props) {
                               fontSize: 12,
                               fontFamily: 'var(--font)',
                               color: 'var(--txt)',
-                              outline: 'none',
                             }}
                           />
                         ))}
@@ -2677,6 +2814,47 @@ export function ChatArea({ conversationId }: Props) {
                     <div style={{ fontSize: 11, color: templateError ? 'var(--red)' : 'var(--txt-2)' }}>
                       {templateError ?? `${templateLanguage} · ${t('chat.templateHint')}`}
                     </div>
+                  </div>
+                )}
+                {pastedFile && (
+                  <div className="paste-preview">
+                    {pastedPreviewUrl ? (
+                      <img
+                        src={pastedPreviewUrl}
+                        alt={t('composer.pasteImageAlt')}
+                        className="paste-preview-image"
+                      />
+                    ) : (
+                      <div className="paste-preview-file">
+                        {pastedFile.type.startsWith('video/') ? (
+                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                            <rect x="2" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.4" />
+                            <path d="M2 7h14M6 3v4M12 3v4M6 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                            <path d="M4 2.5h6l4 4v9H4v-13Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                            <path d="M10 2.5v4h4M6.5 10h5M6.5 12.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                          </svg>
+                        )}
+                        <span className="paste-preview-name">{pastedFile.name}</span>
+                        {!pastedFile.type.startsWith('video/') && (
+                          <span className="paste-preview-size">{formatFileSize(pastedFile.size)}</span>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="paste-preview-remove tb-icon-btn"
+                      onClick={clearPastedFile}
+                      disabled={isPastedFileSending}
+                      aria-label={t('composer.pasteRemove')}
+                      title={t('composer.pasteRemove')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   </div>
                 )}
                 <div
@@ -2779,21 +2957,22 @@ export function ChatArea({ conversationId }: Props) {
                   value={content}
                   onChange={handleContentChange}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  aria-label={t('chat.composeAriaLabel')}
                   placeholder={
                     useTemplateMessage
                       ? t('chat.templatePreviewPlaceholder')
                       : isComposerAttachmentActive
                         ? t('media.caption')
                         : isInternal
-                          ? 'Escreva uma nota interna...'
+                          ? t('chat.internalNotePlaceholder')
                           : t('chat.inputPlaceholder')
                   }
-                  disabled={!canSendMessage || isComposerAttachmentActive}
+                  disabled={!canSendMessage || isComposerAttachmentActive || isPastedFileSending}
                   style={{
                     flex: 1,
                     background: 'none',
                     border: 'none',
-                    outline: 'none',
                     fontSize: 13,
                     fontFamily: 'var(--font)',
                     color: isInternal && !useTemplateMessage ? 'var(--amber)' : 'var(--txt)',
@@ -2806,10 +2985,11 @@ export function ChatArea({ conversationId }: Props) {
 
                 <button
                   type="button"
-                  onClick={showRecordAction ? () => void audioRecorderRef.current?.start() : handleSend}
+                  onClick={showRecordAction ? () => void audioRecorderRef.current?.start() : () => void handleSend()}
                   disabled={
                     !canSendMessage ||
                     isComposerAttachmentActive ||
+                    isPastedFileSending ||
                     (canSubmitComposer ? sendMutation.isPending : !showRecordAction)
                   }
                   style={{
@@ -2822,9 +3002,9 @@ export function ChatArea({ conversationId }: Props) {
                     overflow: 'hidden',
                     flexShrink: 0,
                     background: canSubmitComposer ? 'var(--teal)' : 'var(--bg-4)',
-                    color: canSubmitComposer ? '#0a1a18' : 'var(--txt-2)',
+                    color: canSubmitComposer ? 'var(--on-teal)' : 'var(--txt-2)',
                     transition: 'all .2s cubic-bezier(.4,0,.2,1)',
-                    opacity: (!canSendMessage || isComposerAttachmentActive || (canSubmitComposer && sendMutation.isPending)) ? 0.45 : 1,
+                    opacity: (!canSendMessage || isComposerAttachmentActive || isPastedFileSending || (canSubmitComposer && sendMutation.isPending)) ? 0.45 : 1,
                   }}
                   onMouseEnter={(event) => {
                     if (!canSubmitComposer) {
@@ -2837,7 +3017,7 @@ export function ChatArea({ conversationId }: Props) {
                   onMouseLeave={(event) => {
                     event.currentTarget.style.filter = 'none';
                     event.currentTarget.style.background = canSubmitComposer ? 'var(--teal)' : 'var(--bg-4)';
-                    event.currentTarget.style.color = canSubmitComposer ? '#0a1a18' : 'var(--txt-2)';
+                    event.currentTarget.style.color = canSubmitComposer ? 'var(--on-teal)' : 'var(--txt-2)';
                   }}
                   aria-label={showRecordAction ? t('media.record') : t('chat.send')}
                   title={showRecordAction ? t('media.record') : t('chat.send')}
@@ -2874,7 +3054,7 @@ export function ChatArea({ conversationId }: Props) {
                   >
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                       <path d="M16 2L1 8.5l6 1.5 1.5 6L16 2z" fill="currentColor" />
-                      <path d="M7 10l4-4" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
+                      <path d="M7 10l4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                     </svg>
                   </span>
                 </button>
@@ -2913,10 +3093,10 @@ export function ChatArea({ conversationId }: Props) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', marginBottom: 2 }}>
-                    Em atendimento por {conv?.assigned_name ?? 'outro agente'}
+                    {t('chat.otherAgentTitle', { name: conv?.assigned_name ?? t('chat.noAgent') })}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-                    Você pode visualizar mas não enviar mensagens
+                    {t('chat.otherAgentSub')}
                   </div>
                 </div>
                 <PermissionGate permission="conversations:manage">
@@ -2939,7 +3119,7 @@ export function ChatArea({ conversationId }: Props) {
                         flexShrink: 0,
                       }}
                     >
-                      Transferir para mim
+                      {t('chat.transferToMe')}
                     </button>
                   )}
                 </PermissionGate>
@@ -2963,7 +3143,7 @@ export function ChatArea({ conversationId }: Props) {
                 <span>
                   {isConversationClosed
                     ? t('chat.closedByClient')
-                    : 'Este atendimento foi encerrado'}
+                    : t('chat.closedByAgent')}
                 </span>
                 <button
                   onClick={() => reopenMutation.mutate()}
@@ -2980,7 +3160,7 @@ export function ChatArea({ conversationId }: Props) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {t('resolve.reopen', { defaultValue: 'Reabrir' })}
+                  {t('resolve.reopen')}
                 </button>
               </div>
             ) : null}
@@ -2997,19 +3177,19 @@ export function ChatArea({ conversationId }: Props) {
                   ? t('chat.charCount', { count: content.length })
                   : canSendMessage && isInternal
                     ? <span style={{ color: 'var(--amber)', fontWeight: 500 }}>{t('chat.internalNoteActive')}</span>
-                    : 'Enter para enviar'}
+                    : t('chat.ctrlEnter')}
               </span>
             </div>
           </>
         )}
       </div>
 
-      <ResolveModal
-        open={showResolveModal}
-        onClose={() => setShowResolveModal(false)}
-        isSubmitting={endMutation.isPending}
+      <CloseConversationModal
+        isOpen={showCloseModal}
+        onClose={() => setShowCloseModal(false)}
+        isLoading={closeMutation.isPending}
         onConfirm={async (payload) => {
-          await endMutation.mutateAsync(payload);
+          await closeMutation.mutateAsync(payload);
         }}
       />
 
@@ -3018,8 +3198,12 @@ export function ChatArea({ conversationId }: Props) {
         conversationId={conversationId}
         currentAgentId={conv?.assigned_to ?? null}
         onClose={() => setShowTransferModal(false)}
-        onTransferred={async ({ name: agentName }) => {
-          await transferSystemMessage.mutateAsync(agentName);
+        onTransferred={async () => {
+          shouldAutoScrollNextRef.current = true;
+          nextScrollBehaviorRef.current = 'smooth';
+          void loadLatestMessages(true);
+          void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+          void qc.invalidateQueries({ queryKey: ['conversations'] });
         }}
       />
 

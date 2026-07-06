@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { CreateConversationModal } from '../../components/omnichannel/CreateConv
 import { ActiveOutboundModal } from '../../components/omnichannel/ActiveOutboundModal';
 import { PageShell } from '../../components/layout/PageShell';
 import { subscribeToEvent } from '../../services/socket';
+import { notificationsApi } from '../../services/api';
 
 export function ConversationsPage() {
   const { t } = useTranslation('omnichannel');
@@ -19,12 +20,27 @@ export function ConversationsPage() {
   const [filterAgentId, setFilterAgentId] = useState('');
   const qc = useQueryClient();
 
+  const markConversationNotificationsRead = useCallback((conversationId: string) => {
+    void notificationsApi.markConversationRead(conversationId)
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ['notifications'] });
+      })
+      .catch(() => {
+        void qc.invalidateQueries({ queryKey: ['notifications'] });
+      });
+  }, [qc]);
+
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
     const agentIdFromUrl = searchParams.get('agent_id');
     if (conversationId) setSelectedId(conversationId);
     setFilterAgentId(agentIdFromUrl ?? '');
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    markConversationNotificationsRead(selectedId);
+  }, [markConversationNotificationsRead, selectedId]);
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);
@@ -43,6 +59,24 @@ export function ConversationsPage() {
       ({ conversationId }) => {
         void qc.invalidateQueries({ queryKey: ['conversations'] });
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+        if (conversationId === selectedId) {
+          markConversationNotificationsRead(conversationId);
+        }
+      },
+    );
+
+    const unsubNotification = subscribeToEvent<{ conversationId?: string; type?: string }>(
+      'notification:new',
+      ({ conversationId, type }) => {
+        if (conversationId !== selectedId) return;
+        if (
+          type !== 'conversation.message'
+          && type !== 'conversation_message'
+          && type !== 'conversation.assigned'
+          && type !== 'conversation_assigned'
+        ) return;
+
+        markConversationNotificationsRead(conversationId);
       },
     );
 
@@ -81,31 +115,40 @@ export function ConversationsPage() {
 
     return () => {
       unsubNew();
+      unsubNotification();
       unsubUpdated();
       unsubCreated();
       unsubTagAdded();
       unsubTagRemoved();
     };
-  }, [qc]);
+  }, [markConversationNotificationsRead, qc, selectedId]);
 
   return (
-    <PageShell padding={0} contentStyle={{ overflowX: 'visible', overflowY: 'hidden' }}>
-      <div className="flex h-full" style={{ overflowX: 'visible', overflowY: 'hidden' }}>
+    <PageShell padding={0} contentStyle={{ overflowX: 'hidden', overflowY: 'hidden' }}>
+      <div
+        className="h-full w-full"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '320px minmax(0, 1fr) 360px',
+          overflowX: 'hidden',
+          overflowY: 'hidden',
+        }}
+      >
         <ConversationList
           selectedId={selectedId}
           onSelect={setSelectedId}
-          onNew={() => setShowModal(true)}
-          onNewActiveOutbound={() => setShowActiveOutboundModal(true)}
           initialAgentId={filterAgentId}
         />
 
         {selectedId ? (
           <>
-            <ChatArea conversationId={selectedId} />
+            <div style={{ minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              <ChatArea conversationId={selectedId} onClosed={() => setSelectedId(null)} />
+            </div>
             <InfoPanel conversationId={selectedId} />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center">
+          <div className="flex items-center justify-center" style={{ gridColumn: '2 / 4' }}>
             <div className="text-center">
               <div className="mb-3 flex justify-center">
                 <svg viewBox="0 0 24 24" fill="none" className="h-12 w-12 text-txt-3" aria-hidden>

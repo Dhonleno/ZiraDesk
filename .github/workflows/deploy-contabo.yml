@@ -1,0 +1,99 @@
+name: Deploy Contabo
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      CONTABO_HOST: ${{ secrets.CONTABO_HOST || '85.239.245.8' }}
+      CONTABO_USER: ${{ secrets.CONTABO_USER || 'deploy' }}
+      CONTABO_PORT: ${{ secrets.CONTABO_PORT || '22' }}
+      CONTABO_DEPLOY_PATH: ${{ secrets.CONTABO_DEPLOY_PATH || '/home/deploy/ziradesk/app' }}
+      CONTABO_SSH_PRIVATE_KEY: ${{ secrets.CONTABO_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Configure SSH for Contabo VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CONTABO_SSH_PRIVATE_KEY}" ]; then
+            echo "::error::Configure o secret CONTABO_SSH_PRIVATE_KEY com a chave privada SSH do usuario deploy."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${CONTABO_SSH_PRIVATE_KEY}" > ~/.ssh/ziradesk_contabo
+          chmod 600 ~/.ssh/ziradesk_contabo
+          ssh-keyscan -T 10 -p "${CONTABO_PORT}" -H "${CONTABO_HOST}" >> ~/.ssh/known_hosts || true
+
+      - name: Deploy to Contabo VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          remote_path="$(printf '%q' "${CONTABO_DEPLOY_PATH}")"
+
+          cat <<'REMOTE' | tr -d '\r' | ssh \
+            -i ~/.ssh/ziradesk_contabo \
+            -p "${CONTABO_PORT}" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "${CONTABO_USER}@${CONTABO_HOST}" \
+            "DEPLOY_PATH=${remote_path} bash -se"
+          set -euo pipefail
+
+          cd "${DEPLOY_PATH}"
+
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+          compose_cmd=(docker compose --env-file .env.production -f docker-compose.production.yml)
+
+          is_compose_service_running() {
+            local service="$1"
+            local container_id
+            container_id="$("${compose_cmd[@]}" ps -q "${service}" 2>/dev/null || true)"
+            [ -n "${container_id}" ] \
+              && [ "$(docker inspect -f '{{.State.Running}}' "${container_id}" 2>/dev/null || true)" = "true" ]
+          }
+
+          if is_compose_service_running nginx \
+            && is_compose_service_running web \
+            && is_compose_service_running api; then
+            "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
+          else
+            echo "Skipping pre-deploy nginx config test until api/web/nginx are running."
+          fi
+
+          "${compose_cmd[@]}" build
+          "${compose_cmd[@]}" up -d postgres redis
+          "${compose_cmd[@]}" run --rm api-migrate </dev/null
+
+          stale_recreate_containers="$(
+            docker ps -a --format '{{.ID}} {{.Names}}' \
+              | awk '$2 ~ /^[[:xdigit:]]+_ziradesk-(api|web|nginx)$/ { print $1 }'
+          )"
+          if [ -n "${stale_recreate_containers}" ]; then
+            docker rm -f ${stale_recreate_containers}
+          fi
+
+          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web nginx
+
+          "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
+          "${compose_cmd[@]}" exec -T nginx nginx -s reload </dev/null
+          "${compose_cmd[@]}" exec -T api wget -q -O - http://127.0.0.1:3333/health </dev/null
+          "${compose_cmd[@]}" ps
+          REMOTE

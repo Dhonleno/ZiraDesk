@@ -19,6 +19,18 @@ export const historyQuerySchema = z.object({
   date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   export: z.enum(['csv']).optional(),
+  sort_by: z.enum([
+    'created_at',
+    'protocol_number',
+    'contact_name',
+    'assigned_name',
+    'channel_type',
+    'status',
+    'duration_seconds',
+    'wait_seconds',
+    'csat_score',
+  ]).optional().default('created_at'),
+  sort_order: z.enum(['asc', 'desc']).optional().default('desc'),
 });
 
 export const historyDetailParamsSchema = z.object({

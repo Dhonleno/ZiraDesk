@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import axios from 'axios';
 import { omnichannelApi, type GoalPayload, type GoalScope, type OmnichannelGoal } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -18,6 +19,22 @@ type GoalFormState = {
   goalVolumeMin: string;
   isActive: boolean;
 };
+
+type GoalFieldErrors = Partial<Record<keyof GoalFormState, string>>;
+
+type NumericGoalField = Extract<keyof GoalFormState, 'goalTmaMinutes' | 'goalTmeMinutes' | 'goalSlaPercent' | 'goalCsatMin' | 'goalVolumeMin'>;
+
+const GOAL_LIMITS = {
+  nameMax: 100,
+  minutesMin: 1,
+  minutesMax: 1440,
+  slaMin: 0,
+  slaMax: 100,
+  csatMin: 1,
+  csatMax: 5,
+  volumeMin: 1,
+  volumeMax: 100000,
+} as const;
 
 const EMPTY_FORM: GoalFormState = {
   id: null,
@@ -54,6 +71,70 @@ function toNullableFloat(value: string): number | null {
   return parsed;
 }
 
+function normalizeDecimalInput(value: string): string {
+  return value.replace(',', '.');
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const normalized = normalizeDecimalInput(value).trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function buildGoalValidationErrors(form: GoalFormState, t: TFunction<'omnichannel'>): GoalFieldErrors {
+  const errors: GoalFieldErrors = {};
+  const name = form.name.trim();
+
+  if (!name) {
+    errors.name = t('goals.validation.nameRequired');
+  } else if (name.length > GOAL_LIMITS.nameMax) {
+    errors.name = t('goals.validation.nameMax', { max: GOAL_LIMITS.nameMax });
+  }
+
+  if (form.scope === 'agent' && !form.agentId) {
+    errors.agentId = t('goals.validation.agentRequired');
+  }
+
+  const validateIntRange = (field: NumericGoalField, min: number, max: number) => {
+    const value = parseOptionalNumber(form[field]);
+    if (value === null) return;
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      errors[field] = t('goals.validation.integer');
+      return;
+    }
+    if (value < min || value > max) {
+      errors[field] = t('goals.validation.range', { min, max });
+    }
+  };
+
+  const validateDecimalRange = (field: NumericGoalField, min: number, max: number) => {
+    const value = parseOptionalNumber(form[field]);
+    if (value === null) return;
+    if (!Number.isFinite(value)) {
+      errors[field] = t('goals.validation.number');
+      return;
+    }
+    if (value < min || value > max) {
+      errors[field] = t('goals.validation.range', { min, max });
+    }
+  };
+
+  validateIntRange('goalTmaMinutes', GOAL_LIMITS.minutesMin, GOAL_LIMITS.minutesMax);
+  validateIntRange('goalTmeMinutes', GOAL_LIMITS.minutesMin, GOAL_LIMITS.minutesMax);
+  validateIntRange('goalSlaPercent', GOAL_LIMITS.slaMin, GOAL_LIMITS.slaMax);
+  validateDecimalRange('goalCsatMin', GOAL_LIMITS.csatMin, GOAL_LIMITS.csatMax);
+  validateIntRange('goalVolumeMin', GOAL_LIMITS.volumeMin, GOAL_LIMITS.volumeMax);
+
+  return errors;
+}
+
+function GoalFieldMessage({ error, hint }: { error?: string | undefined; hint?: string | undefined }) {
+  if (error) return <small className="history-goal-field-error">{error}</small>;
+  if (hint) return <small className="history-goal-field-hint">{hint}</small>;
+  return null;
+}
+
 function mapGoalToForm(goal: OmnichannelGoal): GoalFormState {
   const normalizedScope: GoalScope = goal.scope === 'agent' ? 'agent' : 'global';
   return {
@@ -74,16 +155,14 @@ function mapGoalToForm(goal: OmnichannelGoal): GoalFormState {
 function GoalMetricPill({
   label,
   value,
-  color,
-  background,
+  variant,
 }: {
   label: string;
   value: string;
-  color: string;
-  background: string;
+  variant: 'blue' | 'teal' | 'green' | 'amber' | 'purple';
 }) {
   return (
-    <div className="history-goal-pill" style={{ color, background }}>
+    <div className={`history-goal-pill ${variant}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -103,6 +182,14 @@ export function GoalsConfig() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<GoalFormState>(EMPTY_FORM);
 
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const openConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, title, message, onConfirm });
+  };
+
   const { data: goals = [] } = useQuery({
     queryKey: ['omnichannel-goals'],
     queryFn: () => omnichannelApi.listGoals(),
@@ -115,9 +202,12 @@ export function GoalsConfig() {
   });
 
   const sortedAgents = useMemo(
-    () => [...(monitorData?.agents ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+    () => [...(monitorData?.agents ?? [])].filter((a) => a.role === 'agent').sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
     [monitorData?.agents],
   );
+
+  const validationErrors = useMemo(() => buildGoalValidationErrors(form, t), [form, t]);
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
 
   const upsertMutation = useMutation({
     mutationFn: async (payload: GoalPayload) => {
@@ -161,64 +251,67 @@ export function GoalsConfig() {
   };
 
   const handleDelete = (goalId: string) => {
-    const confirmed = window.confirm(t('tenantAdmin.common.remove', { ns: 'admin' }));
-    if (!confirmed) return;
-    deleteMutation.mutate(goalId);
+    openConfirm(
+      t('goals.removeTitle'),
+      t('tenantAdmin.common.remove', { ns: 'admin' }),
+      () => deleteMutation.mutate(goalId),
+    );
   };
 
   const handleSave = () => {
+    if (hasValidationErrors) {
+      toast.error(t('goals.validation.fixBeforeSave'));
+      return;
+    }
+
     const payload: GoalPayload = {
       name: form.name.trim(),
       scope: form.scope,
       period: form.period,
       agentId: form.scope === 'agent' ? (form.agentId || null) : null,
-      goalTmaMinutes: toNullableInt(form.goalTmaMinutes),
-      goalTmeMinutes: toNullableInt(form.goalTmeMinutes),
-      goalSlaPercent: toNullableInt(form.goalSlaPercent),
-      goalCsatMin: toNullableFloat(form.goalCsatMin),
-      goalVolumeMin: toNullableInt(form.goalVolumeMin),
+      goalTmaMinutes: toNullableInt(normalizeDecimalInput(form.goalTmaMinutes)),
+      goalTmeMinutes: toNullableInt(normalizeDecimalInput(form.goalTmeMinutes)),
+      goalSlaPercent: toNullableInt(normalizeDecimalInput(form.goalSlaPercent)),
+      goalCsatMin: toNullableFloat(normalizeDecimalInput(form.goalCsatMin)),
+      goalVolumeMin: toNullableInt(normalizeDecimalInput(form.goalVolumeMin)),
       isActive: form.isActive,
     };
     upsertMutation.mutate(payload);
   };
 
   const canSave = form.name.trim().length > 0
-    && (form.scope !== 'agent' || Boolean(form.agentId));
+    && (form.scope !== 'agent' || Boolean(form.agentId))
+    && !hasValidationErrors;
 
   const goalMetricDefs = [
     {
       key: 'goalTmaMinutes',
       label: 'TMA',
-      color: 'var(--blue)',
-      background: 'var(--blue-dim)',
+      variant: 'blue',
       value: (goal: OmnichannelGoal) => `<= ${goal.goalTmaMinutes}${t('metrics.tmaUnit')}`,
     },
     {
       key: 'goalTmeMinutes',
       label: 'TME',
-      color: 'var(--teal)',
-      background: 'var(--teal-dim)',
+      variant: 'teal',
       value: (goal: OmnichannelGoal) => `<= ${goal.goalTmeMinutes}${t('metrics.tmaUnit')}`,
     },
     {
       key: 'goalSlaPercent',
       label: 'SLA',
-      color: 'var(--green)',
-      background: 'var(--green-dim)',
+      variant: 'green',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalSlaPercent}%`,
     },
     {
       key: 'goalCsatMin',
       label: 'CSAT',
-      color: 'var(--amber)',
-      background: 'var(--amber-dim)',
+      variant: 'amber',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalCsatMin}★`,
     },
     {
       key: 'goalVolumeMin',
       label: t('performance.columns.volume'),
-      color: 'var(--purple)',
-      background: 'var(--purple-dim)',
+      variant: 'purple',
       value: (goal: OmnichannelGoal) => `>= ${goal.goalVolumeMin}`,
     },
   ] as const;
@@ -238,8 +331,11 @@ export function GoalsConfig() {
   return (
     <div className="history-goals-wrap">
       <div className="history-goals-head">
-        <button className="tb-btn-primary" type="button" onClick={openForCreate}>
-          + {t('goals.new')}
+        <button className="zd-btn zd-btn-primary" type="button" onClick={openForCreate}>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+            <path d="M6.5 2.5v8M2.5 6.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          {t('goals.new')}
         </button>
       </div>
 
@@ -268,12 +364,11 @@ export function GoalsConfig() {
                   </svg>
                 </button>
                 <button
-                  className="tb-icon-btn"
+                  className="tb-icon-btn history-goal-delete-btn"
                   type="button"
                   title={t('tenantAdmin.common.remove', { ns: 'admin' })}
                   aria-label={t('tenantAdmin.common.remove', { ns: 'admin' })}
                   onClick={() => handleDelete(goal.id)}
-                  style={{ color: 'var(--red)' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <path d="M2 4h10M5 4V2.5h4V4M5.5 6.5v4M8.5 6.5v4M3 4l.8 7.5h6.4L11 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -294,8 +389,7 @@ export function GoalsConfig() {
                     key={metric.key}
                     label={metric.label}
                     value={metric.value(goal)}
-                    color={metric.color}
-                    background={metric.background}
+                    variant={metric.variant}
                   />
                 );
               })}
@@ -315,8 +409,11 @@ export function GoalsConfig() {
               <strong>{t('goals.empty')}</strong>
               <p>{t('goals.emptyHint')}</p>
             </div>
-            <button className="tb-btn-primary" type="button" onClick={openForCreate}>
-              + {t('goals.new')}
+            <button className="zd-btn zd-btn-primary" type="button" onClick={openForCreate}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M6.5 2.5v8M2.5 6.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              {t('goals.new')}
             </button>
           </div>
         ) : null}
@@ -336,10 +433,13 @@ export function GoalsConfig() {
               <label>
                 <span>{t('goals.name')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.name.trim() && validationErrors.name ? ' is-invalid' : ''}`}
                   value={form.name}
+                  maxLength={GOAL_LIMITS.nameMax}
+                  aria-invalid={Boolean(form.name.trim() && validationErrors.name)}
                   onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
                 />
+                <GoalFieldMessage error={form.name.trim() ? validationErrors.name : undefined} hint={t('goals.validation.nameHint', { max: GOAL_LIMITS.nameMax })} />
               </label>
 
               <label>
@@ -347,7 +447,11 @@ export function GoalsConfig() {
                 <select
                   className="filter-select"
                   value={form.scope}
-                  onChange={(event) => setForm((prev) => ({ ...prev, scope: event.target.value as GoalScope }))}
+                  onChange={(event) => setForm((prev) => ({
+                    ...prev,
+                    scope: event.target.value as GoalScope,
+                    agentId: event.target.value === 'agent' ? prev.agentId : '',
+                  }))}
                 >
                   <option value="global">{t('goals.scope.global')}</option>
                   <option value="agent">{t('goals.scope.agent')}</option>
@@ -358,8 +462,9 @@ export function GoalsConfig() {
                 <label>
                   <span>{t('history.filters.agent')}</span>
                   <select
-                    className="filter-select"
+                    className={`filter-select${validationErrors.agentId ? ' is-invalid' : ''}`}
                     value={form.agentId}
+                    aria-invalid={Boolean(validationErrors.agentId)}
                     onChange={(event) => setForm((prev) => ({ ...prev, agentId: event.target.value }))}
                   >
                     <option value="">—</option>
@@ -367,6 +472,7 @@ export function GoalsConfig() {
                       <option key={agent.id} value={agent.id}>{agent.name}</option>
                     ))}
                   </select>
+                  <GoalFieldMessage error={validationErrors.agentId} />
                 </label>
               ) : null}
 
@@ -386,50 +492,95 @@ export function GoalsConfig() {
               <label>
                 <span>{t('goals.metrics.tma')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.goalTmaMinutes.trim() && validationErrors.goalTmaMinutes ? ' is-invalid' : ''}`}
+                  type="number"
                   inputMode="numeric"
+                  min={GOAL_LIMITS.minutesMin}
+                  max={GOAL_LIMITS.minutesMax}
+                  step={1}
                   value={form.goalTmaMinutes}
+                  aria-invalid={Boolean(form.goalTmaMinutes.trim() && validationErrors.goalTmaMinutes)}
                   onChange={(event) => setForm((prev) => ({ ...prev, goalTmaMinutes: event.target.value }))}
+                />
+                <GoalFieldMessage
+                  error={form.goalTmaMinutes.trim() ? validationErrors.goalTmaMinutes : undefined}
+                  hint={t('goals.validation.minutesHint', { min: GOAL_LIMITS.minutesMin, max: GOAL_LIMITS.minutesMax })}
                 />
               </label>
 
               <label>
                 <span>{t('goals.metrics.tme')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.goalTmeMinutes.trim() && validationErrors.goalTmeMinutes ? ' is-invalid' : ''}`}
+                  type="number"
                   inputMode="numeric"
+                  min={GOAL_LIMITS.minutesMin}
+                  max={GOAL_LIMITS.minutesMax}
+                  step={1}
                   value={form.goalTmeMinutes}
+                  aria-invalid={Boolean(form.goalTmeMinutes.trim() && validationErrors.goalTmeMinutes)}
                   onChange={(event) => setForm((prev) => ({ ...prev, goalTmeMinutes: event.target.value }))}
+                />
+                <GoalFieldMessage
+                  error={form.goalTmeMinutes.trim() ? validationErrors.goalTmeMinutes : undefined}
+                  hint={t('goals.validation.minutesHint', { min: GOAL_LIMITS.minutesMin, max: GOAL_LIMITS.minutesMax })}
                 />
               </label>
 
               <label>
                 <span>{t('goals.metrics.sla')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.goalSlaPercent.trim() && validationErrors.goalSlaPercent ? ' is-invalid' : ''}`}
+                  type="number"
                   inputMode="numeric"
+                  min={GOAL_LIMITS.slaMin}
+                  max={GOAL_LIMITS.slaMax}
+                  step={1}
                   value={form.goalSlaPercent}
+                  aria-invalid={Boolean(form.goalSlaPercent.trim() && validationErrors.goalSlaPercent)}
                   onChange={(event) => setForm((prev) => ({ ...prev, goalSlaPercent: event.target.value }))}
+                />
+                <GoalFieldMessage
+                  error={form.goalSlaPercent.trim() ? validationErrors.goalSlaPercent : undefined}
+                  hint={t('goals.validation.percentHint', { min: GOAL_LIMITS.slaMin, max: GOAL_LIMITS.slaMax })}
                 />
               </label>
 
               <label>
                 <span>{t('goals.metrics.csat')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.goalCsatMin.trim() && validationErrors.goalCsatMin ? ' is-invalid' : ''}`}
+                  type="number"
                   inputMode="decimal"
+                  min={GOAL_LIMITS.csatMin}
+                  max={GOAL_LIMITS.csatMax}
+                  step={0.1}
                   value={form.goalCsatMin}
+                  aria-invalid={Boolean(form.goalCsatMin.trim() && validationErrors.goalCsatMin)}
                   onChange={(event) => setForm((prev) => ({ ...prev, goalCsatMin: event.target.value }))}
+                />
+                <GoalFieldMessage
+                  error={form.goalCsatMin.trim() ? validationErrors.goalCsatMin : undefined}
+                  hint={t('goals.validation.csatHint', { min: GOAL_LIMITS.csatMin, max: GOAL_LIMITS.csatMax })}
                 />
               </label>
 
               <label>
                 <span>{t('goals.metrics.volume')}</span>
                 <input
-                  className="zd-input"
+                  className={`zd-input${form.goalVolumeMin.trim() && validationErrors.goalVolumeMin ? ' is-invalid' : ''}`}
+                  type="number"
                   inputMode="numeric"
+                  min={GOAL_LIMITS.volumeMin}
+                  max={GOAL_LIMITS.volumeMax}
+                  step={1}
                   value={form.goalVolumeMin}
+                  aria-invalid={Boolean(form.goalVolumeMin.trim() && validationErrors.goalVolumeMin)}
                   onChange={(event) => setForm((prev) => ({ ...prev, goalVolumeMin: event.target.value }))}
+                />
+                <GoalFieldMessage
+                  error={form.goalVolumeMin.trim() ? validationErrors.goalVolumeMin : undefined}
+                  hint={t('goals.validation.volumeHint', { min: GOAL_LIMITS.volumeMin, max: GOAL_LIMITS.volumeMax })}
                 />
               </label>
             </div>
@@ -450,6 +601,43 @@ export function GoalsConfig() {
           </div>
         </div>
       ) : null}
+
+      {confirmState.open && (
+        <div
+          className="history-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-goal-confirm-title"
+          onClick={() => setConfirmState((s) => ({ ...s, open: false }))}
+        >
+          <div className="modal-panel history-confirm-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span id="history-goal-confirm-title">{confirmState.title}</span>
+              <button
+                className="tb-icon-btn"
+                type="button"
+                aria-label={t('tenantAdmin.common.close', { ns: 'admin' })}
+                onClick={() => setConfirmState((s) => ({ ...s, open: false }))}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body"><p className="history-confirm-message">{confirmState.message}</p></div>
+            <div className="modal-footer">
+              <button className="tb-btn" type="button" onClick={() => setConfirmState((s) => ({ ...s, open: false }))}>{t('common.cancel')}</button>
+              <button
+                className="tb-btn history-confirm-danger-btn"
+                type="button"
+                onClick={() => { confirmState.onConfirm(); setConfirmState((s) => ({ ...s, open: false })); }}
+              >
+                {t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

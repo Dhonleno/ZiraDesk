@@ -20,6 +20,7 @@ model Plan {
   priceYear   Decimal  @map("price_year") @db.Decimal(10, 2)
   maxUsers    Int      @map("max_users")
   maxContacts Int      @map("max_contacts")
+  maxMessages Int      @default(-1) @map("max_messages")
   /// JSON com flags de features habilitadas no plano
   features    Json     @default("{}")
   isActive    Boolean  @default(true) @map("is_active")
@@ -32,22 +33,37 @@ model Plan {
 }
 
 model Tenant {
-  id         String       @id @default(cuid())
-  name       String
-  slug       String       @unique
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
   /// Nome do schema PostgreSQL isolado deste tenant (ex: tenant_acme)
-  schemaName String       @unique @map("schema_name")
-  planId     String       @map("plan_id")
-  status     TenantStatus @default(trial)
-  trialEndsAt DateTime?   @map("trial_ends_at")
+  schemaName  String       @unique @map("schema_name")
+  planId      String       @map("plan_id")
+  status      TenantStatus @default(trial)
+  trialEndsAt DateTime?    @map("trial_ends_at")
   /// Configurações do tenant (timezone, logo_url, etc.)
-  settings   Json         @default("{}")
-  createdAt  DateTime     @default(now()) @map("created_at")
+  settings    Json         @default("{}")
+  createdAt   DateTime     @default(now()) @map("created_at")
 
-  plan          Plan           @relation(fields: [planId], references: [id])
-  subscriptions Subscription[]
+  plan           Plan            @relation(fields: [planId], references: [id])
+  subscriptions  Subscription[]
+  usageSnapshots UsageSnapshot[]
 
   @@map("tenants")
+}
+
+model UsageSnapshot {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  metric    String
+  period    String
+  value     BigInt   @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, metric, period])
+  @@map("usage_snapshots")
 }
 
 model Subscription {
@@ -80,39 +96,51 @@ model SuperAdmin {
 }
 
 model ConversationCloseType {
-  id         String         @id @default(cuid())
-  label      String         @unique
-  isDefault  Boolean        @default(false) @map("is_default")
-  isActive   Boolean        @default(true) @map("is_active")
-  order      Int            @default(0) @map("sort_order")
-  createdAt  DateTime       @default(now()) @map("created_at")
+  id            String         @id @default(cuid())
+  label         String         @unique
+  isDefault     Boolean        @default(false) @map("is_default")
+  isActive      Boolean        @default(true) @map("is_active")
+  order         Int            @default(0) @map("sort_order")
+  createdAt     DateTime       @default(now()) @map("created_at")
   conversations Conversation[] @relation("ConversationCloseTypeToConversation")
 
   @@map("conversation_close_types")
 }
 
 model ConversationCloseOutcome {
-  id         String         @id @default(cuid())
-  label      String         @unique
-  isDefault  Boolean        @default(false) @map("is_default")
-  isActive   Boolean        @default(true) @map("is_active")
-  order      Int            @default(0) @map("sort_order")
-  createdAt  DateTime       @default(now()) @map("created_at")
+  id            String         @id @default(cuid())
+  label         String         @unique
+  isDefault     Boolean        @default(false) @map("is_default")
+  isActive      Boolean        @default(true) @map("is_active")
+  order         Int            @default(0) @map("sort_order")
+  createdAt     DateTime       @default(now()) @map("created_at")
   conversations Conversation[] @relation("ConversationCloseOutcomeToConversation")
 
   @@map("conversation_close_outcomes")
 }
 
 model Conversation {
-  id             String                     @id @db.Uuid
-  closeTypeId    String?                    @map("close_type_id")
-  closeOutcomeId String?                    @map("close_outcome_id")
-  closedAt       DateTime?                  @map("closed_at")
-  csatExpiresAt  DateTime?                  @map("csat_expires_at")
-  closeType      ConversationCloseType?     @relation("ConversationCloseTypeToConversation", fields: [closeTypeId], references: [id], onDelete: SetNull)
-  closeOutcome   ConversationCloseOutcome?  @relation("ConversationCloseOutcomeToConversation", fields: [closeOutcomeId], references: [id], onDelete: SetNull)
+  id               String                    @id @db.Uuid
+  status           ConversationStatus        @default(open)
+  closeTypeId      String?                   @map("close_type_id")
+  closeOutcomeId   String?                   @map("close_outcome_id")
+  closedAt         DateTime?                 @map("closed_at")
+  csatExpiresAt    DateTime?                 @map("csat_expires_at")
+  closureReason    Json?                     @map("closure_reason")
+  waitingExpiresAt DateTime?                 @map("waiting_expires_at")
+  queueEnteredAt   DateTime?                 @map("queue_entered_at")
+  closeType        ConversationCloseType?    @relation("ConversationCloseTypeToConversation", fields: [closeTypeId], references: [id], onDelete: SetNull)
+  closeOutcome     ConversationCloseOutcome? @relation("ConversationCloseOutcomeToConversation", fields: [closeOutcomeId], references: [id], onDelete: SetNull)
 
   @@map("conversations")
+}
+
+enum ConversationStatus {
+  open
+  waiting
+  closed
+
+  @@map("conversation_status")
 }
 
 enum TenantStatus {

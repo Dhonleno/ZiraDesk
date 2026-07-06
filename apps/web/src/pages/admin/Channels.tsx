@@ -32,9 +32,8 @@ interface SmtpFormState {
   fromName: string;
 }
 
-const TYPE_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+const TYPE_META: Record<string, { color: string; icon: React.ReactNode }> = {
   whatsapp: {
-    label: 'WhatsApp',
     color: '#25D366',
     icon: (
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden>
@@ -43,7 +42,6 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
     ),
   },
   instagram: {
-    label: 'Instagram DM',
     color: '#E1306C',
     icon: (
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden>
@@ -52,7 +50,6 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
     ),
   },
   email: {
-    label: 'E-mail',
     color: 'var(--blue)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
@@ -62,7 +59,6 @@ const TYPE_META: Record<string, { label: string; color: string; icon: React.Reac
     ),
   },
   webchat: {
-    label: 'Web Chat',
     color: 'var(--teal)',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden>
@@ -191,7 +187,11 @@ export function Channels() {
     ),
     onSuccess: async (_res, channel) => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'channels'] });
-      toast.success(channel.status === 'active' ? 'Canal desativado' : 'Canal ativado');
+      toast.success(t(
+        channel.status === 'active'
+          ? 'tenantAdmin.channels.deactivated'
+          : 'tenantAdmin.channels.activated',
+      ));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
@@ -249,7 +249,9 @@ export function Channels() {
                   {meta.icon}
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>{meta.label}</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--txt)' }}>
+                    {t(`tenantAdmin.channels.types.${type}`)}
+                  </p>
                   <p className="mt-0.5 text-xs" style={{ color: 'var(--txt-3)' }}>
                     {t('tenantAdmin.channels.clickToAdd')}
                   </p>
@@ -260,7 +262,7 @@ export function Channels() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(channels as Channel[]).map((channel) => {
-              const meta = TYPE_META[channel.type] ?? { label: 'Canal', color: 'var(--txt-2)', icon: null };
+              const meta = TYPE_META[channel.type] ?? { color: 'var(--txt-2)', icon: null };
               return (
                 <div
                   key={channel.id}
@@ -277,7 +279,11 @@ export function Channels() {
                       </div>
                       <div>
                         <p className="font-medium" style={{ color: 'var(--txt)' }}>{channel.name}</p>
-                        <p className="text-xs" style={{ color: 'var(--txt-3)' }}>{meta.label}</p>
+                        <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
+                          {TYPE_META[channel.type]
+                            ? t(`tenantAdmin.channels.types.${channel.type}`)
+                            : t('tenantAdmin.channels.columnChannel')}
+                        </p>
                       </div>
                     </div>
                     <StatusBadge channel={channel} t={t} />
@@ -302,7 +308,7 @@ export function Channels() {
                       onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-2)'; }}
                     >
-                      Configurar
+                      {t('tenantAdmin.channels.configure')}
                     </button>
                     <button
                       type="button"
@@ -311,7 +317,11 @@ export function Channels() {
                       className="zd-btn"
                       style={{ borderColor: 'var(--blue)', background: 'var(--blue-dim)', color: 'var(--blue)' }}
                     >
-                      {channel.status === 'active' ? 'Desativar' : 'Ativar'}
+                      {t(
+                        channel.status === 'active'
+                          ? 'tenantAdmin.channels.deactivate'
+                          : 'tenantAdmin.channels.activate',
+                      )}
                     </button>
                     <button
                       type="button"
@@ -348,7 +358,7 @@ export function Channels() {
               </div>
               <div>
                 <p className="font-medium" style={{ color: 'var(--txt)' }}>
-                  SMTP - E-mail corporativo
+                  {t('tenantAdmin.channels.smtpLabel')}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--txt-3)' }}>
                   {t('tenantAdmin.smtp.usedFor')}
@@ -357,7 +367,9 @@ export function Channels() {
             </div>
 
             <Button variant="secondary" onClick={() => setSmtpModalOpen(true)} disabled={smtpLoading}>
-              {smtpConfig ? 'Editar' : 'Configurar'}
+              {smtpConfig
+                ? t('tenantAdmin.channels.edit')
+                : t('tenantAdmin.channels.configure')}
             </Button>
           </div>
 

@@ -8,7 +8,13 @@
       "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\")",
       "Bash(ls -la \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\")",
       "Bash(grep -n \"adminApi\" \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\\\\\\\\apps\\\\\\\\web\\\\\\\\src\\\\\\\\services\\\\\\\\api.ts\")",
-      "Bash(find \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\" -name \"schema.prisma\" -o -name \"*.prisma\")"
+      "Bash(find \"d:\\\\\\\\Projetos\\\\\\\\ZiraDesk\" -name \"schema.prisma\" -o -name \"*.prisma\")",
+      "Bash(grep -iv \"import\\\\|//.*agent\")",
+      "Bash(git commit -m ' *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\Projetos\\\\ZiraDesk\\\\apps\\\\web\\\\src\" -Recurse -Filter \"*.tsx\" -Filter \"*.ts\")",
+      "Bash(Select-Object -First 30 FullName)",
+      "Bash(pnpm --filter @ziradesk/web type-check)",
+      "Bash(pnpm --filter @ziradesk/api type-check)"
     ],
     "defaultMode": "bypassPermissions"
   }

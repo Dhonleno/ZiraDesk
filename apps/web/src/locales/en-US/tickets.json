@@ -65,8 +65,34 @@
       "resolve": "Resolve",
       "close": "Close",
       "reopen": "Reopen",
+      "cancel": "Cancel",
       "edit": "Edit",
       "delete": "Delete"
+    },
+    "resolve": {
+      "title": "Resolve ticket",
+      "subtitle": "Describe how the issue was resolved before finalizing.",
+      "notesLabel": "Resolution notes",
+      "notesPlaceholder": "Describe what was done to resolve this ticket...",
+      "notesRequired": "Resolution notes are required"
+    },
+    "waiting": {
+      "title": "Waiting reason",
+      "subtitle": "Select the reason why this ticket is on hold.",
+      "confirm": "Confirm",
+      "reasons": {
+        "customer": "Waiting for customer",
+        "internal": "Waiting for internal team",
+        "third_party": "Waiting for third party"
+      }
+    },
+    "close": {
+      "title": "Close ticket",
+      "subtitle": "The ticket will be permanently closed. It can be reopened if needed."
+    },
+    "reopen": {
+      "title": "Reopen ticket",
+      "subtitle": "The ticket will return to Open status and can be handled again."
     },
     "chooseFile": "Choose files",
     "noFileSelected": "No file selected",
@@ -170,6 +196,7 @@
       "history": "History",
       "write": "Write",
       "preview": "Preview",
+      "saveDescription": "Save description",
       "newTagPlaceholder": "+ Tag",
       "systemUser": "System",
       "sections": {

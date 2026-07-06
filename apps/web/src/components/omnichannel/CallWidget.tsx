@@ -69,6 +69,7 @@ export function CallWidget({
         className="call-start-btn"
         onClick={() => void handleCall()}
         title={`Ligar para ${contactName}`}
+        aria-label={`Ligar para ${contactName}`}
         disabled={!contactPhone}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -105,6 +106,7 @@ export function CallWidget({
             className={`call-ctrl-btn ${isMuted ? 'active' : ''}`}
             onClick={toggleMute}
             title={isMuted ? 'Ativar microfone' : 'Mutar microfone'}
+            aria-label={isMuted ? 'Ativar microfone' : 'Mutar microfone'}
           >
             {isMuted ? (
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -130,7 +132,7 @@ export function CallWidget({
             <span>{isMuted ? 'Ativar mic' : 'Mutar'}</span>
           </button>
 
-          <button className="call-ctrl-btn hangup" onClick={handleHangUp} title="Encerrar chamada">
+          <button className="call-ctrl-btn hangup" onClick={handleHangUp} title="Encerrar chamada" aria-label="Encerrar chamada">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M16 11.7c0 .3-.1.7-.2 1-.1.3-.3.6-.6.8-.4.4-.9.7-1.4.8-.6.1-1.1.1-1.7-.1-1.6-.6-3-1.5-4.2-2.7C6.7 10.3 5.8 8.9 5.2 7.3c-.2-.6-.2-1.1-.1-1.7.1-.5.4-1 .8-1.4.2-.2.5-.4.8-.5.3-.1.6-.1.9 0l.7.2c.2.1.4.3.5.5l1.3 1.9c.1.2.2.4.2.7 0 .2-.1.5-.2.7L9.6 9c-.1.2-.1.3-.1.5 0 .2.1.3.2.5.6.9 1.3 1.6 2.2 2.2.2.1.3.2.5.2.2 0 .4 0 .5-.1l.6-.7c.2-.2.4-.3.7-.3.3 0 .5.1.7.2l1.9 1.3c.2.2.4.3.5.5v.7z"

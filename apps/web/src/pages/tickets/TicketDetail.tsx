@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import type { TFunction } from 'i18next';
 import {
   adminApi,
@@ -15,7 +17,6 @@ import {
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { useDebounce } from '../../hooks/useDebounce';
-import { parseMarkdown } from '../../utils/markdown';
 import { PageShell } from '../../components/layout/PageShell';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
 import { SourceBadge } from '../../components/tickets/SourceBadge';
@@ -26,8 +27,32 @@ import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
+const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
+  open:        ['in_progress', 'waiting'],
+  in_progress: ['open', 'waiting', 'resolved'],
+  waiting:     ['open', 'in_progress'],
+  resolved:    ['open', 'in_progress', 'closed'],
+  closed:      ['open'],
+};
+
 type DetailTab = 'comments' | 'history';
-type DescriptionTab = 'write' | 'preview';
+
+function useAppTheme(): 'dark' | 'light' {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+  ));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const nextTheme = document.documentElement.getAttribute('data-theme');
+      setTheme(nextTheme === 'light' ? 'light' : 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
 
 function sanitizeTicketTitle(value: string): string {
   return value
@@ -45,6 +70,10 @@ function formatMonoDate(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatTicketNumber(n: number): string {
+  return `#${String(n).padStart(5, '0')}`;
 }
 
 function statusLabel(status: TicketStatus, t: (key: string) => string): string {
@@ -106,6 +135,30 @@ function getSlaLabel(sla: SlaInfo, t: TFunction<'tickets'>): string | null {
   return t('tickets.sla.expiresHours', { count: remainingHours });
 }
 
+function AuthedImage({ src, alt }: { src: string; alt: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const token = useAuthStore((s) => s.token);
+
+  useEffect(() => {
+    if (!token) return;
+    let revoke: string | null = null;
+    fetch(src, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        revoke = url;
+        setObjectUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [src, token]);
+
+  if (!objectUrl) return null;
+  return <img src={objectUrl} alt={alt} />;
+}
+
 function AttachmentCard({
   attachment,
   canDelete,
@@ -121,7 +174,7 @@ function AttachmentCard({
     <div className="ticket-attachment-item">
       {isImage ? (
         <a href={attachment.file_url} target="_blank" rel="noreferrer" className="ticket-attachment-thumb">
-          <img src={attachment.file_url} alt={attachment.filename} />
+          <AuthedImage src={attachment.file_url} alt={attachment.filename} />
         </a>
       ) : (
         <a href={attachment.file_url} target="_blank" rel="noreferrer" className="ticket-attachment-file">
@@ -151,13 +204,13 @@ export function TicketDetailPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
+  const appTheme = useAppTheme();
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
 
   const [descriptionEditing, setDescriptionEditing] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
-  const [descriptionTab, setDescriptionTab] = useState<DescriptionTab>('write');
   const [activeTab, setActiveTab] = useState<DetailTab>('comments');
 
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -171,6 +224,12 @@ export function TicketDetailPage() {
   const [sidebarTagInput, setSidebarTagInput] = useState('');
   const [sidebarTags, setSidebarTags] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [showWaitingModal, setShowWaitingModal] = useState(false);
+  const [waitingReason, setWaitingReason] = useState<'customer' | 'internal' | 'third_party' | ''>('');
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload>>({});
@@ -180,7 +239,6 @@ export function TicketDetailPage() {
   const priorityRef = useRef<HTMLDivElement | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: ticket, isPending } = useQuery({
@@ -284,11 +342,6 @@ export function TicketDetailPage() {
     titleInputRef.current.focus();
     titleInputRef.current.select();
   }, [titleEditing]);
-
-  useEffect(() => {
-    if (!descriptionEditing || !descriptionInputRef.current) return;
-    descriptionInputRef.current.focus();
-  }, [descriptionEditing]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
@@ -401,54 +454,6 @@ export function TicketDetailPage() {
     setSidebarTagInput('');
   }
 
-  function applyDescriptionStyle(kind: 'bold' | 'italic' | 'code' | 'quote' | 'unordered' | 'ordered') {
-    const textarea = descriptionInputRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = descriptionDraft.slice(start, end);
-
-    let prefix = '';
-    let suffix = '';
-
-    if (kind === 'bold') {
-      prefix = '**';
-      suffix = '**';
-    }
-
-    if (kind === 'italic') {
-      prefix = '_';
-      suffix = '_';
-    }
-
-    if (kind === 'code') {
-      prefix = '`';
-      suffix = '`';
-    }
-
-    if (kind === 'quote') {
-      prefix = '> ';
-    }
-
-    if (kind === 'unordered') {
-      prefix = '- ';
-    }
-
-    if (kind === 'ordered') {
-      prefix = '1. ';
-    }
-
-    const nextValue = `${descriptionDraft.slice(0, start)}${prefix}${selected}${suffix}${descriptionDraft.slice(end)}`;
-    setDescriptionDraft(nextValue);
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      const cursor = start + prefix.length + selected.length + suffix.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
-  }
-
   async function handleDelete() {
     await deleteTicketMutation.mutateAsync();
     setShowDeleteConfirm(false);
@@ -526,7 +531,7 @@ export function TicketDetailPage() {
             <div className="ticket-detail-v2-breadcrumb">
               <span>{t('tickets.title')}</span>
               <span>/</span>
-              <strong>#{ticket.id.slice(-6).toUpperCase()} - {truncatedTitle}</strong>
+              <strong>{formatTicketNumber(ticket.ticket_number)} - {truncatedTitle}</strong>
             </div>
           </div>
 
@@ -541,16 +546,23 @@ export function TicketDetailPage() {
 
               {statusMenuOpen ? (
                 <div className="ticket-inline-menu">
-                  {(['open', 'in_progress', 'waiting', 'resolved', 'closed'] as TicketStatus[]).map((status) => (
+                  {(TICKET_STATUS_TRANSITIONS[ticket.status] ?? []).map((status) => (
                     <button
                       key={status}
                       type="button"
                       onClick={() => {
-                        patchStatus(status);
+                        if (status === 'waiting') {
+                          setWaitingReason('');
+                          setShowWaitingModal(true);
+                          setStatusMenuOpen(false);
+                          return;
+                        }
+
+                        patchStatus(status as TicketStatus);
                         setStatusMenuOpen(false);
                       }}
                     >
-                      {statusLabel(status, t)}
+                      {statusLabel(status as TicketStatus, t)}
                     </button>
                   ))}
                 </div>
@@ -589,67 +601,30 @@ export function TicketDetailPage() {
             </div>
 
             {ticket.status === 'open' ? (
-              <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
-                  {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-                <button
-                  type="button"
-                  className="zd-btn"
-                  onClick={() => {
-                    if (user?.id) {
-                      setSidebarAssignedTo(user.id);
-                      queuePatch({ assigned_to: user.id });
-                    }
-                  }}
-                >
-                  {t('tickets.actions.assignToMe')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>
-                  {t('tickets.actions.assign')}
-                </button>
-              </>
+              <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>
+                {t('tickets.actions.assign')}
+              </button>
             ) : null}
 
             {ticket.status === 'in_progress' ? (
+              <button type="button" className="zd-btn zd-btn-primary" onClick={() => setShowResolveModal(true)}>
+                {t('tickets.actions.resolve')}
+              </button>
+            ) : null}
+
+            {ticket.status === 'resolved' ? (
               <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
+                <button type="button" className="zd-btn zd-btn-secondary" onClick={() => setShowReopenConfirm(true)}>
+                  {t('tickets.actions.reopen')}
+                </button>
+                <button type="button" className="zd-btn zd-btn-primary" onClick={() => setShowCloseConfirm(true)}>
                   {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-                <button
-                  type="button"
-                  className="zd-btn"
-                  onClick={() => {
-                    if (user?.id) {
-                      setSidebarAssignedTo(user.id);
-                      queuePatch({ assigned_to: user.id });
-                    }
-                  }}
-                >
-                  {t('tickets.actions.assignToMe')}
                 </button>
               </>
             ) : null}
 
-            {ticket.status === 'waiting' ? (
-              <>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('closed')}>
-                  {t('tickets.actions.close')}
-                </button>
-                <button type="button" className="zd-btn" onClick={() => patchStatus('resolved')}>
-                  {t('tickets.actions.resolve')}
-                </button>
-              </>
-            ) : null}
-
-            {(ticket.status === 'resolved' || ticket.status === 'closed') ? (
-              <button type="button" className="zd-btn zd-btn-primary" onClick={() => patchStatus('open')}>
+            {ticket.status === 'closed' ? (
+              <button type="button" className="zd-btn zd-btn-secondary" onClick={() => setShowReopenConfirm(true)}>
                 {t('tickets.actions.reopen')}
               </button>
             ) : null}
@@ -736,67 +711,42 @@ export function TicketDetailPage() {
               </header>
 
               {descriptionEditing ? (
-                <div className="ticket-description-editor">
-                  <div className="ticket-description-editor-tabs">
+                <div className="ticket-description-editor" data-color-mode={appTheme}>
+                  <MDEditor
+                    value={descriptionDraft}
+                    onChange={(val) => setDescriptionDraft(val ?? '')}
+                    height={300}
+                    preview="live"
+                    visibleDragbar={false}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                     <button
                       type="button"
-                      className={descriptionTab === 'write' ? 'active' : ''}
-                      onClick={() => setDescriptionTab('write')}
-                    >
-                      {t('tickets.detail.write')}
-                    </button>
-                    <button
-                      type="button"
-                      className={descriptionTab === 'preview' ? 'active' : ''}
-                      onClick={() => setDescriptionTab('preview')}
-                    >
-                      {t('tickets.detail.preview')}
-                    </button>
-                  </div>
-
-                  {descriptionTab === 'write' ? (
-                    <>
-                      <div className="ticket-md-toolbar">
-                        <button type="button" onClick={() => applyDescriptionStyle('bold')}>B</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('italic')}>I</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('code')}>{'</>'}</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('quote')}>{'"'}</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('unordered')}>•</button>
-                        <button type="button" onClick={() => applyDescriptionStyle('ordered')}>1.</button>
-                      </div>
-
-                      <textarea
-                        ref={descriptionInputRef}
-                        className="ticket-description-textarea"
-                        value={descriptionDraft}
-                        onChange={(event) => setDescriptionDraft(event.target.value)}
-                      />
-                    </>
-                  ) : (
-                    <div
-                      className="ticket-description-preview"
-                      dangerouslySetInnerHTML={{ __html: parseMarkdown(descriptionDraft || '') }}
-                    />
-                  )}
-
-                  <div className="ticket-description-actions">
-                    <button
-                      type="button"
-                      className="zd-btn"
+                      className="zd-btn zd-btn-secondary"
                       onClick={() => {
                         setDescriptionDraft(ticket.description ?? '');
                         setDescriptionEditing(false);
                       }}
                     >
-                      {t('tickets.cancel')}
+                      {t('tickets.actions.cancel')}
                     </button>
-                    <button type="button" className="zd-btn zd-btn-primary" onClick={saveDescription}>
-                      {t('tickets.save')}
+                    <button
+                      type="button"
+                      className="zd-btn zd-btn-primary"
+                      disabled={updateMutation.isPending}
+                      onClick={saveDescription}
+                    >
+                      {t('tickets.detail.saveDescription')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="ticket-description-render" dangerouslySetInnerHTML={{ __html: parseMarkdown(ticket.description ?? '') }} />
+                <div className="ticket-description-render" data-color-mode={appTheme}>
+                  <MDEditor.Markdown
+                    source={ticket.description ?? ''}
+                    style={{ background: 'transparent', color: 'var(--txt)' }}
+                  />
+                </div>
               )}
             </section>
 
@@ -905,6 +855,13 @@ export function TicketDetailPage() {
                 <span>{t('tickets.fields.source')}</span>
                 <SourceBadge source={ticket.source ?? 'manual'} />
               </div>
+
+              {ticket.status === 'waiting' && ticket.waiting_reason ? (
+                <div className="ticket-sidebar-field">
+                  <span>{t('tickets.waiting.title')}</span>
+                  <strong>{t(`tickets.waiting.reasons.${ticket.waiting_reason}`)}</strong>
+                </div>
+              ) : null}
 
               <div className="ticket-sidebar-field">
                 <span>{t('tickets.fields.createdAt')}</span>
@@ -1074,6 +1031,261 @@ export function TicketDetailPage() {
         loading={deleteTicketMutation.isPending}
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      {showWaitingModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ticket-waiting-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'var(--backdrop)',
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowWaitingModal(false);
+              setWaitingReason('');
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              width: '100%',
+              maxWidth: 460,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+              boxShadow: 'var(--shadow-pop)',
+            }}
+          >
+            <div>
+              <h3
+                id="ticket-waiting-title"
+                style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)', margin: 0 }}
+              >
+                {t('tickets.waiting.title')}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', marginTop: 4, marginBottom: 0 }}>
+                {t('tickets.waiting.subtitle')}
+              </p>
+            </div>
+
+            <div role="radiogroup" aria-labelledby="ticket-waiting-title" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(['customer', 'internal', 'third_party'] as const).map((reason) => (
+                <label
+                  key={reason}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    minHeight: 42,
+                    padding: '10px 12px',
+                    border: `1px solid ${waitingReason === reason ? 'var(--teal)' : 'var(--line)'}`,
+                    borderRadius: 8,
+                    background: waitingReason === reason ? 'var(--teal-dim)' : 'var(--bg-3)',
+                    color: 'var(--txt)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="ticket-waiting-reason"
+                    value={reason}
+                    checked={waitingReason === reason}
+                    onChange={() => setWaitingReason(reason)}
+                    style={{ accentColor: 'var(--teal)' }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>
+                    {t(`tickets.waiting.reasons.${reason}`)}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                className="zd-btn zd-btn-secondary"
+                onClick={() => {
+                  setShowWaitingModal(false);
+                  setWaitingReason('');
+                }}
+              >
+                {t('tickets.actions.cancel')}
+              </button>
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={!waitingReason || updateMutation.isPending}
+                onClick={async () => {
+                  if (!waitingReason) return;
+
+                  await updateMutation.mutateAsync({
+                    status: 'waiting',
+                    waiting_reason: waitingReason,
+                  });
+                  setShowWaitingModal(false);
+                  setWaitingReason('');
+                  setStatusMenuOpen(false);
+                }}
+              >
+                {t('tickets.waiting.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showResolveModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'var(--backdrop)',
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowResolveModal(false);
+              setResolutionNotes('');
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 12,
+              width: '100%',
+              maxWidth: 480,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-pop)',
+            }}
+          >
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--txt)', margin: 0 }}>
+                {t('tickets.resolve.title')}
+              </h3>
+              <p style={{ fontSize: 13, color: 'var(--txt-2)', marginTop: 4, marginBottom: 0 }}>
+                {t('tickets.resolve.subtitle')}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label
+                htmlFor="ticket-resolution-notes"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--txt-2)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.8,
+                }}
+              >
+                {t('tickets.resolve.notesLabel')} *
+              </label>
+              <textarea
+                id="ticket-resolution-notes"
+                value={resolutionNotes}
+                onChange={(event) => setResolutionNotes(event.target.value)}
+                placeholder={t('tickets.resolve.notesPlaceholder')}
+                rows={4}
+                style={{
+                  background: 'var(--bg-3)',
+                  border: `1px solid ${resolutionNotes.trim().length === 0 ? 'var(--red)' : 'var(--line)'}`,
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  color: 'var(--txt)',
+                  fontSize: 13,
+                  resize: 'vertical',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  fontFamily: 'var(--font)',
+                }}
+              />
+              {resolutionNotes.trim().length === 0 ? (
+                <span style={{ fontSize: 11, color: 'var(--red)' }}>
+                  {t('tickets.resolve.notesRequired')}
+                </span>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                className="zd-btn zd-btn-secondary"
+                onClick={() => {
+                  setShowResolveModal(false);
+                  setResolutionNotes('');
+                }}
+              >
+                {t('tickets.actions.cancel')}
+              </button>
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={resolutionNotes.trim().length === 0 || updateMutation.isPending}
+                onClick={async () => {
+                  await updateMutation.mutateAsync({
+                    status: 'resolved',
+                    resolution_notes: resolutionNotes.trim(),
+                  } as Partial<CreateTicketPayload> & { resolution_notes: string });
+                  setShowResolveModal(false);
+                  setResolutionNotes('');
+                }}
+              >
+                {t('tickets.actions.resolve')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <ConfirmModal
+        open={showCloseConfirm}
+        title={t('tickets.close.title')}
+        message={t('tickets.close.subtitle')}
+        confirmLabel={t('tickets.actions.close')}
+        loading={updateMutation.isPending}
+        onConfirm={async () => {
+          await updateMutation.mutateAsync({ status: 'closed' });
+          setShowCloseConfirm(false);
+        }}
+        onCancel={() => setShowCloseConfirm(false)}
+      />
+
+      <ConfirmModal
+        open={showReopenConfirm}
+        title={t('tickets.reopen.title')}
+        message={t('tickets.reopen.subtitle')}
+        confirmLabel={t('tickets.actions.reopen')}
+        loading={updateMutation.isPending}
+        onConfirm={async () => {
+          await updateMutation.mutateAsync({ status: 'open' });
+          setShowReopenConfirm(false);
+        }}
+        onCancel={() => setShowReopenConfirm(false)}
       />
     </PageShell>
   );

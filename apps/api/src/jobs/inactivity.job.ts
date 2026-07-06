@@ -1,6 +1,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { prisma } from '../config/database.js';
-import { redis } from '../config/redis.js';
+import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { quoteIdent } from '../modules/omnichannel/conversations/protocols.js';
 import { decryptCredentials } from '../utils/crypto.js';
@@ -50,7 +50,7 @@ const DEFAULT_CLOSE_MESSAGE =
   'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊';
 
 export const inactivityQueue = new Queue<InactivityJobData>('ziradesk-inactivity', {
-  connection: redis,
+  connection: bullmqConnection,
 });
 
 function normalizeMinutes(value: unknown, fallback: number, minimum: number): number {
@@ -136,7 +136,7 @@ async function loadConversation(
      JOIN ${quoteIdent(schemaName)}.contacts ct ON ct.id = c.contact_id
      JOIN ${quoteIdent(schemaName)}.channels ch ON ch.id = c.channel_id
      WHERE c.id = $1::uuid
-       AND c.status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')
+       AND c.status IN ('open', 'waiting')
      LIMIT 1`,
     conversationId,
   );
@@ -244,10 +244,18 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
   await prisma.$executeRawUnsafe(
     `UPDATE ${quoteIdent(schemaName)}.conversations
      SET status = 'closed',
-         resolved_at = NOW()
+         resolved_at = NOW(),
+         closure_reason = $2::jsonb,
+         waiting_expires_at = NULL
      WHERE id = $1::uuid
-       AND status IN ('open', 'pending', 'active_outbound', 'in_service', 'bot')`,
+       AND status IN ('open', 'waiting')`,
     conversationId,
+    JSON.stringify({
+      reason: 'inactivity',
+      notes: 'Encerrado por inatividade',
+      resolvedAt: new Date(),
+      agentId: null,
+    }),
   );
 
   await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);
@@ -265,7 +273,7 @@ const inactivityWorker = new Worker<InactivityJobData>(
   async (job) => {
     await processInactivity(job.data);
   },
-  { connection: redis },
+  { connection: bullmqConnection },
 );
 
 inactivityWorker.on('failed', (job, err) => {
@@ -305,3 +313,4 @@ export async function scheduleInactivityCheck(
     },
   );
 }
+

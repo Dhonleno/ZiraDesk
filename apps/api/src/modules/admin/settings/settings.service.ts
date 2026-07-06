@@ -1,9 +1,6 @@
 import { prisma } from '../../../config/database.js';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { getStorage } from '../../../lib/storage/index.js';
 import type { UpdateSettingsInput } from './settings.schema.js';
-
-const LOGO_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'logos');
 
 const LOGO_EXT_BY_MIME: Record<string, string> = {
   'image/png': 'png',
@@ -13,12 +10,15 @@ const LOGO_EXT_BY_MIME: Record<string, string> = {
   'image/svg+xml': 'svg',
 };
 
+const LOGO_ALL_EXTS = ['png', 'jpg', 'webp', 'svg'] as const;
+
 const DEFAULT_INACTIVITY_WARNING_MESSAGE =
   'Olá! Notamos que você está inativo há {{time}}. Seu atendimento será encerrado em {{remaining}} minutos caso não haja interação.';
 const DEFAULT_INACTIVITY_CLOSE_MESSAGE =
   'Seu atendimento foi encerrado por inatividade. Caso precise de ajuda, entre em contato novamente. 😊';
 const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE = 'end_of_day';
 const DEFAULT_ACTIVE_OUTBOUND_VALIDITY_HOURS = 24;
+const DEFAULT_LGPD_RETENTION_DAYS = 180;
 const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   '✅ Seu atendimento foi aceito!',
   '',
@@ -26,34 +26,32 @@ const DEFAULT_BOT_ASSIGNED_MESSAGE = [
   'Em breve entraremos em contato. 😊',
 ].join('\n');
 
-async function ensureLogoDir() {
-  await fs.mkdir(LOGO_DIR, { recursive: true });
-}
+const DEFAULT_QUEUE_MESSAGE_TEMPLATE =
+  'Você é o nº {{position}} na fila. Aguarde, em breve um agente irá atendê-lo.';
+const DEFAULT_AGENT_ASSUME_TEMPLATE =
+  'Olá! Meu nome é {{agent_name}}, vou continuar seu atendimento. Em que posso ajudar?';
+const DEFAULT_EXPIRE_24H_MESSAGE =
+  'Olá, infelizmente não conseguimos atender no momento. Por favor, entre em contato novamente quando puder.';
 
-function logoFileName(tenantId: string, mimeType: string): string {
+function logoKey(tenantId: string, mimeType: string): string {
   const ext = LOGO_EXT_BY_MIME[mimeType] ?? 'png';
-  return `${tenantId}.${ext}`;
+  return `logos/${tenantId}.${ext}`;
 }
 
-async function removeOldLogos(tenantId: string, keepFileName: string) {
-  await ensureLogoDir();
-  const files = await fs.readdir(LOGO_DIR);
-  await Promise.all(
-    files
-      .filter((file) => file.startsWith(`${tenantId}.`) && file !== keepFileName)
-      .map(async (file) => {
-        await fs.rm(path.join(LOGO_DIR, file), { force: true });
-      }),
+async function deleteOldLogos(tenantId: string, keepKey: string): Promise<void> {
+  const storage = getStorage();
+  await Promise.allSettled(
+    LOGO_ALL_EXTS.map((ext) => {
+      const key = `logos/${tenantId}.${ext}`;
+      return key !== keepKey ? storage.delete(key) : Promise.resolve();
+    }),
   );
 }
 
-function resolveLogoPath(fileName: string): string | null {
-  if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
-  return path.join(LOGO_DIR, fileName);
-}
-
-function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' {
-  return value === 'hours' ? 'hours' : DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE;
+function resolveActiveOutboundValidityMode(value: unknown): 'end_of_day' | 'hours' | 'unlimited' {
+  if (value === 'hours') return 'hours';
+  if (value === 'unlimited') return 'unlimited';
+  return DEFAULT_ACTIVE_OUTBOUND_VALIDITY_MODE;
 }
 
 function resolveActiveOutboundValidityHours(value: unknown): number {
@@ -63,12 +61,17 @@ function resolveActiveOutboundValidityHours(value: unknown): number {
   return parsed;
 }
 
-export async function readLogoFile(fileName: string): Promise<Buffer | null> {
-  const resolved = resolveLogoPath(fileName);
-  if (!resolved) return null;
+function resolveLgpdRetentionDays(value: unknown): number {
+  if (typeof value !== 'number') return DEFAULT_LGPD_RETENTION_DAYS;
+  const parsed = Math.trunc(value);
+  if (parsed < 1 || parsed > 3650) return DEFAULT_LGPD_RETENTION_DAYS;
+  return parsed;
+}
 
+export async function readLogoFile(fileName: string): Promise<Buffer | null> {
+  if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   try {
-    return await fs.readFile(resolved);
+    return await getStorage().download(`logos/${fileName}`);
   } catch {
     return null;
   }
@@ -125,6 +128,14 @@ export async function getSettings(tenantId: string) {
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
+    lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
+    queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
+    queue_message_template: (s.queue_message_template as string | undefined) ?? DEFAULT_QUEUE_MESSAGE_TEMPLATE,
+    queue_throttle_seconds: typeof s.queue_throttle_seconds === 'number' ? Math.trunc(s.queue_throttle_seconds) : 60,
+    agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
+    expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
+    expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -177,6 +188,30 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...('max_conversations_per_agent' in data
       ? { max_conversations_per_agent: data.max_conversations_per_agent ?? null }
       : {}),
+    ...(data.lgpd_retention_enabled !== undefined
+      ? { lgpd_retention_enabled: data.lgpd_retention_enabled }
+      : {}),
+    ...(data.lgpd_retention_days !== undefined
+      ? { lgpd_retention_days: data.lgpd_retention_days }
+      : {}),
+    ...(data.queue_notifications_enabled !== undefined
+      ? { queue_notifications_enabled: data.queue_notifications_enabled }
+      : {}),
+    ...(data.queue_message_template !== undefined
+      ? { queue_message_template: data.queue_message_template }
+      : {}),
+    ...(data.queue_throttle_seconds !== undefined
+      ? { queue_throttle_seconds: data.queue_throttle_seconds }
+      : {}),
+    ...(data.agent_assume_template !== undefined
+      ? { agent_assume_template: data.agent_assume_template }
+      : {}),
+    ...(data.expire_24h_action !== undefined
+      ? { expire_24h_action: data.expire_24h_action }
+      : {}),
+    ...(data.expire_24h_message !== undefined
+      ? { expire_24h_message: data.expire_24h_message }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -218,6 +253,14 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
+    lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
+    queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
+    queue_message_template: (s.queue_message_template as string | undefined) ?? DEFAULT_QUEUE_MESSAGE_TEMPLATE,
+    queue_throttle_seconds: typeof s.queue_throttle_seconds === 'number' ? Math.trunc(s.queue_throttle_seconds) : 60,
+    agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
+    expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
+    expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
   };
 }
 
@@ -226,11 +269,9 @@ export async function uploadLogo(params: {
   fileBuffer: Buffer;
   mimeType: string;
 }) {
-  const fileName = logoFileName(params.tenantId, params.mimeType);
-  const fullPath = path.join(LOGO_DIR, fileName);
-  await ensureLogoDir();
-  await removeOldLogos(params.tenantId, fileName);
-  await fs.writeFile(fullPath, params.fileBuffer);
+  const key = logoKey(params.tenantId, params.mimeType);
+  await deleteOldLogos(params.tenantId, key);
+  const logoUrl = await getStorage().upload(key, params.fileBuffer, params.mimeType);
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: params.tenantId },
@@ -239,16 +280,10 @@ export async function uploadLogo(params: {
   if (!tenant) throw new Error('Tenant não encontrado');
 
   const current = (tenant.settings as Record<string, unknown>) ?? {};
-  const logoUrl = `/api/admin/settings/logo/${fileName}?v=${Date.now()}`;
 
   await prisma.tenant.update({
     where: { id: params.tenantId },
-    data: {
-      settings: {
-        ...current,
-        logo_url: logoUrl,
-      },
-    },
+    data: { settings: { ...current, logo_url: logoUrl } },
   });
 
   return { logo_url: logoUrl };

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import {
   omnichannelApi,
+  type MonitorBotConversation,
   type OmnichannelConversation,
   type TvAgentCard,
   type TvDashboardData,
@@ -11,7 +12,11 @@ import {
 } from '../../services/api';
 import { subscribeToEvent } from '../../services/socket';
 import { useAuthStore } from '../../stores/auth.store';
+import { useToast } from '../../stores/toast.store';
 import { usePermission } from '../../hooks/usePermission';
+import { BotConversationDrawer } from '../../components/omnichannel/BotConversationDrawer';
+
+const BOT_STUCK_THRESHOLD_MINUTES = 10;
 
 interface AgentEventPayload {
   userId?: string;
@@ -38,6 +43,7 @@ interface ConversationUpdatedPayload {
   status?: string;
   assigned_to?: string | null;
   assigned_name?: string | null;
+  queue_entered_at?: string | null;
   conversation?: Partial<OmnichannelConversation> & { id?: string };
 }
 
@@ -94,6 +100,46 @@ function formatMinutesMetric(value: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function formatBotDuration(minutes: number): string {
+  const safe = Math.max(0, Math.floor(minutes));
+  if (safe < 60) return `${safe}min`;
+  const hours = Math.floor(safe / 60);
+  const rest = safe % 60;
+  return `${hours}h ${rest}min`;
+}
+
+function minutesSince(iso: string, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000));
+}
+
+function truncateText(value: string | null | undefined, max = 60): string {
+  const text = value?.trim();
+  if (!text) return '-';
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}...`;
+}
+
+function formatRelativeTime(iso: string | null | undefined, now: Date, language: string): string {
+  if (!iso) return '-';
+  const minutes = minutesSince(iso, now);
+  if (minutes < 1) {
+    if (language.startsWith('en')) return 'now';
+    if (language.startsWith('es')) return 'ahora';
+    return 'agora';
+  }
+  if (minutes < 60) {
+    if (language.startsWith('en')) return `${minutes}min ago`;
+    if (language.startsWith('es')) return `hace ${minutes}min`;
+    return `há ${minutes}min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  const value = rest > 0 ? `${hours}h ${rest}min` : `${hours}h`;
+  if (language.startsWith('en')) return `${value} ago`;
+  if (language.startsWith('es')) return `hace ${value}`;
+  return `há ${value}`;
+}
+
 function formatClock(date: Date): string {
   return new Intl.DateTimeFormat('pt-BR', {
     hour: '2-digit',
@@ -114,7 +160,7 @@ function formatDateLabel(date: Date, locale: string): string {
 }
 
 function deriveConversationCounts(cards: TvConversationCard[]): { queued: number; inService: number } {
-  const queued = cards.filter((card) => !card.agentName && card.status !== 'resolved' && card.status !== 'closed').length;
+  const queued = cards.filter((card) => !card.agentName && Boolean(card.queueEnteredAt) && card.status !== 'resolved' && card.status !== 'closed').length;
   const inService = cards.filter((card) => Boolean(card.agentName) && card.status !== 'resolved' && card.status !== 'closed').length;
   return { queued, inService };
 }
@@ -155,25 +201,52 @@ function toCardFromConversation(payload: Partial<OmnichannelConversation> & { id
     createdAt,
     status: payload.status ?? 'open',
     waitTime: null,
+    queueEnteredAt: payload.queue_entered_at ?? null,
   };
+}
+
+function BotIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden>
+      <rect x="6" y="10" width="20" height="16" rx="5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M16 10V6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="16" cy="5" r="2" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="13" cy="18" r="1.4" fill="currentColor" />
+      <circle cx="19" cy="18" r="1.4" fill="currentColor" />
+      <path d="M13 22h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function CounterCard({
   label,
   value,
   color,
+  onClick,
 }: {
   label: string;
   value: string;
   color: string;
+  onClick?: () => void;
 }) {
   return (
     <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!onClick) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         background: 'var(--bg-2)',
         border: '1px solid var(--line)',
         borderRadius: 'var(--r-lg)',
-        padding: '10px 12px',
+        padding: '12px 14px',
+        cursor: onClick ? 'pointer' : 'default',
       }}
     >
       <div
@@ -188,7 +261,7 @@ function CounterCard({
       >
         {label}
       </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 32, fontWeight: 500, lineHeight: 1, color }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', lineHeight: 1, color }}>
         {value}
       </div>
     </div>
@@ -220,18 +293,38 @@ function ConversationChronometer({
 
 export function TVDashboard() {
   const { t, i18n } = useTranslation('omnichannel');
+  const toast = useToast();
+  const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { role } = usePermission();
   const canAccessTv = ['owner', 'admin', 'supervisor'].includes(role ?? '');
   const [now, setNow] = useState(new Date());
   const [dashboard, setDashboard] = useState<TvDashboardData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'realtime' | 'bot'>('realtime');
+  const [botAction, setBotAction] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<MonitorBotConversation | null>(null);
+  const [closingBotConversation, setClosingBotConversation] = useState<MonitorBotConversation | null>(null);
+  const [closeMessage, setCloseMessage] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dateLabel = formatDateLabel(now, i18n.language || 'pt-BR');
 
   const { data } = useQuery({
     queryKey: ['tv-dashboard'],
     queryFn: omnichannelApi.tv,
+    enabled: isAuthenticated && canAccessTv,
+    staleTime: 0,
+    refetchInterval: 30_000,
+    retry: (failureCount, error) => {
+      const statusCode = (error as { response?: { status?: number } })?.response?.status;
+      if (statusCode === 403) return false;
+      return failureCount < 1;
+    },
+  });
+
+  const { data: botData, refetch: refetchBot, isFetching: isFetchingBot } = useQuery({
+    queryKey: ['monitor-bot'],
+    queryFn: omnichannelApi.monitorBot,
     enabled: isAuthenticated && canAccessTv,
     staleTime: 0,
     refetchInterval: 30_000,
@@ -253,6 +346,16 @@ export function TVDashboard() {
   }, []);
 
   useEffect(() => {
+    setSelectedConversation(null);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!selectedConversation || !botData) return;
+    const stillInBot = botData.conversations.some((conversation) => conversation.id === selectedConversation.id);
+    if (!stillInBot) setSelectedConversation(null);
+  }, [botData, selectedConversation]);
+
+  useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -272,6 +375,40 @@ export function TVDashboard() {
       }
     } catch {
       // browser bloqueou ou não suporta fullscreen
+    }
+  };
+
+  const pullBotConversation = async (conversationId: string): Promise<boolean> => {
+    setBotAction(`pull:${conversationId}`);
+    try {
+      await omnichannelApi.pullMonitorBotConversation(conversationId);
+      toast.success(t('monitor.bot.pullSuccess'));
+      await refetchBot();
+      return true;
+    } catch {
+      toast.error(t('monitor.bot.actionError'));
+      return false;
+    } finally {
+      setBotAction(null);
+    }
+  };
+
+  const closeBotConversation = async (): Promise<boolean> => {
+    if (!closingBotConversation) return false;
+    const conversationId = closingBotConversation.id;
+    setBotAction(`close:${conversationId}`);
+    try {
+      await omnichannelApi.closeMonitorBotConversation(conversationId, closeMessage);
+      toast.success(t('monitor.bot.closeSuccess'));
+      setClosingBotConversation(null);
+      setCloseMessage('');
+      await refetchBot();
+      return true;
+    } catch {
+      toast.error(t('monitor.bot.actionError'));
+      return false;
+    } finally {
+      setBotAction(null);
     }
   };
 
@@ -369,6 +506,7 @@ export function TVDashboard() {
             createdAt: new Date().toISOString(),
             status: 'open',
             waitTime: null,
+            queueEnteredAt: null,
           };
           const cards = existing
             ? current.conversationCards.map((item) => (item.id === id ? { ...item, ...card } : item))
@@ -387,7 +525,7 @@ export function TVDashboard() {
           if (!current) return current;
           const cards = current.conversationCards.map((card) => (
             card.id === payload.conversationId
-              ? { ...card, assignedAt: card.assignedAt ?? new Date().toISOString(), status: 'open' }
+              ? { ...card, assignedAt: card.assignedAt ?? new Date().toISOString(), queueEnteredAt: null, status: 'open' }
               : card
           ));
           const counts = deriveConversationCounts(cards);
@@ -454,6 +592,9 @@ export function TVDashboard() {
               ...(patch ?? {}),
               assignedAt,
               agentName: payload.assigned_name ?? patch?.agentName ?? card.agentName,
+              queueEnteredAt: payload.assigned_to
+                ? null
+                : (payload.queue_entered_at ?? patch?.queueEnteredAt ?? card.queueEnteredAt),
               status: status ?? card.status,
             };
           });
@@ -519,7 +660,7 @@ export function TVDashboard() {
     (card) => Boolean(card.agentName) && card.status !== 'resolved' && card.status !== 'closed',
   );
   const queuedConvs = conversationCards.filter(
-    (card) => !card.agentName && card.status !== 'resolved' && card.status !== 'closed',
+    (card) => !card.agentName && Boolean(card.queueEnteredAt) && card.status !== 'resolved' && card.status !== 'closed',
   );
 
   const queuedCount = queuedConvs.length;
@@ -527,6 +668,15 @@ export function TVDashboard() {
   const resolvedToday = data?.conversations?.resolvedToday ?? 0;
   const abandoned = data?.conversations?.abandoned ?? 0;
   const hasCsat = (dashboard.stats.csat ?? 0) > 0;
+  const slaEmpty = dashboard.stats.sla === 0 && queuedCount + inServiceConvCount + resolvedToday + abandoned === 0;
+  const botConversations = botData?.conversations ?? [];
+  const botTotal = botData?.total ?? botConversations.length;
+  const botStuck = botConversations.filter(
+    (conversation) => minutesSince(conversation.created_at, now) > BOT_STUCK_THRESHOLD_MINUTES,
+  ).length;
+  const botGridTemplateRows = activeTab === 'realtime'
+    ? '48px auto auto auto auto minmax(0, 1fr)'
+    : '48px auto minmax(0, 1fr)';
 
   return (
     <div
@@ -539,7 +689,7 @@ export function TVDashboard() {
         fontFamily: 'var(--font)',
         color: 'var(--txt)',
         display: 'grid',
-        gridTemplateRows: '48px auto auto auto minmax(0, 1fr)',
+        gridTemplateRows: botGridTemplateRows,
         gap: 12,
       }}
     >
@@ -587,30 +737,73 @@ export function TVDashboard() {
         </div>
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+      <nav
+        aria-label={t('monitor.tabs')}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          width: 'max-content',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--r)',
+          background: 'var(--bg-2)',
+          padding: 3,
+        }}
+      >
+        {([
+          ['realtime', t('monitor.realtimeTab')],
+          ['bot', t('monitor.bot.tab')],
+        ] as const).map(([tab, label]) => {
+          const selected = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              style={{
+                border: '1px solid transparent',
+                borderRadius: 'var(--r)',
+                background: selected ? 'var(--bg-3)' : 'transparent',
+                color: selected ? 'var(--txt)' : 'var(--txt-2)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '6px 10px',
+                cursor: 'pointer',
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {activeTab === 'realtime' ? (
+        <>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 14 }}>
         <CounterCard label={t('tv.offline')} value={String(offlineCount)} color="var(--txt-2)" />
-        <CounterCard label={t('tv.online')} value={String(onlineCount)} color="var(--teal)" />
-        <CounterCard label={t('tv.available')} value={String(availableCount)} color="var(--teal)" />
-        <CounterCard label={t('tv.inService')} value={String(inServiceCount)} color="#F59E0B" />
-        <CounterCard label={t('tv.paused')} value={String(pausedCount)} color="#EF4444" />
+        <CounterCard label={t('tv.online')} value={String(onlineCount)} color="var(--green)" />
+        <CounterCard label={t('tv.available')} value={String(availableCount)} color="var(--green)" />
+        <CounterCard label={t('tv.inService')} value={String(inServiceCount)} color="var(--teal)" />
+        <CounterCard label={t('tv.paused')} value={String(pausedCount)} color="var(--amber)" />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        <CounterCard label={t('tv.queued')} value={String(queuedCount)} color="#EF4444" />
-        <CounterCard label={t('tv.inService')} value={String(inServiceConvCount)} color="#F59E0B" />
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 14 }}>
+        <CounterCard label={t('tv.queued')} value={String(queuedCount)} color="var(--red)" />
+        <CounterCard label={t('tv.inService')} value={String(inServiceConvCount)} color="var(--teal)" />
         <CounterCard label={t('tv.resolvedToday')} value={String(resolvedToday)} color="var(--teal)" />
         <CounterCard label={t('tv.abandoned')} value={String(abandoned)} color="var(--txt-2)" />
+        <CounterCard label={t('monitor.bot.cardLabel')} value={String(botTotal)} color="var(--txt-2)" onClick={() => setActiveTab('bot')} />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
         <CounterCard label={t('tv.tme')} value={formatMinutesMetric(dashboard.stats.tme)} color="var(--txt)" />
         <CounterCard label={t('tv.tma')} value={formatMinutesMetric(dashboard.stats.tma)} color="var(--txt)" />
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', padding: '10px 12px' }}>
+        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', padding: '12px 14px' }}>
           <div style={{ color: 'var(--txt-3)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
             {t('tv.csat')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 32, lineHeight: 1, color: 'var(--txt)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.4px', lineHeight: 1, color: hasCsat ? 'var(--amber)' : 'var(--txt-3)' }}>
               {hasCsat ? dashboard.stats.csat.toFixed(1) : '—'}
             </span>
             {hasCsat ? (
@@ -622,24 +815,24 @@ export function TVDashboard() {
         </div>
         <CounterCard
           label={t('tv.sla')}
-          value={`${Math.round(dashboard.stats.sla)}%`}
-          color={dashboard.stats.sla >= 80 ? 'var(--teal)' : dashboard.stats.sla >= 50 ? '#F59E0B' : '#EF4444'}
+          value={slaEmpty ? '—' : `${Math.round(dashboard.stats.sla)}%`}
+          color={slaEmpty ? 'var(--txt-3)' : dashboard.stats.sla >= 80 ? 'var(--teal)' : dashboard.stats.sla >= 50 ? 'var(--amber)' : 'var(--red)'}
         />
       </section>
 
-      <section style={{ minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+      <section style={{ minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.inService')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {inServiceConvs.map((card) => (
-              <div key={card.id} style={{ background: 'rgba(0,201,167,0.08)', border: '1px solid var(--teal)', borderRadius: 'var(--r)', padding: 9 }}>
+              <div key={card.id} style={{ background: 'var(--teal-dim)', border: '1px solid rgba(0, 201, 167, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--teal)' }}>{card.protocol}</span>
                   {channelIcon(card.channelType)}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{card.contactName}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{card.contactName}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.contactPhone || '-'}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.agentName ?? '-'}</div>
                 <ConversationChronometer baseTime={card.assignedAt ?? card.createdAt} color="var(--teal)" />
@@ -648,53 +841,50 @@ export function TVDashboard() {
             {inServiceConvs.length === 0 ? (
               <div
                 style={{
-                  border: '1px dashed var(--line-2)',
-                  borderRadius: 'var(--r)',
-                  minHeight: 96,
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--txt-3)',
-                  fontSize: 12,
-                  textAlign: 'center',
-                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px 0',
+                  gap: 6,
                 }}
               >
-                {t('tv.emptyInService')}
+                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tv.emptyInService')}</span>
               </div>
             ) : null}
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.queued')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {queuedConvs.map((card) => (
-              <div key={card.id} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid #EF4444', borderRadius: 'var(--r)', padding: 9 }}>
+              <div key={card.id} style={{ background: 'var(--red-dim)', border: '1px solid rgba(248, 113, 113, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: '#EF4444' }}>{card.protocol}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--red)' }}>{card.protocol}</span>
                   {channelIcon(card.channelType)}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{card.contactName}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{card.contactName}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{card.contactPhone || '-'}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)', marginBottom: 2 }}>{t('tv.waiting')}</div>
-                <ConversationChronometer baseTime={card.createdAt} color="#EF4444" />
+                <ConversationChronometer baseTime={card.queueEnteredAt ?? card.createdAt} color="var(--red)" />
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.paused')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {pausedAgents.map((agent) => (
-              <div key={agent.id} style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid #F59E0B', borderRadius: 'var(--r)', padding: 9 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{agent.name}</div>
+              <div key={agent.id} style={{ background: 'var(--amber-dim)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{agent.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--txt-2)' }}>{agent.pauseReason ?? '-'}</div>
-                <span style={{ fontFamily: 'var(--mono)', color: '#F59E0B', fontSize: 12 }}>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--amber)', fontSize: 12 }}>
                   {agent.pauseStartedAt
                     ? formatHhMmSs(diffSecondsFrom(agent.pauseStartedAt))
                     : (agent.pauseDuration ?? '00:00:00')}
@@ -704,37 +894,374 @@ export function TVDashboard() {
             {pausedAgents.length === 0 ? (
               <div
                 style={{
-                  border: '1px dashed var(--line-2)',
-                  borderRadius: 'var(--r)',
-                  minHeight: 96,
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--txt-3)',
-                  fontSize: 12,
-                  textAlign: 'center',
-                  padding: 12,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px 0',
+                  gap: 6,
                 }}
               >
-                {t('tv.emptyPaused')}
+                <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tv.emptyPaused')}</span>
               </div>
             ) : null}
           </div>
         </div>
 
-        <div style={{ minHeight: 0, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 200, border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', background: 'var(--bg-2)', padding: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--txt-3)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 14px 8px' }}>
             {t('tv.available')}
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
             {availableAgents.map((agent) => (
-              <div key={agent.id} style={{ background: 'rgba(0,201,167,0.05)', border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 9 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{agent.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--teal)' }}>{t('tv.available_status')}</div>
+              <div key={agent.id} style={{ background: 'var(--teal-dim)', border: '1px solid rgba(0, 201, 167, 0.25)', borderRadius: 'var(--r)', padding: 9 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{agent.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--green)' }}>{t('tv.available_status')}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
+        </>
+      ) : (
+        <section
+          style={{
+            minHeight: 0,
+            display: 'grid',
+            gridTemplateRows: 'auto minmax(0, 1fr)',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              padding: '10px 12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 12,
+                  color: 'var(--txt-2)',
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 'var(--r)',
+                  padding: '4px 8px',
+                }}
+              >
+                {t('monitor.bot.total', { count: botTotal })}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 12,
+                  color: botStuck > 0 ? 'var(--red)' : 'var(--txt-2)',
+                  background: botStuck > 0 ? 'var(--red-dim)' : 'var(--bg-3)',
+                  border: `1px solid ${botStuck > 0 ? 'var(--red)' : 'var(--line-2)'}`,
+                  borderRadius: 'var(--r)',
+                  padding: '4px 8px',
+                }}
+              >
+                {t('monitor.bot.stuck', { count: botStuck })} {t('monitor.bot.stuckThreshold', { minutes: BOT_STUCK_THRESHOLD_MINUTES })}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void refetchBot(); }}
+              disabled={isFetchingBot}
+              style={{
+                border: '1px solid var(--line-2)',
+                borderRadius: 'var(--r)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '7px 10px',
+                cursor: isFetchingBot ? 'wait' : 'pointer',
+                opacity: isFetchingBot ? 0.7 : 1,
+              }}
+            >
+              {t('monitor.bot.refresh')}
+            </button>
+          </div>
+
+          <div
+            style={{
+              minHeight: 0,
+              overflow: 'auto',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+            }}
+          >
+            {botConversations.length === 0 ? (
+              <div
+                style={{
+                  minHeight: '100%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: 'var(--txt-2)',
+                  padding: 24,
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ display: 'grid', justifyItems: 'center', gap: 8 }}>
+                  <span style={{ color: 'var(--txt-3)' }}>
+                    <BotIcon />
+                  </span>
+                  <strong style={{ color: 'var(--txt)', fontSize: 15 }}>{t('monitor.bot.emptyTitle')}</strong>
+                  <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('monitor.bot.emptySubtitle')}</span>
+                </div>
+              </div>
+            ) : (
+              <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ position: 'sticky', top: 0, background: 'var(--bg-3)', zIndex: 1 }}>
+                    <th style={{ textAlign: 'left', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.contact')}</th>
+                    <th style={{ textAlign: 'left', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.phone')}</th>
+                    <th style={{ textAlign: 'left', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.channel')}</th>
+                    <th style={{ textAlign: 'left', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.timeInBot')}</th>
+                    <th style={{ textAlign: 'left', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.lastMessage')}</th>
+                    <th style={{ textAlign: 'right', padding: '9px 10px', color: 'var(--txt-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('monitor.bot.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {botConversations.map((conversation) => {
+                    const liveMinutes = minutesSince(conversation.created_at, now);
+                    const isStuck = liveMinutes > BOT_STUCK_THRESHOLD_MINUTES;
+                    const phone = conversation.contact_whatsapp ?? conversation.contact_phone ?? '-';
+                    const actionPull = botAction === `pull:${conversation.id}`;
+                    const actionClose = botAction === `close:${conversation.id}`;
+                    return (
+                      <tr
+                        key={conversation.id}
+                        style={{
+                          background: isStuck ? 'var(--red-dim)' : 'transparent',
+                          boxShadow: isStuck ? 'inset 2px 0 0 var(--red)' : 'inset 0 -1px 0 var(--line)',
+                        }}
+                      >
+                        <td style={{ padding: '10px', color: 'var(--txt)', verticalAlign: 'top' }}>
+                          <div style={{ display: 'grid', gap: 2 }}>
+                            <strong style={{ fontSize: 13, fontWeight: 600 }}>{conversation.contact_name ?? '-'}</strong>
+                            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>
+                              {conversation.protocol_number ?? conversation.id.slice(0, 12).toUpperCase()}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px', color: 'var(--txt-2)', verticalAlign: 'top', fontFamily: 'var(--mono)' }}>{phone}</td>
+                        <td style={{ padding: '10px', color: 'var(--txt-2)', verticalAlign: 'top' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {channelIcon(conversation.channel_type)}
+                            {conversation.channel_name ?? conversation.channel_type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', verticalAlign: 'top' }}>
+                          <span style={{ fontFamily: 'var(--mono)', color: isStuck ? 'var(--red)' : 'var(--txt)', fontWeight: 600 }}>
+                            {formatBotDuration(liveMinutes)}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', color: 'var(--txt-2)', verticalAlign: 'top', maxWidth: 320 }}>
+                          <div style={{ display: 'grid', gap: 2 }}>
+                            <span>{truncateText(conversation.last_message)}</span>
+                            <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>
+                              {formatRelativeTime(conversation.last_message_at, now, i18n.language || 'pt-BR')}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                            <button
+                              type="button"
+                              className="tb-icon-btn"
+                              onClick={() => setSelectedConversation(conversation)}
+                              title={t('monitor.bot.viewConversation')}
+                              aria-label={t('monitor.bot.viewConversation')}
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden
+                              >
+                                <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+                                <circle cx="8" cy="8" r="2.5" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { void pullBotConversation(conversation.id); }}
+                              disabled={Boolean(botAction)}
+                              style={{
+                                border: '1px solid var(--teal)',
+                                borderRadius: 'var(--r)',
+                                background: 'var(--teal)',
+                                color: 'var(--on-teal)',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                padding: '6px 9px',
+                                cursor: botAction ? 'wait' : 'pointer',
+                              }}
+                            >
+                              {actionPull ? t('monitor.bot.loading') : t('monitor.bot.pull')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClosingBotConversation(conversation);
+                                setCloseMessage('');
+                              }}
+                              disabled={Boolean(botAction)}
+                              style={{
+                                border: '1px solid var(--red)',
+                                borderRadius: 'var(--r)',
+                                background: 'var(--red-dim)',
+                                color: 'var(--red)',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                padding: '6px 9px',
+                                cursor: botAction ? 'wait' : 'pointer',
+                              }}
+                            >
+                              {actionClose ? t('monitor.bot.loading') : t('monitor.bot.close')}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      )}
+
+      <BotConversationDrawer
+        conversation={selectedConversation}
+        onClose={() => setSelectedConversation(null)}
+        onPull={async (conversationId) => {
+          const success = await pullBotConversation(conversationId);
+          if (success) setSelectedConversation(null);
+          return success;
+        }}
+        onClose_={(conversationId) => {
+          const conversation = selectedConversation?.id === conversationId
+            ? selectedConversation
+            : botConversations.find((item) => item.id === conversationId) ?? null;
+          if (!conversation) return false;
+          setSelectedConversation(null);
+          setClosingBotConversation(conversation);
+          setCloseMessage('');
+          return false;
+        }}
+      />
+
+      {closingBotConversation ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="monitor-bot-close-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            padding: 16,
+            background: 'var(--backdrop)',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              width: 'min(480px, 100%)',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              boxShadow: 'var(--shadow-pop)',
+              padding: 16,
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'grid', gap: 4 }}>
+              <strong id="monitor-bot-close-title" style={{ fontSize: 16, color: 'var(--txt)' }}>
+                {t('monitor.bot.confirmClose')}
+              </strong>
+              <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>
+                {t('monitor.bot.confirmCloseMessage')}
+              </span>
+            </div>
+            <textarea
+              value={closeMessage}
+              onChange={(event) => setCloseMessage(event.target.value)}
+              placeholder={t('monitor.bot.closeMessagePlaceholder')}
+              rows={4}
+              style={{
+                width: '100%',
+                resize: 'vertical',
+                border: '1px solid var(--line-2)',
+                borderRadius: 'var(--r)',
+                background: 'var(--bg-3)',
+                color: 'var(--txt)',
+                fontFamily: 'var(--font)',
+                fontSize: 13,
+                padding: 10,
+                outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setClosingBotConversation(null);
+                  setCloseMessage('');
+                }}
+                disabled={Boolean(botAction)}
+                style={{
+                  border: '1px solid var(--line-2)',
+                  borderRadius: 'var(--r)',
+                  background: 'var(--bg-3)',
+                  color: 'var(--txt)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: '8px 12px',
+                  cursor: botAction ? 'wait' : 'pointer',
+                }}
+              >
+                {t('monitor.bot.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void closeBotConversation(); }}
+                disabled={Boolean(botAction)}
+                style={{
+                  border: '1px solid var(--red)',
+                  borderRadius: 'var(--r)',
+                  background: 'var(--red)',
+                  color: 'var(--bg)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: '8px 12px',
+                  cursor: botAction ? 'wait' : 'pointer',
+                }}
+              >
+                {botAction?.startsWith('close:') ? t('monitor.bot.loading') : t('monitor.bot.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

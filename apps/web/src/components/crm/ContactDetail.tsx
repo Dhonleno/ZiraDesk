@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { adminApi, contactsApi, omnichannelApi, ticketsApi, type CrmContact } from '../../services/api';
+import { contactsApi, omnichannelApi, ticketsApi, type CrmContact } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { ContactAvatar } from './ContactAvatar';
 import { EditContactModal } from './EditContactModal';
 import { LinkOrganizationModal } from './LinkOrganizationModal';
 import { SelectChannelModal } from './SelectChannelModal';
 import { Modal } from '../ui/Modal';
+import { PiiReveal } from '../common/PiiReveal';
+import { maskEmail, maskPhone, maskDocument } from '../../utils/pii-mask';
 
 type Tab = 'data' | 'conversations' | 'tickets' | 'notes';
 
@@ -73,6 +75,17 @@ function formatRelativeDate(value: string) {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d`;
   return date.toLocaleDateString('pt-BR');
+}
+
+function PiiField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 13 }}>{children}</span>
+    </div>
+  );
 }
 
 function InfoField({ label, value, link }: { label: string; value?: string | null; link?: string }) {
@@ -144,7 +157,7 @@ export function ContactDetail({ contactId }: Props) {
   const { data: channels = [] } = useQuery({
     queryKey: ['crm-active-channels'],
     queryFn: async () => {
-      const list = await adminApi.listChannels();
+      const list = await omnichannelApi.listConversationChannels();
       return list.filter((channel) => channel.status === 'active');
     },
     staleTime: 60_000,
@@ -225,7 +238,7 @@ export function ContactDetail({ contactId }: Props) {
         initial_message: `Olá ${contact.name}, iniciamos seu atendimento.`,
         ...(contact.organization_id ? { organization_id: contact.organization_id } : {}),
       });
-      navigate(`/omnichannel/conversations?conversation=${created.id}`);
+      navigate(`/omnichannel/conversations?conversation=${created.conversation.id}`);
     } catch {
       toast.error('Não foi possível iniciar conversa');
     } finally {
@@ -248,6 +261,7 @@ export function ContactDetail({ contactId }: Props) {
 
   const ticketRows = ticketsData?.data ?? [];
   const contactEmail = contact ? resolveContactEmail(contact) : null;
+  const maskedPortalEmail = maskEmail(accessInfo?.email ?? null);
 
   if (isLoading || !contact) {
     return (
@@ -336,10 +350,18 @@ export function ContactDetail({ contactId }: Props) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
           {activeTab === 'data' ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
-              <InfoField label={t('contacts.table.whatsapp')} value={contact.whatsapp} />
-              <InfoField label={t('contacts.fields.phone')} value={contact.phone} />
-              <InfoField label={t('contacts.fields.email')} value={contactEmail} />
-              <InfoField label={t('contacts.fields.document')} value={contact.document} />
+              <PiiField label={t('contacts.table.whatsapp')}>
+                <PiiReveal entityType="contact" entityId={contact.id} maskedValue={maskPhone(contact.whatsapp ?? null)} fullValue={contact.whatsapp ?? null} />
+              </PiiField>
+              <PiiField label={t('contacts.fields.phone')}>
+                <PiiReveal entityType="contact" entityId={contact.id} maskedValue={maskPhone(contact.phone ?? null)} fullValue={contact.phone ?? null} />
+              </PiiField>
+              <PiiField label={t('contacts.fields.email')}>
+                <PiiReveal entityType="contact" entityId={contact.id} maskedValue={maskEmail(contactEmail)} fullValue={contactEmail} />
+              </PiiField>
+              <PiiField label={t('contacts.fields.document')}>
+                <PiiReveal entityType="contact" entityId={contact.id} maskedValue={maskDocument(contact.document ?? null)} fullValue={contact.document ?? null} />
+              </PiiField>
               <InfoField label={t('contacts.fields.role')} value={contact.role} />
               <InfoField label={t('contacts.fields.department')} value={contact.department} />
               <InfoField
@@ -552,7 +574,7 @@ export function ContactDetail({ contactId }: Props) {
         {accessInfo ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-2)' }}>
-              As credenciais foram enviadas por e-mail para {accessInfo.email ?? 'o contato'}.
+              As credenciais foram enviadas por e-mail para {accessInfo.email ?? maskedPortalEmail ?? 'o contato'}.
             </p>
             <div className="portal-credentials-display">
               <div>

@@ -3,15 +3,17 @@ import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  adminApi,
+  api,
   contactsApi,
   omnichannelApi,
   type ActiveOutboundTemplate,
   type CrmContact,
+  type WhatsAppWindowStatus,
 } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { PermissionGate } from '../ui/PermissionGate';
+import { avatarClass } from '../../utils/avatar';
 
 interface Props {
   onClose: () => void;
@@ -57,6 +59,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
+  const [duplicateExistingId, setDuplicateExistingId] = useState<string | null>(null);
 
   const [selectedChannelId, setSelectedChannelId] = useState('');
   const [useTemplate, setUseTemplate] = useState(true);
@@ -97,8 +100,9 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
   const { data: channels = [] } = useQuery({
     queryKey: ['active-outbound-channels'],
     queryFn: async () => {
-      const result = await adminApi.listChannelsByTypes(['whatsapp', 'email']);
-      return result.filter((channel) => channel.status === 'active' && (channel.type === 'whatsapp' || channel.type === 'email'));
+      const res = await api.get('/omnichannel/conversations/channels');
+      const result = res.data.data as { id: string; type: string; name: string; status: string }[];
+      return result.filter((channel) => channel.type === 'whatsapp' || channel.type === 'email');
     },
     staleTime: 60_000,
   });
@@ -142,6 +146,16 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
 
   const lastConversation = previousConversations[0] ?? null;
 
+  const { data: windowStatus, isFetching: isWindowLoading } = useQuery<WhatsAppWindowStatus>({
+    queryKey: ['active-outbound-window-status', selectedContact?.id, selectedChannelId],
+    queryFn: () => omnichannelApi.getWindowStatus(selectedContact!.id, selectedChannelId),
+    enabled: Boolean(selectedContact?.id) && Boolean(selectedChannelId) && selectedChannel?.type === 'whatsapp',
+    staleTime: 30_000,
+  });
+
+  const isOutsideWindow =
+    selectedChannel?.type === 'whatsapp' && windowStatus !== undefined && !windowStatus.withinWindow;
+
   useEffect(() => {
     if (!selectedChannel) return;
 
@@ -159,6 +173,10 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       setTemplateValues({});
     }
   }, [selectedChannel]);
+
+  useEffect(() => {
+    if (isOutsideWindow) setUseTemplate(true);
+  }, [isOutsideWindow]);
 
   useEffect(() => {
     if (!selectedTemplateName) {
@@ -223,6 +241,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       });
     },
     onSuccess: (conversation) => {
+      setDuplicateExistingId(null);
       toast.success(t('activeOutbound.sent'));
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
@@ -230,20 +249,35 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
       onClose();
     },
     onError: (error: unknown) => {
-      const apiMessage = (
+      const response = (
         error as {
           response?: {
+            status?: number;
             data?: {
-              error?: { message?: string };
+              error?: unknown;
+              existingId?: string;
             };
           };
         }
-      )?.response?.data?.error?.message;
+      )?.response;
+      if (response?.status === 409 && response.data?.error === 'DUPLICATE_OPEN_CONVERSATION' && response.data.existingId) {
+        setDuplicateExistingId(response.data.existingId);
+        return;
+      }
+      setDuplicateExistingId(null);
+      const errorObj = response?.data?.error as { code?: string; message?: string } | string | undefined;
+      if (typeof errorObj === 'object' && errorObj?.code === 'WHATSAPP_WINDOW_EXPIRED') {
+        setUseTemplate(true);
+        toast.error(t('outbound.errors.windowExpired'));
+        return;
+      }
+      const apiMessage = typeof errorObj === 'object' ? errorObj?.message : undefined;
       toast.error(apiMessage ?? t('form.errorCreate'));
     },
   });
 
   const handleSelectContact = useCallback((contact: ContactOption) => {
+    setDuplicateExistingId(null);
     setSelectedContact(contact);
     setShowContactDropdown(false);
     setContactSearch('');
@@ -321,7 +355,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-3)', border: `1px solid ${selectedContact ? 'rgba(0,201,167,.3)' : 'var(--line-2)'}`, borderRadius: 'var(--r)', padding: '9px 12px' }}>
                 {selectedContact ? (
                   <>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+                    <div className={avatarClass(selectedContact.name)} style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, flexShrink: 0 }}>
                       {selectedContact.name.charAt(0).toUpperCase()}
                     </div>
                     <span style={{ flex: 1, fontSize: 13, color: 'var(--txt)' }}>{selectedContact.name}</span>
@@ -346,7 +380,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
                       }}
                       onFocus={() => setShowContactDropdown(true)}
                       placeholder={t('form.clientPlaceholder')}
-                      style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
+                      style={{ flex: 1, background: 'none', border: 'none', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--txt)' }}
                     />
                   </>
                 )}
@@ -365,7 +399,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
                       onClick={() => handleSelectContact(contact)}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', borderBottom: '1px solid var(--line)', padding: '10px 14px', cursor: 'pointer', textAlign: 'left', color: 'var(--txt)' }}
                     >
-                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#667eea,#764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 600 }}>
+                      <div className={avatarClass(contact.name)} style={{ width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500 }}>
                         {contact.name.charAt(0).toUpperCase()}
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
@@ -402,7 +436,7 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
             <select
               value={selectedChannelId}
               onChange={(event) => setSelectedChannelId(event.target.value)}
-              style={{ width: '100%', background: 'var(--bg-3)', border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font)', color: selectedChannelId ? 'var(--txt)' : 'var(--txt-3)', outline: 'none', appearance: 'none' }}
+              style={{ width: '100%', background: 'var(--bg-3)', border: '1px solid var(--line-2)', borderRadius: 'var(--r)', padding: '9px 12px', fontSize: 13, fontFamily: 'var(--font)', color: selectedChannelId ? 'var(--txt)' : 'var(--txt-3)', appearance: 'none' }}
             >
               <option value="">{t('form.channelPlaceholder')}</option>
               {channels.map((channel) => (
@@ -420,23 +454,55 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
 
             {selectedChannel?.type === 'whatsapp' && (
               <div style={{ display: 'grid', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setUseTemplate((current) => !current)}
-                  style={{
-                    width: 'fit-content',
-                    borderRadius: 'var(--r-pill)',
-                    border: `1px solid ${useTemplate ? 'rgba(0,201,167,.4)' : 'var(--line-2)'}`,
-                    background: useTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
-                    color: useTemplate ? 'var(--teal)' : 'var(--txt-2)',
-                    padding: '4px 10px',
-                    fontSize: 11,
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t('activeOutbound.useTemplate')}
-                </button>
+                {isWindowLoading && selectedContact && (
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden style={{ animation: 'spin 1s linear infinite' }}>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                )}
+
+                {!isWindowLoading && windowStatus?.withinWindow && (
+                  <div style={{ fontSize: 11, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
+                      <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {t('outbound.withinWindow')}
+                  </div>
+                )}
+
+                {!isWindowLoading && isOutsideWindow && (
+                  <div style={{ fontSize: 11, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    {t('outbound.windowExpiredNotice')}
+                  </div>
+                )}
+
+                {!isOutsideWindow && (
+                  <button
+                    type="button"
+                    onClick={() => setUseTemplate((current) => !current)}
+                    style={{
+                      width: 'fit-content',
+                      borderRadius: 'var(--r-pill)',
+                      border: `1px solid ${useTemplate ? 'rgba(0,201,167,.4)' : 'var(--line-2)'}`,
+                      background: useTemplate ? 'var(--teal-dim)' : 'var(--bg-3)',
+                      color: useTemplate ? 'var(--teal)' : 'var(--txt-2)',
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('activeOutbound.useTemplate')}
+                  </button>
+                )}
 
                 {useTemplate ? (
                   <>
@@ -519,8 +585,41 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
         </div>
 
         <div style={{ borderTop: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ minHeight: 18, fontSize: 11, color: 'var(--amber)' }}>
-            {selectedChannel?.type === 'whatsapp' && useTemplate ? `⚠️ ${t('activeOutbound.costWarning')}` : ''}
+          <div style={{ minHeight: 18, fontSize: 11, color: duplicateExistingId ? 'var(--amber)' : 'var(--amber)', display: 'grid', gap: 4 }}>
+            {duplicateExistingId ? (
+              <>
+                <span>Já existe uma conversa aberta com este contato neste canal.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCreated(duplicateExistingId);
+                    onClose();
+                  }}
+                  style={{
+                    width: 'fit-content',
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--teal)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: 'var(--font)',
+                    padding: 0,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Abrir conversa existente
+                </button>
+              </>
+            ) : selectedChannel?.type === 'whatsapp' && useTemplate ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                {t('activeOutbound.costWarning')}
+              </span>
+            ) : ''}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -532,9 +631,10 @@ export function ActiveOutboundModal({ onClose, onCreated }: Props) {
               <button
                 type="button"
                 className="topbar-primary-btn"
-                disabled={createMutation.isPending || !selectedContact || !selectedChannel}
+                disabled={createMutation.isPending || !selectedContact || !selectedChannel || isWindowLoading}
                 onClick={() => createMutation.mutate()}
                 title={t('activeOutbound.send')}
+                aria-label={t('activeOutbound.send')}
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                   <path d="M2 10L10 6 2 2l1.6 3.1L8 6l-4.4.9L2 10z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />

@@ -1,15 +1,23 @@
 import multipart from '@fastify/multipart';
 import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { z } from 'zod';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { quoteIdent } from '../omnichannel/conversations/protocols.js';
+import { getStorage } from '../../lib/storage/index.js';
+import {
+  getUserLgpdState,
+  updateUserLgpdConsent,
+  exportUserLgpdData,
+  submitUserAnonymizeRequest,
+  listUserLgpdRequests,
+  ForbiddenError as LgpdForbiddenError,
+} from '../admin/users/users.lgpd.service.js';
+import { ensureUsersLgpdInfrastructure } from '../admin/users/users.infrastructure.js';
+import { updateUserLgpdConsentSchema, submitAnonymizeRequestSchema, exportUserLgpdQuerySchema } from '../admin/users/users.schema.js';
 
-const AVATAR_DIR = path.resolve(process.cwd(), 'public', 'uploads', 'avatars');
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ACCEPTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -20,6 +28,7 @@ const profileUpdateSchema = z.object({
   language: z.enum(['pt-BR', 'en-US', 'es']).optional(),
   notification_sound: z.boolean().optional(),
   notification_desktop: z.boolean().optional(),
+  notification_sound_variant: z.enum(['default', 'soft', 'sharp']).optional(),
 });
 
 const passwordUpdateSchema = z
@@ -47,39 +56,6 @@ function avatarMimeFromFileName(fileName: string): string {
   return 'application/octet-stream';
 }
 
-async function ensureAvatarDir() {
-  await fs.mkdir(AVATAR_DIR, { recursive: true });
-}
-
-async function removeOldAvatars(userId: string, keepFileName: string) {
-  await ensureAvatarDir();
-  const files = await fs.readdir(AVATAR_DIR);
-
-  await Promise.all(
-    files
-      .filter((file) => file.startsWith(`${userId}-`) && file !== keepFileName)
-      .map(async (file) => {
-        await fs.rm(path.join(AVATAR_DIR, file), { force: true });
-      }),
-  );
-}
-
-function resolveAvatarPath(fileName: string): string | null {
-  if (!/^[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(fileName)) return null;
-  return path.join(AVATAR_DIR, fileName);
-}
-
-async function readAvatarFile(fileName: string): Promise<Buffer | null> {
-  const resolved = resolveAvatarPath(fileName);
-  if (!resolved) return null;
-
-  try {
-    return await fs.readFile(resolved);
-  } catch {
-    return null;
-  }
-}
-
 async function ensureUserProfileColumns(schemaName: string): Promise<void> {
   const usersRef = `${quoteIdent(schemaName)}.users`;
 
@@ -91,6 +67,8 @@ async function ensureUserProfileColumns(schemaName: string): Promise<void> {
     ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'pt-BR',
     ADD COLUMN IF NOT EXISTS notification_sound BOOLEAN DEFAULT true,
     ADD COLUMN IF NOT EXISTS notification_desktop BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS notification_sound_variant VARCHAR(20) NOT NULL DEFAULT 'default',
+    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `);
 }
@@ -106,14 +84,18 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   const guard = [authMiddleware, tenantSchemaFromJwt];
 
   app.get<{ Params: { fileName: string } }>('/me/avatar/:fileName', async (request, reply) => {
-    const file = await readAvatarFile(request.params.fileName);
-    if (!file) {
+    const { fileName } = request.params;
+    if (!/^[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(fileName)) {
       return reply.code(404).send({ success: false, error: { message: 'Avatar não encontrado' } });
     }
-
-    reply.header('Content-Type', avatarMimeFromFileName(request.params.fileName));
-    reply.header('Cache-Control', 'public, max-age=86400');
-    return reply.send(file);
+    try {
+      const file = await getStorage().download(`avatars/${fileName}`);
+      reply.header('Content-Type', avatarMimeFromFileName(fileName));
+      reply.header('Cache-Control', 'public, max-age=86400');
+      return reply.send(file);
+    } catch {
+      return reply.code(404).send({ success: false, error: { message: 'Avatar não encontrado' } });
+    }
   });
 
   app.get('/me', { preHandler: guard }, async (request, reply) => {
@@ -139,12 +121,15 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      notification_sound_variant: string | null;
+      must_change_password: boolean;
       status: string;
       created_at: Date;
     }>>(
       `SELECT
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, status, created_at
+         notification_sound, notification_desktop, notification_sound_variant,
+         must_change_password, status, created_at
        FROM ${quoteIdent(schemaName)}.users
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -191,6 +176,8 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       language: string | null;
       notification_sound: boolean | null;
       notification_desktop: boolean | null;
+      notification_sound_variant: string | null;
+      must_change_password: boolean;
       status: string;
       created_at: Date;
     }>>(
@@ -202,17 +189,20 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
          language = COALESCE($4::text, language),
          notification_sound = COALESCE($5::boolean, notification_sound),
          notification_desktop = COALESCE($6::boolean, notification_desktop),
+         notification_sound_variant = COALESCE($7::varchar, notification_sound_variant),
          updated_at = NOW()
-       WHERE id = $7::uuid
+       WHERE id = $8::uuid
        RETURNING
          id, name, email, role, avatar_url, bio, phone, language,
-         notification_sound, notification_desktop, status, created_at`,
+         notification_sound, notification_desktop, notification_sound_variant,
+         must_change_password, status, created_at`,
       payload.name ?? null,
       payload.bio ?? null,
       payload.phone ?? null,
       payload.language ?? null,
       payload.notification_sound ?? null,
       payload.notification_desktop ?? null,
+      payload.notification_sound_variant ?? null,
       request.user.id,
     );
 
@@ -242,13 +232,6 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { current_password, new_password } = parsed.data;
-    if (!current_password) {
-      return reply.code(400).send({
-        success: false,
-        error: { message: 'Informe a senha atual' },
-      });
-    }
-
     if (new_password.length < 8) {
       return reply.code(400).send({
         success: false,
@@ -265,8 +248,8 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
     await ensureUserProfileColumns(schemaName);
 
-    const userRows = await prisma.$queryRawUnsafe<Array<{ password_hash: string }>>(
-      `SELECT password_hash
+    const userRows = await prisma.$queryRawUnsafe<Array<{ password_hash: string; must_change_password: boolean }>>(
+      `SELECT password_hash, must_change_password
        FROM ${quoteIdent(schemaName)}.users
        WHERE id = $1::uuid
        LIMIT 1`,
@@ -277,9 +260,19 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ success: false, error: { message: 'Usuário não encontrado' } });
     }
 
-    const valid = await bcrypt.compare(current_password, userRows[0].password_hash);
-    if (!valid) {
-      return reply.code(400).send({ success: false, error: { message: 'Senha atual incorreta' } });
+    const requiresCurrentPassword = !userRows[0].must_change_password;
+    if (requiresCurrentPassword && !current_password) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Informe a senha atual' },
+      });
+    }
+
+    if (current_password) {
+      const valid = await bcrypt.compare(current_password, userRows[0].password_hash);
+      if (!valid) {
+        return reply.code(400).send({ success: false, error: { message: 'Senha atual incorreta' } });
+      }
     }
 
     const hash = await bcrypt.hash(new_password, 12);
@@ -292,7 +285,77 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       request.user.id,
     );
 
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${quoteIdent(schemaName)}.users
+       SET must_change_password = false, updated_at = NOW()
+       WHERE id = $1::uuid`,
+      request.user.id,
+    );
+
     return reply.send({ success: true });
+  });
+
+  app.get('/me/lgpd', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const state = await getUserLgpdState(request.user.id, schemaName);
+    const requestsResult = await listUserLgpdRequests(
+      { page: 1, per_page: 20, user_id: request.user.id },
+      schemaName,
+    );
+    return reply.send({ success: true, data: { ...state, requests: requestsResult.data } });
+  });
+
+  app.patch('/me/lgpd/consent', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = updateUserLgpdConsentSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ success: false, error: { message: 'Dados inválidos' } });
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const result = await updateUserLgpdConsent(
+      request.user.id,
+      { ...parsed.data, source: parsed.data.source ?? 'self_service' },
+      request.user.id,
+      schemaName,
+    );
+    return reply.send({ success: true, data: result });
+  });
+
+  app.get('/me/lgpd/export', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = exportUserLgpdQuerySchema.safeParse(request.query);
+    const includeAuditLogs = parsed.success ? parsed.data.include_audit_logs : true;
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    const data = await exportUserLgpdData(request.user.id, request.user.id, { includeAuditLogs }, schemaName);
+    return reply.send({ success: true, data });
+  });
+
+  app.post('/me/lgpd/anonymize-request', { preHandler: guard }, async (request, reply) => {
+    if (request.user.isSuperAdmin) return reply.code(403).send({ success: false, error: { message: 'Acesso não permitido' } });
+    const schemaName = request.user.schemaName;
+    if (!schemaName) return reply.code(500).send({ success: false, error: { message: 'Schema do tenant não resolvido' } });
+
+    const parsed = submitAnonymizeRequestSchema.safeParse(request.body);
+    const reason = parsed.success ? parsed.data.reason : undefined;
+
+    await ensureUsersLgpdInfrastructure(schemaName);
+    try {
+      const request_ = await submitUserAnonymizeRequest(request.user.id, reason, schemaName);
+      return reply.code(201).send({ success: true, data: request_ });
+    } catch (err) {
+      if (err instanceof LgpdForbiddenError) return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
   });
 
   app.post('/me/avatar', { preHandler: guard }, async (request, reply) => {
@@ -342,13 +405,22 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ success: false, error: { message: 'Arquivo muito grande. Máximo 2MB' } });
     }
 
-    await ensureAvatarDir();
-    const ext = avatarExtFromMime(mimeType);
-    const fileName = `${request.user.id}-${Date.now()}.${ext}`;
-    await removeOldAvatars(request.user.id, fileName);
-    await fs.writeFile(path.join(AVATAR_DIR, fileName), fileBuffer);
+    const existingRows = await prisma.$queryRawUnsafe<Array<{ avatar_url: string | null }>>(
+      `SELECT avatar_url FROM ${quoteIdent(schemaName)}.users WHERE id = $1::uuid LIMIT 1`,
+      request.user.id,
+    );
+    const oldAvatarUrl = existingRows[0]?.avatar_url ?? null;
+    if (oldAvatarUrl) {
+      const avatarsIdx = oldAvatarUrl.indexOf('avatars/');
+      if (avatarsIdx !== -1) {
+        const oldKey = oldAvatarUrl.slice(avatarsIdx).split('?')[0] ?? '';
+        await getStorage().delete(oldKey).catch(() => {});
+      }
+    }
 
-    const avatarUrl = `/api/auth/me/avatar/${fileName}?v=${Date.now()}`;
+    const ext = avatarExtFromMime(mimeType);
+    const key = `avatars/${request.user.id}-${Date.now()}.${ext}`;
+    const avatarUrl = await getStorage().upload(key, fileBuffer, mimeType);
 
     await ensureUserProfileColumns(schemaName);
     await prisma.$executeRawUnsafe(

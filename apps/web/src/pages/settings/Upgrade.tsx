@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { adminApi, api } from '../../services/api';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { PageShell } from '../../components/layout/PageShell';
+import { UsageRow, formatBytes } from '../../components/usage/UsageRow';
 
 interface Plan {
   id: string;
@@ -38,11 +40,17 @@ function featureList(plan: Plan) {
 }
 
 export function Upgrade() {
+  const { t } = useTranslation('admin');
   const [annual, setAnnual] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
+  });
+
+  const { data: usage, isLoading: usageLoading } = useQuery({
+    queryKey: ['admin', 'usage'],
+    queryFn: adminApi.getUsage,
   });
 
   const { data: plans = [], isLoading } = useQuery({
@@ -72,6 +80,65 @@ export function Upgrade() {
           <button onClick={() => setAnnual(false)} style={{ border: 'none', borderRadius: 'var(--r-pill)', padding: '7px 12px', background: !annual ? 'var(--teal)' : 'transparent', color: !annual ? 'var(--on-teal)' : 'var(--txt-2)', fontWeight: 700, cursor: 'pointer' }}>Mensal</button>
           <button onClick={() => setAnnual(true)} style={{ border: 'none', borderRadius: 'var(--r-pill)', padding: '7px 12px', background: annual ? 'var(--teal)' : 'transparent', color: annual ? 'var(--on-teal)' : 'var(--txt-2)', fontWeight: 700, cursor: 'pointer' }}>Anual {discount > 0 ? `-${discount}%` : ''}</button>
         </div>
+      </div>
+
+      <div
+        style={{
+          background: 'var(--bg-2)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--r-lg)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: 'var(--txt-3)',
+            }}
+          >
+            {t('usage.title')}
+          </span>
+          {usage && (
+            <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+              {t('usage.period', { period: usage.period })}
+            </span>
+          )}
+        </div>
+
+        {usageLoading ? (
+          <>
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+            <Skeleton style={{ height: 32, borderRadius: 'var(--r)' }} />
+          </>
+        ) : usage ? (
+          <>
+            <UsageRow
+              label={t('usage.messages_sent')}
+              used={usage.metrics.messages_sent.used}
+              limit={usage.metrics.messages_sent.limit}
+            />
+            <UsageRow
+              label={t('usage.storage_bytes')}
+              used={usage.metrics.storage_bytes.used}
+              limit={usage.metrics.storage_bytes.limit}
+              format={formatBytes}
+            />
+            <UsageRow
+              label={t('usage.active_users')}
+              used={usage.metrics.active_users.used}
+              limit={usage.metrics.active_users.limit}
+            />
+          </>
+        ) : null}
       </div>
 
       {isLoading ? (

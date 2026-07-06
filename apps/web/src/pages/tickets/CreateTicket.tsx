@@ -1,7 +1,9 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import {
   adminApi,
   contactsApi,
@@ -39,6 +41,23 @@ interface CreateTicketForm {
 
 type SubmitMode = 'open' | 'new';
 
+function useAppTheme(): 'dark' | 'light' {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+  ));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const nextTheme = document.documentElement.getAttribute('data-theme');
+      setTheme(nextTheme === 'light' ? 'light' : 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
+
 function buildDraft(form: CreateTicketForm): TicketCreateDraft {
   return {
     title: form.title,
@@ -61,6 +80,7 @@ export default function CreateTicket() {
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
+  const appTheme = useAppTheme();
   const titleRef = useRef<HTMLInputElement | null>(null);
   const [submitMode, setSubmitMode] = useState<SubmitMode>('open');
 
@@ -91,9 +111,9 @@ export default function CreateTicket() {
     queryFn: adminApi.ticketTypes.list,
     staleTime: 60_000,
   });
-  const { data: categoriesData } = useQuery({
-    queryKey: ['ticket-categories-options'],
-    queryFn: () => ticketsApi.list({ per_page: 100, sort_by: 'updated_at', sort_order: 'desc' }),
+  const { data: ticketCategories = [] } = useQuery({
+    queryKey: ['ticket-categories'],
+    queryFn: adminApi.ticketCategories.list,
     staleTime: 60_000,
   });
   const selectedType = useMemo(
@@ -110,14 +130,15 @@ export default function CreateTicket() {
     ),
     [form.priority, form.status, selectedType?.require_category_for_waiting, selectedType?.require_due_date_for_urgent],
   );
-  const categoryOptions = useMemo(() => {
-    const values = new Set<string>();
-    (categoriesData?.data ?? []).forEach((item) => {
-      if (item.category) values.add(item.category);
-    });
-    if (form.category) values.add(form.category);
-    return Array.from(values).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [categoriesData?.data, form.category]);
+  const categoryOptions = useMemo(
+    () => ticketCategories
+      .filter((c) => c.is_active)
+      .sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.name.localeCompare(b.name, 'pt-BR');
+      }),
+    [ticketCategories],
+  );
 
   const { data: agentsData } = useQuery({
     queryKey: ['create-ticket-agents'],
@@ -305,14 +326,16 @@ export default function CreateTicket() {
 
             <div className="ct-field">
               <label className="ct-label" htmlFor="ct-description">Descrição</label>
-              <textarea
-                id="ct-description"
-                value={form.description}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Adicione detalhes, passos para reproduzir e contexto..."
-                className="ct-textarea"
-                rows={10}
-              />
+              <div id="ct-description" data-color-mode={appTheme}>
+                <MDEditor
+                  value={form.description}
+                  onChange={(val) => setForm((prev) => ({ ...prev, description: val ?? '' }))}
+                  height={200}
+                  preview="edit"
+                  hideToolbar={false}
+                  visibleDragbar={false}
+                />
+              </div>
             </div>
 
             <div className="ct-field">
@@ -598,8 +621,8 @@ export default function CreateTicket() {
                 }}
               >
                 <option value="">Selecione a categoria</option>
-                {categoryOptions.map((category) => (
-                  <option key={category} value={category}>{category}</option>
+                {categoryOptions.map((cat) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
               </select>
             </div>
