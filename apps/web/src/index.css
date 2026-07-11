@@ -3658,7 +3658,6 @@
   display: grid;
   grid-template-columns: repeat(6, minmax(260px, 1fr));
   gap: 16px;
-  height: calc(100vh - 180px);
   overflow-x: auto;
   overflow-y: hidden;
   padding: 16px;
@@ -3668,6 +3667,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
