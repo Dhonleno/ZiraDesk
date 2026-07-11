@@ -49,6 +49,11 @@
     "validation": {
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
     },
+    "errors": {
+      "acceptForbidden": "Only the assigned agent can accept this ticket",
+      "acceptConflict": "This ticket cannot be accepted in its current state",
+      "notFound": "Ticket not found"
+    },
     "comments": {
       "title": "Comments",
       "updates": "Updates",
@@ -66,6 +71,7 @@
     },
     "actions": {
       "assign": "Assign",
+      "accept": "Accept",
       "assignToMe": "Assign to me",
       "claim": "Claim from queue",
       "claimSuccess": "Ticket claimed successfully",

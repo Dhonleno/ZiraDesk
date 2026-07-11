@@ -695,4 +695,47 @@ describe('Tickets integration', () => {
       assigned_to: agentId,
     });
   });
+
+  it('POST /api/tickets/:id/accept — agente designado aceita ticket open, status vira in_progress', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('in_progress');
+  });
+
+  it('POST /api/tickets/:id/accept — agente designado aceita ticket queued, status vira in_progress', async () => {
+    const ticket = await createTicket({ status: 'queued', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('in_progress');
+  });
+
+  it('POST /api/tickets/:id/accept — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader({ sub: otherUserId }));
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/accept — ticket já in_progress recebe 409', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(409);
+  });
 });

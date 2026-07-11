@@ -3998,6 +3998,11 @@ export const ticketsApi = {
     return res.data.data;
   },
 
+  accept: async (id: string): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(`/tickets/${id}/accept`);
+    return res.data.data;
+  },
+
   listComments: async (ticketId: string): Promise<TicketComment[]> => {
     const res = await api.get<{ success: boolean; data: TicketComment[] }>(`/tickets/${ticketId}/comments`);
     return res.data.data;

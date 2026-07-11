@@ -49,6 +49,11 @@
     "validation": {
       "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
     },
+    "errors": {
+      "acceptForbidden": "Solo el agente asignado puede aceptar este ticket",
+      "acceptConflict": "Este ticket no puede ser aceptado en su estado actual",
+      "notFound": "Ticket no encontrado"
+    },
     "comments": {
       "title": "Comentarios",
       "updates": "Actualizaciones",
@@ -66,6 +71,7 @@
     },
     "actions": {
       "assign": "Asignar",
+      "accept": "Aceptar",
       "assignToMe": "Asignarme",
       "claim": "Reclamar de la cola",
       "claimSuccess": "Ticket reclamado con éxito",

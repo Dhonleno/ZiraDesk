@@ -215,7 +215,7 @@ interface TicketTypeRuleRow {
 }
 
 const STATUS_TRANSITIONS: Record<string, ReadonlySet<string>> = {
-  queued:      new Set(['open']), // apenas via claimTicketFromQueue
+  queued:      new Set(['open', 'in_progress']), // open via claimTicketFromQueue, in_progress via acceptTicket
   open:        new Set(['in_progress', 'waiting']),
   in_progress: new Set(['open', 'waiting', 'resolved']),
   waiting:     new Set(['open', 'in_progress']),
@@ -1485,6 +1485,83 @@ export async function claimTicketFromQueue(
     : await prisma.$transaction(async (tx) => runner(tx as RawExecutor));
 
   if (claimedEvent) emitTicketEvent(tenantId, ticketId, claimedEvent);
+
+  try {
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
+  } catch { /* socket não inicializado em testes */ }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+
+  return ticket;
+}
+
+/* ── acceptTicket ────────────────────────────────────────────────────────── */
+// Aceitação explícita pelo agente designado. Diferente de claimTicketFromQueue
+// (que resolve QUEM assume um ticket sem dono), aqui o dono já é conhecido —
+// não há corrida a proteger, por isso não usa SELECT FOR UPDATE.
+export async function acceptTicket(
+  ticketId: string,
+  userId: string,
+  tenantId: string,
+  schemaName?: string,
+) {
+  const { ticket, acceptedEvent } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+
+    const current = await getTicket(ticketId, undefined, db);
+
+    if (current.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente designado pode aceitar este ticket');
+    }
+
+    if (current.status !== 'queued' && current.status !== 'open') {
+      throw new ConflictError('Ticket não está em estado aceitável');
+    }
+
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `UPDATE tickets
+       SET status = 'in_progress',
+           updated_at = NOW()
+       WHERE id = $1::uuid
+       RETURNING
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+         csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
+         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         NULL AS assignee_name, NULL AS assignee_avatar,
+         NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
+      ticketId,
+    );
+
+    if (!rows[0]) throw new NotFoundError('Ticket');
+    const ticket = rows[0];
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.accepted', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      userId,
+      ticketId,
+      JSON.stringify({ status: current.status }),
+      JSON.stringify({ status: 'in_progress' }),
+    );
+
+    const acceptedEvent = await logTicketEvent(
+      ticketId,
+      userId,
+      'accepted',
+      current.status,
+      'in_progress',
+      undefined,
+      db,
+    );
+
+    return { ticket, acceptedEvent };
+  });
+
+  if (acceptedEvent) emitTicketEvent(tenantId, ticketId, acceptedEvent);
 
   try {
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });

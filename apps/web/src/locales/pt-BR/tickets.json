@@ -49,6 +49,11 @@
     "validation": {
       "assignedOrDepartmentRequired": "Informe o responsável ou o departamento"
     },
+    "errors": {
+      "acceptForbidden": "Apenas o agente designado pode aceitar este ticket",
+      "acceptConflict": "Este ticket não pode ser aceito no estado atual",
+      "notFound": "Ticket não encontrado"
+    },
     "comments": {
       "title": "Comentários",
       "updates": "Atualizações",
@@ -67,6 +72,7 @@
     "actions": {
       "assign": "Atribuir",
       "assignToMe": "A mim",
+      "accept": "Aceitar",
       "claim": "Assumir da fila",
       "claimSuccess": "Ticket assumido com sucesso",
       "claimErrorConflict": "Este ticket já foi assumido por outro agente",

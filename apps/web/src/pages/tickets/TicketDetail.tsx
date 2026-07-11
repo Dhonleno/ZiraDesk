@@ -323,6 +323,33 @@ export function TicketDetailPage() {
     },
   });
 
+  const acceptMutation = useMutation({
+    mutationFn: () => ticketsApi.accept(id ?? ''),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['ticket', id], updated);
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          toast.error(t('tickets.errors.acceptForbidden'));
+          return;
+        }
+        if (error.response?.status === 409) {
+          toast.error(t('tickets.errors.acceptConflict'));
+          return;
+        }
+        if (error.response?.status === 404) {
+          toast.error(t('tickets.errors.notFound'));
+          return;
+        }
+      }
+      toast.error(t('tickets.errorUpdate'));
+    },
+  });
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) => ticketsApi.uploadAttachment(id ?? '', file),
     onSuccess: async () => {
@@ -638,6 +665,17 @@ export function TicketDetailPage() {
                 onClick={() => claimMutation.mutate()}
               >
                 {t('tickets.actions.claim')}
+              </button>
+            ) : null}
+
+            {(ticket.status === 'queued' || ticket.status === 'open') && ticket.assigned_to === user?.id ? (
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                onClick={() => acceptMutation.mutate()}
+                disabled={acceptMutation.isPending}
+              >
+                {t('tickets.actions.accept')}
               </button>
             ) : null}
 
