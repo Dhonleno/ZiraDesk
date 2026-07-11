@@ -9,6 +9,7 @@ import { parseMarkdown } from '../../utils/markdown';
 
 interface Props {
   ticketId: string;
+  disabled?: boolean;
 }
 
 function formatRelative(iso: string): string {
@@ -430,7 +431,7 @@ function FormatToolbar({
   );
 }
 
-export function TicketComments({ ticketId }: Props) {
+export function TicketComments({ ticketId, disabled = false }: Props) {
   const { t } = useTranslation('tickets');
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -766,10 +767,11 @@ export function TicketComments({ ticketId }: Props) {
 
             <div
               ref={editorRef}
-              contentEditable
+              contentEditable={!disabled}
               suppressContentEditableWarning
               role="textbox"
               aria-multiline="true"
+              aria-disabled={disabled}
               data-placeholder={
                 isInternal
                   ? t('tickets.comments.internalPlaceholder', { defaultValue: 'Registre uma nota interna para a equipe...' })
@@ -862,7 +864,7 @@ export function TicketComments({ ticketId }: Props) {
               <button
                 type="submit"
                 className="zd-btn zd-btn-primary"
-                disabled={submitMutation.isPending || (!hasCommentContent && commentFiles.length === 0)}
+                disabled={disabled || submitMutation.isPending || (!hasCommentContent && commentFiles.length === 0)}
               >
                 {submitMutation.isPending ? t('tickets.comments.sending') : (isInternal ? 'Adicionar nota' : 'Comentar')}
               </button>

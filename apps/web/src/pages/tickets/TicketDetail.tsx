@@ -27,6 +27,7 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
+import { isTicketReadonly } from '../../utils/ticketPermissions';
 
 const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   open:        ['in_progress', 'waiting'],
@@ -528,6 +529,7 @@ export function TicketDetailPage() {
     );
   }
 
+  const readonly = isTicketReadonly(ticket, user ?? null);
   const currentTitle = sanitizeTicketTitle(ticket.title) || ticket.title;
   const dueState = dueTone(ticket.due_date ?? null);
   const sla = getSlaInfo(ticket.due_date, ticket.status, now);
@@ -594,7 +596,12 @@ export function TicketDetailPage() {
 
           <div className="ticket-detail-v2-topbar-right">
             <div className="ticket-dropdown-wrap" ref={statusRef}>
-              <button type="button" className="ticket-inline-badge" onClick={() => setStatusMenuOpen((v) => !v)}>
+              <button
+                type="button"
+                className="ticket-inline-badge"
+                disabled={readonly}
+                onClick={() => setStatusMenuOpen((v) => !v)}
+              >
                 {statusLabel(ticket.status, t)}
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
                   <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -630,6 +637,7 @@ export function TicketDetailPage() {
               <button
                 type="button"
                 className="ticket-inline-badge"
+                disabled={readonly}
                 onClick={() => setPriorityMenuOpen((v) => !v)}
                 style={{ color: priorityColor(ticket.priority) }}
               >
@@ -743,6 +751,29 @@ export function TicketDetailPage() {
           </div>
         </header>
 
+        {readonly && ticket.status !== 'resolved' && ticket.status !== 'closed' ? (
+          <div
+            style={{
+              background: 'var(--bg-3)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 'var(--r-md)',
+              padding: '8px 12px',
+              fontSize: 12,
+              color: 'var(--txt-2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: '0 24px',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <rect x="3" y="6.5" width="8" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M4.5 6.5V4.5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            {t('tickets.readonly.banner')}
+          </div>
+        ) : null}
+
         <div className="ticket-detail-v2-layout">
           <main className="ticket-detail-v2-main">
             <section className="ticket-detail-v2-title-block">
@@ -751,6 +782,7 @@ export function TicketDetailPage() {
                   ref={titleInputRef}
                   className="ticket-title-input"
                   value={titleDraft}
+                  disabled={readonly}
                   onChange={(event) => setTitleDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
@@ -767,7 +799,7 @@ export function TicketDetailPage() {
                   aria-label={t('tickets.detail.editTitle')}
                 />
               ) : (
-                <h1 onClick={() => setTitleEditing(true)}>{currentTitle}</h1>
+                <h1 onClick={() => { if (!readonly) setTitleEditing(true); }}>{currentTitle}</h1>
               )}
             </section>
 
@@ -778,6 +810,7 @@ export function TicketDetailPage() {
                   <button
                     type="button"
                     className="tb-icon-btn"
+                    disabled={readonly}
                     onClick={() => setDescriptionEditing(true)}
                     aria-label={t('tickets.fields.description')}
                     title={t('tickets.fields.description')}
@@ -797,6 +830,7 @@ export function TicketDetailPage() {
                     height={300}
                     preview="live"
                     visibleDragbar={false}
+                    textareaProps={{ disabled: readonly }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                     <button
@@ -812,7 +846,7 @@ export function TicketDetailPage() {
                     <button
                       type="button"
                       className="zd-btn zd-btn-primary"
-                      disabled={updateMutation.isPending}
+                      disabled={updateMutation.isPending || readonly}
                       onClick={saveDescription}
                     >
                       {t('tickets.detail.saveDescription')}
@@ -886,7 +920,7 @@ export function TicketDetailPage() {
               </div>
 
               {activeTab === 'comments' ? (
-                <TicketComments ticketId={ticket.id} />
+                <TicketComments ticketId={ticket.id} disabled={readonly} />
               ) : (
                 <div className="ticket-history-list">
                   {timeline.length === 0 ? (
@@ -917,6 +951,7 @@ export function TicketDetailPage() {
                 <span>{t('tickets.fields.type')}</span>
                 <select
                   value={sidebarTypeId}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarTypeId(value);
@@ -960,6 +995,7 @@ export function TicketDetailPage() {
                 <select
                   id="ticket-assignee-select"
                   value={sidebarAssignedTo}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarAssignedTo(value);
@@ -976,6 +1012,7 @@ export function TicketDetailPage() {
               <button
                 type="button"
                 className="zd-btn"
+                disabled={readonly}
                 onClick={() => {
                   if (!user?.id) return;
                   setSidebarAssignedTo(user.id);
@@ -1005,6 +1042,7 @@ export function TicketDetailPage() {
                   className="ticket-due-date-input"
                   type="date"
                   value={sidebarDueDate}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarDueDate(value);
@@ -1054,6 +1092,7 @@ export function TicketDetailPage() {
                 <span>{t('tickets.fields.category')}</span>
                 <select
                   value={sidebarCategory}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarCategory(value);
@@ -1075,6 +1114,7 @@ export function TicketDetailPage() {
                       {tag}
                       <button
                         type="button"
+                        disabled={readonly}
                         onClick={() => updateTags(sidebarTags.filter((item) => item !== tag))}
                         aria-label={`Remover ${tag}`}
                       >
@@ -1086,6 +1126,7 @@ export function TicketDetailPage() {
 
                 <input
                   value={sidebarTagInput}
+                  disabled={readonly}
                   onChange={(event) => setSidebarTagInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ',') {

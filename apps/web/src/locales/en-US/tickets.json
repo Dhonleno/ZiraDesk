@@ -54,6 +54,10 @@
       "acceptConflict": "This ticket cannot be accepted in its current state",
       "notFound": "Ticket not found"
     },
+    "readonly": {
+      "banner": "Accept the ticket to edit it",
+      "tooltipNotAssigned": "You are not assigned to this ticket"
+    },
     "comments": {
       "title": "Comments",
       "updates": "Updates",

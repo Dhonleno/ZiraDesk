@@ -532,13 +532,22 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
     }
     try {
       const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
-      const ticket = await updateTicket(request.params.id, parsed.data, request.user.id, request.user.tenantId!, schemaName);
+      const ticket = await updateTicket(
+        request.params.id,
+        parsed.data,
+        request.user.id,
+        request.user.role,
+        request.user.tenantId!,
+        schemaName,
+      );
       return reply.send({ success: true, data: ticket });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
       if (err instanceof BusinessRuleError)
         return reply.code(422).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });
@@ -795,12 +804,15 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         request.params.id,
         parsed.data,
         request.user.id,
+        request.user.role,
         request.user.tenantId!,
       );
       return reply.code(201).send({ success: true, data: comment });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

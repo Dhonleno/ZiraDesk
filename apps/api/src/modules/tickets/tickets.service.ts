@@ -994,10 +994,28 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 }
 
 /* ── updateTicket ────────────────────────────────────────────────────────── */
-export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string, schemaName?: string) {
+export async function updateTicket(
+  id: string,
+  data: UpdateTicketInput,
+  updatedBy: string,
+  role: string,
+  tenantId: string,
+  schemaName?: string,
+) {
   const { old, ticket, eventsToEmit } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
     const old = await getTicket(id, undefined, db);
+
+    const isAdminOrOwner = role === 'owner' || role === 'admin';
+    if (!isAdminOrOwner) {
+      // Agente: só pode editar se for o designado E ticket estiver in_progress
+      if (old.assigned_to !== updatedBy) {
+        throw new ForbiddenError('Apenas o agente designado pode editar este ticket');
+      }
+      if (old.status !== 'in_progress') {
+        throw new ForbiddenError('Aceite o ticket antes de editá-lo');
+      }
+    }
 
     const newStatus = data.status ?? old.status;
     ensureValidStatusTransition(old.status, newStatus);
@@ -1648,8 +1666,24 @@ export async function listComments(ticketId: string, schemaName?: string) {
 }
 
 /* ── addComment ──────────────────────────────────────────────────────────── */
-export async function addComment(ticketId: string, data: CreateCommentInput, userId: string, tenantId: string) {
+export async function addComment(
+  ticketId: string,
+  data: CreateCommentInput,
+  userId: string,
+  role: string,
+  tenantId: string,
+) {
   const ticket = await getTicket(ticketId);
+
+  const isAdminOrOwner = role === 'owner' || role === 'admin';
+  if (!isAdminOrOwner) {
+    if (ticket.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente designado pode comentar neste ticket');
+    }
+    if (ticket.status !== 'in_progress') {
+      throw new ForbiddenError('Aceite o ticket antes de comentar');
+    }
+  }
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `INSERT INTO ticket_comments (ticket_id, user_id, contact_id, source, content, is_internal)

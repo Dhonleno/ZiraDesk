@@ -738,4 +738,83 @@ describe('Tickets integration', () => {
 
     expect(response.status).toBe(409);
   });
+
+  it('PATCH /api/tickets/:id — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent', sub: otherUserId }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('PATCH /api/tickets/:id — agente designado mas ticket não aceito (status open) recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('PATCH /api/tickets/:id — agente designado com ticket in_progress pode editar', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('PATCH /api/tickets/:id — admin pode editar mesmo sem ser o designado (status open)', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'admin' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('POST /api/tickets/:id/comments — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'agent', sub: otherUserId }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/comments — agente designado mas ticket não aceito (status open) recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/comments — admin pode comentar mesmo sem ser o designado (status open)', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'admin' }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(201);
+  });
 });

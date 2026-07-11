@@ -54,6 +54,10 @@
       "acceptConflict": "Este ticket no puede ser aceptado en su estado actual",
       "notFound": "Ticket no encontrado"
     },
+    "readonly": {
+      "banner": "Acepte el ticket para poder editarlo",
+      "tooltipNotAssigned": "No eres el responsable de este ticket"
+    },
     "comments": {
       "title": "Comentarios",
       "updates": "Actualizaciones",
