@@ -212,7 +212,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
         require_due_date_for_urgent_override: selectedType?.require_due_date_for_urgent ?? true,
         require_category_for_waiting_override: selectedType?.require_category_for_waiting ?? true,
       };
-      const validation = validateTicketCreateDraft(draft);
+      const validation = validateTicketCreateDraft(draft, { t });
       if (!validation.isValid) {
         throw new Error(validation.errors[0] ?? 'Dados inválidos para criar ticket');
       }

@@ -46,6 +46,9 @@
       "noOrganization": "Não vinculada",
       "noDueDate": "Sem prazo"
     },
+    "validation": {
+      "assignedOrDepartmentRequired": "Informe o responsável ou o departamento"
+    },
     "comments": {
       "title": "Comentários",
       "updates": "Atualizações",

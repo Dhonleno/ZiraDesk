@@ -107,7 +107,11 @@ export function saveTicketCreatePreferences(next: TicketCreatePreferences): void
   }
 }
 
-export function validateTicketCreateDraft(draft: TicketCreateDraft): TicketCreateValidationResult {
+export function validateTicketCreateDraft(
+  draft: TicketCreateDraft,
+  options?: { t?: (key: string) => string },
+): TicketCreateValidationResult {
+  const t = options?.t;
   const errors: string[] = [];
   const requirements = getTicketConditionalRequirements(draft, {
     requireDueDateForUrgent: draft.require_due_date_for_urgent_override ?? true,
@@ -145,6 +149,12 @@ export function validateTicketCreateDraft(draft: TicketCreateDraft): TicketCreat
 
   if (!ALLOWED_STATUSES.includes(draft.status)) {
     errors.push('Status inválido para criação');
+  }
+
+  if (!draft.assigned_to && !draft.department_id) {
+    errors.push(
+      t ? t('tickets.validation.assignedOrDepartmentRequired') : 'Informe o responsável ou o departamento',
+    );
   }
 
   return { isValid: errors.length === 0, errors };

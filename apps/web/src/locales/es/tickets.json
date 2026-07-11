@@ -46,6 +46,9 @@
       "noOrganization": "No vinculada",
       "noDueDate": "Sin fecha límite"
     },
+    "validation": {
+      "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
+    },
     "comments": {
       "title": "Comentarios",
       "updates": "Actualizaciones",
