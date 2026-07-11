@@ -3656,7 +3656,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(260px, 1fr));
+  grid-template-columns: repeat(6, minmax(260px, 1fr));
   gap: 16px;
   height: calc(100vh - 180px);
   overflow-x: auto;
@@ -3894,6 +3894,34 @@
 .tickets-sla-dot.overdue {
   background: var(--red);
   box-shadow: 0 0 0 3px var(--red-dim);
+}
+
+.tickets-card-claim-btn {
+  margin-top: 8px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--teal);
+  border-radius: var(--r);
+  background: var(--teal);
+  color: var(--on-teal);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  height: 28px;
+  padding: 0 10px;
+}
+
+.tickets-card-claim-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.tickets-card-claim-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .tickets-list-board {

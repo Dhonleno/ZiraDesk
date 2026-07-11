@@ -29,6 +29,15 @@
         "daysAgo": "hace {{count}} días"
       }
     },
+    "ticketAutoAssign": {
+      "title": "Auto-asignación de Tickets",
+      "subtitle": "Configure la asignación automática de tickets por departamento (round-robin)",
+      "enabled": "Auto-asignación por departamento activa",
+      "enabledHint": "Cuando está activado, los tickets creados con departamento y sin agente se distribuyen automáticamente entre los agentes del departamento. Sin agente disponible, el ticket entra en la cola.",
+      "messages": {
+        "saved": "Configuración guardada con éxito"
+      }
+    },
     "queueConfig": {
       "title": "Notificaciones de Cola",
       "subtitle": "Configure los mensajes enviados automáticamente durante la atención en cola",
@@ -1034,6 +1043,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Reglas de Atención",
     "queueConfig": "Notificaciones de Cola",
+    "ticketAutoAssign": "Auto-asignación de Tickets",
     "settings": "Configuración",
     "lgpd": "LGPD",
     "history": "Historial",

@@ -1388,6 +1388,10 @@ interface QueueConfigSettings {
   expire_24h_message: string;
 }
 
+interface TicketAutoAssignSettings {
+  ticket_auto_assign: boolean;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<{ success: boolean; data: AdminStats }>('/admin/stats/overview');
@@ -1426,6 +1430,16 @@ export const adminApi = {
 
   updateQueueConfig: async (data: Partial<QueueConfigSettings>) => {
     const res = await api.patch<{ success: boolean; data: QueueConfigSettings }>('/admin/queue-config', data);
+    return res.data.data;
+  },
+
+  getTicketAutoAssignConfig: async () => {
+    const res = await api.get<{ success: boolean; data: TicketAutoAssignSettings }>('/admin/ticket-settings');
+    return res.data.data;
+  },
+
+  updateTicketAutoAssignConfig: async (data: TicketAutoAssignSettings) => {
+    const res = await api.patch<{ success: boolean; data: TicketAutoAssignSettings }>('/admin/ticket-settings', data);
     return res.data.data;
   },
 
@@ -2378,7 +2392,7 @@ export const callsApi = {
 
 // ── Tickets Types ─────────────────────────────────────────────────────────────
 
-export type TicketStatus   = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+export type TicketStatus   = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TicketWaitingReason = 'customer' | 'internal' | 'third_party';
 
@@ -2402,6 +2416,8 @@ export interface Ticket {
   priority:        TicketPriority;
   category:        string | null;
   assigned_to:     string | null;
+  department_id?:  string | null;
+  department_name?: string | null;
   resolved_at:     string | null;
   due_date:        string | null;
   tags:            string[];
@@ -2555,6 +2571,7 @@ export interface CreateTicketPayload {
   category?:       string;
   type_id?:        string | null;
   assigned_to?:    string | null;
+  department_id?:  string | null;
   contact_id?:     string;
   organization_id?: string;
   conversation_id?: string;
@@ -3973,6 +3990,11 @@ export const ticketsApi = {
 
   assign: async (id: string, userId: string): Promise<Ticket> => {
     const res = await api.post<{ success: boolean; data: Ticket }>(`/tickets/${id}/assign`, { user_id: userId });
+    return res.data.data;
+  },
+
+  claim: async (id: string): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(`/tickets/${id}/claim`);
     return res.data.data;
   },
 

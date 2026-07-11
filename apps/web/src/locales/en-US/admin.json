@@ -29,6 +29,15 @@
         "daysAgo": "{{count}} days ago"
       }
     },
+    "ticketAutoAssign": {
+      "title": "Ticket Auto-Assign",
+      "subtitle": "Configure automatic ticket assignment by department (round-robin)",
+      "enabled": "Department auto-assign enabled",
+      "enabledHint": "When enabled, tickets created with a department and no agent are automatically distributed among the department's agents. If no agent is available, the ticket goes to the queue.",
+      "messages": {
+        "saved": "Settings saved successfully"
+      }
+    },
     "queueConfig": {
       "title": "Queue Notifications",
       "subtitle": "Configure messages sent automatically during queue attendance",
@@ -1034,6 +1043,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
     "queueConfig": "Queue Notifications",
+    "ticketAutoAssign": "Ticket Auto-Assign",
     "settings": "Settings",
     "lgpd": "LGPD",
     "history": "History",

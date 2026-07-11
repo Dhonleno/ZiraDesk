@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import MDEditor from '@uiw/react-md-editor';
 import '@uiw/react-md-editor/markdown-editor.css';
@@ -77,6 +78,7 @@ function formatTicketNumber(n: number): string {
 }
 
 function statusLabel(status: TicketStatus, t: (key: string) => string): string {
+  if (status === 'queued') return t('tickets.kanban.queued');
   if (status === 'open') return t('tickets.kanban.open');
   if (status === 'in_progress') return t('tickets.kanban.inProgress');
   if (status === 'waiting') return t('tickets.kanban.waiting');
@@ -290,6 +292,34 @@ export function TicketDetailPage() {
     },
     onError: () => {
       toast.error(t('tickets.errorUpdate'));
+    },
+  });
+
+  const claimMutation = useMutation({
+    mutationFn: () => ticketsApi.claim(id ?? ''),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['ticket', id], updated);
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      toast.success(t('tickets.actions.claimSuccess'));
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 409) {
+          toast.error(t('tickets.actions.claimErrorConflict'));
+          return;
+        }
+        if (error.response?.status === 403) {
+          toast.error(t('tickets.actions.claimErrorForbidden'));
+          return;
+        }
+        if (error.response?.status === 404) {
+          toast.error(t('tickets.actions.claimErrorNotFound'));
+          return;
+        }
+      }
+      toast.error(t('tickets.actions.claimErrorGeneric'));
     },
   });
 
@@ -599,6 +629,17 @@ export function TicketDetailPage() {
                 </div>
               ) : null}
             </div>
+
+            {ticket.status === 'queued' ? (
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={claimMutation.isPending}
+                onClick={() => claimMutation.mutate()}
+              >
+                {t('tickets.actions.claim')}
+              </button>
+            ) : null}
 
             {ticket.status === 'open' ? (
               <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>

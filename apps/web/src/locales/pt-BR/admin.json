@@ -29,6 +29,15 @@
         "daysAgo": "há {{count}} dias"
       }
     },
+    "ticketAutoAssign": {
+      "title": "Auto-atribuição de Tickets",
+      "subtitle": "Configure a atribuição automática de tickets por departamento (round-robin)",
+      "enabled": "Auto-atribuição por departamento ativa",
+      "enabledHint": "Quando ativado, tickets criados com departamento e sem agente definido são distribuídos automaticamente entre os agentes do departamento. Sem agente disponível, o ticket entra na fila.",
+      "messages": {
+        "saved": "Configurações salvas com sucesso"
+      }
+    },
     "queueConfig": {
       "title": "Notificações de Fila",
       "subtitle": "Configure as mensagens enviadas automaticamente durante o atendimento na fila",
@@ -1028,6 +1037,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Regras de Atendimento",
     "queueConfig": "Notificações de Fila",
+    "ticketAutoAssign": "Auto-atribuição de Tickets",
     "settings": "Configurações",
     "lgpd": "LGPD",
     "history": "Histórico",

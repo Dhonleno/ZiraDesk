@@ -72,6 +72,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
   const [showOrganizationDropdown, setShowOrganizationDropdown] = useState(false);
 
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const initialPrefs = readTicketCreatePreferences();
@@ -101,6 +102,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
     setValue('status', initialPrefs.status);
     setValue('type_id', initialPrefs.type_id);
     setAssigneeId(initialPrefs.assigned_to || null);
+    setDepartmentId(null);
 
     if (defaultValues?.contact_id) {
       setSelectedContactId(defaultValues.contact_id);
@@ -137,6 +139,13 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
   const { data: usersData } = useQuery({
     queryKey: ['admin-users-select'],
     queryFn: () => adminApi.listUsers({ per_page: 50 }),
+    staleTime: 60_000,
+    enabled: open,
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['create-ticket-departments'],
+    queryFn: () => adminApi.departments.list(),
     staleTime: 60_000,
     enabled: open,
   });
@@ -198,6 +207,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
         contact_id: selectedContactId ?? undefined,
         organization_id: selectedOrganizationId ?? undefined,
         assigned_to: assigneeId,
+        department_id: departmentId,
         source_conversation_id: defaultValues?.source_conversation_id,
         require_due_date_for_urgent_override: selectedType?.require_due_date_for_urgent ?? true,
         require_category_for_waiting_override: selectedType?.require_category_for_waiting ?? true,
@@ -237,6 +247,7 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
       setSelectedOrganizationName('');
       setOrganizationSearch('');
       setAssigneeId(null);
+      setDepartmentId(null);
       setTagInput('');
       setFiles([]);
       onClose();
@@ -513,6 +524,17 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
               <select style={selectStyle} value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value || null)}>
                 <option value="">{t('tickets.form.noUser')}</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt-2)', display: 'block', marginBottom: 6 }}>
+                {t('tickets.fields.department')}
+              </label>
+              <select style={selectStyle} value={departmentId ?? ''} onChange={(e) => setDepartmentId(e.target.value || null)}>
+                <option value="">{t('tickets.form.noDepartment')}</option>
+                {departments.filter((department) => department.isActive).map((department) => (
+                  <option key={department.id} value={department.id}>{department.name}</option>
+                ))}
               </select>
             </div>
             <div>

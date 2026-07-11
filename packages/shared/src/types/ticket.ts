@@ -16,6 +16,8 @@ export interface Ticket {
   category?: string;
   assigned_to?: string;
   assigned_name?: string;
+  department_id?: string;
+  department_name?: string;
   resolved_at?: string;
   due_date?: string;
   tags: string[];

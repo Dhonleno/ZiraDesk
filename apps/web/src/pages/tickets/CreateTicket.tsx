@@ -34,6 +34,7 @@ interface CreateTicketForm {
   contact_id: string;
   organization_id: string;
   assigned_to: string;
+  department_id: string;
   category: string;
   due_date: string;
   tags: string[];
@@ -68,6 +69,7 @@ function buildDraft(form: CreateTicketForm): TicketCreateDraft {
     contact_id: form.contact_id || undefined,
     organization_id: form.organization_id || undefined,
     assigned_to: form.assigned_to || null,
+    department_id: form.department_id || null,
     category: form.category,
     due_date: form.due_date || undefined,
     tags: form.tags,
@@ -94,6 +96,7 @@ export default function CreateTicket() {
     contact_id: searchParams.get('contact_id') ?? '',
     organization_id: searchParams.get('org_id') ?? '',
     assigned_to: initialPrefs.assigned_to,
+    department_id: '',
     category: '',
     due_date: '',
     tags: [],
@@ -146,6 +149,12 @@ export default function CreateTicket() {
     staleTime: 60_000,
   });
   const agents = agentsData?.data ?? [];
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['create-ticket-departments'],
+    queryFn: () => adminApi.departments.list(),
+    staleTime: 60_000,
+  });
 
   const { data: contactsData } = useQuery({
     queryKey: ['create-ticket-contacts-search', contactSearch],
@@ -585,6 +594,23 @@ export default function CreateTicket() {
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="ct-field">
+              <label className="ct-label" htmlFor="ct-department">{t('tickets.fields.department')}</label>
+              <select
+                id="ct-department"
+                value={form.department_id}
+                onChange={(event) => setForm((prev) => ({ ...prev, department_id: event.target.value }))}
+                className="ct-select"
+              >
+                <option value="">{t('tickets.form.noDepartment')}</option>
+                {departments.filter((department) => department.isActive).map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
                   </option>
                 ))}
               </select>

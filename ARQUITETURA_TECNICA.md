@@ -1381,6 +1381,7 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
 - Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
+- Tipo `Ticket` duplicado entre `apps/web/src/services/api.ts` e `packages/shared/src/types/ticket.ts` (este último parece não ser consumido por nenhum módulo hoje) — campos novos (`department_id`, `department_name`, status `queued`) foram replicados manualmente nos dois lugares em vez de consolidar numa fonte única
 
 ---
 

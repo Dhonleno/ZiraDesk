@@ -19,6 +19,7 @@ export interface TicketCreateDraft {
   category?: string | undefined;
   type_id?: string | undefined;
   assigned_to?: string | null | undefined;
+  department_id?: string | null | undefined;
   contact_id?: string | undefined;
   organization_id?: string | undefined;
   conversation_id?: string | undefined;
@@ -170,6 +171,9 @@ export function buildCreateTicketPayload(draft: TicketCreateDraft): CreateTicket
 
   const assignedTo = draft.assigned_to ?? '';
   if (assignedTo) payload.assigned_to = assignedTo;
+
+  const departmentId = draft.department_id ?? '';
+  if (departmentId) payload.department_id = departmentId;
 
   if (draft.due_date) payload.due_date = new Date(draft.due_date).toISOString();
 

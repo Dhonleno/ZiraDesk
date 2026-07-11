@@ -136,6 +136,7 @@ export async function getSettings(tenantId: string) {
     agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
+    ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -212,6 +213,9 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.expire_24h_message !== undefined
       ? { expire_24h_message: data.expire_24h_message }
       : {}),
+    ...(data.ticket_auto_assign !== undefined
+      ? { ticket_auto_assign: data.ticket_auto_assign }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -261,6 +265,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
+    ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
   };
 }
 

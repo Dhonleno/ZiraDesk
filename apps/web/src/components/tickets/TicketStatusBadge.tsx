@@ -6,6 +6,7 @@ interface Props {
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  queued:      { bg: 'var(--amber-dim)',  color: 'var(--amber)'  },
   open:        { bg: 'var(--blue-dim)',   color: 'var(--blue)'   },
   in_progress: { bg: 'var(--amber-dim)',  color: 'var(--amber)'  },
   waiting:     { bg: 'var(--amber-dim)',  color: 'var(--amber)'  },
@@ -14,6 +15,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_KEY: Record<string, string> = {
+  queued:      'tickets.status.queued',
   open:        'tickets.status.open',
   in_progress: 'tickets.status.in_progress',
   waiting:     'tickets.status.waiting',

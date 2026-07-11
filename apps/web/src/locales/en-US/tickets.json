@@ -5,6 +5,7 @@
     "noResults": "No tickets found",
     "noSelection": "Select a ticket to view details",
     "status": {
+      "queued": "Queued",
       "open": "Open",
       "in_progress": "In Progress",
       "waiting": "Waiting",
@@ -32,6 +33,7 @@
       "priority": "Priority",
       "type": "Type",
       "assignedTo": "Assigned to",
+      "department": "Department",
       "client": "Contact",
       "category": "Category",
       "dueDate": "Due date",
@@ -62,6 +64,12 @@
     "actions": {
       "assign": "Assign",
       "assignToMe": "Assign to me",
+      "claim": "Claim from queue",
+      "claimSuccess": "Ticket claimed successfully",
+      "claimErrorConflict": "This ticket has already been claimed by another agent",
+      "claimErrorForbidden": "You don't belong to this ticket's department",
+      "claimErrorNotFound": "Ticket not found",
+      "claimErrorGeneric": "Could not claim the ticket",
       "resolve": "Resolve",
       "close": "Close",
       "reopen": "Reopen",
@@ -114,6 +122,7 @@
       "noClient": "No contact",
       "searchUser": "Search user...",
       "noUser": "No assignee",
+      "noDepartment": "No department",
       "searchOrganization": "Search organization...",
       "organizationLinked": "Linked organization",
       "urgentDueDateRequired": "Required for urgent priority",
@@ -174,6 +183,7 @@
       "expiresLessThanHour": "Due in less than 1h"
     },
     "kanban": {
+      "queued": "Queued",
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",

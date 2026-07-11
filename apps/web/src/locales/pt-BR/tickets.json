@@ -5,6 +5,7 @@
     "noResults": "Nenhum ticket encontrado",
     "noSelection": "Selecione um ticket para ver os detalhes",
     "status": {
+      "queued": "Na fila",
       "open": "Aberto",
       "in_progress": "Em andamento",
       "waiting": "Aguardando",
@@ -32,6 +33,7 @@
       "priority": "Prioridade",
       "type": "Tipo",
       "assignedTo": "Atribuído a",
+      "department": "Departamento",
       "client": "Contato",
       "category": "Categoria",
       "dueDate": "Prazo",
@@ -62,6 +64,12 @@
     "actions": {
       "assign": "Atribuir",
       "assignToMe": "A mim",
+      "claim": "Assumir da fila",
+      "claimSuccess": "Ticket assumido com sucesso",
+      "claimErrorConflict": "Este ticket já foi assumido por outro agente",
+      "claimErrorForbidden": "Você não pertence ao departamento deste ticket",
+      "claimErrorNotFound": "Ticket não encontrado",
+      "claimErrorGeneric": "Não foi possível assumir o ticket",
       "resolve": "Resolver",
       "close": "Fechar",
       "reopen": "Reabrir",
@@ -114,6 +122,7 @@
       "noClient": "Nenhum contato",
       "searchUser": "Buscar usuário...",
       "noUser": "Sem atribuição",
+      "noDepartment": "Sem departamento",
       "searchOrganization": "Buscar organização...",
       "organizationLinked": "Organização vinculada",
       "urgentDueDateRequired": "Obrigatório para prioridade urgente",
@@ -174,6 +183,7 @@
       "expiresLessThanHour": "Vence em menos de 1h"
     },
     "kanban": {
+      "queued": "Na fila",
       "open": "Aberto",
       "inProgress": "Em andamento",
       "waiting": "Aguardando",

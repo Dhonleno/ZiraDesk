@@ -29,6 +29,7 @@ export const updateSettingsSchema = z.object({
   agent_assume_template: z.string().max(1000).optional(),
   expire_24h_action: z.enum(['close', 'keep_open']).optional(),
   expire_24h_message: z.string().max(1000).optional(),
+  ticket_auto_assign: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined
