@@ -8,6 +8,7 @@ import './jobs/process-pending-queue.job.js'; // processa conversas pending peri
 import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
 import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas a cada 6h)
 import './jobs/ticket-sla.job.js'; // monitora SLA de tickets e escala prioridade
+import './jobs/ticket-sla-warning.job.js'; // alerta 30min antes do vencimento de SLA
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import './jobs/recalculate-queue-positions.job.js'; // recalcula posições na fila e notifica clientes
 import './jobs/queue-expire-24h.job.js'; // encerra conversas sem atendimento após 24h na fila

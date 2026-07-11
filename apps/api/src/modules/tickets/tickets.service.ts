@@ -448,6 +448,7 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
     ADD COLUMN IF NOT EXISTS sla_paused_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS sla_warning_sent_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS csat_score SMALLINT,

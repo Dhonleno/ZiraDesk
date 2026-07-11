@@ -40,7 +40,7 @@ function formatMultiline(value: string): string {
   return escapeHtml(value).replace(/\n/g, '<br />');
 }
 
-function wrapTicketEmail(params: {
+export function wrapTicketEmail(params: {
   headerTitle: string;
   bodyHtml: string;
   footerText: string;
