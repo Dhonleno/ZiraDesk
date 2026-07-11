@@ -7,7 +7,7 @@ import { buildTenantUrl } from '../utils/url.js';
 
 interface TicketSlaJobData {}
 
-interface TenantRow {
+export interface TenantRow {
   id: string;
   schemaName: string;
   name: string;
@@ -87,7 +87,9 @@ async function hasColumn(schemaName: string, tableName: string, columnName: stri
   return Boolean(rows[0]?.exists);
 }
 
-async function processTicketSlaForTenant(tenant: TenantRow): Promise<void> {
+// Exportada (mesmo padrão de processTicketSlaWarningForTenant em
+// ticket-sla-warning.job.ts) para permitir teste direto sem depender do BullMQ.
+export async function processTicketSlaForTenant(tenant: TenantRow): Promise<void> {
   const schema = quoteIdent(tenant.schemaName);
   const hasCreatedBy = await hasColumn(tenant.schemaName, 'tickets', 'created_by');
   const createdBySelect = hasCreatedBy

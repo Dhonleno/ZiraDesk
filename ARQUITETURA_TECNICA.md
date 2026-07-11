@@ -1381,7 +1381,6 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
 - Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
-- `jobs/ticket-sla.job.ts` (escalonamento de prioridade + email de breach) não tem teste algum — sua lógica por tenant (`processTicketSlaForTenant`) não é exportada, o que impede testá-la sem depender do BullMQ. O job irmão novo, `ticket-sla-warning.job.ts`, resolveu isso exportando `processTicketSlaWarningForTenant` (mesmo padrão de `lib/lgpd/sla.service.ts`/`processTenantSla`); vale aplicar a mesma refatoração ao job de breach para ganhar cobertura
 - Tipo `Ticket` duplicado entre `apps/web/src/services/api.ts` e `packages/shared/src/types/ticket.ts` (este último parece não ser consumido por nenhum módulo hoje) — campos novos (`department_id`, `department_name`, status `queued`) foram replicados manualmente nos dois lugares em vez de consolidar numa fonte única
 
 ---

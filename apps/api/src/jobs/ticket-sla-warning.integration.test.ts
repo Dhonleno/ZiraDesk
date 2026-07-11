@@ -6,6 +6,7 @@ import { sendEmail } from '../services/email.service.js';
 import { provisionTenantSchema } from '../modules/super-admin/tenants/tenants.service.js';
 import { ensureTicketInfrastructureForSchema } from '../modules/tickets/tickets.service.js';
 import { processTicketSlaWarningForTenant, type TenantRow } from './ticket-sla-warning.job.js';
+import { processTicketSlaForTenant } from './ticket-sla.job.js';
 
 // Stub email so tests don't require SMTP
 vi.mock('../services/email.service.js', () => ({
@@ -122,6 +123,48 @@ async function getTicketWarningSentAt(ticketId: string): Promise<Date | null> {
   return rows[0]?.sla_warning_sent_at ?? null;
 }
 
+async function createOverdueTicket(overrides: {
+  hoursOverdue?: number;
+  escalated?: boolean;
+  escalatedAt?: Date | null;
+  slaPausedAt?: Date | null;
+  status?: string;
+} = {}): Promise<string> {
+  const { schemaName } = requireSuiteTenant();
+  const hoursOverdue = overrides.hoursOverdue ?? 1;
+  const dueDate = new Date(Date.now() - hoursOverdue * 3600_000);
+  const id = randomUUID();
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".tickets
+       (id, title, status, priority, assigned_to, due_date, escalated, escalated_at, sla_paused_at)
+     VALUES ($1::uuid, $2, $3, 'medium', $4::uuid, $5::timestamptz, $6::boolean, $7::timestamptz, $8::timestamptz)`,
+    id,
+    `Ticket breach ${id}`,
+    overrides.status ?? 'open',
+    AGENT_USER_ID,
+    dueDate.toISOString(),
+    overrides.escalated ?? false,
+    overrides.escalatedAt ? overrides.escalatedAt.toISOString() : null,
+    overrides.slaPausedAt ? overrides.slaPausedAt.toISOString() : null,
+  );
+
+  return id;
+}
+
+async function getTicketEscalationState(ticketId: string): Promise<{
+  escalated: boolean;
+  escalated_at: Date | null;
+  priority: string;
+}> {
+  const { schemaName } = requireSuiteTenant();
+  const rows = await prisma.$queryRawUnsafe<Array<{ escalated: boolean; escalated_at: Date | null; priority: string }>>(
+    `SELECT escalated, escalated_at, priority FROM "${schemaName}".tickets WHERE id = $1::uuid`,
+    ticketId,
+  );
+  return rows[0] ?? { escalated: false, escalated_at: null, priority: 'medium' };
+}
+
 beforeAll(async () => {
   suiteTenant = await createTempTenant();
 });
@@ -154,6 +197,55 @@ describe('Ticket SLA warning job — processTicketSlaWarningForTenant', () => {
 
     await processTicketSlaWarningForTenant(requireSuiteTenant());
 
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Ticket SLA breach job — processTicketSlaForTenant', () => {
+  it('escala a prioridade, marca escalated/escalated_at e envia email quando o SLA já venceu', async () => {
+    const ticketId = await createOverdueTicket({ hoursOverdue: 1 });
+
+    await processTicketSlaForTenant(requireSuiteTenant());
+
+    const state = await getTicketEscalationState(ticketId);
+    expect(state.escalated).toBe(true);
+    expect(state.escalated_at).not.toBeNull();
+    expect(state.priority).toBe('high');
+    expect(wasEmailSentTo(AGENT_EMAIL)).toBe(true);
+  });
+
+  it('não reprocessa ticket que já está escalado', async () => {
+    const fixedEscalatedAt = new Date(Date.now() - 30 * 60_000);
+    const ticketId = await createOverdueTicket({
+      hoursOverdue: 1,
+      escalated: true,
+      escalatedAt: fixedEscalatedAt,
+    });
+
+    await processTicketSlaForTenant(requireSuiteTenant());
+
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    const state = await getTicketEscalationState(ticketId);
+    expect(state.escalated_at?.getTime()).toBe(fixedEscalatedAt.getTime());
+  });
+
+  it('não escala ticket com SLA pausado mesmo com due_date vencido', async () => {
+    const ticketId = await createOverdueTicket({ hoursOverdue: 1, slaPausedAt: new Date() });
+
+    await processTicketSlaForTenant(requireSuiteTenant());
+
+    const state = await getTicketEscalationState(ticketId);
+    expect(state.escalated).toBe(false);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('não escala ticket já resolvido mesmo com due_date vencido', async () => {
+    const ticketId = await createOverdueTicket({ hoursOverdue: 1, status: 'resolved' });
+
+    await processTicketSlaForTenant(requireSuiteTenant());
+
+    const state = await getTicketEscalationState(ticketId);
+    expect(state.escalated).toBe(false);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 });
