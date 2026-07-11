@@ -3,6 +3,7 @@ import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { ensureAgentAssignmentsInfrastructure } from '../omnichannel/conversations/auto-assign.service.js';
+import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
 import { buildTenantUrl } from '../../utils/url.js';
 import { randomUUID } from 'node:crypto';
@@ -278,12 +279,11 @@ interface DepartmentAgentCandidateRow {
   name: string;
 }
 
-// Round-robin por departamento. Por decisão do Bloco A, ainda NÃO filtra por
-// presença (agent_assignments.is_available / status='online') — isso fica
-// para o Bloco B. Por ora considera qualquer agente ativo (role='agent',
-// status='active') vinculado ao departamento, ordenado pelo mais antigo em
-// last_assigned_at (agent_assignments), espelhando o critério de
-// resolveAgentForAssignment em omnichannel/conversations/auto-assign.service.ts.
+// Round-robin por departamento, com presença obrigatória (Bloco B): considera
+// apenas agente ativo (role='agent', status='active') vinculado ao
+// departamento, online, disponível e com heartbeat recente, ordenado pelo
+// mais antigo em last_assigned_at (agent_assignments), espelhando o critério
+// de resolveAgentForAssignment em omnichannel/conversations/auto-assign.service.ts.
 async function pickNextAgentForDepartment(
   db: RawExecutor,
   departmentId: string,
@@ -296,6 +296,10 @@ async function pickNextAgentForDepartment(
      WHERE ad.department_id = $1::uuid
        AND u.status = 'active'
        AND u.role = 'agent'
+       -- Bloco B: presença obrigatória (espelha resolveAgentForAssignment)
+       AND aa.status = 'online'
+       AND aa.is_available = true
+       AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
      ORDER BY aa.last_assigned_at ASC
      LIMIT 1`,
     departmentId,
@@ -878,6 +882,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       if (nextAgent) {
         finalAssignedTo = nextAgent.id;
       } else {
+        // Sem agente online no departamento — ticket permanece queued até claim manual
         finalStatus = 'queued';
       }
     }

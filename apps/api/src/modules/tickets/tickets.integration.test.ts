@@ -140,6 +140,57 @@ async function createOrganizationAndContact() {
   return { organization, contact };
 }
 
+async function setTicketAutoAssign(enabled: boolean): Promise<void> {
+  const { id } = requireSuiteTenant();
+  await prisma.tenant.update({
+    where: { id },
+    data: { settings: { ticket_auto_assign: enabled } },
+  });
+}
+
+async function createDepartmentWithAgent(presence: {
+  status: 'online' | 'offline';
+  isAvailable: boolean;
+}): Promise<{ departmentId: string; agentId: string }> {
+  const { schemaName } = requireSuiteTenant();
+
+  const departmentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".departments (name)
+     VALUES ($1)
+     RETURNING id`,
+    uniqueText('Depto Presenca'),
+  );
+  const departmentId = departmentRows[0]?.id;
+  if (!departmentId) throw new Error('Falha ao criar departamento de teste');
+
+  const agentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings)
+     VALUES ($1, $2, 'not_used_in_jwt_tests', 'agent', 'active', 'pt-BR', '{}'::jsonb)
+     RETURNING id`,
+    uniqueText('Agente Presenca'),
+    `agente.presenca.${Date.now()}.${Math.floor(Math.random() * 1_000_000)}@ziradesk.test`,
+  );
+  const agentId = agentRows[0]?.id;
+  if (!agentId) throw new Error('Falha ao criar agente de teste');
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".agent_departments (user_id, department_id)
+     VALUES ($1::uuid, $2::uuid)`,
+    agentId,
+    departmentId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".agent_assignments (user_id, status, is_available, last_seen_at)
+     VALUES ($1::uuid, $2, $3::boolean, NOW())`,
+    agentId,
+    presence.status,
+    presence.isAvailable,
+  );
+
+  return { departmentId, agentId };
+}
+
 async function createTempTenant(track = true): Promise<TempTenant> {
   const slug = uniqueText('tenant').toLowerCase();
   const schemaName = uniqueText('schema').toLowerCase().replace(/[^a-z0-9_]/g, '_');
@@ -604,6 +655,44 @@ describe('Tickets integration', () => {
     expect(logs[0]).toMatchObject({
       action: 'ticket.pii.accessed',
       entity_id: ticket.id,
+    });
+  });
+
+  it('POST /api/tickets com department_id e auto-assign ligado mantém queued quando agente do departamento está offline', async () => {
+    await setTicketAutoAssign(true);
+    const { departmentId } = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+
+    const response = await createTestApp()
+      .post('/api/tickets')
+      .set(authHeader())
+      .send({
+        title: uniqueText('Ticket sem agente online'),
+        department_id: departmentId,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      status: 'queued',
+      assigned_to: null,
+    });
+  });
+
+  it('POST /api/tickets com department_id e auto-assign ligado atribui agente online e disponível do departamento', async () => {
+    await setTicketAutoAssign(true);
+    const { departmentId, agentId } = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+
+    const response = await createTestApp()
+      .post('/api/tickets')
+      .set(authHeader())
+      .send({
+        title: uniqueText('Ticket auto-atribuido por presenca'),
+        department_id: departmentId,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      status: 'open',
+      assigned_to: agentId,
     });
   });
 });
