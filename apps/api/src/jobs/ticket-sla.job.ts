@@ -20,7 +20,6 @@ interface OverdueTicketRow {
   title: string;
   priority: string;
   assigned_to: string | null;
-  created_by: string | null;
   contact_email: string | null;
   contact_name: string | null;
   due_date: Date;
@@ -28,8 +27,6 @@ interface OverdueTicketRow {
   sla_paused_duration_seconds: number;
   assignee_email: string | null;
   assignee_name: string | null;
-  creator_email: string | null;
-  creator_name: string | null;
 }
 
 const QUEUE_NAME = 'ziradesk-ticket-sla';
@@ -71,33 +68,10 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-async function hasColumn(schemaName: string, tableName: string, columnName: string): Promise<boolean> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM information_schema.columns
-       WHERE table_schema = $1
-         AND table_name = $2
-         AND column_name = $3
-     ) AS "exists"`,
-    schemaName,
-    tableName,
-    columnName,
-  );
-  return Boolean(rows[0]?.exists);
-}
-
 // Exportada (mesmo padrão de processTicketSlaWarningForTenant em
 // ticket-sla-warning.job.ts) para permitir teste direto sem depender do BullMQ.
 export async function processTicketSlaForTenant(tenant: TenantRow): Promise<void> {
   const schema = quoteIdent(tenant.schemaName);
-  const hasCreatedBy = await hasColumn(tenant.schemaName, 'tickets', 'created_by');
-  const createdBySelect = hasCreatedBy
-    ? 't.created_by, uc.email AS creator_email, uc.name AS creator_name'
-    : 'NULL::uuid AS created_by, NULL::text AS creator_email, NULL::text AS creator_name';
-  const creatorJoin = hasCreatedBy
-    ? `LEFT JOIN ${schema}.users uc ON uc.id = t.created_by`
-    : '';
 
   const overdueTickets = await prisma.$queryRawUnsafe<OverdueTicketRow[]>(
     `SELECT
@@ -106,7 +80,6 @@ export async function processTicketSlaForTenant(tenant: TenantRow): Promise<void
        t.title,
        t.priority,
        t.assigned_to,
-       ${createdBySelect},
        t.due_date,
        t.escalated,
        t.sla_paused_duration_seconds,
@@ -117,7 +90,6 @@ export async function processTicketSlaForTenant(tenant: TenantRow): Promise<void
      FROM ${schema}.tickets t
      LEFT JOIN ${schema}.contacts ct ON ct.id = t.contact_id
      LEFT JOIN ${schema}.users ua ON ua.id = t.assigned_to
-     ${creatorJoin}
      WHERE t.status NOT IN ('resolved', 'closed', 'canceled')
        AND t.due_date IS NOT NULL
        AND t.escalated = false
@@ -158,9 +130,6 @@ export async function processTicketSlaForTenant(tenant: TenantRow): Promise<void
 
       const recipients: string[] = [];
       if (ticket.assignee_email) recipients.push(ticket.assignee_email);
-      if (ticket.creator_email && ticket.creator_email !== ticket.assignee_email) {
-        recipients.push(ticket.creator_email);
-      }
 
       if (recipients.length === 0) continue;
 
