@@ -17,6 +17,8 @@
   "help": "Ayudar",
   "dismiss": "Rechazar",
   "step": "Paso {{current}} de {{total}}",
+  "previous": "Anterior",
+  "next": "Siguiente",
   "language": {
     "label": "Idioma",
     "ptBR": "Portugués",

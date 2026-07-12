@@ -954,7 +954,7 @@ export function TicketDetailPage() {
 
               <section className="ticket-dsec">
                 <div className="ticket-dsec-head">
-                  <span>Anexos</span>
+                  <span>{t('tickets.fields.attachments')}</span>
                   <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
                     {t('tickets.detail.addAttachment')}
                   </button>
@@ -1172,7 +1172,7 @@ export function TicketDetailPage() {
                         type="button"
                         disabled={readonly}
                         onClick={() => updateTags(sidebarTags.filter((item) => item !== tag))}
-                        aria-label={`Remover ${tag}`}
+                        aria-label={t('tickets.actions.removeTag', { tag })}
                       >
                         ×
                       </button>

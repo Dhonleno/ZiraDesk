@@ -44,7 +44,8 @@
       "noResponsible": "Sem responsável",
       "noClient": "Sem contato vinculado",
       "noOrganization": "Não vinculada",
-      "noDueDate": "Sem prazo"
+      "noDueDate": "Sem prazo",
+      "attachments": "Anexos"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Informe o responsável ou o departamento"
@@ -92,7 +93,8 @@
       "reopen": "Reabrir",
       "cancel": "Cancelar",
       "edit": "Editar",
-      "delete": "Excluir"
+      "delete": "Excluir",
+      "removeTag": "Remover {{tag}}"
     },
     "resolve": {
       "title": "Resolver ticket",

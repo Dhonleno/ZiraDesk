@@ -44,7 +44,8 @@
       "noResponsible": "Unassigned",
       "noClient": "No contact linked",
       "noOrganization": "Not linked",
-      "noDueDate": "No due date"
+      "noDueDate": "No due date",
+      "attachments": "Attachments"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
@@ -92,7 +93,8 @@
       "reopen": "Reopen",
       "cancel": "Cancel",
       "edit": "Edit",
-      "delete": "Delete"
+      "delete": "Delete",
+      "removeTag": "Remove {{tag}}"
     },
     "resolve": {
       "title": "Resolve ticket",

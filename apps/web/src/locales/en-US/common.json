@@ -17,6 +17,8 @@
   "help": "Help",
   "dismiss": "Dismiss",
   "step": "Step {{current}} of {{total}}",
+  "previous": "Previous",
+  "next": "Next",
   "language": {
     "label": "Language",
     "ptBR": "Portuguese",

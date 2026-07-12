@@ -15,14 +15,39 @@
       "7days": "7 días",
       "30days": "30 días",
       "90days": "90 días",
-      "custom": "Personalizado"
+      "custom": "Personalizado",
+      "dateFrom": "Fecha inicial",
+      "dateTo": "Fecha final",
+      "dateFromClearedInfo": "La fecha final fue borrada porque era anterior a la nueva fecha inicial",
+      "dateRangeError": "Período máximo: {{days}} días",
+      "dateToBeforeFromError": "La fecha final no puede ser anterior a la fecha inicial",
+      "agentAriaLabel": "Filtrar por agente",
+      "channelAriaLabel": "Filtrar por canal",
+      "departmentAriaLabel": "Filtrar por departamento",
+      "channelOptions": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram",
+        "email": "Correo electrónico",
+        "chat": "Chat",
+        "liveChat": "Live Chat"
+      }
     },
     "cards": {
       "total": "Atenciones",
       "tma": "TMA",
       "csat": "CSAT Promedio",
       "closed": "Cerrados",
-      "firstResponse": "1ª Respuesta"
+      "firstResponse": "1ª Respuesta",
+      "totalSubtitle": "{{count}} abiertas",
+      "tmaSubtitle": "Tiempo medio de atención",
+      "csatSubtitle": "{{count}} respuestas",
+      "closedSubtitle": "{{count}} cerradas",
+      "firstResponseSubtitle": "Tiempo medio de primera respuesta"
+    },
+    "table": {
+      "agent": "Agente",
+      "total": "Total",
+      "closed": "Cerrados"
     },
     "charts": {
       "volume": "Volumen de atenciones",
@@ -39,6 +64,7 @@
     "conversations": "atenciones",
     "tmaUnit": "min",
     "noData": "Sin datos para el período seleccionado",
+    "noDataHint": "Ajuste el período o los filtros para visualizar datos.",
     "tabs": {
       "omnichannel": "Omnichannel",
       "tickets": "Tickets"

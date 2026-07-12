@@ -373,18 +373,20 @@ export function ContactDetail({ contactId }: Props) {
 
               <div className="portal-access-section" style={{ gridColumn: '1 / -1' }}>
                 <div className="portal-access-header">
-                  <span>Acesso ao Portal</span>
+                  <span>{t('contacts.portal.sectionTitle')}</span>
                   {contact.portal_enabled ? (
-                    <span className="comment-visibility-badge public">Ativo</span>
+                    <span className="comment-visibility-badge public">{t('contacts.portal.active')}</span>
                   ) : (
-                    <span className="comment-visibility-badge">Sem acesso</span>
+                    <span className="comment-visibility-badge">{t('contacts.portal.noAccess')}</span>
                   )}
                 </div>
 
                 {contact.portal_enabled ? (
                   <div>
                     <p className="portal-access-hint">
-                      Último acesso: {contact.portal_last_login ? formatRelativeDate(contact.portal_last_login) : 'Nunca'}
+                      {t('contacts.portal.lastAccess', {
+                        date: contact.portal_last_login ? formatRelativeDate(contact.portal_last_login) : t('contacts.portal.never'),
+                      })}
                     </p>
                     <button
                       type="button"
@@ -393,15 +395,15 @@ export function ContactDetail({ contactId }: Props) {
                       className="zd-btn"
                       style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
                     >
-                      Revogar acesso
+                      {t('contacts.portal.revokeAccess')}
                     </button>
                   </div>
                 ) : (
                   <div>
                     <p className="portal-access-hint">
                       {contactEmail
-                        ? 'Este contato já possui e-mail. Gere o acesso ao portal para liberar login.'
-                        : 'O contato precisa ter e-mail cadastrado.'}
+                        ? t('contacts.portal.hasEmailHint')
+                        : t('contacts.portal.noEmailHint')}
                     </p>
                     <button
                       type="button"
@@ -409,7 +411,7 @@ export function ContactDetail({ contactId }: Props) {
                       disabled={!contactEmail || createPortalAccessMutation.isPending}
                       className="zd-btn zd-btn-primary"
                     >
-                      Criar acesso ao portal
+                      {t('contacts.portal.createAccess')}
                     </button>
                   </div>
                 )}
@@ -568,26 +570,28 @@ export function ContactDetail({ contactId }: Props) {
       <Modal
         open={!!accessInfo}
         onClose={() => setAccessInfo(null)}
-        title="Acesso criado!"
+        title={t('contacts.portal.accessCreatedTitle')}
         maxWidth="sm"
       >
         {accessInfo ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-2)' }}>
-              As credenciais foram enviadas por e-mail para {accessInfo.email ?? maskedPortalEmail ?? 'o contato'}.
+              {t('contacts.portal.credentialsSentTo', {
+                email: accessInfo.email ?? maskedPortalEmail ?? t('contacts.portal.theContact'),
+              })}
             </p>
             <div className="portal-credentials-display">
               <div>
-                <label>URL do portal:</label>
+                <label>{t('contacts.portal.portalUrlLabel')}</label>
                 <code>{accessInfo.portalUrl}</code>
               </div>
               <div>
-                <label>Senha temporária:</label>
+                <label>{t('contacts.portal.tempPasswordLabel')}</label>
                 <code>{accessInfo.tempPassword}</code>
               </div>
             </div>
             <p className="portal-access-hint" style={{ marginBottom: 0 }}>
-              Anote a senha temporária. Ela não será exibida novamente.
+              {t('contacts.portal.tempPasswordHint')}
             </p>
           </div>
         ) : null}

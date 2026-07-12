@@ -216,6 +216,23 @@
   "noPrimaryContactHint": "Set a primary contact to start conversations directly from the organization.",
   "contacts": {
     "title": "Contacts",
+    "portal": {
+      "sectionTitle": "Portal Access",
+      "active": "Active",
+      "noAccess": "No access",
+      "lastAccess": "Last access: {{date}}",
+      "never": "Never",
+      "revokeAccess": "Revoke access",
+      "hasEmailHint": "This contact already has an email. Generate portal access to enable login.",
+      "noEmailHint": "The contact needs a registered email.",
+      "createAccess": "Create portal access",
+      "accessCreatedTitle": "Access created!",
+      "credentialsSentTo": "Credentials were sent by email to {{email}}.",
+      "theContact": "the contact",
+      "portalUrlLabel": "Portal URL:",
+      "tempPasswordLabel": "Temporary password:",
+      "tempPasswordHint": "Write down the temporary password. It won't be shown again."
+    },
     "standalone": "Standalone contacts",
     "standaloneDesc": "Contacts without a linked organization",
     "subtitle": "{{count}} contacts",
@@ -274,6 +291,7 @@
       "edit": "Edit",
       "delete": "Delete"
     },
+    "deleteContact": "Delete contact",
     "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
     "deleteWarning": "This action cannot be undone.",
     "bulkDelete": {

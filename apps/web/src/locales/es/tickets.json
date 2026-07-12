@@ -44,7 +44,8 @@
       "noResponsible": "Sin responsable",
       "noClient": "Sin contacto vinculado",
       "noOrganization": "No vinculada",
-      "noDueDate": "Sin fecha límite"
+      "noDueDate": "Sin fecha límite",
+      "attachments": "Archivos adjuntos"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
@@ -92,7 +93,8 @@
       "reopen": "Reabrir",
       "cancel": "Cancelar",
       "edit": "Editar",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "removeTag": "Eliminar {{tag}}"
     },
     "resolve": {
       "title": "Resolver ticket",

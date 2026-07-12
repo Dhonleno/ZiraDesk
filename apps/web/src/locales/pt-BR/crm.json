@@ -216,6 +216,23 @@
   "noPrimaryContactHint": "Defina um contato primário para iniciar atendimentos direto da organização.",
   "contacts": {
     "title": "Contatos",
+    "portal": {
+      "sectionTitle": "Acesso ao Portal",
+      "active": "Ativo",
+      "noAccess": "Sem acesso",
+      "lastAccess": "Último acesso: {{date}}",
+      "never": "Nunca",
+      "revokeAccess": "Revogar acesso",
+      "hasEmailHint": "Este contato já possui e-mail. Gere o acesso ao portal para liberar login.",
+      "noEmailHint": "O contato precisa ter e-mail cadastrado.",
+      "createAccess": "Criar acesso ao portal",
+      "accessCreatedTitle": "Acesso criado!",
+      "credentialsSentTo": "As credenciais foram enviadas por e-mail para {{email}}.",
+      "theContact": "o contato",
+      "portalUrlLabel": "URL do portal:",
+      "tempPasswordLabel": "Senha temporária:",
+      "tempPasswordHint": "Anote a senha temporária. Ela não será exibida novamente."
+    },
     "standalone": "Contatos avulsos",
     "standaloneDesc": "Contatos sem organização vinculada",
     "subtitle": "{{count}} contatos",
@@ -274,6 +291,7 @@
       "edit": "Editar",
       "delete": "Excluir"
     },
+    "deleteContact": "Excluir contato",
     "deleteConfirm": "Tem certeza que deseja excluir \"{{name}}\"?",
     "deleteWarning": "Esta ação não pode ser desfeita.",
     "bulkDelete": {
