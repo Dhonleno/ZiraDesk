@@ -12,6 +12,7 @@
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
+  "notDefined": "Not defined",
   "language": {
     "label": "Language",
     "ptBR": "Portuguese",

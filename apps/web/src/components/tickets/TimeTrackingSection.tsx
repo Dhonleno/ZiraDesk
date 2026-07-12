@@ -75,23 +75,24 @@ export default function TimeTrackingSection({ ticketId }: TimeTrackingSectionPro
   }
 
   return (
-    <div className="ticket-section">
-      <div className="ticket-section-header">
-        <span className="ticket-section-title">Tempo trabalhado</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <section className="ticket-dsec">
+      <div className="ticket-dsec-head">
+        <span>
+          Tempo trabalhado
           {totalMinutes > 0 ? (
             <span className="time-total-badge">{formatMinutes(totalMinutes)}</span>
           ) : null}
-          <button
-            type="button"
-            className="zd-btn"
-            onClick={() => setShowForm((prev) => !prev)}
-          >
-            + Registrar
-          </button>
-        </div>
+        </span>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => setShowForm((prev) => !prev)}
+        >
+          + Registrar
+        </button>
       </div>
 
+      <div className="ticket-dsec-body">
       {showForm ? (
         <div className="time-form">
           <div className="time-inputs-row">
@@ -158,33 +159,43 @@ export default function TimeTrackingSection({ ticketId }: TimeTrackingSectionPro
         </div>
       ) : null}
 
-      <div className="time-entries">
-        {entries.map((entry) => (
-          <div key={entry.id} className="time-entry">
-            <span className="time-entry-duration">{formatMinutes(entry.minutes)}</span>
-            <div className="time-entry-info">
-              <span className="time-entry-desc">
-                {entry.description || 'Sem descrição'}
-              </span>
-              <span className="time-entry-meta">
-                {entry.user_name ?? 'Usuário'} · {new Date(entry.worked_at).toLocaleDateString('pt-BR')}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="checklist-delete"
-              onClick={() => deleteMutation.mutate(entry.id)}
-              aria-label="Remover registro"
-              title="Remover registro"
-            >
-              ×
-            </button>
+      {entries.length === 0 && !showForm ? (
+        <div className="ticket-empty-state">
+          <div className="ticket-empty-icon">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+              <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M10 6.5V10l2.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-        ))}
-        {entries.length === 0 && !showForm ? (
-          <p className="empty-state-hint">Nenhum tempo registrado</p>
-        ) : null}
+          <p className="ticket-empty-title">Nenhum tempo registrado</p>
+        </div>
+      ) : (
+        <div className="time-entries">
+          {entries.map((entry) => (
+            <div key={entry.id} className="time-entry">
+              <span className="time-entry-duration">{formatMinutes(entry.minutes)}</span>
+              <div className="time-entry-info">
+                <span className="time-entry-desc">
+                  {entry.description || 'Sem descrição'}
+                </span>
+                <span className="time-entry-meta">
+                  {entry.user_name ?? 'Usuário'} · {new Date(entry.worked_at).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="checklist-delete"
+                onClick={() => deleteMutation.mutate(entry.id)}
+                aria-label="Remover registro"
+                title="Remover registro"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
-    </div>
+    </section>
   );
 }

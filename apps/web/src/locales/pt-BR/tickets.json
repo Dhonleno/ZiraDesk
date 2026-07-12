@@ -49,6 +49,10 @@
     "validation": {
       "assignedOrDepartmentRequired": "Informe o responsável ou o departamento"
     },
+    "checklist": {
+      "emptyTitle": "Nenhuma tarefa",
+      "emptySub": "Adicione tarefas para acompanhar o progresso"
+    },
     "errors": {
       "acceptForbidden": "Apenas o agente designado pode aceitar este ticket",
       "acceptConflict": "Este ticket não pode ser aceito no estado atual",

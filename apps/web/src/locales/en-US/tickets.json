@@ -49,6 +49,10 @@
     "validation": {
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
     },
+    "checklist": {
+      "emptyTitle": "No tasks",
+      "emptySub": "Add tasks to track progress"
+    },
     "errors": {
       "acceptForbidden": "Only the assigned agent can accept this ticket",
       "acceptConflict": "This ticket cannot be accepted in its current state",
