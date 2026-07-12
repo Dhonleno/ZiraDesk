@@ -51,8 +51,31 @@
       "assignedOrDepartmentRequired": "Informe o responsável ou o departamento"
     },
     "checklist": {
+      "title": "Checklist",
+      "addTask": "+ Tarefa",
+      "add": "Adicionar",
+      "placeholder": "Descrição da tarefa...",
+      "deleteTask": "Remover item",
       "emptyTitle": "Nenhuma tarefa",
       "emptySub": "Adicione tarefas para acompanhar o progresso"
+    },
+    "timeTracking": {
+      "title": "Tempo trabalhado",
+      "register": "+ Registrar",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "date": "Data",
+      "descriptionPlaceholder": "O que foi feito? (opcional)",
+      "save": "Salvar",
+      "emptyTitle": "Nenhum tempo registrado",
+      "deleteEntry": "Remover registro",
+      "noDescription": "Sem descrição",
+      "unknownUser": "Usuário",
+      "addSuccess": "Tempo registrado!",
+      "addError": "Erro ao registrar tempo",
+      "deleteSuccess": "Registro removido",
+      "deleteError": "Você não pode excluir este registro",
+      "noMinutesError": "Informe pelo menos 1 minuto"
     },
     "errors": {
       "acceptForbidden": "Apenas o agente designado pode aceitar este ticket",

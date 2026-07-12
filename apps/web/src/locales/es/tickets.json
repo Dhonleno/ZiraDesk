@@ -51,8 +51,31 @@
       "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
     },
     "checklist": {
+      "title": "Lista de tareas",
+      "addTask": "+ Tarea",
+      "add": "Agregar",
+      "placeholder": "Descripción de la tarea...",
+      "deleteTask": "Eliminar elemento",
       "emptyTitle": "Sin tareas",
       "emptySub": "Agrega tareas para seguir el progreso"
+    },
+    "timeTracking": {
+      "title": "Tiempo trabajado",
+      "register": "+ Registrar",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "date": "Fecha",
+      "descriptionPlaceholder": "¿Qué se hizo? (opcional)",
+      "save": "Guardar",
+      "emptyTitle": "Sin tiempo registrado",
+      "deleteEntry": "Eliminar registro",
+      "noDescription": "Sin descripción",
+      "unknownUser": "Usuario",
+      "addSuccess": "¡Tiempo registrado!",
+      "addError": "Error al registrar el tiempo",
+      "deleteSuccess": "Registro eliminado",
+      "deleteError": "No puedes eliminar este registro",
+      "noMinutesError": "Ingrese al menos 1 minuto"
     },
     "errors": {
       "acceptForbidden": "Solo el agente asignado puede aceptar este ticket",

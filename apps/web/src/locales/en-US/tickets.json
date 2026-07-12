@@ -51,8 +51,31 @@
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
     },
     "checklist": {
+      "title": "Checklist",
+      "addTask": "+ Task",
+      "add": "Add",
+      "placeholder": "Task description...",
+      "deleteTask": "Remove item",
       "emptyTitle": "No tasks",
       "emptySub": "Add tasks to track progress"
+    },
+    "timeTracking": {
+      "title": "Time tracked",
+      "register": "+ Log time",
+      "hours": "Hours",
+      "minutes": "Minutes",
+      "date": "Date",
+      "descriptionPlaceholder": "What was done? (optional)",
+      "save": "Save",
+      "emptyTitle": "No time logged",
+      "deleteEntry": "Remove entry",
+      "noDescription": "No description",
+      "unknownUser": "User",
+      "addSuccess": "Time logged!",
+      "addError": "Error logging time",
+      "deleteSuccess": "Entry removed",
+      "deleteError": "You cannot delete this entry",
+      "noMinutesError": "Enter at least 1 minute"
     },
     "errors": {
       "acceptForbidden": "Only the assigned agent can accept this ticket",

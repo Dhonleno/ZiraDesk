@@ -56,13 +56,13 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
     <section className="ticket-dsec">
       <div className="ticket-dsec-head">
         <span>
-          Checklist
+          {t('tickets.checklist.title')}
           {items.length > 0 ? (
             <span className="checklist-progress-text"> · {doneCount}/{items.length} ({progress}%)</span>
           ) : null}
         </span>
         <button type="button" className="btn-ghost" onClick={() => setIsAdding(true)}>
-          + Tarefa
+          {t('tickets.checklist.addTask')}
         </button>
       </div>
 
@@ -114,8 +114,8 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
                   type="button"
                   className="checklist-delete"
                   onClick={() => deleteMutation.mutate(item.id)}
-                  aria-label="Remover item"
-                  title="Remover item"
+                  aria-label={t('tickets.checklist.deleteTask')}
+                  title={t('tickets.checklist.deleteTask')}
                 >
                   ×
                 </button>
@@ -129,7 +129,7 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
             <input
               ref={inputRef}
               autoFocus
-              placeholder="Descrição da tarefa..."
+              placeholder={t('tickets.checklist.placeholder')}
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
               onKeyDown={(e) => {
@@ -147,7 +147,7 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
               disabled={!newItem.trim() || addMutation.isPending}
               className="zd-btn zd-btn-primary"
             >
-              Adicionar
+              {t('tickets.checklist.add')}
             </button>
             <button
               type="button"
@@ -157,7 +157,7 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
               }}
               className="zd-btn"
             >
-              Cancelar
+              {t('tickets.cancel')}
             </button>
           </div>
         ) : null}
