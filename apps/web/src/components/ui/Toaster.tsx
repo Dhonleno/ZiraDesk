@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useToastStore, type ToastType } from '../../stores/toast.store';
 
 const typeStyles: Record<Exclude<ToastType, 'help_request'>, { wrapper: string; icon: string }> = {
@@ -20,6 +21,7 @@ const typeStyles: Record<Exclude<ToastType, 'help_request'>, { wrapper: string; 
 };
 
 export function Toaster() {
+  const { t } = useTranslation('common');
   const { toasts, removeToast } = useToastStore();
 
   return (
@@ -55,7 +57,7 @@ export function Toaster() {
                     removeToast(toast.id);
                   }}
                 >
-                  Ajudar
+                  {t('help')}
                 </button>
                 <button
                   className="tb-icon-btn"
@@ -74,7 +76,7 @@ export function Toaster() {
                     removeToast(toast.id);
                   }}
                 >
-                  Recusar
+                  {t('dismiss')}
                 </button>
               </div>
             </div>
@@ -106,7 +108,7 @@ export function Toaster() {
             <button
               onClick={() => removeToast(toast.id)}
               className="shrink-0 text-txt-3 hover:text-txt-2 transition-opacity"
-              aria-label="Fechar"
+              aria-label={t('close')}
             >
               ×
             </button>

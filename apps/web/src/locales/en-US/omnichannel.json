@@ -494,6 +494,7 @@
     "typeNotSupported": "File type not supported",
     "permissionDenied": "Microphone permission denied",
     "uploadError": "Error uploading file",
+    "unavailable": "Media unavailable",
     "downloadFile": "Download file",
     "browserNotSupported": "Browser does not support audio recording.",
     "sending": "Sending audio...",

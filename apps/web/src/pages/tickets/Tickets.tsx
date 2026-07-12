@@ -661,7 +661,7 @@ export function TicketsPage() {
         </header>
 
         {isPending ? (
-          <div className="tickets-loading">{t('common.loading', { ns: 'admin', defaultValue: 'Carregando...' })}</div>
+          <div className="tickets-loading">{t('loading', { ns: 'common' })}</div>
         ) : null}
 
         {!isPending && view === 'kanban' ? (

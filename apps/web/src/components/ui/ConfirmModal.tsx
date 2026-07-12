@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Modal } from './Modal';
 import { Button } from './Button';
 
@@ -17,13 +18,17 @@ export function ConfirmModal({
   open,
   title,
   message,
-  confirmLabel = 'Confirmar',
-  cancelLabel = 'Cancelar',
+  confirmLabel,
+  cancelLabel,
   confirmVariant = 'primary',
   loading = false,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const { t } = useTranslation('common');
+  const resolvedConfirm = confirmLabel ?? t('confirm');
+  const resolvedCancel = cancelLabel ?? t('cancel');
+
   return (
     <Modal open={open} onClose={onCancel} title={title} maxWidth="sm">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -32,7 +37,7 @@ export function ConfirmModal({
         </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button type="button" variant="secondary" onClick={onCancel}>
-            {cancelLabel}
+            {resolvedCancel}
           </Button>
           <Button
             type="button"
@@ -40,7 +45,7 @@ export function ConfirmModal({
             loading={loading}
             onClick={() => void onConfirm()}
           >
-            {confirmLabel}
+            {resolvedConfirm}
           </Button>
         </div>
       </div>

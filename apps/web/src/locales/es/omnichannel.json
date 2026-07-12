@@ -494,6 +494,7 @@
     "typeNotSupported": "Tipo de archivo no compatible",
     "permissionDenied": "Permiso de micrófono denegado",
     "uploadError": "Error al enviar archivo",
+    "unavailable": "Medio no disponible",
     "downloadFile": "Descargar archivo",
     "browserNotSupported": "El navegador no admite grabación de audio.",
     "sending": "Enviando audio...",

@@ -1,6 +1,7 @@
 {
   "save": "Salvar",
   "cancel": "Cancelar",
+  "close": "Fechar",
   "delete": "Excluir",
   "edit": "Editar",
   "back": "Voltar",
@@ -13,6 +14,9 @@
   "noResults": "Nenhum resultado encontrado",
   "required": "Campo obrigatório",
   "notDefined": "Não definido",
+  "help": "Ajudar",
+  "dismiss": "Recusar",
+  "step": "Passo {{current}} de {{total}}",
   "language": {
     "label": "Idioma",
     "ptBR": "Português",

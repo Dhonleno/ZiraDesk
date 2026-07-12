@@ -536,7 +536,7 @@ export function TicketDetailPage() {
   if (isPending || !ticket) {
     return (
       <PageShell>
-        <div className="ticket-detail-loading">{t('common.loading', { ns: 'admin', defaultValue: 'Carregando...' })}</div>
+        <div className="ticket-detail-loading">{t('loading', { ns: 'common' })}</div>
       </PageShell>
     );
   }
