@@ -197,6 +197,8 @@
       "placeholder": "Agregar notas sobre esta organización...",
       "hint": "Las notas se guardan al hacer clic en Guardar"
     },
+    "unlinkSuccess": "Contacto desvinculado con éxito",
+    "transferSuccess": "Contacto transferido con éxito",
     "linkContact": {
       "title": "Vincular contacto existente",
       "search": "Buscar contacto...",
@@ -211,9 +213,6 @@
   "transferContact": "Transferir a otra organización",
   "transferContactTitle": "Transferir contacto",
   "searchOrganization": "Buscar organización...",
-  "unlinkSuccess": "Contacto desvinculado con éxito",
-  "transferSuccess": "Contacto transferido con éxito",
-  "startConversation": "Iniciar atención",
   "noPrimaryContactHint": "Define un contacto principal para iniciar atenciones directamente desde la organización.",
   "contacts": {
     "title": "Contactos",

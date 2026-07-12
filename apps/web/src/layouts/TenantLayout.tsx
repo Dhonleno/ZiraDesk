@@ -1167,7 +1167,7 @@ export function TenantLayout() {
           {/* Atendimentos */}
           <NavItem
             to="/omnichannel/conversations"
-            title={t('nav.conversations', { defaultValue: 'Atendimentos' })}
+            title={t('nav.conversations')}
             badge={unreadConversationNotifications}
             expanded={isNavExpanded}
           >
@@ -1195,7 +1195,7 @@ export function TenantLayout() {
 
           {/* Monitor */}
           {isManager && (
-            <NavItem to="/monitor" title="Monitor" expanded={isNavExpanded}>
+            <NavItem to="/monitor" title={t('nav.monitor')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
                 <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1205,7 +1205,7 @@ export function TenantLayout() {
 
           {/* Métricas */}
           {canViewMetricsNav && (
-            <NavItem to="/omnichannel/metrics" title="Métricas" expanded={isNavExpanded}>
+            <NavItem to="/omnichannel/metrics" title={t('nav.metrics')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
@@ -1233,7 +1233,7 @@ export function TenantLayout() {
           )}
 
           {/* Organizações */}
-          <NavItem to="/crm/organizations" title="Organizações" expanded={isNavExpanded}>
+          <NavItem to="/crm/organizations" title={t('nav.organizations')} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path d="M4 15V3.8A1.8 1.8 0 0 1 5.8 2h6.4A1.8 1.8 0 0 1 14 3.8V15" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
               <path d="M2.5 15h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -1242,7 +1242,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Contatos */}
-          <NavItem to="/crm/contacts" title="Contatos" expanded={isNavExpanded}>
+          <NavItem to="/crm/contacts" title={t('nav.contacts')} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <circle cx="9" cy="6.5" r="2.8" stroke="currentColor" strokeWidth="1.4"/>
               <path d="M3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
@@ -1250,7 +1250,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Tickets */}
-          <NavItem to="/tickets" title={t('nav.tickets', { defaultValue: 'Tickets' })} badge={ticketUnreadCount} expanded={isNavExpanded}>
+          <NavItem to="/tickets" title={t('nav.tickets')} badge={ticketUnreadCount} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path
                 d="M4 5h10a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z"
@@ -1263,7 +1263,7 @@ export function TenantLayout() {
           </NavItem>
 
           {/* Campanhas */}
-          <NavItem to="/omnichannel/campaigns" title="Campanhas" expanded={isNavExpanded}>
+          <NavItem to="/omnichannel/campaigns" title={t('nav.campaigns')} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <path d="M3 10.2H2.5A1.5 1.5 0 0 1 1 8.7V7.3a1.5 1.5 0 0 1 1.5-1.5H5l7-3v10.4l-7-3H3Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M5 10.2 6.2 15H4.1L3 10.2M14.2 6.2c.7.4 1.1 1 1.1 1.8s-.4 1.4-1.1 1.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1274,7 +1274,7 @@ export function TenantLayout() {
 
           {/* Administração */}
           {canViewAdminNav && (
-            <NavItem to="/admin" title="Administração" expanded={isNavExpanded}>
+            <NavItem to="/admin" title={t('nav.admin')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <rect x="3" y="3" width="12" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
                 <circle cx="9" cy="9" r="2.3" stroke="currentColor" strokeWidth="1.3" />

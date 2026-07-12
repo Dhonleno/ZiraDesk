@@ -197,6 +197,8 @@
       "placeholder": "Add notes about this organization...",
       "hint": "Notes are saved when you click Save"
     },
+    "unlinkSuccess": "Contact unlinked successfully",
+    "transferSuccess": "Contact transferred successfully",
     "linkContact": {
       "title": "Link existing contact",
       "search": "Search contact...",
@@ -211,9 +213,6 @@
   "transferContact": "Transfer to another organization",
   "transferContactTitle": "Transfer contact",
   "searchOrganization": "Search organization...",
-  "unlinkSuccess": "Contact unlinked successfully",
-  "transferSuccess": "Contact transferred successfully",
-  "startConversation": "Start conversation",
   "noPrimaryContactHint": "Set a primary contact to start conversations directly from the organization.",
   "contacts": {
     "title": "Contacts",

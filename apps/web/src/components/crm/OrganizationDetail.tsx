@@ -225,7 +225,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['org-contacts', org.id] });
       void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
       void queryClient.invalidateQueries({ queryKey: ['crm-organizations'] });
-      toast.success(t('unlinkSuccess'));
+      toast.success(t('organizations.unlinkSuccess'));
       setUnlinkContact(null);
     },
     onError: () => toast.error(t('organizations.messages.contactActionError')),
@@ -238,7 +238,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['org-contacts', org.id] });
       void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
       void queryClient.invalidateQueries({ queryKey: ['crm-organizations'] });
-      toast.success(t('transferSuccess'));
+      toast.success(t('organizations.transferSuccess'));
       setTransferContact(null);
       setTransferSearchRaw('');
       setTransferTargetOrgId(null);
@@ -364,7 +364,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
   async function handleStartConversationByChannel(preferredContact?: CrmContact | null) {
     setConversationTargetContact(preferredContact ?? null);
     if (activeChannels.length === 0) {
-      toast.error(t('contacts.hasNoActiveChannels', { defaultValue: 'Nenhum canal ativo disponível' }));
+      toast.error(t('contacts.hasNoActiveChannels'));
       return;
     }
     if (activeChannels.length === 1) {
@@ -430,7 +430,7 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
                       <path d="M14 10c0 .667-.167 1.167-.5 1.5S12.667 12 12 12H4l-2 2V4c0-.667.167-1.167.5-1.5S3.333 2 4 2h8c.667 0 1.167.167 1.5.5S14 3.333 14 4v6z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    {t('startConversation')}
+                    {t('organizations.actions.startConversation')}
                   </button>
                 ) : null}
               </div>

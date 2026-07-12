@@ -1022,6 +1022,13 @@
   },
   "nav": {
     "admin": "Administración",
+    "monitor": "Monitor",
+    "metrics": "Métricas",
+    "organizations": "Organizaciones",
+    "contacts": "Contactos",
+    "campaigns": "Campañas",
+    "conversations": "Conversaciones",
+    "tickets": "Tickets",
     "users": "Usuarios",
     "permissions": "Permisos y Acceso",
     "channels": "Canales",

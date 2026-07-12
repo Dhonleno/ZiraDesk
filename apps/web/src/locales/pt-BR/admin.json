@@ -1016,6 +1016,13 @@
   },
   "nav": {
     "admin": "Administração",
+    "monitor": "Monitor",
+    "metrics": "Métricas",
+    "organizations": "Organizações",
+    "contacts": "Contatos",
+    "campaigns": "Campanhas",
+    "conversations": "Atendimentos",
+    "tickets": "Tickets",
     "users": "Usuários",
     "permissions": "Permissões e Acessos",
     "channels": "Canais",
