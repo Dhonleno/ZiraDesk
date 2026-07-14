@@ -15,6 +15,7 @@
       "test": "Test",
       "invite": "Invite",
       "inviting": "Inviting...",
+      "loading": "Loading...",
       "saving": "Saving...",
       "noResults": "No results found",
       "errorSave": "Error saving",
@@ -93,6 +94,7 @@
       "bot": "Support bot",
       "autoAssign": "Automatic Distribution",
       "skills": "Skills",
+      "skillsV2": "Skills v2",
       "pauseReasons": "Pause Reasons",
       "quickReplies": "Quick Replies",
       "templates": "Templates",
@@ -329,6 +331,10 @@
       "depth": "Level {{n}}",
       "parentOption": "Parent option",
       "noSubmenuGreeting": "No intro message",
+      "requiredSkills": "Required skills",
+      "requiredSkillsHint": "Agents must have every selected skill to receive conversations from this option.",
+      "skillRequired": "Required",
+      "noSkillsAvailable": "No active skills available",
       "option": {
         "number": "Number",
         "label": "Label",
@@ -375,13 +381,39 @@
       "saving": "Saving..."
     },
     "skillsV2": {
-      "title": "Skills",
-      "description": "Competencies that can be assigned to agents and bot topics",
+      "title": "Skills v2",
+      "subtitle": "Manage independent skills for agents and bot options",
+      "new": "New skill",
+      "newTitle": "New skill",
+      "editTitle": "Edit skill",
+      "listTitle": "Skills",
+      "detailEyebrow": "Skill",
+      "selectTitle": "Select a skill",
+      "selectBody": "Choose a skill from the list to view linked agents and bot options.",
+      "emptyTitle": "No skills yet",
+      "emptyBody": "Create skills to organize conversation routing.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "deactivate": "Deactivate",
+      "deleteTitle": "Remove skill",
+      "deleteWarning": "This skill has no links and will be permanently removed.",
+      "softDeleteWarning": "This skill is linked to agents or bot options. It will be deactivated to preserve history.",
+      "counts": "{{agents}} agent(s) · {{botOptions}} option(s)",
+      "assignedAgents": "Agents with this skill",
+      "linkedBotOptions": "Linked bot options",
+      "assignAgent": "Assign agent",
+      "assign": "Assign",
+      "selectAgent": "Select an agent",
+      "noDescription": "No description.",
+      "noAgents": "No assigned agents.",
+      "noBotOptions": "No linked bot options.",
+      "required": "Required",
+      "optional": "Optional",
       "fields": {
         "name": "Name",
         "description": "Description",
+        "agent": "Agent",
         "level": "Level",
-        "required": "Required",
         "isActive": "Active"
       },
       "levels": {
@@ -389,16 +421,12 @@
         "intermediate": "Intermediate",
         "senior": "Senior"
       },
-      "actions": {
-        "create": "New skill",
-        "save": "Save",
-        "delete": "Delete skill",
-        "assign": "Assign skill",
-        "remove": "Remove skill"
-      },
-      "empty": {
-        "title": "No skills yet",
-        "sub": "Create skills to organize conversation routing"
+      "messages": {
+        "created": "Skill created",
+        "updated": "Skill updated",
+        "deleted": "Skill removed",
+        "agentAssigned": "Agent assigned",
+        "agentRemoved": "Agent removed"
       }
     },
     "departments": {
@@ -1064,6 +1092,7 @@
     "supportBot": "Support Bot",
     "autoDistribution": "Auto Distribution",
     "skills": "Skills",
+    "skillsV2": "Skills v2",
     "departments": "Departments",
     "pauseReasons": "Pause Reasons",
     "quickReplies": "Quick Replies",

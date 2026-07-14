@@ -18,6 +18,8 @@ export interface SkillV2Row {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  agent_count: number;
+  bot_option_count: number;
 }
 
 export interface AgentSkillV2Row {
@@ -42,6 +44,21 @@ export interface AgentWithSkillsV2Row {
 export interface BotOptionSkillV2Row {
   skill_id: string;
   skill_name: string;
+  required: boolean;
+}
+
+export interface SkillAgentV2Row {
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  level: SkillLevel;
+}
+
+export interface SkillBotOptionV2Row {
+  bot_option_id: string;
+  number: number;
+  label: string;
+  parent_label: string | null;
   required: boolean;
 }
 
@@ -106,12 +123,32 @@ export async function listSkills(
 ): Promise<SkillV2Row[]> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
   const skillsRef = tableRef(resolvedSchemaName, 'skills');
+  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+  const botOptionSkillsRef = tableRef(resolvedSchemaName, 'bot_option_skills');
 
   return prisma.$queryRawUnsafe<SkillV2Row[]>(
-    `SELECT id, name, description, is_active, created_at, updated_at
-     FROM ${skillsRef}
-     WHERE ($1::boolean IS NULL OR is_active = $1::boolean)
-     ORDER BY is_active DESC, name ASC`,
+    `SELECT
+       s.id,
+       s.name,
+       s.description,
+       s.is_active,
+       s.created_at,
+       s.updated_at,
+       COALESCE(agent_counts.agent_count, 0)::integer AS agent_count,
+       COALESCE(option_counts.bot_option_count, 0)::integer AS bot_option_count
+     FROM ${skillsRef} s
+     LEFT JOIN (
+       SELECT skill_id, COUNT(*)::integer AS agent_count
+       FROM ${agentSkillsRef}
+       GROUP BY skill_id
+     ) agent_counts ON agent_counts.skill_id = s.id
+     LEFT JOIN (
+       SELECT skill_id, COUNT(*)::integer AS bot_option_count
+       FROM ${botOptionSkillsRef}
+       GROUP BY skill_id
+     ) option_counts ON option_counts.skill_id = s.id
+     WHERE ($1::boolean IS NULL OR s.is_active = $1::boolean)
+     ORDER BY s.is_active DESC, s.name ASC`,
     query.is_active ?? null,
   );
 }
@@ -130,7 +167,7 @@ export async function createSkill(
   const rows = await prisma.$queryRawUnsafe<SkillV2Row[]>(
     `INSERT INTO ${skillsRef} (name, description, is_active)
      VALUES ($1, $2, $3)
-     RETURNING id, name, description, is_active, created_at, updated_at`,
+     RETURNING id, name, description, is_active, created_at, updated_at, 0::integer AS agent_count, 0::integer AS bot_option_count`,
     name,
     data.description?.trim() || null,
     data.is_active,
@@ -175,7 +212,7 @@ export async function updateSkill(
     `UPDATE ${skillsRef}
      SET ${setParts.join(', ')}
      WHERE id = $1::uuid
-     RETURNING id, name, description, is_active, created_at, updated_at`,
+     RETURNING id, name, description, is_active, created_at, updated_at, 0::integer AS agent_count, 0::integer AS bot_option_count`,
     ...params,
   );
 
@@ -187,10 +224,11 @@ export async function deleteSkill(
   tenantId: string,
   id: string,
   schemaName?: string,
-): Promise<{ deleted: boolean; deactivated: boolean }> {
+): Promise<{ deleted: boolean; deactivated: boolean; agent_count: number; bot_option_count: number }> {
   const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
   const skillsRef = tableRef(resolvedSchemaName, 'skills');
   const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+  const botOptionSkillsRef = tableRef(resolvedSchemaName, 'bot_option_skills');
 
   const existingRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id FROM ${skillsRef} WHERE id = $1::uuid LIMIT 1`,
@@ -198,15 +236,16 @@ export async function deleteSkill(
   );
   if (!existingRows[0]) throw new NotFoundError('Habilidade nao encontrada');
 
-  const countRows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `SELECT COUNT(*)::bigint AS count
-     FROM ${agentSkillsRef}
-     WHERE skill_id = $1::uuid`,
+  const countRows = await prisma.$queryRawUnsafe<Array<{ agent_count: bigint; bot_option_count: bigint }>>(
+    `SELECT
+       (SELECT COUNT(*)::bigint FROM ${agentSkillsRef} WHERE skill_id = $1::uuid) AS agent_count,
+       (SELECT COUNT(*)::bigint FROM ${botOptionSkillsRef} WHERE skill_id = $1::uuid) AS bot_option_count`,
     id,
   );
-  const agentCount = Number(countRows[0]?.count ?? 0n);
+  const agentCount = Number(countRows[0]?.agent_count ?? 0n);
+  const botOptionCount = Number(countRows[0]?.bot_option_count ?? 0n);
 
-  if (agentCount > 0) {
+  if (agentCount > 0 || botOptionCount > 0) {
     await prisma.$executeRawUnsafe(
       `UPDATE ${skillsRef}
        SET is_active = false,
@@ -214,7 +253,7 @@ export async function deleteSkill(
        WHERE id = $1::uuid`,
       id,
     );
-    return { deleted: false, deactivated: true };
+    return { deleted: false, deactivated: true, agent_count: agentCount, bot_option_count: botOptionCount };
   }
 
   await prisma.$executeRawUnsafe(
@@ -222,7 +261,57 @@ export async function deleteSkill(
      WHERE id = $1::uuid`,
     id,
   );
-  return { deleted: true, deactivated: false };
+  return { deleted: true, deactivated: false, agent_count: 0, bot_option_count: 0 };
+}
+
+export async function listAgentsBySkill(
+  tenantId: string,
+  skillId: string,
+  schemaName?: string,
+): Promise<SkillAgentV2Row[]> {
+  const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
+  const usersRef = tableRef(resolvedSchemaName, 'users');
+  const agentSkillsRef = tableRef(resolvedSchemaName, 'agent_skills');
+
+  return prisma.$queryRawUnsafe<SkillAgentV2Row[]>(
+    `SELECT
+       u.id AS user_id,
+       u.name,
+       u.avatar_url,
+       aks.level
+     FROM ${agentSkillsRef} aks
+     JOIN ${usersRef} u ON u.id = aks.user_id
+     WHERE aks.skill_id = $1::uuid
+       AND u.status = 'active'
+       AND u.role IN ('owner', 'admin', 'agent')
+     ORDER BY u.name ASC`,
+    skillId,
+  );
+}
+
+export async function listBotOptionsBySkill(
+  tenantId: string,
+  skillId: string,
+  schemaName?: string,
+): Promise<SkillBotOptionV2Row[]> {
+  const resolvedSchemaName = await ensureInfra(tenantId, schemaName);
+  const botOptionsRef = tableRef(resolvedSchemaName, 'bot_options');
+  const botOptionSkillsRef = tableRef(resolvedSchemaName, 'bot_option_skills');
+
+  return prisma.$queryRawUnsafe<SkillBotOptionV2Row[]>(
+    `SELECT
+       bo.id AS bot_option_id,
+       bo.number,
+       bo.label,
+       parent.label AS parent_label,
+       bos.required
+     FROM ${botOptionSkillsRef} bos
+     JOIN ${botOptionsRef} bo ON bo.id = bos.bot_option_id
+     LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
+     WHERE bos.skill_id = $1::uuid
+     ORDER BY parent.number ASC NULLS FIRST, bo.number ASC, bo.label ASC`,
+    skillId,
+  );
 }
 
 export async function listAgentsWithSkills(

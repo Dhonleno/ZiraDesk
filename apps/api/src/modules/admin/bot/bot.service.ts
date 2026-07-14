@@ -8,6 +8,7 @@ import type {
 } from './bot.schema.js';
 
 type BotDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+type BotOptionSkillInput = { skill_id: string; required?: boolean };
 
 interface BotMenuRow {
   id: string;
@@ -267,6 +268,69 @@ async function ensureOptionNumberAvailable(
   }
 }
 
+async function ensureBotOptionSkillsInfrastructure(db: BotDbClient = prisma): Promise<void> {
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_skills_name"
+    ON skills(name)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS bot_option_skills (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bot_option_id UUID NOT NULL REFERENCES bot_options(id) ON DELETE CASCADE,
+      skill_id      UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      required      BOOLEAN NOT NULL DEFAULT true,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(bot_option_id, skill_id)
+    )
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_option"
+    ON bot_option_skills(bot_option_id)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_skill"
+    ON bot_option_skills(skill_id)
+  `);
+}
+
+async function syncBotOptionSkills(
+  botOptionId: string,
+  skills?: BotOptionSkillInput[],
+  db: BotDbClient = prisma,
+): Promise<void> {
+  if (skills === undefined) return;
+
+  await ensureBotOptionSkillsInfrastructure(db);
+  await db.$executeRawUnsafe('DELETE FROM bot_option_skills WHERE bot_option_id = $1::uuid', botOptionId);
+
+  const deduped = new Map(skills.map((skill) => [skill.skill_id, skill.required ?? true]));
+  for (const [skillId, required] of deduped.entries()) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO bot_option_skills (bot_option_id, skill_id, required)
+       VALUES ($1::uuid, $2::uuid, $3)
+       ON CONFLICT (bot_option_id, skill_id)
+       DO UPDATE SET required = EXCLUDED.required`,
+      botOptionId,
+      skillId,
+      required,
+    );
+  }
+}
+
 export async function ensureBotInfrastructure(
   db: BotDbClient = prisma,
   schemaName?: string | null,
@@ -465,7 +529,9 @@ export async function addOption(data: CreateBotOptionInput): Promise<BotOption> 
     data.sort_order,
   );
 
-  return normalizeOption(rows[0]!);
+  const option = normalizeOption(rows[0]!);
+  await syncBotOptionSkills(option.id, data.skills);
+  return option;
 }
 
 export async function addSubOption(parentId: string, data: CreateBotSubOptionInput): Promise<BotOption> {
@@ -538,7 +604,9 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
     nextDepartmentId,
   );
 
-  return normalizeOption(rows[0]!);
+  const option = normalizeOption(rows[0]!);
+  await syncBotOptionSkills(option.id, data.skills);
+  return option;
 }
 
 export async function deleteOption(id: string): Promise<BotOption> {

@@ -15,6 +15,7 @@
       "test": "Testar",
       "invite": "Convidar",
       "inviting": "Convidando...",
+      "loading": "Carregando...",
       "saving": "Salvando...",
       "noResults": "Nenhum resultado encontrado",
       "errorSave": "Erro ao salvar",
@@ -93,6 +94,7 @@
       "bot": "Bot de Atendimento",
       "autoAssign": "Distribuição Automática",
       "skills": "Habilidades",
+      "skillsV2": "Habilidades v2",
       "pauseReasons": "Motivos de Pausa",
       "quickReplies": "Respostas Rápidas",
       "templates": "Templates",
@@ -329,6 +331,10 @@
       "depth": "Nível {{n}}",
       "parentOption": "Opção pai",
       "noSubmenuGreeting": "Sem mensagem de introdução",
+      "requiredSkills": "Habilidades obrigatórias",
+      "requiredSkillsHint": "Agentes precisam ter todas as habilidades marcadas para receber conversas desta opção.",
+      "skillRequired": "Obrigatória",
+      "noSkillsAvailable": "Nenhuma habilidade ativa disponível",
       "option": {
         "number": "Número",
         "label": "Label",
@@ -375,13 +381,39 @@
       "saving": "Salvando..."
     },
     "skillsV2": {
-      "title": "Habilidades",
-      "description": "Competências que podem ser atribuídas a agentes e assuntos do bot",
+      "title": "Habilidades v2",
+      "subtitle": "Gerencie habilidades independentes para agentes e opções do bot",
+      "new": "Nova habilidade",
+      "newTitle": "Nova habilidade",
+      "editTitle": "Editar habilidade",
+      "listTitle": "Habilidades",
+      "detailEyebrow": "Habilidade",
+      "selectTitle": "Selecione uma habilidade",
+      "selectBody": "Escolha uma habilidade na lista para ver agentes e opções vinculadas.",
+      "emptyTitle": "Nenhuma habilidade cadastrada",
+      "emptyBody": "Crie habilidades para organizar o roteamento de atendimentos.",
+      "active": "Ativa",
+      "inactive": "Inativa",
+      "deactivate": "Desativar",
+      "deleteTitle": "Remover habilidade",
+      "deleteWarning": "Esta habilidade não possui vínculos e será removida definitivamente.",
+      "softDeleteWarning": "Esta habilidade possui vínculos com agentes ou opções do bot. Ela será desativada para preservar o histórico.",
+      "counts": "{{agents}} agente(s) · {{botOptions}} opção(ões)",
+      "assignedAgents": "Agentes com a habilidade",
+      "linkedBotOptions": "Opções do bot vinculadas",
+      "assignAgent": "Atribuir agente",
+      "assign": "Atribuir",
+      "selectAgent": "Selecione um agente",
+      "noDescription": "Sem descrição.",
+      "noAgents": "Nenhum agente atribuído.",
+      "noBotOptions": "Nenhuma opção do bot vinculada.",
+      "required": "Obrigatória",
+      "optional": "Opcional",
       "fields": {
         "name": "Nome",
         "description": "Descrição",
+        "agent": "Agente",
         "level": "Nível",
-        "required": "Obrigatória",
         "isActive": "Ativa"
       },
       "levels": {
@@ -389,16 +421,12 @@
         "intermediate": "Intermediário",
         "senior": "Sênior"
       },
-      "actions": {
-        "create": "Nova habilidade",
-        "save": "Salvar",
-        "delete": "Excluir habilidade",
-        "assign": "Atribuir habilidade",
-        "remove": "Remover habilidade"
-      },
-      "empty": {
-        "title": "Nenhuma habilidade cadastrada",
-        "sub": "Crie habilidades para organizar o roteamento de atendimentos"
+      "messages": {
+        "created": "Habilidade criada",
+        "updated": "Habilidade atualizada",
+        "deleted": "Habilidade removida",
+        "agentAssigned": "Agente atribuído",
+        "agentRemoved": "Agente removido"
       }
     },
     "departments": {
@@ -1058,6 +1086,7 @@
     "supportBot": "Bot de Atendimento",
     "autoDistribution": "Distribuição Automática",
     "skills": "Habilidades",
+    "skillsV2": "Habilidades v2",
     "departments": "Departamentos",
     "pauseReasons": "Motivos de Pausa",
     "quickReplies": "Respostas Rápidas",

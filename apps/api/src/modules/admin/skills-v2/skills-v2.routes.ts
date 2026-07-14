@@ -18,7 +18,9 @@ import {
   deleteSkill,
   getAgentSkills,
   getBotOptionSkills,
+  listAgentsBySkill,
   listAgentsWithSkills,
+  listBotOptionsBySkill,
   listSkills,
   removeAgentSkill,
   removeBotOptionSkill,
@@ -99,6 +101,20 @@ export async function skillsV2Routes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  app.get<{ Params: { id: string } }>('/:id/agents', { preHandler: ownerOrAdminGuard }, async (request, reply) => {
+    const data = await listAgentsBySkill(request.user.tenantId!, request.params.id, schemaName(request));
+    return reply.send({ success: true, data });
+  });
+
+  app.get<{ Params: { id: string } }>(
+    '/:id/bot-options',
+    { preHandler: ownerOrAdminGuard },
+    async (request, reply) => {
+      const data = await listBotOptionsBySkill(request.user.tenantId!, request.params.id, schemaName(request));
+      return reply.send({ success: true, data });
+    },
+  );
 
   app.get('/agents', { preHandler: ownerOrAdminGuard }, async (request, reply) => {
     const data = await listAgentsWithSkills(request.user.tenantId!, schemaName(request));

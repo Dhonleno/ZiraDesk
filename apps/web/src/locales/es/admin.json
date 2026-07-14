@@ -15,6 +15,7 @@
       "test": "Probar",
       "invite": "Invitar",
       "inviting": "Invitando...",
+      "loading": "Cargando...",
       "saving": "Guardando...",
       "noResults": "Sin resultados",
       "errorSave": "Error al guardar",
@@ -93,6 +94,7 @@
       "bot": "Bot de atención",
       "autoAssign": "Distribución Automática",
       "skills": "Habilidades",
+      "skillsV2": "Habilidades v2",
       "pauseReasons": "Motivos de Pausa",
       "quickReplies": "Respuestas Rápidas",
       "templates": "Templates",
@@ -329,6 +331,10 @@
       "depth": "Nivel {{n}}",
       "parentOption": "Opción padre",
       "noSubmenuGreeting": "Sin mensaje de introducción",
+      "requiredSkills": "Habilidades obligatorias",
+      "requiredSkillsHint": "Los agentes deben tener todas las habilidades marcadas para recibir conversaciones de esta opción.",
+      "skillRequired": "Obligatoria",
+      "noSkillsAvailable": "No hay habilidades activas disponibles",
       "option": {
         "number": "Número",
         "label": "Label",
@@ -375,13 +381,39 @@
       "saving": "Guardando..."
     },
     "skillsV2": {
-      "title": "Habilidades",
-      "description": "Competencias asignables a agentes y temas del bot",
+      "title": "Habilidades v2",
+      "subtitle": "Gestiona habilidades independientes para agentes y opciones del bot",
+      "new": "Nueva habilidad",
+      "newTitle": "Nueva habilidad",
+      "editTitle": "Editar habilidad",
+      "listTitle": "Habilidades",
+      "detailEyebrow": "Habilidad",
+      "selectTitle": "Selecciona una habilidad",
+      "selectBody": "Elige una habilidad de la lista para ver agentes y opciones vinculadas.",
+      "emptyTitle": "Sin habilidades registradas",
+      "emptyBody": "Crea habilidades para organizar el enrutamiento de atenciones.",
+      "active": "Activa",
+      "inactive": "Inactiva",
+      "deactivate": "Desactivar",
+      "deleteTitle": "Quitar habilidad",
+      "deleteWarning": "Esta habilidad no tiene vínculos y se eliminará definitivamente.",
+      "softDeleteWarning": "Esta habilidad tiene vínculos con agentes u opciones del bot. Se desactivará para preservar el historial.",
+      "counts": "{{agents}} agente(s) · {{botOptions}} opción(es)",
+      "assignedAgents": "Agentes con la habilidad",
+      "linkedBotOptions": "Opciones del bot vinculadas",
+      "assignAgent": "Asignar agente",
+      "assign": "Asignar",
+      "selectAgent": "Selecciona un agente",
+      "noDescription": "Sin descripción.",
+      "noAgents": "Ningún agente asignado.",
+      "noBotOptions": "Ninguna opción del bot vinculada.",
+      "required": "Obligatoria",
+      "optional": "Opcional",
       "fields": {
         "name": "Nombre",
         "description": "Descripción",
+        "agent": "Agente",
         "level": "Nivel",
-        "required": "Obligatoria",
         "isActive": "Activa"
       },
       "levels": {
@@ -389,16 +421,12 @@
         "intermediate": "Intermedio",
         "senior": "Sénior"
       },
-      "actions": {
-        "create": "Nueva habilidad",
-        "save": "Guardar",
-        "delete": "Eliminar habilidad",
-        "assign": "Asignar habilidad",
-        "remove": "Quitar habilidad"
-      },
-      "empty": {
-        "title": "Sin habilidades registradas",
-        "sub": "Crea habilidades para organizar el enrutamiento de atenciones"
+      "messages": {
+        "created": "Habilidad creada",
+        "updated": "Habilidad actualizada",
+        "deleted": "Habilidad quitada",
+        "agentAssigned": "Agente asignado",
+        "agentRemoved": "Agente quitado"
       }
     },
     "departments": {
@@ -1064,6 +1092,7 @@
     "supportBot": "Bot de atención",
     "autoDistribution": "Distribución automática",
     "skills": "Habilidades",
+    "skillsV2": "Habilidades v2",
     "departments": "Departamentos",
     "pauseReasons": "Motivos de pausa",
     "quickReplies": "Respuestas rápidas",

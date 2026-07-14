@@ -333,6 +333,7 @@ export interface BotOptionPayload {
   parent_option_id?: string | null;
   sort_order?: number;
   department_id?: string | null;
+  skills?: Array<{ skill_id: string; required: boolean }>;
 }
 
 export interface AutoAssignAgent {
@@ -474,6 +475,8 @@ export interface SkillV2 {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  agent_count: number;
+  bot_option_count: number;
 }
 
 export interface AgentSkillV2 {
@@ -498,6 +501,21 @@ export interface AgentWithSkillsV2 {
 export interface BotOptionSkill {
   skill_id: string;
   skill_name: string;
+  required: boolean;
+}
+
+export interface SkillV2Agent {
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  level: 'junior' | 'intermediate' | 'senior';
+}
+
+export interface SkillV2BotOption {
+  bot_option_id: string;
+  number: number;
+  label: string;
+  parent_label: string | null;
   required: boolean;
 }
 
@@ -1458,9 +1476,24 @@ export const skillsV2Api = {
     return res.data.data;
   },
 
-  delete: async (id: string): Promise<{ deleted: boolean; deactivated: boolean }> => {
-    const res = await api.delete<{ success: boolean; data: { deleted: boolean; deactivated: boolean } }>(
-      `/admin/skills-v2/${id}`,
+  delete: async (
+    id: string,
+  ): Promise<{ deleted: boolean; deactivated: boolean; agent_count: number; bot_option_count: number }> => {
+    const res = await api.delete<{
+      success: boolean;
+      data: { deleted: boolean; deactivated: boolean; agent_count: number; bot_option_count: number };
+    }>(`/admin/skills-v2/${id}`);
+    return res.data.data;
+  },
+
+  getAgentsBySkill: async (id: string): Promise<SkillV2Agent[]> => {
+    const res = await api.get<{ success: boolean; data: SkillV2Agent[] }>(`/admin/skills-v2/${id}/agents`);
+    return res.data.data;
+  },
+
+  getBotOptionsBySkill: async (id: string): Promise<SkillV2BotOption[]> => {
+    const res = await api.get<{ success: boolean; data: SkillV2BotOption[] }>(
+      `/admin/skills-v2/${id}/bot-options`,
     );
     return res.data.data;
   },

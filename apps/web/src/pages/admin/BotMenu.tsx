@@ -3,9 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   adminApi,
+  skillsV2Api,
   type BotMenu as BotMenuData,
   type BotOption,
   type BotOptionPayload,
+  type BotOptionSkill,
+  type SkillV2,
 } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { Button } from '../../components/ui/Button';
@@ -20,6 +23,10 @@ interface OptionModalProps {
   onClose: () => void;
   onSubmit: (payload: BotOptionPayload) => void;
   isSaving: boolean;
+  availableSkills: SkillV2[];
+  selectedSkills: BotOptionSkill[];
+  onSkillsChange: (skills: BotOptionSkill[]) => void;
+  isLoadingSkills: boolean;
 }
 
 function buildPreview(menu: Pick<BotMenuData, 'greeting' | 'footer' | 'options'>) {
@@ -56,21 +63,19 @@ function OptionModal({
   onClose,
   onSubmit,
   isSaving,
+  availableSkills,
+  selectedSkills,
+  onSkillsChange,
+  isLoadingSkills,
 }: OptionModalProps) {
   const { t } = useTranslation('admin');
-  const { data: departments = [] } = useQuery({
-    queryKey: ['admin', 'departments'],
-    queryFn: adminApi.departments.list,
-    staleTime: 60_000,
-  });
-  const activeDepartments = departments.filter((d) => d.isActive);
   const [number, setNumber] = useState(1);
   const [label, setLabel] = useState('');
   const [tag, setTag] = useState('');
   const [response, setResponse] = useState('');
   const [hasSubmenu, setHasSubmenu] = useState(false);
   const [submenuGreeting, setSubmenuGreeting] = useState('');
-  const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const activeSkills = availableSkills.filter((skill) => skill.is_active);
 
   useEffect(() => {
     if (!open) return;
@@ -80,8 +85,37 @@ function OptionModal({
     setResponse(option?.response ?? 'Transferindo para um atendente. Aguarde...');
     setHasSubmenu(option?.has_submenu ?? false);
     setSubmenuGreeting(option?.submenu_greeting ?? '');
-    setDepartmentId(option?.department_id ?? null);
   }, [open, option]);
+
+  const selectedSkillMap = useMemo(
+    () => new Map(selectedSkills.map((skill) => [skill.skill_id, skill])),
+    [selectedSkills],
+  );
+
+  const toggleSkill = (skill: SkillV2) => {
+    const existing = selectedSkillMap.get(skill.id);
+    if (existing) {
+      onSkillsChange(selectedSkills.filter((item) => item.skill_id !== skill.id));
+      return;
+    }
+
+    onSkillsChange([
+      ...selectedSkills,
+      {
+        skill_id: skill.id,
+        skill_name: skill.name,
+        required: true,
+      },
+    ]);
+  };
+
+  const toggleRequired = (skillId: string) => {
+    onSkillsChange(
+      selectedSkills.map((item) =>
+        item.skill_id === skillId ? { ...item, required: !item.required } : item,
+      ),
+    );
+  };
 
   if (!open) return null;
 
@@ -103,7 +137,6 @@ function OptionModal({
             submenu_greeting: hasSubmenu ? submenuGreeting : null,
             response: hasSubmenu ? response || null : response,
             sort_order: option?.sort_order ?? defaultSortOrder,
-            department_id: departmentId,
           };
 
           onSubmit(payload);
@@ -157,20 +190,95 @@ function OptionModal({
           <span style={{ color: 'var(--txt-3)', fontSize: 11 }}>{t('tenantAdmin.bot.option.tagHint')}</span>
         </label>
 
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={labelStyle}>{t('tenantAdmin.bot.departmentLabel')}</span>
-          <select
-            value={departmentId ?? ''}
-            onChange={(event) => setDepartmentId(event.target.value || null)}
-            className="zd-input"
-            style={inputStyle}
+        <section style={{ display: 'grid', gap: 8 }}>
+          <div>
+            <span style={labelStyle}>{t('tenantAdmin.bot.requiredSkills')}</span>
+            <p style={{ color: 'var(--txt-3)', fontSize: 11, margin: '4px 0 0' }}>
+              {t('tenantAdmin.bot.requiredSkillsHint')}
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gap: 6,
+              border: '1px solid var(--line-2)',
+              borderRadius: 'var(--r)',
+              padding: 10,
+              background: 'var(--bg-1)',
+              maxHeight: 180,
+              overflow: 'auto',
+            }}
           >
-            <option value="">{t('tenantAdmin.bot.noDepartment')}</option>
-            {activeDepartments.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </label>
+            {isLoadingSkills ? (
+              <span style={{ color: 'var(--txt-3)', fontSize: 12 }}>
+                {t('tenantAdmin.common.loading')}
+              </span>
+            ) : activeSkills.length === 0 ? (
+              <span style={{ color: 'var(--txt-3)', fontSize: 12 }}>
+                {t('tenantAdmin.bot.noSkillsAvailable')}
+              </span>
+            ) : (
+              activeSkills.map((skill) => {
+                const selected = selectedSkillMap.get(skill.id);
+                return (
+                  <div
+                    key={skill.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '7px 8px',
+                      borderRadius: 'var(--r-sm)',
+                      background: selected ? 'var(--bg-2)' : 'transparent',
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: 'var(--txt)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selected}
+                        disabled={isSaving}
+                        onChange={() => toggleSkill(skill)}
+                      />
+                      {skill.name}
+                    </label>
+
+                    {selected ? (
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          color: 'var(--txt-2)',
+                          fontSize: 12,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.required}
+                          disabled={isSaving}
+                          onChange={() => toggleRequired(skill.id)}
+                        />
+                        {t('tenantAdmin.bot.skillRequired')}
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
 
         <label
           style={{
@@ -320,21 +428,6 @@ function OptionNode({
               </span>
             ) : null}
 
-            {option.department_name ? (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: '1px 6px',
-                  borderRadius: 10,
-                  background: 'var(--teal-dim)',
-                  color: 'var(--teal)',
-                  flexShrink: 0,
-                }}
-              >
-                {option.department_name}
-              </span>
-            ) : null}
           </div>
 
           {option.has_submenu ? (
@@ -414,11 +507,20 @@ export function BotMenu() {
   const [editingOption, setEditingOption] = useState<BotOption | null>(null);
   const [parentForNewOption, setParentForNewOption] = useState<BotOption | null>(null);
   const [isOptionModalOpen, setIsOptionModalOpen] = useState(false);
+  const [selectedOptionSkills, setSelectedOptionSkills] = useState<BotOptionSkill[]>([]);
+  const [initialOptionSkills, setInitialOptionSkills] = useState<BotOptionSkill[]>([]);
+  const [isLoadingOptionSkills, setIsLoadingOptionSkills] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const { data: menu, isLoading } = useQuery({
     queryKey: ['admin', 'bot'],
     queryFn: adminApi.bot.getMenu,
+  });
+
+  const { data: skillsV2 = [], isLoading: isLoadingSkillsV2 } = useQuery({
+    queryKey: ['admin', 'skills-v2', 'active'],
+    queryFn: () => skillsV2Api.list({ is_active: true }),
+    staleTime: 60_000,
   });
 
   useEffect(() => {
@@ -440,6 +542,38 @@ export function BotMenu() {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'bot'] });
   };
 
+  const resetOptionModalState = () => {
+    setIsOptionModalOpen(false);
+    setEditingOption(null);
+    setParentForNewOption(null);
+    setSelectedOptionSkills([]);
+    setInitialOptionSkills([]);
+    setIsLoadingOptionSkills(false);
+  };
+
+  const syncBotOptionSkills = async (
+    botOptionId: string,
+    before: BotOptionSkill[],
+    after: BotOptionSkill[],
+  ): Promise<void> => {
+    const beforeMap = new Map(before.map((item) => [item.skill_id, item]));
+    const afterMap = new Map(after.map((item) => [item.skill_id, item]));
+
+    await Promise.all([
+      ...after
+        .filter((item) => beforeMap.get(item.skill_id)?.required !== item.required)
+        .map((item) =>
+          skillsV2Api.assignBotOption(botOptionId, {
+            skill_id: item.skill_id,
+            required: item.required,
+          }),
+        ),
+      ...before
+        .filter((item) => !afterMap.has(item.skill_id))
+        .map((item) => skillsV2Api.removeBotOption(botOptionId, item.skill_id)),
+    ]);
+  };
+
   const updateMenuMutation = useMutation({
     mutationFn: (payload: Partial<Pick<BotMenuData, 'is_active' | 'greeting' | 'footer' | 'invalid_msg'>>) =>
       adminApi.bot.updateMenu(payload),
@@ -451,40 +585,64 @@ export function BotMenu() {
   });
 
   const addOptionMutation = useMutation({
-    mutationFn: adminApi.bot.addOption,
+    mutationFn: async (payload: BotOptionPayload) => {
+      const option = await adminApi.bot.addOption(payload);
+      await syncBotOptionSkills(option.id, [], selectedOptionSkills);
+      return option;
+    },
     onSuccess: () => {
       invalidateBot();
-      setIsOptionModalOpen(false);
-      setParentForNewOption(null);
+      resetOptionModalState();
       toast.success(t('tenantAdmin.bot.messages.optionAdded'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
   const addSubOptionMutation = useMutation({
-    mutationFn: ({ parentId, payload }: { parentId: string; payload: BotOptionPayload }) =>
-      adminApi.bot.addSubOption(parentId, payload),
-    onSuccess: (_, vars) => {
+    mutationFn: async ({ parent, payload }: { parent: BotOption; payload: BotOptionPayload }) => {
+      if (!parent.has_submenu) {
+        await adminApi.bot.updateOption(parent.id, {
+          has_submenu: true,
+          submenu_greeting: parent.submenu_greeting || `Você selecionou *${parent.label}*. Escolha uma opção:`,
+        });
+      }
+
+      const option = await adminApi.bot.addSubOption(parent.id, payload);
+      await syncBotOptionSkills(option.id, [], selectedOptionSkills);
+      return { option, parentId: parent.id };
+    },
+    onSuccess: (data) => {
       invalidateBot();
-      setIsOptionModalOpen(false);
       setExpandedIds((current) => {
         const next = new Set(current);
-        next.add(vars.parentId);
+        next.add(data.parentId);
         return next;
       });
-      setParentForNewOption(null);
+      resetOptionModalState();
       toast.success(t('tenantAdmin.bot.messages.optionAdded'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
   });
 
   const updateOptionMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Partial<BotOptionPayload> }) =>
-      adminApi.bot.updateOption(id, payload),
+    mutationFn: async ({
+      id,
+      payload,
+      syncSkills = true,
+    }: {
+      id: string;
+      payload: Partial<BotOptionPayload>;
+      syncSkills?: boolean;
+    }) => {
+      const option = await adminApi.bot.updateOption(id, payload);
+      if (syncSkills) {
+        await syncBotOptionSkills(id, initialOptionSkills, selectedOptionSkills);
+      }
+      return option;
+    },
     onSuccess: () => {
       invalidateBot();
-      setIsOptionModalOpen(false);
-      setEditingOption(null);
+      resetOptionModalState();
       toast.success(t('tenantAdmin.bot.messages.optionUpdated'));
     },
     onError: () => toast.error(t('tenantAdmin.common.errorSave')),
@@ -511,12 +669,16 @@ export function BotMenu() {
   const handleOpenNewRoot = () => {
     setEditingOption(null);
     setParentForNewOption(null);
+    setSelectedOptionSkills([]);
+    setInitialOptionSkills([]);
     setIsOptionModalOpen(true);
   };
 
   const handleOpenNewSub = (parent: BotOption) => {
     setEditingOption(null);
     setParentForNewOption(parent);
+    setSelectedOptionSkills([]);
+    setInitialOptionSkills([]);
     setIsOptionModalOpen(true);
     setExpandedIds((current) => {
       const next = new Set(current);
@@ -525,14 +687,33 @@ export function BotMenu() {
     });
   };
 
+  const handleOpenEdit = async (option: BotOption) => {
+    setEditingOption(option);
+    setParentForNewOption(null);
+    setSelectedOptionSkills([]);
+    setInitialOptionSkills([]);
+    setIsLoadingOptionSkills(true);
+    setIsOptionModalOpen(true);
+
+    try {
+      const skills = await skillsV2Api.getBotOption(option.id);
+      setSelectedOptionSkills(skills);
+      setInitialOptionSkills(skills);
+    } catch {
+      toast.error(t('tenantAdmin.common.errorLoad'));
+    } finally {
+      setIsLoadingOptionSkills(false);
+    }
+  };
+
   const handleEnableSubmenu = (option: BotOption) => {
     updateOptionMutation.mutate({
       id: option.id,
       payload: {
         has_submenu: true,
-            submenu_greeting:
-              option.submenu_greeting || `Você selecionou *${option.label}*. Escolha uma opção:`,
+        submenu_greeting: option.submenu_greeting || `Você selecionou *${option.label}*. Escolha uma opção:`,
       },
+      syncSkills: false,
     });
   };
 
@@ -684,9 +865,7 @@ export function BotMenu() {
                       }
                       onAddSub={handleOpenNewSub}
                       onEdit={(target) => {
-                        setEditingOption(target);
-                        setParentForNewOption(null);
-                        setIsOptionModalOpen(true);
+                        void handleOpenEdit(target);
                       }}
                       onDelete={(target) => deleteOptionMutation.mutate(target.id)}
                       onEnableSubmenu={handleEnableSubmenu}
@@ -756,11 +935,11 @@ export function BotMenu() {
         parentOption={parentForNewOption}
         defaultSortOrder={flattened.length}
         isSaving={isSavingOption}
-        onClose={() => {
-          setIsOptionModalOpen(false);
-          setEditingOption(null);
-          setParentForNewOption(null);
-        }}
+        availableSkills={skillsV2}
+        selectedSkills={selectedOptionSkills}
+        onSkillsChange={setSelectedOptionSkills}
+        isLoadingSkills={isLoadingSkillsV2 || isLoadingOptionSkills}
+        onClose={resetOptionModalState}
         onSubmit={(payload) => {
           if (editingOption) {
             updateOptionMutation.mutate({ id: editingOption.id, payload });
@@ -768,26 +947,7 @@ export function BotMenu() {
           }
 
           if (parentForNewOption) {
-            const applyCreate = () =>
-              addSubOptionMutation.mutate({ parentId: parentForNewOption.id, payload });
-
-            if (!parentForNewOption.has_submenu) {
-              updateOptionMutation.mutate(
-                {
-                  id: parentForNewOption.id,
-                  payload: {
-                    has_submenu: true,
-                    submenu_greeting:
-                      parentForNewOption.submenu_greeting ||
-                      `Você selecionou *${parentForNewOption.label}*. Escolha uma opção:`,
-                  },
-                },
-                { onSuccess: applyCreate },
-              );
-              return;
-            }
-
-            applyCreate();
+            addSubOptionMutation.mutate({ parent: parentForNewOption, payload });
             return;
           }
 

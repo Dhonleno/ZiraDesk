@@ -38,6 +38,7 @@ import { BotMenu as AdminBotMenu } from './pages/admin/BotMenu';
 import { AutoAssign as AdminAutoAssign } from './pages/admin/AutoAssign';
 import { PauseReasons as AdminPauseReasons } from './pages/admin/PauseReasons';
 import { Skills as AdminSkills } from './pages/admin/Skills';
+import { SkillsV2 as AdminSkillsV2 } from './pages/admin/SkillsV2';
 import { Departments as AdminDepartments } from './pages/admin/Departments';
 import { ConversationTags as AdminConversationTags } from './pages/admin/ConversationTags';
 import { TicketTypes as AdminTicketTypes } from './pages/admin/TicketTypes';
@@ -302,6 +303,7 @@ export function App() {
               <Route path="auto-assign" element={<AdminAutoAssign />} />
               <Route path="pause-reasons" element={<AdminPauseReasons />} />
               <Route path="skills" element={<AdminSkills />} />
+              <Route path="skills-v2" element={<AdminSkillsV2 />} />
               <Route path="departments" element={<AdminDepartments />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="templates" element={<AdminTemplates />} />
