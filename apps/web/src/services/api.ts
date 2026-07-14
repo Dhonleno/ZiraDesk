@@ -938,7 +938,7 @@ export interface CrmOrganizationConversation {
   channel_type: string | null;
   protocol: string | null;
   subject: string | null;
-  bot_department: string | null;
+  department_name: string | null;
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;
@@ -2815,7 +2815,7 @@ export interface OmnichannelConversation {
   channel_id: string | null;
   channel_name: string | null;
   bot_option_id?: string | null;
-  bot_department?: string | null;
+  department_name?: string | null;
   metadata?: Record<string, unknown> | null;
   unread_count?: number;
   tags?: ConversationTag[];
@@ -2953,7 +2953,7 @@ export interface MetricsFiltersParams {
   date_to?: string;
   agent_id?: string;
   channel_type?: string;
-  department?: string;
+  department_id?: string;
 }
 
 export type HistoryPeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'last_week' | 'last_month' | 'custom';
@@ -2986,7 +2986,7 @@ export interface OmnichannelHistoryConversation {
   assigned_avatar: string | null;
   channel_type: string;
   bot_option_id: string | null;
-  bot_department: string | null;
+  department_name: string | null;
   status: string;
   duration_seconds: number;
   wait_seconds: number | null;
@@ -3050,6 +3050,7 @@ export interface OmnichannelHistoryDetail {
     assigned_name: string | null;
     assigned_avatar: string | null;
     channel_name: string | null;
+    department_name: string | null;
     metadata: Record<string, unknown> | null;
   };
   timeline: OmnichannelHistoryTimelineItem[];
@@ -3226,9 +3227,16 @@ export interface MetricsByChannelPoint {
 }
 
 export interface MetricsByDepartmentPoint {
+  department_id: string | null;
   department: string;
   total: number;
   avg_csat: number | null;
+}
+
+export interface MetricsBySkillPoint {
+  skill_id: string | null;
+  skill: string;
+  total: number;
 }
 
 export interface MetricsPeakHoursPoint {
@@ -3375,6 +3383,10 @@ export const omnichannelApi = {
     },
     getByDepartment: async (params?: MetricsFiltersParams): Promise<MetricsByDepartmentPoint[]> => {
       const res = await api.get<{ success: boolean; data: MetricsByDepartmentPoint[] }>('/omnichannel/metrics/by-department', { params });
+      return res.data.data;
+    },
+    getBySkill: async (params?: MetricsFiltersParams): Promise<MetricsBySkillPoint[]> => {
+      const res = await api.get<{ success: boolean; data: MetricsBySkillPoint[] }>('/omnichannel/metrics/by-skill', { params });
       return res.data.data;
     },
     getPeakHours: async (params?: MetricsFiltersParams): Promise<MetricsPeakHoursPoint[]> => {

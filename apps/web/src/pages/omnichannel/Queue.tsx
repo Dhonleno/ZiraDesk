@@ -93,8 +93,7 @@ function getQueueGroup(conversation: QueueConversation, fallback: string): strin
   const metadata = conversation.metadata ?? {};
   const directGroup = conversation.bot_group?.trim() ?? '';
   const group = typeof metadata['bot_group'] === 'string' ? metadata['bot_group'].trim() : '';
-  const department = typeof metadata['bot_department'] === 'string' ? metadata['bot_department'].trim() : '';
-  return directGroup || group || department || fallback;
+  return directGroup || group || fallback;
 }
 
 function getQueueSubject(conversation: QueueConversation, fallback: string): string {

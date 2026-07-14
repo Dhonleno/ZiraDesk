@@ -2,7 +2,9 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../../../config/database.js';
 import { ensureConversationProtocolInfrastructure } from '../conversations/protocols.js';
 import { ensureConversationCsatInfrastructure } from '../conversations/csat.infrastructure.js';
+import { ensureConversationRoutingInfrastructure } from '../conversations/auto-assign.service.js';
 import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-config.service.js';
+import { ensureSkillsInfrastructure } from '../../admin/skills/skills.infrastructure.js';
 
 interface MetricsFilters {
   dateFrom: Date;
@@ -10,7 +12,7 @@ interface MetricsFilters {
   dateToExclusive: Date;
   agentId?: string;
   channelType?: string;
-  department?: string;
+  departmentId?: string;
 }
 
 type MetricsDbClient = Pick<PrismaClient, '$transaction'>;
@@ -27,6 +29,8 @@ async function ensureMetricsInfrastructure(schemaName: string): Promise<void> {
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
   await ensureConversationCsatInfrastructure(prisma, schemaName);
   await ensureCloseConfigInfrastructure(schemaName);
+  await ensureSkillsInfrastructure(prisma, schemaName);
+  await ensureConversationRoutingInfrastructure(prisma, schemaName);
 
   initializedMetricSchemas.add(schemaName);
 }
@@ -65,9 +69,9 @@ function addCommonFilters(
     where.push(`${prefix}channel_type = $${params.length}::text`);
   }
 
-  if (filters.department) {
-    params.push(filters.department);
-    where.push(`COALESCE(${prefix}metadata->>'bot_department', 'Sem departamento') = $${params.length}::text`);
+  if (filters.departmentId) {
+    params.push(filters.departmentId);
+    where.push(`${prefix}department_id = $${params.length}::uuid`);
   }
 }
 
@@ -379,21 +383,54 @@ export async function getByDepartment(filters: MetricsFilters, schemaName: strin
   return withTenantSchema(db, schemaName, async (tx) => {
     const where: string[] = [];
     const params: unknown[] = [];
-    addCommonFilters(where, params, filters);
+    addCommonFilters(where, params, filters, 'c');
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const rows = await tx.$queryRawUnsafe<Array<{
+      department_id: string | null;
       department: string;
       total: bigint;
       avg_csat: number | null;
     }>>(
       `SELECT
-         COALESCE(metadata->>'bot_department', 'Sem departamento') AS department,
-         COUNT(*) AS total,
-         ROUND(AVG(csat_score)::numeric, 1) AS avg_csat
-       FROM conversations
+         c.department_id::text AS department_id,
+         COALESCE(d.name, '—') AS department,
+         COUNT(c.id) AS total,
+         ROUND(AVG(c.csat_score)::numeric, 1) AS avg_csat
+       FROM conversations c
+       LEFT JOIN departments d ON d.id = c.department_id
        ${whereSql}
-       GROUP BY metadata->>'bot_department'
+       GROUP BY c.department_id, d.name
+       ORDER BY total DESC`,
+      ...params,
+    );
+
+    return rows.map((row) => ({ ...row, total: toNumber(row.total) }));
+  });
+}
+
+export async function getBySkill(filters: MetricsFilters, schemaName: string, db: MetricsDbClient = prisma) {
+  await ensureMetricsInfrastructure(schemaName);
+
+  return withTenantSchema(db, schemaName, async (tx) => {
+    const where: string[] = ['c.routing_used_skill_id IS NOT NULL'];
+    const params: unknown[] = [];
+    addCommonFilters(where, params, filters, 'c');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const rows = await tx.$queryRawUnsafe<Array<{
+      skill_id: string | null;
+      skill: string;
+      total: bigint;
+    }>>(
+      `SELECT
+         s.id::text AS skill_id,
+         COALESCE(s.name, '—') AS skill,
+         COUNT(c.id) AS total
+       FROM conversations c
+       LEFT JOIN skills s ON s.id = c.routing_used_skill_id
+       ${whereSql}
+       GROUP BY s.id, s.name
        ORDER BY total DESC`,
       ...params,
     );

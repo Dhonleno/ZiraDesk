@@ -1,8 +1,6 @@
 import { prisma } from '../../../config/database.js';
-import {
-  ensureAgentAssignmentsInfrastructure,
-  ensureAgentBotSkillsInfrastructure,
-} from '../../omnichannel/conversations/auto-assign.service.js';
+import { ensureAgentAssignmentsInfrastructure } from '../../omnichannel/conversations/auto-assign.service.js';
+import { ensureAgentBotSkillsInfrastructure } from './legacy-skills.infrastructure.js';
 import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
 import type { AssignSkillInput } from './skills.schema.js';
 

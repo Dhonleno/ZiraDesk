@@ -687,12 +687,12 @@ export async function listQueueConversations(query: ListQueueQuery, tenantId?: s
   const params: unknown[] = [];
   const conditions = [humanQueueEligibilityCondition('c')];
   const botTopicSelect = infra.hasBotOptions
-    ? `COALESCE(NULLIF(parent_bo.label, ''), NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+    ? `COALESCE(NULLIF(parent_bo.label, ''), NULLIF(c.metadata->>'bot_group', '')) AS bot_group,
        COALESCE(NULLIF(bo.label, ''), NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`
-    : `COALESCE(NULLIF(c.metadata->>'bot_group', ''), NULLIF(c.metadata->>'bot_department', '')) AS bot_group,
+    : `NULLIF(c.metadata->>'bot_group', '') AS bot_group,
        COALESCE(NULLIF(c.metadata->>'bot_subject', ''), NULLIF(c.metadata->>'bot_tag', ''), NULLIF(c.subject, '')) AS bot_subject,`;
   const botTopicJoin = infra.hasBotOptions
-    ? `LEFT JOIN ${botOptionsRef} bo ON bo.id::text = c.metadata->>'bot_option_id'
+    ? `LEFT JOIN ${botOptionsRef} bo ON bo.id = c.bot_option_id
        LEFT JOIN ${botOptionsRef} parent_bo ON parent_bo.id = bo.parent_option_id`
     : '';
 
@@ -1671,16 +1671,18 @@ export async function listTransferAgents(currentAgentId?: string): Promise<Trans
 
 export async function listTransferSkills(): Promise<TransferSkillRow[]> {
   return prisma.$queryRawUnsafe<TransferSkillRow[]>(
-    `SELECT bo.id, bo.label AS name,
+    `SELECT s.id, s.name,
             COUNT(DISTINCT aa.user_id)::integer AS online_agents_count
-     FROM bot_options bo
-     JOIN agent_bot_skills abs ON abs.bot_option_id = bo.id
-     JOIN agent_assignments aa ON aa.user_id = abs.user_id
+     FROM agent_skills aks
+     JOIN skills s ON s.id = aks.skill_id
+     JOIN agent_assignments aa ON aa.user_id = aks.user_id
      WHERE aa.status = 'online'
        AND aa.is_available = true
-     GROUP BY bo.id, bo.label
+       AND aa.last_seen_at > NOW() - INTERVAL '3 minutes'
+       AND s.is_active = true
+     GROUP BY s.id, s.name
      HAVING COUNT(DISTINCT aa.user_id) > 0
-     ORDER BY bo.label ASC`,
+     ORDER BY s.name ASC`,
   );
 }
 
@@ -1726,12 +1728,13 @@ export async function transferConversation(
   } else if (target.skillId) {
     const eligibleAgents = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
       `SELECT u.id
-       FROM agent_bot_skills abs
-       JOIN agent_assignments aa ON aa.user_id = abs.user_id
-       JOIN users u ON u.id = abs.user_id
-       WHERE abs.bot_option_id = $1::uuid
+       FROM agent_skills aks
+       JOIN agent_assignments aa ON aa.user_id = aks.user_id
+       JOIN users u ON u.id = aks.user_id
+       WHERE aks.skill_id = $1::uuid
          AND aa.status = 'online'
          AND aa.is_available = true
+         AND aa.last_seen_at > NOW() - INTERVAL '3 minutes'
          AND u.status = 'active'
          AND u.id != $2::uuid
        ORDER BY aa.last_assigned_at ASC NULLS FIRST

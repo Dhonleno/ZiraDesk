@@ -228,18 +228,6 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        label: 'nav.skillsV2',
-        path: '/admin/skills-v2',
-        permission: 'users:manage',
-        icon: (
-          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path d="M2.2 12h11.6M3.6 9.3 6 6.9l1.8 1.4 3.1-3.1 1.5 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="3.6" cy="4.9" r="1.2" stroke="currentColor" strokeWidth="1.2" />
-            <circle cx="12" cy="9.3" r="1.2" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-        ),
-      },
-      {
         label: 'nav.aiAgent',
         path: '/admin/ai-agent',
         icon: (

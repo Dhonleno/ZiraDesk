@@ -362,7 +362,7 @@ export function HistoryPage() {
     const values = new Map<string, string>();
     for (const row of historyResult?.data ?? []) {
       if (!row.bot_option_id) continue;
-      values.set(row.bot_option_id, row.bot_department ?? row.bot_option_id);
+      values.set(row.bot_option_id, row.department_name ?? row.bot_option_id);
     }
     return Array.from(values.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [historyResult?.data]);
@@ -642,7 +642,7 @@ export function HistoryPage() {
                             <span>{conversation.channel_type}</span>
                           </span>
                         </td>
-                        <td>{conversation.bot_department ?? '—'}</td>
+                        <td>{conversation.department_name ?? '—'}</td>
                         <td>
                           <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-open'}`}>
                             {t(`status.${conversation.status}`)}
@@ -720,7 +720,7 @@ export function HistoryPage() {
                           </div>
                           <div>
                             <strong>{t('history.columns.group')}</strong>
-                            <span>{(detailData.conversation.metadata?.bot_department as string | undefined) ?? '—'}</span>
+                            <span>{detailData.conversation.department_name ?? '—'}</span>
                           </div>
                         </div>
                       </section>

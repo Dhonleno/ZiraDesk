@@ -60,6 +60,11 @@
     },
     "byType": "Tipos de Atendimento",
     "byOutcome": "Desfechos",
+    "bySkill": {
+      "title": "Por habilidade",
+      "skill": "Habilidade",
+      "noData": "Nenhum atendimento roteado por habilidade ainda"
+    },
     "noDataPeriod": "Nenhum dado no período",
     "conversations": "atendimentos",
     "tmaUnit": "min",

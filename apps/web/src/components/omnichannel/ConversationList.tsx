@@ -29,6 +29,7 @@ interface ConversationItem {
   contact_name?: string | null;
   contact_email?: string | null;
   organization_name?: string | null;
+  department_name?: string | null;
   assigned_to?: string | null;
   assigned_name: string | null;
   channel_name: string | null;
@@ -719,10 +720,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
     const hasUnread = (conv.unread_count ?? 0) > 0;
     const hasNewActivity = newActivity.has(conv.id);
     const isNewConversation = newConversations.has(conv.id);
-    const botDepartment =
-      typeof conv.metadata?.bot_department === 'string'
-        ? conv.metadata.bot_department
-        : null;
+    const departmentName = conv.department_name?.trim() ?? null;
     const isAwaitingBotChoice = conv.metadata?.bot_stage === 'waiting_choice';
     const isAiAgentActive = conv.metadata?.ai_agent_active === true;
     const canAssumeConversation = activeTab === 'open' && !conv.assigned_to && !isAwaitingBotChoice && !isAiAgentActive;
@@ -922,7 +920,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 {t('outboundBadge')}
               </span>
             )}
-            {botDepartment && (
+            {departmentName && (
               <span style={{
                 fontSize: 10,
                 fontWeight: 500,
@@ -936,7 +934,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}>
-                {botDepartment}
+                {departmentName}
               </span>
             )}
             {activeTab === 'closed' && conv.csat_score ? (

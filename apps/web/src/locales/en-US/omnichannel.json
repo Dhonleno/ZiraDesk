@@ -60,6 +60,11 @@
     },
     "byType": "Service Types",
     "byOutcome": "Outcomes",
+    "bySkill": {
+      "title": "By skill",
+      "skill": "Skill",
+      "noData": "No conversations routed by skill yet"
+    },
     "noDataPeriod": "No data in selected period",
     "conversations": "conversations",
     "tmaUnit": "min",

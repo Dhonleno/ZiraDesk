@@ -195,7 +195,6 @@ interface ConversationRow {
   outbound_expires_at?: Date | null;
   bot_stage?: string | null;
   bot_tag?: string | null;
-  bot_department?: string | null;
   status?: string;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;
   csat_score?: number | null;
@@ -1249,7 +1248,6 @@ async function processIncomingMessage(
               , waiting_expires_at AS outbound_expires_at
               , metadata->>'bot_stage' AS bot_stage
               , metadata->>'bot_tag' AS bot_tag
-              , metadata->>'bot_department' AS bot_department
               , (metadata->>'ai_agent_active')::boolean AS ai_agent_active
               , COALESCE((metadata->>'ai_attempts')::int, 0) AS ai_attempts
        FROM conversations
@@ -1869,7 +1867,7 @@ async function processIncomingMessage(
         : (currentConversation?.bot_tag ?? undefined),
       botDepartment: botResponse?.type === 'choice'
         ? (botResponse.option?.label ?? undefined)
-        : (currentConversation?.bot_department ?? undefined),
+        : undefined,
       botOptionId: botResponse?.type === 'choice' ? (botResponse.option?.id ?? undefined) : undefined,
       message: savedMessage,
       protocolNumber,
@@ -2152,21 +2150,6 @@ async function processIncomingMessage(
         });
       }
     } else {
-      if (result.botOptionId) {
-        void prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
-          `SELECT department_id FROM "${schemaName}".bot_options WHERE id = $1::uuid LIMIT 1`,
-          result.botOptionId,
-        )
-          .then((rows) =>
-            prisma.$executeRawUnsafe(
-              `UPDATE "${schemaName}".conversations SET department_id = $1::uuid WHERE id = $2::uuid`,
-              rows[0]?.department_id ?? null,
-              result.conversationId,
-            ),
-          )
-          .catch((err) => logger.warn({ err }, '[Webhook] Failed to propagate department_id from bot_option'));
-      }
-
       const assignedAgentId = await autoAssignConversation(
         result.conversationId,
         tenantId,

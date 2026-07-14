@@ -69,22 +69,74 @@ async function main() {
 
   // Dropar tabelas antigas do modelo B2C
   await exec(`DROP TABLE IF EXISTS clients CASCADE`);
-  await exec(`DROP TABLE IF EXISTS agent_skills CASCADE`);
-  await exec(`DROP TABLE IF EXISTS skills CASCADE`);
 
   await exec(`
-    CREATE TABLE IF NOT EXISTS agent_bot_skills (
+    CREATE TABLE IF NOT EXISTS skills (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      bot_option_id UUID REFERENCES bot_options(id) ON DELETE CASCADE,
-      level VARCHAR(20) DEFAULT 'intermediate',
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT true,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, bot_option_id)
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
-  await exec(`CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_user ON agent_bot_skills(user_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_option ON agent_bot_skills(bot_option_id)`);
+  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS "uidx_skills_name" ON skills(name)`);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS bot_option_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bot_option_id UUID NOT NULL REFERENCES bot_options(id) ON DELETE CASCADE,
+      skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      required BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(bot_option_id, skill_id)
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_option" ON bot_option_skills(bot_option_id)`);
+  await exec(`CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_skill" ON bot_option_skills(skill_id)`);
+
+  await exec(`
+    CREATE TABLE IF NOT EXISTS agent_skills (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      level VARCHAR(20) NOT NULL DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, skill_id)
+    )
+  `);
+
+  await exec(`CREATE INDEX IF NOT EXISTS "idx_agent_skills_user" ON agent_skills(user_id)`);
+  await exec(`CREATE INDEX IF NOT EXISTS "idx_agent_skills_skill" ON agent_skills(skill_id)`);
+
+  await exec(`DELETE FROM agent_skills`);
+  await exec(`DELETE FROM bot_option_skills`);
+  await exec(`DELETE FROM skills`);
+
+  await exec(`
+    INSERT INTO skills (name, description)
+    VALUES
+      ('Suporte Tecnico', 'Atendimento tecnico e suporte ao produto'),
+      ('Comercial', 'Pre-vendas e negociacao comercial'),
+      ('Financeiro', 'Cobrancas, pagamentos e notas fiscais')
+    ON CONFLICT (name) DO UPDATE
+    SET description = EXCLUDED.description,
+        is_active = true,
+        updated_at = NOW()
+  `);
+
+  await exec(`
+    INSERT INTO agent_skills (user_id, skill_id, level)
+    SELECT u.id, s.id, 'intermediate'
+    FROM users u
+    CROSS JOIN skills s
+    WHERE u.status = 'active'
+      AND u.role IN ('owner', 'admin', 'supervisor', 'agent')
+    ON CONFLICT (user_id, skill_id) DO NOTHING
+  `);
 
   // Criar tabela organizations
   await exec(`
@@ -284,8 +336,8 @@ async function main() {
   console.log(`${SCHEMA} resetado com sucesso!`);
   console.log('Tabelas criadas: organizations, contacts');
   console.log('Tabelas atualizadas: conversations (contact_id, organization_id), tickets (contact_id, organization_id, source_conversation_id)');
-  console.log('Tabela removida: clients, skills, agent_skills');
-  console.log('Tabelas criadas: agent_bot_skills, ticket_events');
+  console.log('Tabela removida: clients');
+  console.log('Tabelas criadas: skills, agent_skills, bot_option_skills, ticket_events');
 
   await prisma.$disconnect();
 }

@@ -117,7 +117,6 @@ async function resetTenantData(tenant: TempTenant): Promise<void> {
       "${tenant.schemaName}".bot_option_skills,
       "${tenant.schemaName}".skills,
       "${tenant.schemaName}".agent_departments,
-      "${tenant.schemaName}".agent_bot_skills,
       "${tenant.schemaName}".agent_assignments,
       "${tenant.schemaName}".conversations,
       "${tenant.schemaName}".bot_options,
@@ -195,12 +194,11 @@ async function createAgent(schemaName: string, params: {
   return agentId;
 }
 
-async function createBotOption(schemaName: string, departmentId?: string | null): Promise<string> {
+async function createBotOption(schemaName: string): Promise<string> {
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `INSERT INTO "${schemaName}".bot_options (number, label, department_id)
-     VALUES (1, 'Financeiro', $1::uuid)
+    `INSERT INTO "${schemaName}".bot_options (number, label)
+     VALUES (1, 'Financeiro')
      RETURNING id`,
-    departmentId ?? null,
   );
   return rows[0]!.id;
 }
@@ -252,6 +250,16 @@ async function assignedTo(schemaName: string, conversationId: string): Promise<s
   return rows[0]?.assigned_to ?? null;
 }
 
+async function routingUsedSkillId(schemaName: string, conversationId: string): Promise<string | null> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ routing_used_skill_id: string | null }>>(
+    `SELECT routing_used_skill_id
+     FROM "${schemaName}".conversations
+     WHERE id = $1::uuid`,
+    conversationId,
+  );
+  return rows[0]?.routing_used_skill_id ?? null;
+}
+
 describe('autoAssignConversation AND logic integration', () => {
   let tenant: TempTenant;
 
@@ -277,7 +285,7 @@ describe('autoAssignConversation AND logic integration', () => {
 
   it('retorna agente com departamento correto e todas as skills obrigatórias da opção', async () => {
     const departmentId = await createDepartment(tenant.schemaName);
-    const botOptionId = await createBotOption(tenant.schemaName, departmentId);
+    const botOptionId = await createBotOption(tenant.schemaName);
     const skillId = await createSkill(tenant.schemaName, botOptionId);
     const agentId = await createAgent(tenant.schemaName, { departmentId, skillIds: [skillId] });
     const conversationId = await createConversation(tenant.schemaName, { departmentId, botOptionId });
@@ -294,11 +302,12 @@ describe('autoAssignConversation AND logic integration', () => {
 
     expect(result).toBe(agentId);
     expect(await assignedTo(tenant.schemaName, conversationId)).toBe(agentId);
+    expect(await routingUsedSkillId(tenant.schemaName, conversationId)).toBe(skillId);
   });
 
   it('retorna null quando agente do departamento não tem skill e timeout ainda não expirou', async () => {
     const departmentId = await createDepartment(tenant.schemaName);
-    const botOptionId = await createBotOption(tenant.schemaName, departmentId);
+    const botOptionId = await createBotOption(tenant.schemaName);
     await createSkill(tenant.schemaName, botOptionId);
     await createAgent(tenant.schemaName, { departmentId });
     const conversationId = await createConversation(tenant.schemaName, { departmentId, botOptionId });
@@ -319,7 +328,7 @@ describe('autoAssignConversation AND logic integration', () => {
 
   it('após timeout, retorna agente do departamento mesmo sem skill e registra fallback', async () => {
     const departmentId = await createDepartment(tenant.schemaName);
-    const botOptionId = await createBotOption(tenant.schemaName, departmentId);
+    const botOptionId = await createBotOption(tenant.schemaName);
     await createSkill(tenant.schemaName, botOptionId);
     const agentId = await createAgent(tenant.schemaName, { departmentId });
     const conversationId = await createConversation(tenant.schemaName, {
@@ -383,7 +392,7 @@ describe('autoAssignConversation AND logic integration', () => {
 
   it('não retorna agente offline', async () => {
     const departmentId = await createDepartment(tenant.schemaName);
-    const botOptionId = await createBotOption(tenant.schemaName, departmentId);
+    const botOptionId = await createBotOption(tenant.schemaName);
     const skillId = await createSkill(tenant.schemaName, botOptionId);
     await createAgent(tenant.schemaName, { departmentId, skillIds: [skillId], status: 'offline', isAvailable: false });
     const conversationId = await createConversation(tenant.schemaName, { departmentId, botOptionId });
@@ -403,7 +412,7 @@ describe('autoAssignConversation AND logic integration', () => {
 
   it('bot_option sem bot_option_skills não filtra por skill e retorna agente do departamento', async () => {
     const departmentId = await createDepartment(tenant.schemaName);
-    const botOptionId = await createBotOption(tenant.schemaName, departmentId);
+    const botOptionId = await createBotOption(tenant.schemaName);
     const agentId = await createAgent(tenant.schemaName, { departmentId });
     const conversationId = await createConversation(tenant.schemaName, { departmentId, botOptionId });
 

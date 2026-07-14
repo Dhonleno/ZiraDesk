@@ -17,12 +17,14 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  adminApi,
   omnichannelApi,
   ticketsApi,
   type MetricsByAgentPoint,
   type MetricsByChannelPoint,
   type MetricsByDepartmentPoint,
   type MetricsByOutcomePoint,
+  type MetricsBySkillPoint,
   type MetricsByTypePoint,
   type MetricsCsatPoint,
   type MetricsPeakHoursPoint,
@@ -291,6 +293,29 @@ function DepartmentChart({ data, title }: { data: MetricsByDepartmentPoint[]; ti
             }}
           />
           <Bar dataKey="total" fill="var(--blue)" radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function SkillChart({ data, title }: { data: MetricsBySkillPoint[]; title: string }) {
+  return (
+    <div className="chart-card">
+      <h3 className="chart-title">{title}</h3>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} layout="vertical">
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
+          <XAxis type="number" tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
+          <YAxis dataKey="skill" type="category" width={140} tick={{ fill: 'var(--txt-2)', fontSize: 11 }} />
+          <Tooltip
+            contentStyle={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 8,
+            }}
+          />
+          <Bar dataKey="total" fill="var(--teal)" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -735,7 +760,7 @@ export function MetricsPage() {
   const [customTo, setCustomTo] = useState<string>('');
   const [agentId, setAgentId] = useState<string>('');
   const [channelType, setChannelType] = useState<string>('');
-  const [department, setDepartment] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
   const maxDateRange = 365;
 
   const { dateFrom, dateTo } = useMemo(
@@ -749,9 +774,9 @@ export function MetricsPage() {
       date_to: dateTo,
       ...(agentId ? { agent_id: agentId } : {}),
       ...(channelType ? { channel_type: channelType } : {}),
-      ...(department ? { department } : {}),
+      ...(departmentId ? { department_id: departmentId } : {}),
     }),
-    [agentId, channelType, dateFrom, dateTo, department],
+    [agentId, channelType, dateFrom, dateTo, departmentId],
   );
 
   const { data: monitorData } = useQuery({
@@ -760,19 +785,31 @@ export function MetricsPage() {
     staleTime: 30_000,
   });
 
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin', 'departments', 'metrics-filter'],
+    queryFn: adminApi.departments.list,
+    staleTime: 60_000,
+  });
+
+  const activeDepartments = useMemo(
+    () => departments.filter((department) => department.isActive),
+    [departments],
+  );
+
   const { data, isLoading } = useQuery({
-    queryKey: ['metrics', period, customFrom, customTo, agentId, channelType, department],
+    queryKey: ['metrics', period, customFrom, customTo, agentId, channelType, departmentId],
     queryFn: async () => {
-      const [overview, volume, byAgent, byChannel, byDepartment, peakHours, csat] = await Promise.all([
+      const [overview, volume, byAgent, byChannel, byDepartment, bySkill, peakHours, csat] = await Promise.all([
         omnichannelApi.metrics.getOverview(filters),
         omnichannelApi.metrics.getVolume(filters),
         omnichannelApi.metrics.getByAgent(filters),
         omnichannelApi.metrics.getByChannel(filters),
         omnichannelApi.metrics.getByDepartment(filters),
+        omnichannelApi.metrics.getBySkill(filters),
         omnichannelApi.metrics.getPeakHours(filters),
         omnichannelApi.metrics.getCsat(filters),
       ]);
-      return { overview, volume, byAgent, byChannel, byDepartment, peakHours, csat };
+      return { overview, volume, byAgent, byChannel, byDepartment, bySkill, peakHours, csat };
     },
   });
 
@@ -985,11 +1022,11 @@ export function MetricsPage() {
               <option value="live_chat">{t('metrics.filters.channelOptions.liveChat')}</option>
             </select>
 
-            <select className="filter-select" aria-label={t('metrics.filters.departmentAriaLabel')} value={department} onChange={(event) => setDepartment(event.target.value)}>
+            <select className="filter-select" aria-label={t('metrics.filters.departmentAriaLabel')} value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
               <option value="">{t('metrics.filters.allDepartments')}</option>
-              {(data?.byDepartment ?? []).map((item) => (
-                <option key={item.department} value={item.department}>
-                  {item.department}
+              {activeDepartments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
                 </option>
               ))}
             </select>
@@ -1059,6 +1096,9 @@ export function MetricsPage() {
               </div>
 
               <DepartmentChart data={data?.byDepartment ?? []} title={t('metrics.charts.byDepartment')} />
+              {(data?.bySkill?.length ?? 0) > 0 ? (
+                <SkillChart data={data?.bySkill ?? []} title={t('metrics.bySkill.title')} />
+              ) : null}
               <PeakHoursHeatmap data={data?.peakHours ?? []} title={t('metrics.charts.peakHours')} />
               <CsatChart data={csatDistribution} title={t('metrics.charts.csatDistribution')} />
               <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />

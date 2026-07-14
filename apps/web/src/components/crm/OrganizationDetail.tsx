@@ -589,9 +589,9 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
                           {title}
                         </div>
-                        {conv.bot_department ? (
+                        {conv.department_name ? (
                           <span style={{ display: 'block', fontSize: 11, color: 'var(--teal)', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {conv.bot_department}
+                            {conv.department_name}
                           </span>
                         ) : null}
                         <div style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -1030,25 +1030,13 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ success: false, error: { message: 'Conversa não encontrada' } });
       }
 
-      // Valida que o bot_option_id existe no tenant (se não for null)
-      let groupLabel: string | null = null;
       if (bot_option_id) {
-        const optionRows = await tx.$queryRawUnsafe<Array<{ id: string; label: string; parent_option_id: string | null }>>(
-          `SELECT id, label, parent_option_id FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
+        const optionRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
           bot_option_id,
         );
         if (!optionRows[0]) {
           return reply.code(404).send({ success: false, error: { message: 'Opção de grupo não encontrada' } });
-        }
-        // bot_department = label da opção pai (se existir) ou da própria opção
-        if (optionRows[0].parent_option_id) {
-          const parentRows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
-            `SELECT label FROM "${safeSchema}".bot_options WHERE id = $1::uuid LIMIT 1`,
-            optionRows[0].parent_option_id,
-          );
-          groupLabel = parentRows[0]?.label ?? optionRows[0].label;
-        } else {
-          groupLabel = optionRows[0].label;
         }
       }
 
@@ -1056,14 +1044,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         `UPDATE "${safeSchema}".conversations
          SET bot_option_id = $2::uuid,
              metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-               'bot_option_id', $2::uuid,
-               'bot_department', $3::text
+               'bot_option_id', $2::uuid
              )
          WHERE id = $1::uuid
          RETURNING id`,
         request.params.id,
         bot_option_id,
-        groupLabel ?? '',
       );
 
       if (!updatedRows[0]) {
@@ -1074,12 +1060,11 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       io.to(`tenant:${request.user.tenantId}`).emit('conversation:updated', {
         conversationId: request.params.id,
         bot_option_id,
-        bot_department: groupLabel,
       });
 
       return reply.send({
         success: true,
-        data: { id: request.params.id, bot_option_id, bot_department: groupLabel },
+        data: { id: request.params.id, bot_option_id },
       });
     });
   });

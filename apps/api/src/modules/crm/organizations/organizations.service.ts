@@ -407,7 +407,7 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
   channel_type: string | null;
   protocol: string | null;
   subject: string | null;
-  bot_department: string | null;
+  department_name: string | null;
   last_message: string | null;
   last_message_at: Date | null;
   created_at: Date;
@@ -423,7 +423,7 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
     channel_type: string | null;
     protocol: string | null;
     subject: string | null;
-    bot_department: string | null;
+    department_name: string | null;
     last_message: string | null;
     last_message_at: Date | null;
     created_at: Date;
@@ -434,11 +434,12 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
        cv.channel_type,
        cv.protocol_number AS protocol,
        cv.subject,
-       cv.metadata->>'bot_department' AS bot_department,
+       d.name AS department_name,
        cv.last_message,
        cv.last_message_at,
        cv.created_at
      FROM conversations cv
+     LEFT JOIN departments d ON d.id = cv.department_id
      WHERE cv.organization_id = $1::uuid
      ORDER BY cv.created_at DESC
      LIMIT 20`,

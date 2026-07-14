@@ -60,6 +60,11 @@
     },
     "byType": "Tipos de Atención",
     "byOutcome": "Desenlaces",
+    "bySkill": {
+      "title": "Por habilidad",
+      "skill": "Habilidad",
+      "noData": "Sin atenciones enrutadas por habilidad aún"
+    },
     "noDataPeriod": "Sin datos en el período",
     "conversations": "atenciones",
     "tmaUnit": "min",

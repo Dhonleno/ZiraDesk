@@ -1,8 +1,8 @@
 import { prisma } from '../../config/database.js';
 import {
   ensureAgentAssignmentsInfrastructure,
-  ensureAgentBotSkillsInfrastructure,
 } from './conversations/auto-assign.service.js';
+import { ensureSkillsInfrastructure } from '../admin/skills/skills.infrastructure.js';
 import { ensureConversationProtocolInfrastructure, quoteIdent } from './conversations/protocols.js';
 
 interface MonitorAgent {
@@ -18,11 +18,7 @@ interface MonitorAgent {
   max_conversations: number | null;
   skills: Array<{
     id: string;
-    bot_option_id: string;
-    label: string;
     name: string;
-    tag: string | null;
-    parent_label: string | null;
     level: 'junior' | 'intermediate' | 'senior';
   }>;
 }
@@ -100,12 +96,12 @@ function botEligibilityCondition(alias: string): string {
 
 export async function getMonitorSnapshot(schemaName: string): Promise<MonitorResponse> {
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
-  await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
+  await ensureSkillsInfrastructure(prisma, schemaName);
   await ensureConversationProtocolInfrastructure(prisma, schemaName);
   const usersRef = tableRef(schemaName, 'users');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
-  const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
-  const botOptionsRef = tableRef(schemaName, 'bot_options');
+  const agentSkillsRef = tableRef(schemaName, 'agent_skills');
+  const skillsRef = tableRef(schemaName, 'skills');
   const conversationsRef = tableRef(schemaName, 'conversations');
   const messagesRef = tableRef(schemaName, 'messages');
 
@@ -145,22 +141,17 @@ export async function getMonitorSnapshot(schemaName: string): Promise<MonitorRes
          COALESCE(
            json_agg(
              json_build_object(
-               'id', bo.id,
-               'bot_option_id', bo.id,
-               'label', bo.label,
-               'name', bo.label,
-               'tag', bo.tag,
-               'parent_label', parent.label,
-               'level', abs.level
+               'id', s.id,
+               'name', s.name,
+               'level', aks.level
              )
-           ) FILTER (WHERE bo.id IS NOT NULL),
+           ) FILTER (WHERE s.id IS NOT NULL),
            '[]'::json
          ) AS skills
        FROM ${usersRef} u
        LEFT JOIN ${assignmentsRef} aa ON aa.user_id = u.id
-       LEFT JOIN ${agentBotSkillsRef} abs ON abs.user_id = u.id
-       LEFT JOIN ${botOptionsRef} bo ON bo.id = abs.bot_option_id
-       LEFT JOIN ${botOptionsRef} parent ON parent.id = bo.parent_option_id
+       LEFT JOIN ${agentSkillsRef} aks ON aks.user_id = u.id
+       LEFT JOIN ${skillsRef} s ON s.id = aks.skill_id
        WHERE u.status = 'active'
          AND u.role = 'agent'
        GROUP BY

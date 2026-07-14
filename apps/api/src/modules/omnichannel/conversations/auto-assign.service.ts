@@ -12,6 +12,7 @@ interface AgentCandidateRow {
   user_id: string;
   name: string;
   routing_fallback?: 'department_without_skill';
+  routing_used_skill_id?: string | null;
 }
 
 interface BotOptionSkillRow {
@@ -88,17 +89,26 @@ export async function ensureConversationRoutingInfrastructure(
   prisma: PrismaClient,
   schemaName: string,
 ): Promise<void> {
+  await ensureSkillsInfrastructure(prisma, schemaName);
+
   const conversationsRef = tableRef(schemaName, 'conversations');
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${conversationsRef}
-    ADD COLUMN IF NOT EXISTS routing_started_at TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS routing_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS routing_used_skill_id UUID REFERENCES ${tableRef(schemaName, 'skills')}(id) ON DELETE SET NULL
   `);
 
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "idx_conversations_routing_started"
     ON ${conversationsRef}(routing_started_at)
     WHERE routing_started_at IS NOT NULL AND assigned_to IS NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_routing_skill"
+    ON ${conversationsRef}(routing_used_skill_id)
+    WHERE routing_used_skill_id IS NOT NULL
   `);
 }
 
@@ -212,36 +222,6 @@ export async function ensureAgentAssignmentsInfrastructure(
   `);
 }
 
-export async function ensureAgentBotSkillsInfrastructure(
-  prisma: PrismaClient,
-  schemaName: string,
-): Promise<void> {
-  const usersRef = tableRef(schemaName, 'users');
-  const botOptionsRef = tableRef(schemaName, 'bot_options');
-  const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS ${agentBotSkillsRef} (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID REFERENCES ${usersRef}(id) ON DELETE CASCADE,
-      bot_option_id UUID REFERENCES ${botOptionsRef}(id) ON DELETE CASCADE,
-      level VARCHAR(20) DEFAULT 'intermediate',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, bot_option_id)
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_user
-    ON ${agentBotSkillsRef}(user_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_agent_bot_skills_option
-    ON ${agentBotSkillsRef}(bot_option_id)
-  `);
-}
-
 async function resolveAgentForAssignment(
   prisma: PrismaClient,
   schemaName: string,
@@ -256,7 +236,6 @@ async function resolveAgentForAssignment(
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
   const botOptionsRef = tableRef(schemaName, 'bot_options');
-  const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
   const agentDepartmentsRef = tableRef(schemaName, 'agent_departments');
   const botOptionSkillsRef = tableRef(schemaName, 'bot_option_skills');
   const agentSkillsRef = tableRef(schemaName, 'agent_skills');
@@ -401,7 +380,9 @@ async function resolveAgentForAssignment(
          WHERE bot_option_id IN (SELECT id FROM option_scope)
            AND required = true
        )
-       SELECT aa.user_id, u.name
+       SELECT aa.user_id,
+              u.name,
+              (SELECT skill_id::text FROM required_skills ORDER BY skill_id LIMIT 1) AS routing_used_skill_id
        FROM ${assignmentsRef} aa
        JOIN ${usersRef} u ON u.id = aa.user_id
        JOIN ${agentDepartmentsRef} ad ON ad.user_id = aa.user_id
@@ -472,7 +453,12 @@ async function resolveAgentForAssignment(
            WHERE bot_option_id IN (SELECT id FROM option_scope)
              AND required = true
          )
-         SELECT aa.user_id, u.name
+         SELECT aa.user_id,
+                u.name,
+                COALESCE(
+                  (SELECT skill_id::text FROM required_skills ORDER BY skill_id LIMIT 1),
+                  (SELECT skill_id::text FROM all_skills ORDER BY skill_id LIMIT 1)
+                ) AS routing_used_skill_id
          FROM ${assignmentsRef} aa
          JOIN ${usersRef} u ON u.id = aa.user_id
          WHERE aa.is_available = true
@@ -515,35 +501,7 @@ async function resolveAgentForAssignment(
       if (connectedByNewSkillModel) return connectedByNewSkillModel;
     }
 
-    const rowsByLegacySkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
-      `WITH RECURSIVE option_scope AS (
-         SELECT id, parent_option_id
-         FROM ${botOptionsRef}
-         WHERE id = $1::uuid
-         UNION ALL
-         SELECT parent.id, parent.parent_option_id
-         FROM ${botOptionsRef} parent
-         JOIN option_scope current ON current.parent_option_id = parent.id
-       )
-       SELECT aa.user_id, u.name
-       FROM ${assignmentsRef} aa
-       JOIN ${usersRef} u ON u.id = aa.user_id
-       JOIN ${agentBotSkillsRef} abs ON abs.user_id = aa.user_id
-       WHERE aa.is_available = true
-         AND aa.status = 'online'
-         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
-         AND u.status = 'active'
-         AND u.role IN ('agent')
-         AND abs.bot_option_id IN (SELECT id FROM option_scope)
-         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
-       ORDER BY aa.last_assigned_at ASC NULLS FIRST
-       LIMIT 15`,
-      botOptionId,
-      globalLimit ?? null,
-    );
-
-    const connectedByLegacySkill = await pickConnectedCandidate(rowsByLegacySkill);
-    if (connectedByLegacySkill) return connectedByLegacySkill;
+    return pickConnectedCandidate(await selectGeneral());
   }
 
   return pickConnectedCandidate(await selectGeneral());
@@ -591,6 +549,7 @@ async function persistAutoAssignment(
   requiredBotOptionId?: string,
   departmentId?: string | null,
   routingFallback?: AgentCandidateRow['routing_fallback'],
+  routingUsedSkillId?: string | null,
 ): Promise<boolean> {
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
@@ -604,6 +563,7 @@ async function persistAutoAssignment(
          status = 'open',
          bot_option_id = COALESCE($3::uuid, bot_option_id),
          department_id = COALESCE(department_id, $4::uuid),
+         routing_used_skill_id = COALESCE($5::uuid, routing_used_skill_id),
          metadata = CASE
            WHEN queue_entered_at IS NOT NULL THEN COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
              'queue_wait_started_at', queue_entered_at,
@@ -624,6 +584,7 @@ async function persistAutoAssignment(
     conversationId,
     requiredBotOptionId ?? null,
     departmentId ?? null,
+    routingUsedSkillId ?? null,
   );
 
   if (!updatedRows[0]) return false;
@@ -875,7 +836,6 @@ export async function autoAssignConversation(
   if (!settings.auto_assign || settings.auto_assign_algorithm !== 'round_robin') return null;
 
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
-  await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
   await ensureSkillsInfrastructure(prisma, schemaName);
   await ensureConversationRoutingInfrastructure(prisma, schemaName);
   await syncAllActiveConversationCounters(prisma, schemaName);
@@ -924,6 +884,7 @@ export async function autoAssignConversation(
     requiredBotOptionId,
     departmentId,
     nextAgent.routing_fallback,
+    nextAgent.routing_used_skill_id ?? null,
   );
 
   if (!assigned) return null;

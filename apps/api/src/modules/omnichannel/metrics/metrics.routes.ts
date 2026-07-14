@@ -10,6 +10,7 @@ import {
   getByChannel,
   getByDepartment,
   getByOrganization,
+  getBySkill,
   getCsatDistribution,
   getCsatOverTime,
   getMyStats,
@@ -26,7 +27,7 @@ const metricsQuerySchema = z.object({
   date_to: z.string().optional(),
   agent_id: z.string().uuid().optional(),
   channel_type: z.string().optional(),
-  department: z.string().optional(),
+  department_id: z.string().uuid().optional(),
 });
 
 function parseDatePartsOrNull(value: string | undefined): { year: number; month: number; day: number } | null {
@@ -143,7 +144,7 @@ function getFilters(raw: z.infer<typeof metricsQuerySchema>) {
     dateToExclusive,
     ...(raw.agent_id ? { agentId: raw.agent_id } : {}),
     ...(raw.channel_type ? { channelType: raw.channel_type } : {}),
-    ...(raw.department ? { department: raw.department } : {}),
+    ...(raw.department_id ? { departmentId: raw.department_id } : {}),
   };
 }
 
@@ -275,6 +276,26 @@ export async function omnichannelMetricsRoutes(app: FastifyInstance): Promise<vo
     try {
       const schemaName = await resolveSchemaNameFromRequest(request)();
       const data = await getByDepartment(getFilters(parsed.data), schemaName);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar métricas' },
+      });
+    }
+  });
+
+  app.get('/metrics/by-skill', { preHandler: reportsGuard }, async (request, reply) => {
+    const parsed = metricsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = await resolveSchemaNameFromRequest(request)();
+      const data = await getBySkill(getFilters(parsed.data), schemaName);
       return reply.send({ success: true, data });
     } catch (error) {
       return reply.code(400).send({
