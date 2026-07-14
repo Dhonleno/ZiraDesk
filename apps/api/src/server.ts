@@ -5,6 +5,7 @@ import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
 import './jobs/waiting-expiry.job.js'; // fecha conversas waiting expiradas
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import './jobs/process-pending-queue.job.js'; // processa conversas pending periodicamente
+import './jobs/conversation-routing-retry.job.js'; // retenta roteamento por habilidade com timeout
 import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
 import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas a cada 6h)
 import './jobs/ticket-sla.job.js'; // monitora SLA de tickets e escala prioridade

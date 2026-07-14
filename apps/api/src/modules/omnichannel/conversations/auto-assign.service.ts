@@ -6,10 +6,17 @@ import { logger } from '../../../config/logger.js';
 import { sendWhatsAppTextMessage } from './csat.service.js';
 import { PRESENCE_TIMEOUT_MS } from '../presence.constants.js';
 import { getSocketServer } from '../../../socket/index.js';
+import { ensureSkillsInfrastructure } from '../../admin/skills/skills.infrastructure.js';
 
 interface AgentCandidateRow {
   user_id: string;
   name: string;
+  routing_fallback?: 'department_without_skill';
+}
+
+interface BotOptionSkillRow {
+  skill_id: string;
+  required: boolean;
 }
 
 interface QueueConversationRow {
@@ -28,6 +35,7 @@ interface AutoAssignSettings {
   auto_assign: boolean;
   auto_assign_algorithm: 'round_robin';
   max_conversations_per_agent: number | null;
+  routing_skill_timeout_ms: number;
 }
 
 interface AgentAvailabilityRow {
@@ -50,6 +58,15 @@ function humanQueueEligibilityCondition(alias?: string): string {
        AND COALESCE(${prefix}metadata->>'ai_agent_active', 'false') <> 'true'`;
 }
 
+const DEFAULT_ROUTING_SKILL_TIMEOUT_MS = 120_000;
+
+function normalizeRoutingSkillTimeoutMs(value: unknown): number {
+  if (typeof value !== 'number') return DEFAULT_ROUTING_SKILL_TIMEOUT_MS;
+  const parsed = Math.trunc(value);
+  if (parsed < 30_000 || parsed > 600_000) return DEFAULT_ROUTING_SKILL_TIMEOUT_MS;
+  return parsed;
+}
+
 function parseAutoAssignSettings(settings: unknown): AutoAssignSettings {
   const safe = typeof settings === 'object' && settings !== null
     ? (settings as Record<string, unknown>)
@@ -63,7 +80,26 @@ function parseAutoAssignSettings(settings: unknown): AutoAssignSettings {
       typeof rawLimit === 'number' && Number.isInteger(rawLimit) && rawLimit >= 1
         ? rawLimit
         : null,
+    routing_skill_timeout_ms: normalizeRoutingSkillTimeoutMs(safe['routing_skill_timeout_ms']),
   };
+}
+
+export async function ensureConversationRoutingInfrastructure(
+  prisma: PrismaClient,
+  schemaName: string,
+): Promise<void> {
+  const conversationsRef = tableRef(schemaName, 'conversations');
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${conversationsRef}
+    ADD COLUMN IF NOT EXISTS routing_started_at TIMESTAMPTZ
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_conversations_routing_started"
+    ON ${conversationsRef}(routing_started_at)
+    WHERE routing_started_at IS NOT NULL AND assigned_to IS NULL
+  `);
 }
 
 export async function ensureAgentAssignmentsInfrastructure(
@@ -214,19 +250,27 @@ async function resolveAgentForAssignment(
   requiredBotOptionId?: string,
   globalLimit?: number | null,
   requiredDepartmentId?: string | null,
+  conversationId?: string,
+  routingSkillTimeoutMs = DEFAULT_ROUTING_SKILL_TIMEOUT_MS,
 ): Promise<AgentCandidateRow | null> {
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const usersRef = tableRef(schemaName, 'users');
   const botOptionsRef = tableRef(schemaName, 'bot_options');
   const agentBotSkillsRef = tableRef(schemaName, 'agent_bot_skills');
   const agentDepartmentsRef = tableRef(schemaName, 'agent_departments');
+  const botOptionSkillsRef = tableRef(schemaName, 'bot_option_skills');
+  const agentSkillsRef = tableRef(schemaName, 'agent_skills');
+  const conversationsRef = tableRef(schemaName, 'conversations');
 
   const pickConnectedCandidate = async (
     candidates: AgentCandidateRow[],
+    routingFallback?: AgentCandidateRow['routing_fallback'],
   ): Promise<AgentCandidateRow | null> => {
     for (const candidate of candidates) {
       const connectedSockets = await io.in(`agent:${candidate.user_id}`).fetchSockets();
-      if (connectedSockets.length > 0) return candidate;
+      if (connectedSockets.length > 0) {
+        return routingFallback ? { ...candidate, routing_fallback: routingFallback } : candidate;
+      }
 
       // Corrige estado stale para evitar novas atribuições em agente já desconectado.
       await prisma.$executeRawUnsafe(
@@ -240,6 +284,79 @@ async function resolveAgentForAssignment(
       );
     }
     return null;
+  };
+
+  const getBotOptionSkills = async (botOptionId: string): Promise<BotOptionSkillRow[]> => {
+    return prisma.$queryRawUnsafe<BotOptionSkillRow[]>(
+      `WITH RECURSIVE option_scope AS (
+         SELECT id, parent_option_id
+         FROM ${botOptionsRef}
+         WHERE id = $1::uuid
+         UNION ALL
+         SELECT parent.id, parent.parent_option_id
+         FROM ${botOptionsRef} parent
+         JOIN option_scope current ON current.parent_option_id = parent.id
+       )
+       SELECT bos.skill_id::text AS skill_id,
+              BOOL_OR(bos.required)::boolean AS required
+       FROM ${botOptionSkillsRef} bos
+       WHERE bos.bot_option_id IN (SELECT id FROM option_scope)
+       GROUP BY bos.skill_id`,
+      botOptionId,
+    );
+  };
+
+  const hasRoutingSkillTimeoutElapsed = async (): Promise<boolean> => {
+    if (!conversationId) return true;
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ routing_started_at: Date | null }>>(
+      `SELECT routing_started_at
+       FROM ${conversationsRef}
+       WHERE id = $1::uuid
+       LIMIT 1`,
+      conversationId,
+    );
+    const startedAt = rows[0]?.routing_started_at;
+    if (!startedAt) return false;
+
+    return Date.now() - startedAt.getTime() >= routingSkillTimeoutMs;
+  };
+
+  const selectByDepartment = async (departmentId: string): Promise<AgentCandidateRow[]> => {
+    return prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM ${agentDepartmentsRef} ad
+       JOIN ${assignmentsRef} aa ON aa.user_id = ad.user_id
+       JOIN ${usersRef} u ON u.id = ad.user_id
+       WHERE ad.department_id = $1::uuid
+         AND aa.is_available = true
+         AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+         AND u.status = 'active'
+         AND u.role IN ('agent')
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
+       LIMIT 15`,
+      departmentId,
+      globalLimit ?? null,
+    );
+  };
+
+  const selectGeneral = async (): Promise<AgentCandidateRow[]> => {
+    return prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `SELECT aa.user_id, u.name
+       FROM ${assignmentsRef} aa
+       JOIN ${usersRef} u ON u.id = aa.user_id
+       WHERE aa.is_available = true
+         AND aa.status = 'online'
+         AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+         AND u.status = 'active'
+         AND u.role IN ('agent')
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $1::integer, 999999)
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
+       LIMIT 15`,
+      globalLimit ?? null,
+    );
   };
 
   if (preferredAgentId) {
@@ -263,32 +380,142 @@ async function resolveAgentForAssignment(
     if (preferredConnected) return preferredConnected;
   }
 
-  if (requiredDepartmentId?.trim()) {
-    const rowsByDept = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
-      `SELECT aa.user_id, u.name
-       FROM ${agentDepartmentsRef} ad
-       JOIN ${assignmentsRef} aa ON aa.user_id = ad.user_id
-       JOIN ${usersRef} u ON u.id = ad.user_id
-       WHERE ad.department_id = $1::uuid
-         AND aa.is_available = true
+  const departmentId = requiredDepartmentId?.trim() || null;
+  const botOptionId = requiredBotOptionId?.trim() || null;
+  const botOptionSkills = botOptionId ? await getBotOptionSkills(botOptionId) : [];
+
+  if (departmentId && botOptionId && botOptionSkills.length > 0) {
+    const rowsByDepartmentAndSkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+      `WITH RECURSIVE option_scope AS (
+         SELECT id, parent_option_id
+         FROM ${botOptionsRef}
+         WHERE id = $1::uuid
+         UNION ALL
+         SELECT parent.id, parent.parent_option_id
+         FROM ${botOptionsRef} parent
+         JOIN option_scope current ON current.parent_option_id = parent.id
+       ),
+       required_skills AS (
+         SELECT DISTINCT skill_id
+         FROM ${botOptionSkillsRef}
+         WHERE bot_option_id IN (SELECT id FROM option_scope)
+           AND required = true
+       )
+       SELECT aa.user_id, u.name
+       FROM ${assignmentsRef} aa
+       JOIN ${usersRef} u ON u.id = aa.user_id
+       JOIN ${agentDepartmentsRef} ad ON ad.user_id = aa.user_id
+                                  AND ad.department_id = $2::uuid
+       WHERE aa.is_available = true
          AND aa.status = 'online'
          AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
          AND u.status = 'active'
          AND u.role IN ('agent')
-         AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
-       ORDER BY aa.last_assigned_at ASC
+         AND aa.active_conversations < COALESCE(aa.max_conversations, $3::integer, 999999)
+         AND NOT EXISTS (
+           SELECT 1
+           FROM required_skills rs
+           WHERE NOT EXISTS (
+             SELECT 1
+             FROM ${agentSkillsRef} aks
+             WHERE aks.user_id = aa.user_id
+               AND aks.skill_id = rs.skill_id
+           )
+         )
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
        LIMIT 15`,
-      requiredDepartmentId.trim(),
+      botOptionId,
+      departmentId,
       globalLimit ?? null,
     );
 
-    const connectedByDept = await pickConnectedCandidate(rowsByDept);
+    const connectedByDepartmentAndSkill = await pickConnectedCandidate(rowsByDepartmentAndSkill);
+    if (connectedByDepartmentAndSkill) return connectedByDepartmentAndSkill;
+
+    if (!(await hasRoutingSkillTimeoutElapsed())) return null;
+
+    const connectedByDepartmentFallback = await pickConnectedCandidate(
+      await selectByDepartment(departmentId),
+      'department_without_skill',
+    );
+    if (connectedByDepartmentFallback) return connectedByDepartmentFallback;
+
+    return pickConnectedCandidate(await selectGeneral());
+  }
+
+  if (departmentId) {
+    const connectedByDept = await pickConnectedCandidate(await selectByDepartment(departmentId));
     if (connectedByDept) return connectedByDept;
     return null;
   }
 
-  if (requiredBotOptionId?.trim()) {
-    const rowsBySkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+  if (botOptionId) {
+    if (botOptionSkills.length > 0) {
+      const rowsByNewSkillModel = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
+        `WITH RECURSIVE option_scope AS (
+           SELECT id, parent_option_id
+           FROM ${botOptionsRef}
+           WHERE id = $1::uuid
+           UNION ALL
+           SELECT parent.id, parent.parent_option_id
+           FROM ${botOptionsRef} parent
+           JOIN option_scope current ON current.parent_option_id = parent.id
+         ),
+         all_skills AS (
+           SELECT DISTINCT skill_id
+           FROM ${botOptionSkillsRef}
+           WHERE bot_option_id IN (SELECT id FROM option_scope)
+         ),
+         required_skills AS (
+           SELECT DISTINCT skill_id
+           FROM ${botOptionSkillsRef}
+           WHERE bot_option_id IN (SELECT id FROM option_scope)
+             AND required = true
+         )
+         SELECT aa.user_id, u.name
+         FROM ${assignmentsRef} aa
+         JOIN ${usersRef} u ON u.id = aa.user_id
+         WHERE aa.is_available = true
+           AND aa.status = 'online'
+           AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+           AND u.status = 'active'
+           AND u.role IN ('agent')
+           AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
+           AND (
+             (
+               EXISTS (SELECT 1 FROM required_skills)
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM required_skills rs
+                 WHERE NOT EXISTS (
+                   SELECT 1
+                   FROM ${agentSkillsRef} aks
+                   WHERE aks.user_id = aa.user_id
+                     AND aks.skill_id = rs.skill_id
+                 )
+               )
+             )
+             OR (
+               NOT EXISTS (SELECT 1 FROM required_skills)
+               AND EXISTS (
+                 SELECT 1
+                 FROM ${agentSkillsRef} aks
+                 WHERE aks.user_id = aa.user_id
+                   AND aks.skill_id IN (SELECT skill_id FROM all_skills)
+               )
+             )
+           )
+         ORDER BY aa.last_assigned_at ASC NULLS FIRST
+         LIMIT 15`,
+        botOptionId,
+        globalLimit ?? null,
+      );
+
+      const connectedByNewSkillModel = await pickConnectedCandidate(rowsByNewSkillModel);
+      if (connectedByNewSkillModel) return connectedByNewSkillModel;
+    }
+
+    const rowsByLegacySkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
       `WITH RECURSIVE option_scope AS (
          SELECT id, parent_option_id
          FROM ${botOptionsRef}
@@ -309,33 +536,17 @@ async function resolveAgentForAssignment(
          AND u.role IN ('agent')
          AND abs.bot_option_id IN (SELECT id FROM option_scope)
          AND aa.active_conversations < COALESCE(aa.max_conversations, $2::integer, 999999)
-       ORDER BY aa.last_assigned_at ASC
+       ORDER BY aa.last_assigned_at ASC NULLS FIRST
        LIMIT 15`,
-      requiredBotOptionId.trim(),
+      botOptionId,
       globalLimit ?? null,
     );
 
-    const connectedBySkill = await pickConnectedCandidate(rowsBySkill);
-    if (connectedBySkill) return connectedBySkill;
-    return null;
+    const connectedByLegacySkill = await pickConnectedCandidate(rowsByLegacySkill);
+    if (connectedByLegacySkill) return connectedByLegacySkill;
   }
 
-  const rows = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
-    `SELECT aa.user_id, u.name
-     FROM ${assignmentsRef} aa
-     JOIN ${usersRef} u ON u.id = aa.user_id
-     WHERE aa.is_available = true
-       AND aa.status = 'online'
-       AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
-       AND u.status = 'active'
-       AND u.role IN ('agent')
-       AND aa.active_conversations < COALESCE(aa.max_conversations, $1::integer, 999999)
-     ORDER BY aa.last_assigned_at ASC
-     LIMIT 15`,
-    globalLimit ?? null,
-  );
-
-  return pickConnectedCandidate(rows);
+  return pickConnectedCandidate(await selectGeneral());
 }
 
 async function syncAllActiveConversationCounters(
@@ -379,6 +590,7 @@ async function persistAutoAssignment(
   agentName: string,
   requiredBotOptionId?: string,
   departmentId?: string | null,
+  routingFallback?: AgentCandidateRow['routing_fallback'],
 ): Promise<boolean> {
   const conversationsRef = tableRef(schemaName, 'conversations');
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
@@ -459,6 +671,28 @@ async function persistAutoAssignment(
 
   await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schemaName}", public`);
+    if (routingFallback) {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO audit_logs (
+           user_id, action, entity, entity_id, new_data, created_at
+         ) VALUES (
+           $1::uuid,
+           'conversation.routing_fallback',
+           'conversation',
+           $2::uuid,
+           $3::jsonb,
+           NOW()
+         )`,
+        agentId,
+        conversationId,
+        JSON.stringify({
+          assigned_to: agentId,
+          source: 'auto_assign',
+          fallback: routingFallback,
+        }),
+      );
+    }
+
     await tx.$executeRawUnsafe(
       `INSERT INTO audit_logs (
          user_id, action, entity, entity_id, new_data, created_at
@@ -575,7 +809,13 @@ export async function syncAgentAvailability(
 
   const assignmentsRef = tableRef(schemaName, 'agent_assignments');
   const conversationsRef = tableRef(schemaName, 'conversations');
-  const io = getSocketServer();
+  const io = (() => {
+    try {
+      return getSocketServer();
+    } catch {
+      return null;
+    }
+  })();
 
   for (const agentId of uniqueIds) {
     const rows = await prisma.$queryRawUnsafe<AgentAvailabilityRow[]>(
@@ -609,7 +849,7 @@ export async function syncAgentAvailability(
       shouldBeAvailable,
     );
 
-    io.to(`tenant:${tenantId}`).emit('agent:updated', {
+    io?.to(`tenant:${tenantId}`).emit('agent:updated', {
       agentId,
       isAvailable: shouldBeAvailable,
       ...(shouldBeAvailable ? {} : { reason: 'max_conversations_reached' }),
@@ -636,6 +876,8 @@ export async function autoAssignConversation(
 
   await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
   await ensureAgentBotSkillsInfrastructure(prisma, schemaName);
+  await ensureSkillsInfrastructure(prisma, schemaName);
+  await ensureConversationRoutingInfrastructure(prisma, schemaName);
   await syncAllActiveConversationCounters(prisma, schemaName);
 
   const conversationRows = await prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
@@ -643,6 +885,14 @@ export async function autoAssignConversation(
     conversationId,
   );
   const departmentId = conversationRows[0]?.department_id ?? null;
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${tableRef(schemaName, 'conversations')}
+     SET routing_started_at = COALESCE(routing_started_at, NOW())
+     WHERE id = $1::uuid
+       AND assigned_to IS NULL`,
+    conversationId,
+  );
 
   const nextAgent = await resolveAgentForAssignment(
     prisma,
@@ -652,6 +902,8 @@ export async function autoAssignConversation(
     requiredBotOptionId,
     settings.max_conversations_per_agent,
     departmentId,
+    conversationId,
+    settings.routing_skill_timeout_ms,
   );
   if (!nextAgent) {
     if (departmentId) {
@@ -671,6 +923,7 @@ export async function autoAssignConversation(
     nextAgent.name,
     requiredBotOptionId,
     departmentId,
+    nextAgent.routing_fallback,
   );
 
   if (!assigned) return null;
