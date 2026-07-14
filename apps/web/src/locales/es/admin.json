@@ -374,6 +374,33 @@
       "save": "Guardar",
       "saving": "Guardando..."
     },
+    "skillsV2": {
+      "title": "Habilidades",
+      "description": "Competencias asignables a agentes y temas del bot",
+      "fields": {
+        "name": "Nombre",
+        "description": "Descripción",
+        "level": "Nivel",
+        "required": "Obligatoria",
+        "isActive": "Activa"
+      },
+      "levels": {
+        "junior": "Júnior",
+        "intermediate": "Intermedio",
+        "senior": "Sénior"
+      },
+      "actions": {
+        "create": "Nueva habilidad",
+        "save": "Guardar",
+        "delete": "Eliminar habilidad",
+        "assign": "Asignar habilidad",
+        "remove": "Quitar habilidad"
+      },
+      "empty": {
+        "title": "Sin habilidades registradas",
+        "sub": "Crea habilidades para organizar el enrutamiento de atenciones"
+      }
+    },
     "departments": {
       "title": "Departamentos",
       "subtitle": "Organice su equipo en departamentos y asigne agentes a cada uno",

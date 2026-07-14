@@ -467,6 +467,56 @@ export interface AgentWithSkills {
   skills: AgentSkill[];
 }
 
+export interface SkillV2 {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentSkillV2 {
+  skill_id: string;
+  skill_name: string;
+  level: 'junior' | 'intermediate' | 'senior';
+}
+
+export interface AgentWithSkillsV2 {
+  id: string;
+  name: string;
+  role: string;
+  avatar_url: string | null;
+  status: 'online' | 'paused' | 'offline' | string;
+  is_available: boolean;
+  active_conversations: number;
+  pause_reason: string | null;
+  pause_started_at: string | null;
+  skills: AgentSkillV2[];
+}
+
+export interface BotOptionSkill {
+  skill_id: string;
+  skill_name: string;
+  required: boolean;
+}
+
+export interface CreateSkillV2Payload {
+  name: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface AssignAgentSkillV2Payload {
+  skill_id: string;
+  level?: 'junior' | 'intermediate' | 'senior';
+}
+
+export interface AssignBotOptionSkillPayload {
+  skill_id: string;
+  required?: boolean;
+}
+
 export interface MonitorData {
   agents: AgentWithSkills[];
   queue: {
@@ -1392,6 +1442,83 @@ interface TicketAutoAssignSettings {
   ticket_auto_assign: boolean;
 }
 
+export const skillsV2Api = {
+  list: async (params?: { is_active?: boolean }): Promise<SkillV2[]> => {
+    const res = await api.get<{ success: boolean; data: SkillV2[] }>('/admin/skills-v2', { params });
+    return res.data.data;
+  },
+
+  create: async (data: CreateSkillV2Payload): Promise<SkillV2> => {
+    const res = await api.post<{ success: boolean; data: SkillV2 }>('/admin/skills-v2', data);
+    return res.data.data;
+  },
+
+  update: async (id: string, data: Partial<CreateSkillV2Payload>): Promise<SkillV2> => {
+    const res = await api.patch<{ success: boolean; data: SkillV2 }>(`/admin/skills-v2/${id}`, data);
+    return res.data.data;
+  },
+
+  delete: async (id: string): Promise<{ deleted: boolean; deactivated: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { deleted: boolean; deactivated: boolean } }>(
+      `/admin/skills-v2/${id}`,
+    );
+    return res.data.data;
+  },
+
+  listAgents: async (): Promise<AgentWithSkillsV2[]> => {
+    const res = await api.get<{ success: boolean; data: AgentWithSkillsV2[] }>('/admin/skills-v2/agents');
+    return res.data.data;
+  },
+
+  getAgent: async (id: string): Promise<AgentSkillV2[]> => {
+    const res = await api.get<{ success: boolean; data: AgentSkillV2[] }>(`/admin/skills-v2/agents/${id}`);
+    return res.data.data;
+  },
+
+  assignAgent: async (
+    userId: string,
+    data: AssignAgentSkillV2Payload,
+  ): Promise<{ user_id: string; skill_id: string; level: 'junior' | 'intermediate' | 'senior' }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { user_id: string; skill_id: string; level: 'junior' | 'intermediate' | 'senior' };
+    }>(`/admin/skills-v2/agents/${userId}`, data);
+    return res.data.data;
+  },
+
+  removeAgent: async (userId: string, skillId: string): Promise<{ removed: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+      `/admin/skills-v2/agents/${userId}/${skillId}`,
+    );
+    return res.data.data;
+  },
+
+  getBotOption: async (botOptionId: string): Promise<BotOptionSkill[]> => {
+    const res = await api.get<{ success: boolean; data: BotOptionSkill[] }>(
+      `/admin/skills-v2/bot-options/${botOptionId}`,
+    );
+    return res.data.data;
+  },
+
+  assignBotOption: async (
+    botOptionId: string,
+    data: AssignBotOptionSkillPayload,
+  ): Promise<{ bot_option_id: string; skill_id: string; required: boolean }> => {
+    const res = await api.post<{
+      success: boolean;
+      data: { bot_option_id: string; skill_id: string; required: boolean };
+    }>(`/admin/skills-v2/bot-options/${botOptionId}`, data);
+    return res.data.data;
+  },
+
+  removeBotOption: async (botOptionId: string, skillId: string): Promise<{ removed: boolean }> => {
+    const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
+      `/admin/skills-v2/bot-options/${botOptionId}/${skillId}`,
+    );
+    return res.data.data;
+  },
+};
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const res = await api.get<{ success: boolean; data: AdminStats }>('/admin/stats/overview');
@@ -2033,6 +2160,8 @@ export const adminApi = {
       return res.data.data;
     },
   },
+
+  skillsV2: skillsV2Api,
 
   quickReplies: {
     list: async (params?: QuickRepliesListParams): Promise<QuickReply[]> => {

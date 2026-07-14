@@ -374,6 +374,33 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "skillsV2": {
+      "title": "Skills",
+      "description": "Competencies that can be assigned to agents and bot topics",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "level": "Level",
+        "required": "Required",
+        "isActive": "Active"
+      },
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermediate",
+        "senior": "Senior"
+      },
+      "actions": {
+        "create": "New skill",
+        "save": "Save",
+        "delete": "Delete skill",
+        "assign": "Assign skill",
+        "remove": "Remove skill"
+      },
+      "empty": {
+        "title": "No skills yet",
+        "sub": "Create skills to organize conversation routing"
+      }
+    },
     "departments": {
       "title": "Departments",
       "subtitle": "Organize your team into departments and assign agents to each one",

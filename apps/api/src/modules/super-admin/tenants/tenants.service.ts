@@ -396,6 +396,65 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".skills (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_skills_name"
+    ON "${schemaName}".skills(name)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".bot_option_skills (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bot_option_id UUID NOT NULL REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
+      skill_id      UUID NOT NULL REFERENCES "${schemaName}".skills(id) ON DELETE CASCADE,
+      required      BOOLEAN NOT NULL DEFAULT true,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(bot_option_id, skill_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_option"
+    ON "${schemaName}".bot_option_skills(bot_option_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_skill"
+    ON "${schemaName}".bot_option_skills(skill_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".agent_skills (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
+      skill_id   UUID NOT NULL REFERENCES "${schemaName}".skills(id) ON DELETE CASCADE,
+      level      VARCHAR(20) NOT NULL DEFAULT 'intermediate',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, skill_id)
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_skills_user"
+    ON "${schemaName}".agent_skills(user_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_agent_skills_skill"
+    ON "${schemaName}".agent_skills(skill_id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".departments (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(100) NOT NULL,

@@ -374,6 +374,33 @@
       "save": "Salvar",
       "saving": "Salvando..."
     },
+    "skillsV2": {
+      "title": "Habilidades",
+      "description": "Competências que podem ser atribuídas a agentes e assuntos do bot",
+      "fields": {
+        "name": "Nome",
+        "description": "Descrição",
+        "level": "Nível",
+        "required": "Obrigatória",
+        "isActive": "Ativa"
+      },
+      "levels": {
+        "junior": "Júnior",
+        "intermediate": "Intermediário",
+        "senior": "Sênior"
+      },
+      "actions": {
+        "create": "Nova habilidade",
+        "save": "Salvar",
+        "delete": "Excluir habilidade",
+        "assign": "Atribuir habilidade",
+        "remove": "Remover habilidade"
+      },
+      "empty": {
+        "title": "Nenhuma habilidade cadastrada",
+        "sub": "Crie habilidades para organizar o roteamento de atendimentos"
+      }
+    },
     "departments": {
       "title": "Departamentos",
       "subtitle": "Organize sua equipe em departamentos e atribua agentes a cada um",
