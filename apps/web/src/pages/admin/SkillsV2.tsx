@@ -362,10 +362,10 @@ export function SkillsV2() {
 
   return (
     <PageShell padding={0}>
-      <div className="admin-page-header">
+      <div style={headerStyle}>
         <div>
-          <h1>{t('tenantAdmin.skillsV2.title')}</h1>
-          <p>{t('tenantAdmin.skillsV2.subtitle')}</p>
+          <h1 style={titleStyle}>{t('tenantAdmin.skillsV2.title')}</h1>
+          <p style={subtitleStyle}>{t('tenantAdmin.skillsV2.subtitle')}</p>
         </div>
         <Button type="button" onClick={openCreate}>
           {t('tenantAdmin.skillsV2.new')}
@@ -599,6 +599,27 @@ const inputStyle: CSSProperties = {
 const textareaStyle: CSSProperties = {
   ...inputStyle,
   resize: 'vertical',
+};
+
+const headerStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: 16,
+  padding: '24px 24px 0',
+};
+
+const titleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 24,
+  fontWeight: 700,
+  color: 'var(--txt)',
+};
+
+const subtitleStyle: CSSProperties = {
+  margin: '4px 0 0',
+  fontSize: 14,
+  color: 'var(--txt-2)',
 };
 
 const selectStyle: CSSProperties = {
