@@ -155,8 +155,7 @@ function AssignAgentModal({
           <select
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
-            className="zd-input"
-            style={inputStyle}
+            style={selectStyle}
             required
           >
             <option value="">{isLoading ? t('tenantAdmin.common.loading') : t('tenantAdmin.skillsV2.selectAgent')}</option>
@@ -173,8 +172,7 @@ function AssignAgentModal({
           <select
             value={level}
             onChange={(event) => setLevel(event.target.value as SkillLevel)}
-            className="zd-input"
-            style={inputStyle}
+            style={selectStyle}
           >
             {LEVELS.map((item) => (
               <option key={item} value={item}>
@@ -601,6 +599,18 @@ const inputStyle: CSSProperties = {
 const textareaStyle: CSSProperties = {
   ...inputStyle,
   resize: 'vertical',
+};
+
+const selectStyle: CSSProperties = {
+  background: 'var(--bg-2)',
+  border: '1px solid var(--line-2)',
+  color: 'var(--txt)',
+  height: '2.5rem',
+  borderRadius: 'var(--r)',
+  padding: '0 10px',
+  fontSize: 13,
+  width: '100%',
+  outline: 'none',
 };
 
 const panelStyle: CSSProperties = {
