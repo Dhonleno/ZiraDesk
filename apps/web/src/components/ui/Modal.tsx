@@ -45,7 +45,6 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidt
           inset: 0,
           zIndex: 1000,
           background: 'var(--backdrop)',
-          backdropFilter: 'blur(6px)',
         }}
         onClick={onClose}
         aria-hidden
