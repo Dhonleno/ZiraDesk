@@ -1008,11 +1008,12 @@ export async function updateTicket(
 
     const isAdminOrOwner = role === 'owner' || role === 'admin';
     if (!isAdminOrOwner) {
-      // Agente: só pode editar se for o designado E ticket estiver in_progress
+      // Agente: só pode editar se for o designado E ticket estiver em um status editável
       if (old.assigned_to !== updatedBy) {
         throw new ForbiddenError('Apenas o agente designado pode editar este ticket');
       }
-      if (old.status !== 'in_progress') {
+      const AGENT_EDITABLE_STATUSES = ['in_progress', 'waiting', 'resolved'];
+      if (!AGENT_EDITABLE_STATUSES.includes(old.status)) {
         throw new ForbiddenError('Aceite o ticket antes de editá-lo');
       }
     }

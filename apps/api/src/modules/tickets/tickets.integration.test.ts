@@ -739,6 +739,23 @@ describe('Tickets integration', () => {
     expect(response.status).toBe(409);
   });
 
+  it('PATCH /api/tickets/:id — agente designado fecha ticket resolved → 200', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ status: 'resolved' });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ status: 'closed' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('closed');
+  });
+
   it('PATCH /api/tickets/:id — agente não designado recebe 403', async () => {
     const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
     const otherUserId = '00000000-0000-0000-0000-000000000099';
