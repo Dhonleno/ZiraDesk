@@ -18,6 +18,7 @@ export const portalCreateTicketSchema = z.object({
   title: z.string().trim().min(3).max(255),
   description: z.string().trim().max(5000).optional(),
   type_id: z.string().uuid().optional(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
 });
 
 export const portalAddCommentSchema = z.object({

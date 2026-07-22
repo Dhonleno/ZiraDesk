@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { portalApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -66,6 +66,10 @@ export function PortalLogin() {
             {loading ? t('login.loading') : t('login.submit')}
           </button>
         </form>
+
+        <Link to="/portal/forgot-password" className="portal-forgot-link">
+          {t('auth.forgotPassword')}
+        </Link>
       </div>
     </div>
   );

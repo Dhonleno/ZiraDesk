@@ -26,7 +26,9 @@
   "stats": {
     "open": "Abiertos",
     "inProgress": "En progreso",
-    "resolved": "Resueltos"
+    "waiting": "En espera",
+    "resolved": "Resueltos",
+    "closed": "Cerrados"
   },
   "ticket": {
     "pageTitle": "Mis tickets",
@@ -35,7 +37,9 @@
       "all": "Todos",
       "open": "Abiertos",
       "in_progress": "En progreso",
-      "resolved": "Resueltos"
+      "waiting": "En espera",
+      "resolved": "Resueltos",
+      "closed": "Cerrados"
     },
     "emptyFiltered": "No hay tickets para el filtro seleccionado",
     "new": "Nuevo ticket",
@@ -45,15 +49,29 @@
     "typePlaceholder": "Selecciona el tipo",
     "typeFallback": "Ticket",
     "type": "Tipo",
+    "priority": "Prioridad",
     "description": "Descripción",
     "descriptionPlaceholder": "Describe lo que está ocurriendo",
     "descriptionTitle": "Descripción",
     "noDescription": "Sin descripción",
+    "attachments": "Archivos adjuntos",
+    "attachFiles": "Adjuntar archivos",
+    "attachmentsHint": "Hasta {{count}} archivos, 10MB cada uno.",
+    "attachmentsTitle": "Archivos adjuntos",
+    "removeAttachment": "Quitar",
     "commentsTitle": "Comentarios",
     "commentPlaceholder": "Agregar comentario",
     "commenterFallback": "Equipo",
     "backToTickets": "Volver a tickets",
     "loading": "Cargando ticket...",
+    "errorTitle": "No fue posible cargar el ticket",
+    "errorSubtitle": "Verifica tu conexión e inténtalo de nuevo.",
+    "retry": "Intentar de nuevo",
+    "reopen": "Reabrir ticket",
+    "reopenLoading": "Reabriendo...",
+    "reopenHint": "Este ticket fue resuelto. Si el problema persiste, puedes reabrirlo.",
+    "reopenSuccess": "Ticket reabierto con éxito.",
+    "reopenError": "No fue posible reabrir el ticket",
     "details": {
       "type": "Tipo",
       "priority": "Prioridad",
@@ -83,8 +101,40 @@
       "createSuccess": "Ticket creado con éxito",
       "createError": "No fue posible crear el ticket",
       "commentSuccess": "Comentario agregado",
-      "commentError": "No fue posible agregar el comentario"
+      "commentError": "No fue posible agregar el comentario",
+      "attachmentError": "No fue posible abrir el archivo adjunto",
+      "attachmentUploadError": "No fue posible adjuntar {{name}}",
+      "attachmentTooLarge": "Algunos archivos superan el límite de 10MB y fueron ignorados",
+      "attachmentLimit": "Máximo de {{count}} archivos por ticket"
     }
+  },
+  "csat": {
+    "title": "¿Cómo fue tu atención?",
+    "description": "Tu evaluación nos ayuda a mejorar.",
+    "starLabel": "{{count}} estrella",
+    "starLabel_other": "{{count}} estrellas",
+    "commentPlaceholder": "Deja un comentario (opcional)",
+    "submit": "Enviar evaluación",
+    "submitLoading": "Enviando...",
+    "submitSuccess": "¡Gracias por tu evaluación!",
+    "submitError": "No fue posible enviar la evaluación",
+    "thanksTitle": "Ya evaluaste este ticket"
+  },
+  "auth": {
+    "forgotPassword": "Olvidé mi contraseña",
+    "forgotPasswordTitle": "Restablecer contraseña",
+    "forgotPasswordDesc": "Indica tu correo para recibir el enlace de restablecimiento.",
+    "forgotPasswordSubmit": "Enviar enlace",
+    "forgotPasswordSuccess": "Si el correo está registrado, recibirás el enlace en breve.",
+    "backToLogin": "Volver al inicio de sesión",
+    "resetPasswordTitle": "Nueva contraseña",
+    "resetPasswordNew": "Nueva contraseña",
+    "resetPasswordConfirm": "Confirmar contraseña",
+    "resetPasswordSubmit": "Restablecer contraseña",
+    "resetPasswordSuccess": "Contraseña restablecida con éxito.",
+    "resetPasswordMinLength": "La contraseña debe tener al menos 8 caracteres",
+    "resetPasswordMismatch": "Las contraseñas no coinciden",
+    "resetPasswordInvalidToken": "Enlace inválido o expirado. Solicita un nuevo restablecimiento."
   },
   "access": {
     "title": "Acceso al Portal",

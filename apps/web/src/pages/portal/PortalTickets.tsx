@@ -8,7 +8,9 @@ const tabs: Array<{ key: TicketStatus | 'all' }> = [
   { key: 'all' },
   { key: 'open' },
   { key: 'in_progress' },
+  { key: 'waiting' },
   { key: 'resolved' },
+  { key: 'closed' },
 ];
 
 export function PortalTickets() {

@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { getSocketServer } from '../../socket/index.js';
 import { sendEmail } from '../../services/email.service.js';
+import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
 import type {
   PortalAddCommentInput,
   PortalCreateTicketInput,
@@ -16,6 +19,31 @@ import type {
 
 const PORTAL_TOKEN_TTL = '7d';
 const PORTAL_RESET_TOKEN_TTL = '1h';
+
+// Mesma allowlist/limite do upload de anexos de tickets pelo agente (tickets.service.ts)
+const ALLOWED_ATTACHMENT_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+
+function sanitizeAttachmentFileName(fileName: string): string {
+  const base = path.basename(fileName).trim();
+  const normalized = base.replace(/[^\w.\-()\s]/g, '_').replace(/\s+/g, '_');
+  return normalized || 'arquivo';
+}
+
+function buildPortalAttachmentStorageKey(ticketId: string, attachmentId: string, fileName: string): string {
+  return `tickets/${ticketId}/${attachmentId}-${sanitizeAttachmentFileName(fileName)}`;
+}
 
 export class PortalAuthError extends Error {}
 export class PortalNotFoundError extends Error {}
@@ -53,7 +81,7 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
-function resolveHostTenant(host: string, fallbackTenantSlug?: string): { isPortal: boolean; tenantSlug: string | null } {
+export function resolveHostTenant(host: string, fallbackTenantSlug?: string): { isPortal: boolean; tenantSlug: string | null } {
   const hostName = (host ?? '').split(':')[0]?.toLowerCase() ?? '';
   const parts = hostName.split('.').filter(Boolean);
 
@@ -82,7 +110,11 @@ async function getTenantBySlug(slug: string) {
   return tenant;
 }
 
+const ensuredPortalSchemas = new Set<string>();
+
 async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
+  if (ensuredPortalSchemas.has(schemaName)) return;
+
   const schema = quoteIdent(schemaName);
 
   await prisma.$executeRawUnsafe(`
@@ -124,6 +156,16 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
 
   await prisma.$executeRawUnsafe(`
     ALTER TABLE ${schema}.ticket_comments
+    ALTER COLUMN user_id DROP NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.ticket_attachments
+    ADD COLUMN IF NOT EXISTS contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE ${schema}.ticket_attachments
     ALTER COLUMN user_id DROP NOT NULL
   `);
 
@@ -172,6 +214,8 @@ async function ensurePortalInfrastructure(schemaName: string): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact
     ON ${schema}.lgpd_requests(contact_id)
   `);
+
+  ensuredPortalSchemas.add(schemaName);
 }
 
 export async function portalLogin(host: string, payload: PortalLoginInput) {
@@ -251,7 +295,7 @@ export async function verifyPortalToken(token: string): Promise<PortalJwtPayload
 
 function resolvePortalResetUrl(tenantSlug: string, token: string): string {
   if (env.NODE_ENV === 'production') {
-    return `https://suporte.${tenantSlug}.ziradesk.com/reset-password?token=${encodeURIComponent(token)}`;
+    return `https://suporte.${tenantSlug}.ziradesk.com/portal/reset-password?token=${encodeURIComponent(token)}`;
   }
   const appUrl = env.APP_URL.replace(/\/$/, '');
   return `${appUrl}/portal/reset-password?token=${encodeURIComponent(token)}`;
@@ -678,6 +722,10 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
     created_at: Date;
     updated_at: Date;
     resolved_at: Date | null;
+    csat_score: number | null;
+    csat_comment: string | null;
+    csat_responded_at: Date | null;
+    csat_expires_at: Date | null;
   }>>(
     `SELECT
        t.id,
@@ -694,7 +742,11 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
        ct.name AS contact_name,
        t.created_at,
        t.updated_at,
-       t.resolved_at
+       t.resolved_at,
+       t.csat_score,
+       t.csat_comment,
+       t.csat_responded_at,
+       t.csat_expires_at
      FROM ${schema}.tickets t
      LEFT JOIN ${schema}.ticket_types tt ON tt.id = t.type_id
      LEFT JOIN ${schema}.users u ON u.id = t.assigned_to
@@ -737,9 +789,25 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
     ticketId,
   );
 
+  const attachments = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    filename: string;
+    file_url: string;
+    file_size: number;
+    mime_type: string;
+    created_at: Date;
+  }>>(
+    `SELECT id, filename, file_url, file_size, mime_type, created_at
+     FROM ${schema}.ticket_attachments
+     WHERE ticket_id = $1::uuid
+     ORDER BY created_at ASC`,
+    ticketId,
+  );
+
   return {
     ...ticket,
     comments,
+    attachments,
   };
 }
 
@@ -785,16 +853,17 @@ export async function createPortalTicket(portalUser: PortalJwtPayload, payload: 
        $2,
        'portal',
        'open',
-       'medium',
-       $3::uuid,
+       $3,
        $4::uuid,
        $5::uuid,
+       $6::uuid,
        NOW(),
        NOW()
      )
      RETURNING id, title, status, source, created_at`,
     payload.title,
     payload.description ?? null,
+    payload.priority ?? 'medium',
     portalUser.contactId,
     portalUser.organizationId,
     payload.type_id ?? null,
@@ -904,6 +973,108 @@ export async function addPortalComment(
   return { success: true };
 }
 
+export async function addPortalTicketAttachment(
+  portalUser: PortalJwtPayload,
+  ticketId: string,
+  file: { fileName: string; mimeType: string; buffer: Buffer },
+): Promise<{ id: string; filename: string; file_url: string; file_size: number; mime_type: string; created_at: Date }> {
+  if (!ALLOWED_ATTACHMENT_MIME.has(file.mimeType)) {
+    throw new PortalForbiddenError('Tipo de arquivo não permitido');
+  }
+  if (file.buffer.length > MAX_ATTACHMENT_SIZE) {
+    throw new PortalForbiddenError('Arquivo excede o limite de 10MB');
+  }
+
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const tickets = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id
+     FROM ${schema}.tickets
+     WHERE id = $1::uuid
+       AND (
+         contact_id = $2::uuid
+         OR ($3::uuid IS NOT NULL AND organization_id = $3::uuid)
+       )
+     LIMIT 1`,
+    ticketId,
+    portalUser.contactId,
+    portalUser.organizationId,
+  );
+
+  if (!tickets[0]) throw new PortalNotFoundError('Ticket não encontrado');
+
+  const attachmentId = randomUUID();
+  const safeName = sanitizeAttachmentFileName(file.fileName);
+  const key = buildPortalAttachmentStorageKey(ticketId, attachmentId, safeName);
+  await getStorage().upload(key, file.buffer, file.mimeType);
+  const fileUrl = `/api/portal/tickets/attachments/${attachmentId}/content`;
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    filename: string;
+    file_url: string;
+    file_size: number;
+    mime_type: string;
+    created_at: Date;
+  }>>(
+    `INSERT INTO ${schema}.ticket_attachments (id, ticket_id, contact_id, filename, file_url, file_size, mime_type)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7)
+     RETURNING id, filename, file_url, file_size, mime_type, created_at`,
+    attachmentId,
+    ticketId,
+    portalUser.contactId,
+    safeName,
+    fileUrl,
+    file.buffer.length,
+    file.mimeType,
+  );
+
+  const attachment = rows[0];
+  if (!attachment) throw new PortalNotFoundError('Falha ao registrar anexo');
+  return attachment;
+}
+
+export async function getPortalAttachmentContent(
+  portalUser: PortalJwtPayload,
+  attachmentId: string,
+): Promise<{ content: Buffer; filename: string; mimeType: string }> {
+  const schema = quoteIdent(portalUser.schemaName);
+
+  const rows = await prisma.$queryRawUnsafe<Array<{
+    id: string;
+    ticket_id: string;
+    filename: string;
+    mime_type: string;
+  }>>(
+    `SELECT a.id, a.ticket_id, a.filename, a.mime_type
+     FROM ${schema}.ticket_attachments a
+     JOIN ${schema}.tickets t ON t.id = a.ticket_id
+     WHERE a.id = $1::uuid
+       AND (
+         t.contact_id = $2::uuid
+         OR ($3::uuid IS NOT NULL AND t.organization_id = $3::uuid)
+       )
+     LIMIT 1`,
+    attachmentId,
+    portalUser.contactId,
+    portalUser.organizationId,
+  );
+
+  const attachment = rows[0];
+  if (!attachment) throw new PortalNotFoundError('Anexo não encontrado');
+
+  const key = buildPortalAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename);
+  try {
+    const content = await getStorage().download(key);
+    return { content, filename: attachment.filename, mimeType: attachment.mime_type };
+  } catch (err) {
+    if (err instanceof StorageObjectNotFoundError) {
+      throw new PortalNotFoundError('Arquivo não encontrado no armazenamento');
+    }
+    throw err;
+  }
+}
+
 export async function submitTicketCsat(
   ticketId: string,
   score: number,
@@ -1001,4 +1172,26 @@ export async function reopenTicketByContact(
   } catch {
     // socket pode não estar disponível em testes
   }
+}
+
+export async function getPortalBranding(tenantSlug: string): Promise<{
+  logoUrl: string | null;
+  primaryColor: string | null;
+  tenantName: string;
+}> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: { name: true, settings: true, status: true },
+  });
+
+  if (!tenant || (tenant.status !== 'active' && tenant.status !== 'trial')) {
+    throw new PortalNotFoundError('Tenant não encontrado');
+  }
+
+  const settings = (tenant.settings as Record<string, unknown>) ?? {};
+  return {
+    logoUrl: typeof settings.logo_url === 'string' ? settings.logo_url : null,
+    primaryColor: typeof settings.primary_color === 'string' ? settings.primary_color : null,
+    tenantName: tenant.name,
+  };
 }

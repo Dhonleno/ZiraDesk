@@ -63,6 +63,8 @@ import { Privacy as ProfilePrivacy } from './pages/profile/Privacy';
 import { NotFound } from './pages/NotFound';
 import { PortalGuard } from './components/portal/PortalGuard';
 import { PortalLogin } from './pages/portal/PortalLogin';
+import { PortalForgotPassword } from './pages/portal/PortalForgotPassword';
+import { PortalResetPassword } from './pages/portal/PortalResetPassword';
 import { PortalDashboard } from './pages/portal/PortalDashboard';
 import { PortalTickets } from './pages/portal/PortalTickets';
 import { PortalTicketDetail } from './pages/portal/PortalTicketDetail';
@@ -149,6 +151,8 @@ export function App() {
         <Routes>
           <Route path="/portal" element={<PortalLayout />}>
             <Route index element={<PortalLogin />} />
+            <Route path="forgot-password" element={<PortalForgotPassword />} />
+            <Route path="reset-password" element={<PortalResetPassword />} />
             <Route path="dashboard" element={<PortalGuard><PortalDashboard /></PortalGuard>} />
             <Route path="tickets" element={<PortalGuard><PortalTickets /></PortalGuard>} />
             <Route path="tickets/:id" element={<PortalGuard><PortalTicketDetail /></PortalGuard>} />

@@ -1,3 +1,4 @@
+import multipart from '@fastify/multipart';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -13,7 +14,10 @@ import {
 } from './portal.schema.js';
 import {
   addPortalComment,
+  addPortalTicketAttachment,
   createPortalTicket,
+  getPortalAttachmentContent,
+  getPortalBranding,
   getPortalTicket,
   getPortalLgpdState,
   listPortalTicketTypes,
@@ -26,12 +30,22 @@ import {
   reopenTicketByContact,
   requestPortalPasswordReset,
   resetPortalPassword,
+  resolveHostTenant,
   submitTicketCsat,
   submitPortalLgpdRequest,
   submitPortalLgpdRectificationRequest,
   updatePortalLgpdConsent,
   verifyPortalToken,
 } from './portal.service.js';
+
+const MAX_PORTAL_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+
+function isMultipartTooLargeError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE';
+}
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -77,6 +91,30 @@ function resolveCsatTenantSlug(request: FastifyRequest): string | null {
 }
 
 export async function portalRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    limits: {
+      fileSize: MAX_PORTAL_ATTACHMENT_SIZE,
+      files: 1,
+    },
+  });
+
+  app.get<{ Querystring: { tenant_slug?: string } }>('/branding', async (request, reply) => {
+    const hostInfo = resolveHostTenant(request.headers.host ?? '', request.query.tenant_slug);
+    if (!hostInfo.isPortal || !hostInfo.tenantSlug) {
+      return reply.code(404).send({ success: false, error: { message: 'Tenant não encontrado' } });
+    }
+
+    try {
+      const data = await getPortalBranding(hostInfo.tenantSlug);
+      return reply.send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
   app.post('/auth/login', async (request, reply) => {
     const parsed = portalLoginSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -334,6 +372,81 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  app.post<{ Params: { id: string } }>('/tickets/:id/attachments', { preHandler: [portalAuth] }, async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Content-Type deve ser multipart/form-data' },
+      });
+    }
+
+    let fileBuffer: Buffer | null = null;
+    let fileName = '';
+    let mimeType = '';
+
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file' && part.fieldname === 'file' && !fileBuffer) {
+          fileBuffer = await part.toBuffer();
+          fileName = part.filename;
+          mimeType = part.mimetype;
+          continue;
+        }
+        if (part.type === 'file') {
+          await part.toBuffer();
+        }
+      }
+    } catch (err) {
+      if (isMultipartTooLargeError(err)) {
+        return reply.code(413).send({ success: false, error: { message: 'Arquivo excede o limite de 10MB' } });
+      }
+      throw err;
+    }
+
+    if (!fileBuffer || !fileName || !mimeType) {
+      return reply.code(400).send({ success: false, error: { message: 'Arquivo não enviado' } });
+    }
+
+    try {
+      const data = await addPortalTicketAttachment(request.portalUser!, request.params.id, {
+        fileName,
+        mimeType,
+        buffer: fileBuffer,
+      });
+      return reply.code(201).send({ success: true, data });
+    } catch (err) {
+      if (err instanceof PortalNotFoundError) {
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalForbiddenError) {
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.get<{ Params: { attachmentId: string } }>(
+    '/tickets/attachments/:attachmentId/content',
+    { preHandler: [portalAuth] },
+    async (request, reply) => {
+      try {
+        const { content, filename, mimeType } = await getPortalAttachmentContent(
+          request.portalUser!,
+          request.params.attachmentId,
+        );
+        reply.header('Content-Type', mimeType);
+        reply.header('Content-Disposition', `inline; filename="${filename.replace(/"/g, '')}"`);
+        reply.header('Cache-Control', 'private, max-age=3600');
+        return reply.send(content);
+      } catch (err) {
+        if (err instanceof PortalNotFoundError) {
+          return reply.code(404).send({ success: false, error: { message: err.message } });
+        }
+        throw err;
+      }
+    },
+  );
 
   app.patch<{ Params: { id: string } }>('/tickets/:id/reopen', { preHandler: [portalAuth] }, async (request, reply) => {
     try {

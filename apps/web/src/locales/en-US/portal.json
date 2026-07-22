@@ -26,7 +26,9 @@
   "stats": {
     "open": "Open",
     "inProgress": "In progress",
-    "resolved": "Resolved"
+    "waiting": "Waiting",
+    "resolved": "Resolved",
+    "closed": "Closed"
   },
   "ticket": {
     "pageTitle": "My tickets",
@@ -35,7 +37,9 @@
       "all": "All",
       "open": "Open",
       "in_progress": "In progress",
-      "resolved": "Resolved"
+      "waiting": "Waiting",
+      "resolved": "Resolved",
+      "closed": "Closed"
     },
     "emptyFiltered": "No tickets for the selected filter",
     "new": "New ticket",
@@ -45,15 +49,29 @@
     "typePlaceholder": "Select ticket type",
     "typeFallback": "Ticket",
     "type": "Type",
+    "priority": "Priority",
     "description": "Description",
     "descriptionPlaceholder": "Describe what is happening",
     "descriptionTitle": "Description",
     "noDescription": "No description",
+    "attachments": "Attachments",
+    "attachFiles": "Attach files",
+    "attachmentsHint": "Up to {{count}} files, 10MB each.",
+    "attachmentsTitle": "Attachments",
+    "removeAttachment": "Remove",
     "commentsTitle": "Comments",
     "commentPlaceholder": "Add comment",
     "commenterFallback": "Team",
     "backToTickets": "Back to tickets",
     "loading": "Loading ticket...",
+    "errorTitle": "Couldn't load this ticket",
+    "errorSubtitle": "Check your connection and try again.",
+    "retry": "Try again",
+    "reopen": "Reopen ticket",
+    "reopenLoading": "Reopening...",
+    "reopenHint": "This ticket was resolved. If the issue persists, you can reopen it.",
+    "reopenSuccess": "Ticket reopened successfully.",
+    "reopenError": "Couldn't reopen the ticket",
     "details": {
       "type": "Type",
       "priority": "Priority",
@@ -83,8 +101,40 @@
       "createSuccess": "Ticket created successfully",
       "createError": "Failed to create ticket",
       "commentSuccess": "Comment added",
-      "commentError": "Failed to add comment"
+      "commentError": "Failed to add comment",
+      "attachmentError": "Couldn't open the attachment",
+      "attachmentUploadError": "Failed to attach {{name}}",
+      "attachmentTooLarge": "Some files exceed the 10MB limit and were skipped",
+      "attachmentLimit": "Maximum of {{count}} files per ticket"
     }
+  },
+  "csat": {
+    "title": "How was your support experience?",
+    "description": "Your feedback helps us improve.",
+    "starLabel": "{{count}} star",
+    "starLabel_other": "{{count}} stars",
+    "commentPlaceholder": "Leave a comment (optional)",
+    "submit": "Submit rating",
+    "submitLoading": "Submitting...",
+    "submitSuccess": "Thanks for your feedback!",
+    "submitError": "Couldn't submit your rating",
+    "thanksTitle": "You already rated this ticket"
+  },
+  "auth": {
+    "forgotPassword": "Forgot my password",
+    "forgotPasswordTitle": "Reset password",
+    "forgotPasswordDesc": "Enter your email to receive the reset link.",
+    "forgotPasswordSubmit": "Send link",
+    "forgotPasswordSuccess": "If the email is registered, you'll receive the link shortly.",
+    "backToLogin": "Back to login",
+    "resetPasswordTitle": "New password",
+    "resetPasswordNew": "New password",
+    "resetPasswordConfirm": "Confirm password",
+    "resetPasswordSubmit": "Reset password",
+    "resetPasswordSuccess": "Password reset successfully.",
+    "resetPasswordMinLength": "Password must be at least 8 characters",
+    "resetPasswordMismatch": "Passwords don't match",
+    "resetPasswordInvalidToken": "Invalid or expired link. Request a new reset."
   },
   "access": {
     "title": "Portal Access",

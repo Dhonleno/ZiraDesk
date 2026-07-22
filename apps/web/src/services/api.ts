@@ -674,7 +674,7 @@ interface JwtPayloadWithExp {
   exp?: number;
 }
 
-function decodeJwtPayload(token: string): JwtPayloadWithExp | null {
+export function decodeJwtPayload(token: string): JwtPayloadWithExp | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3 || !parts[1]) return null;
@@ -4416,8 +4416,28 @@ export interface PortalTicketComment {
   source?: string | null;
 }
 
+export interface PortalTicketAttachment {
+  id: string;
+  filename: string;
+  file_url: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
+}
+
 export interface PortalTicketDetail extends PortalTicket {
   comments: PortalTicketComment[];
+  attachments: PortalTicketAttachment[];
+  csat_score: number | null;
+  csat_comment: string | null;
+  csat_responded_at: string | null;
+  csat_expires_at: string | null;
+}
+
+export interface PortalBranding {
+  logoUrl: string | null;
+  primaryColor: string | null;
+  tenantName: string;
 }
 
 export type PortalLgpdConsentStatus = 'pending' | 'granted' | 'denied' | 'revoked';
@@ -4505,6 +4525,17 @@ export const portalApi = {
     await portalHttp.post('/auth/forgot-password', { email });
   },
 
+  resetPassword: async (token: string, password: string): Promise<void> => {
+    await portalHttp.post('/auth/reset-password', { token, password });
+  },
+
+  getBranding: async (): Promise<PortalBranding> => {
+    const res = await portalHttp.get<{ success: boolean; data: PortalBranding }>('/branding', {
+      params: { tenant_slug: resolvePortalTenantSlug() },
+    });
+    return res.data.data;
+  },
+
   getMe: async (): Promise<PortalMe> => {
     const res = await portalHttp.get<{ success: boolean; data: PortalMe }>('/me', withPortalAuth());
     return res.data.data;
@@ -4544,13 +4575,45 @@ export const portalApi = {
     return res.data.data;
   },
 
-  createTicket: async (payload: { title: string; description?: string; type_id?: string }): Promise<PortalTicket> => {
+  createTicket: async (payload: {
+    title: string;
+    description?: string;
+    type_id?: string;
+    priority?: TicketPriority;
+  }): Promise<PortalTicket> => {
     const res = await portalHttp.post<{ success: boolean; data: PortalTicket }>('/tickets', payload, withPortalAuth());
     return res.data.data;
   },
 
   addComment: async (ticketId: string, content: string): Promise<void> => {
     await portalHttp.post(`/tickets/${ticketId}/comments`, { content }, withPortalAuth());
+  },
+
+  addAttachment: async (ticketId: string, file: File): Promise<PortalTicketAttachment> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await portalHttp.post<{ success: boolean; data: PortalTicketAttachment }>(
+      `/tickets/${ticketId}/attachments`,
+      formData,
+      withPortalAuth({ headers: { 'Content-Type': 'multipart/form-data' } }),
+    );
+    return res.data.data;
+  },
+
+  downloadAttachment: async (attachmentId: string): Promise<Blob> => {
+    const res = await portalHttp.get<Blob>(
+      `/tickets/attachments/${attachmentId}/content`,
+      withPortalAuth({ responseType: 'blob' }),
+    );
+    return res.data;
+  },
+
+  reopenTicket: async (ticketId: string): Promise<void> => {
+    await portalHttp.patch(`/tickets/${ticketId}/reopen`, undefined, withPortalAuth());
+  },
+
+  submitCsat: async (ticketId: string, payload: { score: number; comment?: string }): Promise<void> => {
+    await portalHttp.post(`/tickets/${ticketId}/csat`, payload);
   },
 
   getLgpdState: async (): Promise<PortalLgpdState> => {

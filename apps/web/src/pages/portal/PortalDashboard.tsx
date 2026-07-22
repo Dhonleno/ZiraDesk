@@ -16,7 +16,9 @@ export function PortalDashboard() {
   const tickets = ticketsResult?.data ?? [];
   const open = tickets.filter((ticket) => ticket.status === 'open').length;
   const inProgress = tickets.filter((ticket) => ticket.status === 'in_progress').length;
+  const waiting = tickets.filter((ticket) => ticket.status === 'waiting').length;
   const resolved = tickets.filter((ticket) => ticket.status === 'resolved').length;
+  const closed = tickets.filter((ticket) => ticket.status === 'closed').length;
 
   return (
     <div className="portal-dashboard">
@@ -40,8 +42,16 @@ export function PortalDashboard() {
           <span className="stat-label">{t('stats.inProgress')}</span>
         </div>
         <div className="portal-stat-card">
+          <span className="stat-value">{waiting}</span>
+          <span className="stat-label">{t('stats.waiting')}</span>
+        </div>
+        <div className="portal-stat-card">
           <span className="stat-value">{resolved}</span>
           <span className="stat-label">{t('stats.resolved')}</span>
+        </div>
+        <div className="portal-stat-card">
+          <span className="stat-value">{closed}</span>
+          <span className="stat-label">{t('stats.closed')}</span>
         </div>
       </div>
 
