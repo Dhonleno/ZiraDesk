@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { portalApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -11,6 +12,13 @@ export function PortalLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { data: branding } = useQuery({
+    queryKey: ['portal-branding'],
+    queryFn: () => portalApi.getBranding(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
@@ -32,6 +40,13 @@ export function PortalLogin() {
   return (
     <div className="portal-login-page">
       <div className="portal-login-card">
+        <div className="portal-login-logo">
+          {branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={branding.tenantName} className="portal-logo-img" />
+          ) : (
+            <div className="portal-logo-icon" aria-hidden="true">Z</div>
+          )}
+        </div>
         <div className="portal-login-header">
           <h1>{t('login.title')}</h1>
           <p>{t('login.subtitle')}</p>

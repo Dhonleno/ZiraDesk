@@ -2,9 +2,27 @@
   "title": "Support Center",
   "nav": {
     "ariaLabel": "Support center navigation",
-    "dashboard": "Dashboard",
-    "tickets": "Tickets",
+    "tickets": "My tickets",
+    "newTicket": "New ticket",
     "privacy": "Privacy"
+  },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "common": {
+    "cancel": "Cancel"
+  },
+  "tickets": {
+    "recent": "Recent tickets",
+    "backToList": "Back to list",
+    "newTitle": "New ticket",
+    "fields": {
+      "attachmentsHint": "Click to select files (max. 5, 10MB each)"
+    },
+    "detail": {
+      "emptyTitle": "Select a ticket",
+      "emptySub": "Click a ticket in the list to see its details"
+    }
   },
   "login": {
     "title": "Support Center",
@@ -21,7 +39,10 @@
     "newTicket": "+ New ticket",
     "recent": "Recent tickets",
     "emptyTitle": "No recent tickets",
-    "emptySubtitle": "Create a new ticket to start your support request."
+    "emptySubtitle": "Create a new ticket to start your support request.",
+    "kpiInProgress": "In progress",
+    "kpiWaiting": "Waiting",
+    "kpiResolved": "Resolved"
   },
   "stats": {
     "open": "Open",
@@ -84,7 +105,8 @@
       "in_progress": "In progress",
       "waiting": "Waiting",
       "resolved": "Resolved",
-      "closed": "Closed"
+      "closed": "Closed",
+      "queued": "Queued"
     },
     "priorityLabel": {
       "low": "Low",
@@ -121,6 +143,7 @@
     "thanksTitle": "You already rated this ticket"
   },
   "auth": {
+    "logout": "Log out",
     "forgotPassword": "Forgot my password",
     "forgotPasswordTitle": "Reset password",
     "forgotPasswordDesc": "Enter your email to receive the reset link.",

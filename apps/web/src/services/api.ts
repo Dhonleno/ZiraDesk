@@ -4392,6 +4392,7 @@ export interface PortalMe {
 
 export interface PortalTicket {
   id: string;
+  ticket_number: number;
   title: string;
   description?: string | null;
   status: TicketStatus;

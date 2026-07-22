@@ -2,9 +2,27 @@
   "title": "Central de Suporte",
   "nav": {
     "ariaLabel": "Navegação da central de suporte",
-    "dashboard": "Painel",
-    "tickets": "Tickets",
+    "tickets": "Meus tickets",
+    "newTicket": "Abrir ticket",
     "privacy": "Privacidade"
+  },
+  "theme": {
+    "toggle": "Alternar tema"
+  },
+  "common": {
+    "cancel": "Cancelar"
+  },
+  "tickets": {
+    "recent": "Tickets recentes",
+    "backToList": "Voltar para lista",
+    "newTitle": "Novo ticket",
+    "fields": {
+      "attachmentsHint": "Clique para selecionar arquivos (máx. 5, 10MB cada)"
+    },
+    "detail": {
+      "emptyTitle": "Selecione um ticket",
+      "emptySub": "Clique em um ticket da lista para ver os detalhes"
+    }
   },
   "login": {
     "title": "Central de Suporte",
@@ -21,7 +39,10 @@
     "newTicket": "+ Novo ticket",
     "recent": "Tickets recentes",
     "emptyTitle": "Nenhum ticket recente",
-    "emptySubtitle": "Abra um novo ticket para iniciar seu atendimento."
+    "emptySubtitle": "Abra um novo ticket para iniciar seu atendimento.",
+    "kpiInProgress": "Em andamento",
+    "kpiWaiting": "Aguardando",
+    "kpiResolved": "Resolvidos"
   },
   "stats": {
     "open": "Abertos",
@@ -84,7 +105,8 @@
       "in_progress": "Em andamento",
       "waiting": "Aguardando",
       "resolved": "Resolvido",
-      "closed": "Fechado"
+      "closed": "Fechado",
+      "queued": "Na fila"
     },
     "priorityLabel": {
       "low": "Baixa",
@@ -121,6 +143,7 @@
     "thanksTitle": "Você já avaliou este ticket"
   },
   "auth": {
+    "logout": "Sair",
     "forgotPassword": "Esqueci minha senha",
     "forgotPasswordTitle": "Redefinir senha",
     "forgotPasswordDesc": "Informe seu e-mail para receber o link de redefinição.",

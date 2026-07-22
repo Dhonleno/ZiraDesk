@@ -2,9 +2,27 @@
   "title": "Centro de Soporte",
   "nav": {
     "ariaLabel": "Navegación del centro de soporte",
-    "dashboard": "Panel",
-    "tickets": "Tickets",
+    "tickets": "Mis tickets",
+    "newTicket": "Abrir ticket",
     "privacy": "Privacidad"
+  },
+  "theme": {
+    "toggle": "Cambiar tema"
+  },
+  "common": {
+    "cancel": "Cancelar"
+  },
+  "tickets": {
+    "recent": "Tickets recientes",
+    "backToList": "Volver a la lista",
+    "newTitle": "Nuevo ticket",
+    "fields": {
+      "attachmentsHint": "Haz clic para seleccionar archivos (máx. 5, 10MB cada uno)"
+    },
+    "detail": {
+      "emptyTitle": "Selecciona un ticket",
+      "emptySub": "Haz clic en un ticket de la lista para ver los detalles"
+    }
   },
   "login": {
     "title": "Centro de Soporte",
@@ -21,7 +39,10 @@
     "newTicket": "+ Nuevo ticket",
     "recent": "Tickets recientes",
     "emptyTitle": "No hay tickets recientes",
-    "emptySubtitle": "Crea un nuevo ticket para iniciar tu solicitud de soporte."
+    "emptySubtitle": "Crea un nuevo ticket para iniciar tu solicitud de soporte.",
+    "kpiInProgress": "En progreso",
+    "kpiWaiting": "En espera",
+    "kpiResolved": "Resueltos"
   },
   "stats": {
     "open": "Abiertos",
@@ -84,7 +105,8 @@
       "in_progress": "En progreso",
       "waiting": "En espera",
       "resolved": "Resuelto",
-      "closed": "Cerrado"
+      "closed": "Cerrado",
+      "queued": "En cola"
     },
     "priorityLabel": {
       "low": "Baja",
@@ -121,6 +143,7 @@
     "thanksTitle": "Ya evaluaste este ticket"
   },
   "auth": {
+    "logout": "Salir",
     "forgotPassword": "Olvidé mi contraseña",
     "forgotPasswordTitle": "Restablecer contraseña",
     "forgotPasswordDesc": "Indica tu correo para recibir el enlace de restablecimiento.",

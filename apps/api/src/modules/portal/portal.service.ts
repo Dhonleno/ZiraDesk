@@ -647,6 +647,7 @@ export async function listPortalTickets(portalUser: PortalJwtPayload, query: Por
     created_at: Date;
     updated_at: Date;
     resolved_at: Date | null;
+    ticket_number: number;
     type_name: string | null;
     type_icon: string | null;
     type_color: string | null;
@@ -661,6 +662,7 @@ export async function listPortalTickets(portalUser: PortalJwtPayload, query: Por
        t.created_at,
        t.updated_at,
        t.resolved_at,
+       t.ticket_number,
        tt.name AS type_name,
        tt.icon AS type_icon,
        tt.color AS type_color,
@@ -722,6 +724,7 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
     created_at: Date;
     updated_at: Date;
     resolved_at: Date | null;
+    ticket_number: number;
     csat_score: number | null;
     csat_comment: string | null;
     csat_responded_at: Date | null;
@@ -735,6 +738,7 @@ export async function getPortalTicket(portalUser: PortalJwtPayload, ticketId: st
        t.priority,
        t.source,
        t.type_id,
+       t.ticket_number,
        tt.name AS type_name,
        tt.icon AS type_icon,
        tt.color AS type_color,
