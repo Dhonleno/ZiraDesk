@@ -1656,7 +1656,8 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            margin: '8px 0',
+            margin: '12px 0',
+            padding: '0 16px',
             background: 'transparent',
             border: 'none',
             boxShadow: 'none',
@@ -1665,10 +1666,15 @@ export function ChatArea({ conversationId, onClosed }: Props) {
           <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
           <span
             style={{
-              color: 'var(--txt-2)',
+              color: 'var(--txt-3)',
               fontSize: 11,
               whiteSpace: 'nowrap',
               lineHeight: 1.4,
+              padding: '2px 8px',
+              background: 'var(--bg)',
+              borderRadius: 'var(--r-pill)',
+              border: '1px solid var(--line)',
+              fontFamily: 'var(--font)',
             }}
           >
             {msg.content}
@@ -1793,9 +1799,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                   ? 'var(--teal-dim)'
                   : isAIMessage
                     ? 'linear-gradient(135deg,var(--teal-dim),rgba(0,201,167,0.06))'
-                    : isBot
-                      ? 'var(--bg-4)'
-                      : 'var(--bg-3)',
+                    : 'var(--bg-4)',
               color: msg.is_internal ? 'var(--amber)' : 'var(--txt)',
               border: msg.is_internal
                 ? '1px solid rgba(245,158,11,.3)'
@@ -2596,7 +2600,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                       )}
                     />
                     <ToolbarButton
-                      tooltip="Emoji"
+                      tooltip={t('chat.emoji')}
                       active={showEmojiPicker}
                       onClick={() => {
                         setShowQuickReplies(false);
@@ -2612,7 +2616,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                       )}
                     />
                     <ToolbarButton
-                      tooltip="Respostas rápidas"
+                      tooltip={t('chat.quickReplies')}
                       active={showQuickReplies}
                       onClick={() => {
                         setShowEmojiPicker(false);
@@ -2625,7 +2629,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                       )}
                     />
                     <ToolbarButton
-                      tooltip="Nota interna"
+                      tooltip={t('chat.internalNote')}
                       active={isInternal}
                       activeColor="var(--amber)"
                       onClick={() => {
@@ -3177,7 +3181,13 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                   ? t('chat.charCount', { count: content.length })
                   : canSendMessage && isInternal
                     ? <span style={{ color: 'var(--amber)', fontWeight: 500 }}>{t('chat.internalNoteActive')}</span>
-                    : t('chat.ctrlEnter')}
+                    : (
+                      <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <span>{t('chat.enterToSend')}</span>
+                        <span style={{ color: 'var(--txt-3)' }}>·</span>
+                        <span style={{ color: 'var(--txt-3)' }}>{t('chat.shiftEnterNewLine')}</span>
+                      </span>
+                    )}
               </span>
             </div>
           </>
