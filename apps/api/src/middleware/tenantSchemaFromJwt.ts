@@ -1,6 +1,10 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/database.js';
 
+// Mesma whitelist usada em ~20 outros pontos do codebase (ex.: tickets.service.ts
+// ensureSafeSchemaName) antes de interpolar schemaName em SQL raw.
+const SAFE_SCHEMA_NAME = /^[a-z0-9_]+$/i;
+
 export async function tenantSchemaFromJwt(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -23,6 +27,11 @@ export async function tenantSchemaFromJwt(
   // Fast path: schemaName already in JWT (tokens issued after this deploy)
   if (user.schemaName) {
     const schemaName = resolvedTenant?.schemaName ?? user.schemaName;
+
+    if (!SAFE_SCHEMA_NAME.test(schemaName)) {
+      return reply.code(403).send({ error: 'Schema do tenant inválido' });
+    }
+
     await prisma.$executeRawUnsafe(`SET search_path TO "${schemaName}", public`);
     request.user = {
       ...user,
@@ -43,6 +52,10 @@ export async function tenantSchemaFromJwt(
 
   if (tenant.status !== 'active' && tenant.status !== 'trial') {
     return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
+  }
+
+  if (!SAFE_SCHEMA_NAME.test(tenant.schemaName)) {
+    return reply.code(403).send({ error: 'Schema do tenant inválido' });
   }
 
   request.user = {

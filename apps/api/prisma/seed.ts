@@ -64,7 +64,13 @@ async function seedPlans() {
 
 async function seedSuperAdmin() {
   const email = process.env['SEED_SUPER_ADMIN_EMAIL'] ?? 'admin@ziradesk.com';
-  const password = process.env['SEED_SUPER_ADMIN_PASSWORD'] ?? 'ZiraDesk@2025';
+  const password = process.env['SEED_SUPER_ADMIN_PASSWORD'];
+
+  if (!password) {
+    throw new Error(
+      'SEED_SUPER_ADMIN_PASSWORD env var is required. Set it in .env before running the seed.',
+    );
+  }
 
   const existing = await prisma.superAdmin.findUnique({ where: { email } });
   if (existing) {

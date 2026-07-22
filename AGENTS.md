@@ -46,3 +46,21 @@ Se houver conflito entre documentos, prevalece:
 - Estados de foco/hover visíveis.
 - Estados vazios contemplados.
 - Microcópia em PT-BR.
+
+## 4) Atualização de documentação obrigatória
+
+Vale para qualquer sessão de implementação — frontend, backend ou infra —, não só UI.
+
+Ao final de uma sessão que adicionar funcionalidade, corrigir bug relevante, alterar
+arquitetura/modelo de dados, ou tocar em segurança/infraestrutura de produção, o agente DEVE:
+
+1. Adicionar uma entrada em `docs/technical/CHANGELOG.md` (topo do arquivo, acima da versão
+   anterior), seguindo o formato existente (`### Adicionado`/`### Alterado`/`### Corrigido`/
+   `### Removido`/`### Documentação`, e `### Segurança / Infraestrutura` quando aplicável).
+2. Se a sessão alterou modelo de dados, endpoints, motor de roteamento, ou qualquer decisão
+   estrutural documentada em `ARQUITETURA_TECNICA.md`, atualizar as seções afetadas.
+3. Se a sessão resolveu ou identificou um item de dívida técnica, atualizar `ARQUITETURA_TECNICA.md`
+   §16 — marcar itens resolvidos (`~~item~~ — ✅ Resolvido: ...`) e registrar novos itens
+   encontrados, mesmo que não corrigidos nesta sessão (documentar > fingir que não existe).
+4. Nunca declarar um bloqueador/dívida como "resolvido" se a correção for parcial ou mitigação —
+   registrar o estado real (ex.: "mitigado parcialmente", "fechado o vetor X, gap Y permanece").

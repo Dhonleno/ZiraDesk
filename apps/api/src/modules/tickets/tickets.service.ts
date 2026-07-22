@@ -347,7 +347,9 @@ function buildAttachmentStorageKey(ticketId: string, attachmentId: string, fileN
 }
 
 type RawExecutor = typeof prisma;
-let ticketInfraEnsured = false;
+// Chaveado por schema (não por processo) — cada tenant precisa do próprio retrofit de DDL,
+// já que a flag booleana global só cobria o primeiro schema acessado após o boot.
+const ensuredTicketSchemas = new Set<string>();
 
 function ensureSafeSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/i.test(schemaName)) {
@@ -380,7 +382,12 @@ async function withOptionalSchema<T>(
 }
 
 async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<void> {
-  if (ticketInfraEnsured) return;
+  const schemaRows = await db.$queryRawUnsafe<Array<{ current_schema: string | null }>>(
+    'SELECT current_schema()',
+  );
+  const schemaName = schemaRows[0]?.current_schema;
+
+  if (!schemaName || ensuredTicketSchemas.has(schemaName)) return;
 
   await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ticket_types (
@@ -552,7 +559,7 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     ON ticket_time_entries(ticket_id)
   `);
 
-  ticketInfraEnsured = true;
+  ensuredTicketSchemas.add(schemaName);
 }
 
 export async function ensureTicketInfrastructureForSchema(schemaName: string): Promise<void> {

@@ -929,6 +929,29 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_tickets_status"
+    ON "${schemaName}".tickets(status)
+    WHERE status NOT IN ('closed', 'resolved')
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_tickets_assigned_to"
+    ON "${schemaName}".tickets(assigned_to)
+    WHERE assigned_to IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_tickets_created_at"
+    ON "${schemaName}".tickets(created_at DESC)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_tickets_department_status"
+    ON "${schemaName}".tickets(department_id, status)
+    WHERE department_id IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".ticket_events (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       ticket_id   UUID REFERENCES "${schemaName}".tickets(id) ON DELETE CASCADE,

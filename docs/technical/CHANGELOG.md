@@ -1,5 +1,47 @@
 # Changelog — ZiraDesk
 
+## [0.9.2] — Skills v2, roteamento AND logic, reorganização de nav e bloqueadores de produção
+
+### Adicionado
+- Tickets: fila `queued`, auto-assign, claim e departamento no create (Bloco A)
+- Tickets: presence status considerado no auto-assign (Bloco B)
+- Tickets: e-mail de aviso de SLA 30min antes do vencimento (Bloco C)
+- Tickets: aceitação explícita pelo agente designado
+- Tickets: restrições de edição por status/role
+- Tickets: pausa de SLA + escalação automática, CSAT por e-mail após resolução, notificações automáticas de e-mail ao contato, campo/modal de motivo de espera (`waiting_reason`), `ticket_number` sequencial com zero-padding
+- Skills v2: novo modelo de dados (Fase 1), motor de roteamento AND logic com fallback inteligente (Fase 2), Admin UI + integração no BotMenu (Fase 3), métricas e limpeza do legado (Fase 4)
+- Nav rail reorganizado: 12 itens → 8, com abas (Monitor+Fila, Análise = Métricas+Histórico+Performance, CRM = Contatos+Organizações)
+- Nav lateral expansível
+- Abrir atendimento diretamente pelo protocolo
+- Script `apps/api/src/scripts/migrate-ticket-indexes.ts` — índices de `tickets` para tenants existentes
+
+### Alterado
+- Reestruturação visual do `TicketDetail` (arquétipo B)
+- Refatoração visual do `Toaster` (estrutura zd-toast + ícones stroke-only)
+- Melhorias visuais/UX da central de atendimento: bolha do cliente legível no tema claro, separador de mensagem de sistema, i18n da toolbar, hint Enter/Shift+Enter, painel de informações compactado
+- `ensureTicketInfrastructure`: cache por schema (`Set<string>` via `current_schema()`) em vez de flag booleana global de processo — corrige tenants que ficavam sem o retrofit incremental de DDL
+
+### Corrigido
+- Guard de edição de ticket permitia agente fechar ticket resolvido
+- SkillsV2: classe fantasma no header, selects cortados no modal de atribuição de agente
+- Modal: `backdropFilter` blur removido (artefato de cor no overlay)
+- Scroll vertical das colunas do kanban de tickets
+- Busca de tickets por número e por status resolvido
+- Categorias de ticket carregadas via API em vez de derivadas do lado do cliente
+- i18n: nav rail, `OrganizationDetail`, componentes globais e páginas individuais (portal, campanhas, métricas, contatos, tickets, `CampaignDetail`, `ChecklistSection`, `TimeTrackingSection`)
+
+### Removido
+- Tipo `Ticket` duplicado em `packages/shared/src/types/ticket.ts` (não tinha consumidores)
+
+### Segurança / Infraestrutura
+- `tenantSchemaFromJwt.ts`: `schemaName` validado por regex (`^[a-z0-9_]+$`) antes de interpolar em `SET search_path` — fecha o vetor de injeção. **A race condition do `SET` sem `LOCAL` sob pool de conexões concorrente permanece — ver `ARQUITETURA_TECNICA.md` §16, é dívida técnica crítica, não foi resolvida nesta sessão.**
+- `prisma/seed.ts`: seed do Super Admin agora falha (`throw`) se `SEED_SUPER_ADMIN_PASSWORD` não estiver definida — removido o fallback hardcoded (`ZiraDesk@2025`)
+- Índices adicionados em `tickets(status)`, `tickets(assigned_to)`, `tickets(created_at)` e `tickets(department_id, status)` — ausentes desde a criação da tabela, agora presentes tanto no provisionamento de tenants novos quanto via script de migração para tenants existentes
+
+### Documentação
+- Auditoria completa de prontidão para produção (infra/deploy, banco/migrações, segurança, features críticas, testes, frontend, dívida técnica, config de produção, multitenancy, performance)
+- `ARQUITETURA_TECNICA.md` §16 sincronizado: itens resolvidos marcados, novos itens registrados (race condition de `search_path`, bundle sem lazy-loading, CI não valida `apps/web`)
+
 ## [0.9.1] — Ajustes de Deploy Contabo
 ### Alterado
 - Deploy de producao movido para workflow dedicado `.github/workflows/deploy-contabo.yml`
