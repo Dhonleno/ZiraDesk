@@ -3096,7 +3096,33 @@
 }
 
 .portal-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 14px;
+}
+
+.portal-comment-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  background: var(--bg-3);
+  color: var(--txt);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.portal-comment-form textarea:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-dim);
+}
+
+.portal-comment-form .portal-btn-primary {
+  align-self: flex-end;
 }
 
 .portal-lgpd-grid {
