@@ -15,6 +15,7 @@
       "test": "Probar",
       "invite": "Invitar",
       "inviting": "Invitando...",
+      "loading": "Cargando...",
       "saving": "Guardando...",
       "noResults": "Sin resultados",
       "errorSave": "Error al guardar",
@@ -27,6 +28,15 @@
         "minutesAgo": "hace {{count}} min",
         "hoursAgo": "hace {{count}}h",
         "daysAgo": "hace {{count}} días"
+      }
+    },
+    "ticketAutoAssign": {
+      "title": "Auto-asignación de Tickets",
+      "subtitle": "Configure la asignación automática de tickets por departamento (round-robin)",
+      "enabled": "Auto-asignación por departamento activa",
+      "enabledHint": "Cuando está activado, los tickets creados con departamento y sin agente se distribuyen automáticamente entre los agentes del departamento. Sin agente disponible, el ticket entra en la cola.",
+      "messages": {
+        "saved": "Configuración guardada con éxito"
       }
     },
     "queueConfig": {
@@ -320,6 +330,10 @@
       "depth": "Nivel {{n}}",
       "parentOption": "Opción padre",
       "noSubmenuGreeting": "Sin mensaje de introducción",
+      "requiredSkills": "Habilidades obligatorias",
+      "requiredSkillsHint": "Los agentes deben tener todas las habilidades marcadas para recibir conversaciones de esta opción.",
+      "skillRequired": "Obligatoria",
+      "noSkillsAvailable": "No hay habilidades activas disponibles",
       "option": {
         "number": "Número",
         "label": "Label",
@@ -364,6 +378,55 @@
       "close": "Cerrar",
       "save": "Guardar",
       "saving": "Guardando..."
+    },
+    "skillsV2": {
+      "title": "Habilidades",
+      "subtitle": "Gestiona habilidades independientes para agentes y opciones del bot",
+      "new": "Nueva habilidad",
+      "newTitle": "Nueva habilidad",
+      "editTitle": "Editar habilidad",
+      "listTitle": "Habilidades",
+      "detailEyebrow": "Habilidad",
+      "selectTitle": "Selecciona una habilidad",
+      "selectBody": "Elige una habilidad de la lista para ver agentes y opciones vinculadas.",
+      "emptyTitle": "Sin habilidades registradas",
+      "emptyBody": "Crea habilidades para organizar el enrutamiento de atenciones.",
+      "active": "Activa",
+      "inactive": "Inactiva",
+      "deactivate": "Desactivar",
+      "deleteTitle": "Quitar habilidad",
+      "deleteWarning": "Esta habilidad no tiene vínculos y se eliminará definitivamente.",
+      "softDeleteWarning": "Esta habilidad tiene vínculos con agentes u opciones del bot. Se desactivará para preservar el historial.",
+      "counts": "{{agents}} agente(s) · {{botOptions}} opción(es)",
+      "assignedAgents": "Agentes con la habilidad",
+      "linkedBotOptions": "Opciones del bot vinculadas",
+      "assignAgent": "Asignar agente",
+      "assign": "Asignar",
+      "selectAgent": "Selecciona un agente",
+      "noDescription": "Sin descripción.",
+      "noAgents": "Ningún agente asignado.",
+      "noBotOptions": "Ninguna opción del bot vinculada.",
+      "required": "Obligatoria",
+      "optional": "Opcional",
+      "fields": {
+        "name": "Nombre",
+        "description": "Descripción",
+        "agent": "Agente",
+        "level": "Nivel",
+        "isActive": "Activa"
+      },
+      "levels": {
+        "junior": "Júnior",
+        "intermediate": "Intermedio",
+        "senior": "Sénior"
+      },
+      "messages": {
+        "created": "Habilidad creada",
+        "updated": "Habilidad actualizada",
+        "deleted": "Habilidad quitada",
+        "agentAssigned": "Agente asignado",
+        "agentRemoved": "Agente quitado"
+      }
     },
     "departments": {
       "title": "Departamentos",
@@ -1013,6 +1076,13 @@
   },
   "nav": {
     "admin": "Administración",
+    "monitor": "Monitor",
+    "metrics": "Métricas",
+    "organizations": "Organizaciones",
+    "contacts": "Contactos",
+    "campaigns": "Campañas",
+    "conversations": "Conversaciones",
+    "tickets": "Tickets",
     "users": "Usuarios",
     "permissions": "Permisos y Acceso",
     "channels": "Canales",
@@ -1034,6 +1104,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Reglas de Atención",
     "queueConfig": "Notificaciones de Cola",
+    "ticketAutoAssign": "Auto-asignación de Tickets",
     "settings": "Configuración",
     "lgpd": "LGPD",
     "history": "Historial",

@@ -110,32 +110,32 @@ export function CampaignsPage() {
 
   const pauseMutation = useMutation({
     mutationFn: (id: string) => campaignsApi.pause(id),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campanha pausada.'); },
-    onError: () => toast.error('Erro ao pausar campanha.'),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success(t('actions.pauseSuccess')); },
+    onError: () => toast.error(t('actions.pauseError')),
   });
 
   const resumeMutation = useMutation({
     mutationFn: (id: string) => campaignsApi.resume(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success('Campanha retomada.');
+      toast.success(t('actions.resumeSuccess'));
     },
-    onError: () => toast.error('Erro ao retomar campanha.'),
+    onError: () => toast.error(t('actions.resumeError')),
   });
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => campaignsApi.cancel(id),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campanha cancelada.'); },
-    onError: () => toast.error('Erro ao cancelar campanha.'),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaigns'] }); toast.success(t('actions.cancelSuccess')); },
+    onError: () => toast.error(t('actions.cancelError')),
   });
 
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => campaignsApi.duplicate(id),
     onSuccess: (dup) => {
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success(`Campanha duplicada: "${dup.name}"`);
+      toast.success(t('actions.duplicateSuccess', { name: dup.name }));
     },
-    onError: () => toast.error('Erro ao duplicar campanha.'),
+    onError: () => toast.error(t('actions.duplicateError')),
   });
 
   const handleExportCsvFromList = async (id: string, name: string) => {
@@ -248,7 +248,7 @@ export function CampaignsPage() {
         </div>
 
         {isLoading && (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>Carregando...</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--txt-3)', fontSize: 12 }}>{t('loading', { ns: 'common' })}</div>
         )}
 
         {!isLoading && campaigns.length === 0 && (
@@ -473,11 +473,11 @@ export function CampaignsPage() {
         {/* Pagination */}
         {meta && meta.total_pages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '14px 20px' }}>
-            <button className="tb-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</button>
+            <button className="tb-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>{t('previous', { ns: 'common' })}</button>
             <span style={{ fontSize: 11, color: 'var(--txt-3)', alignSelf: 'center' }}>
               {page} / {meta.total_pages}
             </span>
-            <button className="tb-btn" disabled={page >= meta.total_pages} onClick={() => setPage((p) => p + 1)}>Próximo</button>
+            <button className="tb-btn" disabled={page >= meta.total_pages} onClick={() => setPage((p) => p + 1)}>{t('next', { ns: 'common' })}</button>
           </div>
         )}
       </div>

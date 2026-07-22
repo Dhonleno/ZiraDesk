@@ -638,7 +638,7 @@ export async function listPerformanceByGroup(
       SELECT
         c.id,
         c.bot_option_id,
-        COALESCE(d.name, NULLIF(c.metadata->>'bot_department', ''), '—') AS group_name,
+        COALESCE(d.name, '—') AS group_name,
         c.created_at,
         c.conversation_type,
         c.outbound_returned_at,

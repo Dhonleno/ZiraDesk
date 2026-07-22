@@ -106,11 +106,89 @@ async function createTicket(payload: Record<string, unknown> = {}) {
 
   return response.body.data as {
     id: string;
+    ticket_number: number;
     title: string;
     status: string;
     priority: string;
     assigned_to: string | null;
   };
+}
+
+async function createOrganizationAndContact() {
+  const { schemaName } = requireSuiteTenant();
+  const organizationRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+    `INSERT INTO "${schemaName}".organizations (name, email)
+     VALUES ($1, $2)
+     RETURNING id, name`,
+    uniqueText('Org Busca'),
+    'org.busca@ziradesk.test',
+  );
+  const organization = organizationRows[0];
+  if (!organization) throw new Error('Falha ao criar organização de teste');
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; email: string }>>(
+    `INSERT INTO "${schemaName}".contacts (organization_id, name, email)
+     VALUES ($1::uuid, $2, $3)
+     RETURNING id, name, email`,
+    organization.id,
+    uniqueText('Contato Busca'),
+    `contato.busca.${Date.now()}@ziradesk.test`,
+  );
+  const contact = contactRows[0];
+  if (!contact) throw new Error('Falha ao criar contato de teste');
+
+  return { organization, contact };
+}
+
+async function setTicketAutoAssign(enabled: boolean): Promise<void> {
+  const { id } = requireSuiteTenant();
+  await prisma.tenant.update({
+    where: { id },
+    data: { settings: { ticket_auto_assign: enabled } },
+  });
+}
+
+async function createDepartmentWithAgent(presence: {
+  status: 'online' | 'offline';
+  isAvailable: boolean;
+}): Promise<{ departmentId: string; agentId: string }> {
+  const { schemaName } = requireSuiteTenant();
+
+  const departmentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".departments (name)
+     VALUES ($1)
+     RETURNING id`,
+    uniqueText('Depto Presenca'),
+  );
+  const departmentId = departmentRows[0]?.id;
+  if (!departmentId) throw new Error('Falha ao criar departamento de teste');
+
+  const agentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings)
+     VALUES ($1, $2, 'not_used_in_jwt_tests', 'agent', 'active', 'pt-BR', '{}'::jsonb)
+     RETURNING id`,
+    uniqueText('Agente Presenca'),
+    `agente.presenca.${Date.now()}.${Math.floor(Math.random() * 1_000_000)}@ziradesk.test`,
+  );
+  const agentId = agentRows[0]?.id;
+  if (!agentId) throw new Error('Falha ao criar agente de teste');
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".agent_departments (user_id, department_id)
+     VALUES ($1::uuid, $2::uuid)`,
+    agentId,
+    departmentId,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${schemaName}".agent_assignments (user_id, status, is_available, last_seen_at)
+     VALUES ($1::uuid, $2, $3::boolean, NOW())`,
+    agentId,
+    presence.status,
+    presence.isAvailable,
+  );
+
+  return { departmentId, agentId };
 }
 
 async function createTempTenant(track = true): Promise<TempTenant> {
@@ -256,6 +334,47 @@ describe('Tickets integration', () => {
 
     const returnedIds = [page1.body.data[0]?.id, page2.body.data[0]?.id].sort();
     expect(returnedIds).toEqual([firstMatch.id, secondMatch.id].sort());
+  });
+
+  it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
+    const { organization, contact } = await createOrganizationAndContact();
+    const ticket = await createTicket({
+      title: uniqueText('Ticket resolvido buscavel'),
+      status: 'in_progress',
+      priority: 'medium',
+      contact_id: contact.id,
+      organization_id: organization.id,
+    });
+    await createTicket({ title: uniqueText('Nao deve aparecer'), status: 'open' });
+
+    const resolveResponse = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader())
+      .send({ status: 'resolved' });
+
+    expect(resolveResponse.status).toBe(200);
+
+    const searchByNumber = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: `#${String(ticket.ticket_number).padStart(5, '0')}` })
+      .set(authHeader());
+    const searchByContact = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: contact.email })
+      .set(authHeader());
+    const searchByOrganization = await createTestApp()
+      .get('/api/tickets')
+      .query({ search: organization.name })
+      .set(authHeader());
+
+    for (const response of [searchByNumber, searchByContact, searchByOrganization]) {
+      expect(response.status).toBe(200);
+      expect(response.body.meta.total).toBe(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: ticket.id,
+        status: 'resolved',
+      });
+    }
   });
 
   it('PATCH /api/tickets/:id atualiza status seguindo STATUS_TRANSITIONS', async () => {
@@ -537,5 +656,182 @@ describe('Tickets integration', () => {
       action: 'ticket.pii.accessed',
       entity_id: ticket.id,
     });
+  });
+
+  it('POST /api/tickets com department_id e auto-assign ligado mantém queued quando agente do departamento está offline', async () => {
+    await setTicketAutoAssign(true);
+    const { departmentId } = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+
+    const response = await createTestApp()
+      .post('/api/tickets')
+      .set(authHeader())
+      .send({
+        title: uniqueText('Ticket sem agente online'),
+        department_id: departmentId,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      status: 'queued',
+      assigned_to: null,
+    });
+  });
+
+  it('POST /api/tickets com department_id e auto-assign ligado atribui agente online e disponível do departamento', async () => {
+    await setTicketAutoAssign(true);
+    const { departmentId, agentId } = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+
+    const response = await createTestApp()
+      .post('/api/tickets')
+      .set(authHeader())
+      .send({
+        title: uniqueText('Ticket auto-atribuido por presenca'),
+        department_id: departmentId,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data).toMatchObject({
+      status: 'open',
+      assigned_to: agentId,
+    });
+  });
+
+  it('POST /api/tickets/:id/accept — agente designado aceita ticket open, status vira in_progress', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('in_progress');
+  });
+
+  it('POST /api/tickets/:id/accept — agente designado aceita ticket queued, status vira in_progress', async () => {
+    const ticket = await createTicket({ status: 'queued', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('in_progress');
+  });
+
+  it('POST /api/tickets/:id/accept — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader({ sub: otherUserId }));
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/accept — ticket já in_progress recebe 409', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/accept`)
+      .set(authHeader());
+
+    expect(response.status).toBe(409);
+  });
+
+  it('PATCH /api/tickets/:id — agente designado fecha ticket resolved → 200', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ status: 'resolved' });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ status: 'closed' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('closed');
+  });
+
+  it('PATCH /api/tickets/:id — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent', sub: otherUserId }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('PATCH /api/tickets/:id — agente designado mas ticket não aceito (status open) recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('PATCH /api/tickets/:id — agente designado com ticket in_progress pode editar', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('PATCH /api/tickets/:id — admin pode editar mesmo sem ser o designado (status open)', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader({ role: 'admin' }))
+      .send({ title: uniqueText('Titulo Atualizado') });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('POST /api/tickets/:id/comments — agente não designado recebe 403', async () => {
+    const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
+    const otherUserId = '00000000-0000-0000-0000-000000000099';
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'agent', sub: otherUserId }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/comments — agente designado mas ticket não aceito (status open) recebe 403', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/comments — admin pode comentar mesmo sem ser o designado (status open)', async () => {
+    const ticket = await createTicket({ status: 'open', assigned_to: TEST_USER_ID });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set(authHeader({ role: 'admin' }))
+      .send({ content: 'Comentário de teste', is_internal: false });
+
+    expect(response.status).toBe(201);
   });
 });

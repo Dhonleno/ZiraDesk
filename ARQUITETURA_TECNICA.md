@@ -1381,6 +1381,8 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
 - Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
+- Tipo `Ticket` duplicado entre `apps/web/src/services/api.ts` e `packages/shared/src/types/ticket.ts` (este último parece não ser consumido por nenhum módulo hoje) — campos novos (`department_id`, `department_name`, status `queued`) foram replicados manualmente nos dois lugares em vez de consolidar numa fonte única
+- Backend: mensagens de erro (`NotFoundError`, `ForbiddenError`, `ConflictError`, `ValidationError`) hardcoded em PT-BR em todos os módulos da API. `middleware/language.ts` faz parsing de `Accept-Language` e está registrado globalmente, mas só é usado no fluxo de login (`auth.service.ts`, catálogo de 3 chaves). Estender exigiria: lib de i18n na API, refatoração das classes de erro (hoje redefinidas localmente em 20+ arquivos, cada uma com o template PT-BR embutido no construtor), e extensão do middleware para os demais módulos. Escopo: sprint dedicada.
 
 ---
 

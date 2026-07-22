@@ -444,7 +444,7 @@ export function ContactsPage() {
                 color: currentPage === 1 ? 'var(--txt-3)' : 'var(--txt-2)',
                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
               }}
-              aria-label="Página anterior"
+              aria-label={t('previous', { ns: 'common' })}
             >
               ←
             </button>
@@ -462,7 +462,7 @@ export function ContactsPage() {
                 color: currentPage === totalPages ? 'var(--txt-3)' : 'var(--txt-2)',
                 cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
               }}
-              aria-label="Próxima página"
+              aria-label={t('next', { ns: 'common' })}
             >
               →
             </button>
@@ -506,13 +506,13 @@ export function ContactsPage() {
         ) : null}
         <ConfirmModal
           open={Boolean(deleteConfirm)}
-          title="Excluir contato"
+          title={t('contacts.deleteContact')}
           message={
             deleteConfirm
               ? `${t('contacts.deleteConfirm', { name: deleteConfirm.name })} ${t('contacts.deleteWarning')}`
               : ''
           }
-          confirmLabel="Excluir"
+          confirmLabel={t('delete', { ns: 'common' })}
           confirmVariant="danger"
           loading={deleting}
           onConfirm={handleDelete}

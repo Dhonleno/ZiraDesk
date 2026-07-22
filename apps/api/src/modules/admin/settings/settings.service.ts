@@ -32,6 +32,7 @@ const DEFAULT_AGENT_ASSUME_TEMPLATE =
   'Olá! Meu nome é {{agent_name}}, vou continuar seu atendimento. Em que posso ajudar?';
 const DEFAULT_EXPIRE_24H_MESSAGE =
   'Olá, infelizmente não conseguimos atender no momento. Por favor, entre em contato novamente quando puder.';
+const DEFAULT_ROUTING_SKILL_TIMEOUT_MS = 120_000;
 
 function logoKey(tenantId: string, mimeType: string): string {
   const ext = LOGO_EXT_BY_MIME[mimeType] ?? 'png';
@@ -65,6 +66,13 @@ function resolveLgpdRetentionDays(value: unknown): number {
   if (typeof value !== 'number') return DEFAULT_LGPD_RETENTION_DAYS;
   const parsed = Math.trunc(value);
   if (parsed < 1 || parsed > 3650) return DEFAULT_LGPD_RETENTION_DAYS;
+  return parsed;
+}
+
+function resolveRoutingSkillTimeoutMs(value: unknown): number {
+  if (typeof value !== 'number') return DEFAULT_ROUTING_SKILL_TIMEOUT_MS;
+  const parsed = Math.trunc(value);
+  if (parsed < 30_000 || parsed > 600_000) return DEFAULT_ROUTING_SKILL_TIMEOUT_MS;
   return parsed;
 }
 
@@ -128,6 +136,7 @@ export async function getSettings(tenantId: string) {
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    routing_skill_timeout_ms: resolveRoutingSkillTimeoutMs(s.routing_skill_timeout_ms),
     lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
     lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
     queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
@@ -136,6 +145,7 @@ export async function getSettings(tenantId: string) {
     agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
+    ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -188,6 +198,9 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...('max_conversations_per_agent' in data
       ? { max_conversations_per_agent: data.max_conversations_per_agent ?? null }
       : {}),
+    ...(data.routing_skill_timeout_ms !== undefined
+      ? { routing_skill_timeout_ms: data.routing_skill_timeout_ms }
+      : {}),
     ...(data.lgpd_retention_enabled !== undefined
       ? { lgpd_retention_enabled: data.lgpd_retention_enabled }
       : {}),
@@ -211,6 +224,9 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       : {}),
     ...(data.expire_24h_message !== undefined
       ? { expire_24h_message: data.expire_24h_message }
+      : {}),
+    ...(data.ticket_auto_assign !== undefined
+      ? { ticket_auto_assign: data.ticket_auto_assign }
       : {}),
   };
 
@@ -253,6 +269,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
       (s.bot_assigned_message as string | undefined) ?? DEFAULT_BOT_ASSIGNED_MESSAGE,
     max_conversations_per_agent:
       typeof s.max_conversations_per_agent === 'number' ? s.max_conversations_per_agent : null,
+    routing_skill_timeout_ms: resolveRoutingSkillTimeoutMs(s.routing_skill_timeout_ms),
     lgpd_retention_enabled: (s.lgpd_retention_enabled as boolean | undefined) ?? false,
     lgpd_retention_days: resolveLgpdRetentionDays(s.lgpd_retention_days),
     queue_notifications_enabled: (s.queue_notifications_enabled as boolean | undefined) ?? true,
@@ -261,6 +278,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     agent_assume_template: (s.agent_assume_template as string | undefined) ?? DEFAULT_AGENT_ASSUME_TEMPLATE,
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
+    ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
   };
 }
 

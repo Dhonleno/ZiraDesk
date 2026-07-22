@@ -1,6 +1,7 @@
 {
   "save": "Save",
   "cancel": "Cancel",
+  "close": "Close",
   "delete": "Delete",
   "edit": "Edit",
   "back": "Back",
@@ -12,6 +13,12 @@
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
+  "notDefined": "Not defined",
+  "help": "Help",
+  "dismiss": "Dismiss",
+  "step": "Step {{current}} of {{total}}",
+  "previous": "Previous",
+  "next": "Next",
   "language": {
     "label": "Language",
     "ptBR": "Portuguese",

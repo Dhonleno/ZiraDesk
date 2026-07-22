@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ticketsApi, type TicketChecklistItem } from '../../services/api';
 
 interface ChecklistSectionProps {
@@ -7,6 +8,7 @@ interface ChecklistSectionProps {
 }
 
 export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
+  const { t } = useTranslation('tickets');
   const queryClient = useQueryClient();
   const [newItem, setNewItem] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -51,103 +53,115 @@ export default function ChecklistSection({ ticketId }: ChecklistSectionProps) {
   }
 
   return (
-    <div className="ticket-section">
-      <div className="ticket-section-header">
-        <span className="ticket-section-title">Checklist</span>
-        {items.length > 0 ? (
-          <span className="checklist-progress-text">{doneCount}/{items.length} ({progress}%)</span>
-        ) : null}
+    <section className="ticket-dsec">
+      <div className="ticket-dsec-head">
+        <span>
+          {t('tickets.checklist.title')}
+          {items.length > 0 ? (
+            <span className="checklist-progress-text"> · {doneCount}/{items.length} ({progress}%)</span>
+          ) : null}
+        </span>
+        <button type="button" className="btn-ghost" onClick={() => setIsAdding(true)}>
+          {t('tickets.checklist.addTask')}
+        </button>
       </div>
 
-      {items.length > 0 ? (
-        <div className="checklist-progress-bar">
-          <div
-            className="checklist-progress-fill"
-            style={{
-              width: `${progress}%`,
-              background: progress === 100 ? 'var(--green)' : 'var(--teal)',
-            }}
-          />
-        </div>
-      ) : null}
-
-      <div className="checklist-items">
-        {items.map((item) => (
-          <div key={item.id} className="checklist-item">
-            <input
-              type="checkbox"
-              checked={item.is_done}
-              onChange={(e) => {
-                toggleMutation.mutate({ itemId: item.id, isDone: e.target.checked });
+      <div className="ticket-dsec-body">
+        {items.length > 0 ? (
+          <div className="checklist-progress-bar">
+            <div
+              className="checklist-progress-fill"
+              style={{
+                width: `${progress}%`,
+                background: progress === 100 ? 'var(--green)' : 'var(--teal)',
               }}
-              className="checklist-checkbox"
             />
-            <span className={`checklist-label ${item.is_done ? 'done' : ''}`}>
-              {item.title}
-            </span>
-            {item.is_done && item.done_by_name ? (
-              <span className="checklist-done-by" title={item.done_at ?? undefined}>
-                ✓ {item.done_by_name}
-              </span>
-            ) : null}
+          </div>
+        ) : null}
+
+        {items.length === 0 && !isAdding ? (
+          <div className="ticket-empty-state">
+            <div className="ticket-empty-icon">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                <rect x="3.5" y="3.5" width="13" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M6.8 10 9 12.2l4.2-4.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="ticket-empty-title">{t('tickets.checklist.emptyTitle')}</p>
+            <p className="ticket-empty-sub">{t('tickets.checklist.emptySub')}</p>
+          </div>
+        ) : (
+          <div className="checklist-items">
+            {items.map((item) => (
+              <div key={item.id} className="checklist-item">
+                <input
+                  type="checkbox"
+                  checked={item.is_done}
+                  onChange={(e) => {
+                    toggleMutation.mutate({ itemId: item.id, isDone: e.target.checked });
+                  }}
+                  className="checklist-checkbox"
+                />
+                <span className={`checklist-label ${item.is_done ? 'done' : ''}`}>
+                  {item.title}
+                </span>
+                {item.is_done && item.done_by_name ? (
+                  <span className="checklist-done-by" title={item.done_at ?? undefined}>
+                    ✓ {item.done_by_name}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="checklist-delete"
+                  onClick={() => deleteMutation.mutate(item.id)}
+                  aria-label={t('tickets.checklist.deleteTask')}
+                  title={t('tickets.checklist.deleteTask')}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isAdding ? (
+          <div className="checklist-add">
+            <input
+              ref={inputRef}
+              autoFocus
+              placeholder={t('tickets.checklist.placeholder')}
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAdd();
+                if (e.key === 'Escape') {
+                  setIsAdding(false);
+                  setNewItem('');
+                }
+              }}
+              className="checklist-input"
+            />
             <button
               type="button"
-              className="checklist-delete"
-              onClick={() => deleteMutation.mutate(item.id)}
-              aria-label="Remover item"
-              title="Remover item"
+              onClick={handleAdd}
+              disabled={!newItem.trim() || addMutation.isPending}
+              className="zd-btn zd-btn-primary"
             >
-              ×
+              {t('tickets.checklist.add')}
             </button>
-          </div>
-        ))}
-      </div>
-
-      {isAdding ? (
-        <div className="checklist-add">
-          <input
-            ref={inputRef}
-            autoFocus
-            placeholder="Descrição da tarefa..."
-            value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAdd();
-              if (e.key === 'Escape') {
+            <button
+              type="button"
+              onClick={() => {
                 setIsAdding(false);
                 setNewItem('');
-              }
-            }}
-            className="checklist-input"
-          />
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={!newItem.trim() || addMutation.isPending}
-            className="zd-btn zd-btn-primary"
-          >
-            Adicionar
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsAdding(false);
-              setNewItem('');
-            }}
-            className="zd-btn"
-          >
-            Cancelar
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="checklist-add-trigger"
-          onClick={() => setIsAdding(true)}
-        >
-          + Adicionar tarefa
-        </button>
-      )}
-    </div>
+              }}
+              className="zd-btn"
+            >
+              {t('tickets.cancel')}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }

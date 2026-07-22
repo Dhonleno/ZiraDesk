@@ -19,6 +19,7 @@ export interface TicketCreateDraft {
   category?: string | undefined;
   type_id?: string | undefined;
   assigned_to?: string | null | undefined;
+  department_id?: string | null | undefined;
   contact_id?: string | undefined;
   organization_id?: string | undefined;
   conversation_id?: string | undefined;
@@ -106,7 +107,11 @@ export function saveTicketCreatePreferences(next: TicketCreatePreferences): void
   }
 }
 
-export function validateTicketCreateDraft(draft: TicketCreateDraft): TicketCreateValidationResult {
+export function validateTicketCreateDraft(
+  draft: TicketCreateDraft,
+  options?: { t?: (key: string) => string },
+): TicketCreateValidationResult {
+  const t = options?.t;
   const errors: string[] = [];
   const requirements = getTicketConditionalRequirements(draft, {
     requireDueDateForUrgent: draft.require_due_date_for_urgent_override ?? true,
@@ -146,6 +151,12 @@ export function validateTicketCreateDraft(draft: TicketCreateDraft): TicketCreat
     errors.push('Status inválido para criação');
   }
 
+  if (!draft.assigned_to && !draft.department_id) {
+    errors.push(
+      t ? t('tickets.validation.assignedOrDepartmentRequired') : 'Informe o responsável ou o departamento',
+    );
+  }
+
   return { isValid: errors.length === 0, errors };
 }
 
@@ -170,6 +181,9 @@ export function buildCreateTicketPayload(draft: TicketCreateDraft): CreateTicket
 
   const assignedTo = draft.assigned_to ?? '';
   if (assignedTo) payload.assigned_to = assignedTo;
+
+  const departmentId = draft.department_id ?? '';
+  if (departmentId) payload.department_id = departmentId;
 
   if (draft.due_date) payload.due_date = new Date(draft.due_date).toISOString();
 

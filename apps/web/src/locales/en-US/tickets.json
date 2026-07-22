@@ -5,6 +5,7 @@
     "noResults": "No tickets found",
     "noSelection": "Select a ticket to view details",
     "status": {
+      "queued": "Queued",
       "open": "Open",
       "in_progress": "In Progress",
       "waiting": "Waiting",
@@ -32,6 +33,7 @@
       "priority": "Priority",
       "type": "Type",
       "assignedTo": "Assigned to",
+      "department": "Department",
       "client": "Contact",
       "category": "Category",
       "dueDate": "Due date",
@@ -42,7 +44,47 @@
       "noResponsible": "Unassigned",
       "noClient": "No contact linked",
       "noOrganization": "Not linked",
-      "noDueDate": "No due date"
+      "noDueDate": "No due date",
+      "attachments": "Attachments"
+    },
+    "validation": {
+      "assignedOrDepartmentRequired": "Assign an agent or select a department"
+    },
+    "checklist": {
+      "title": "Checklist",
+      "addTask": "+ Task",
+      "add": "Add",
+      "placeholder": "Task description...",
+      "deleteTask": "Remove item",
+      "emptyTitle": "No tasks",
+      "emptySub": "Add tasks to track progress"
+    },
+    "timeTracking": {
+      "title": "Time tracked",
+      "register": "+ Log time",
+      "hours": "Hours",
+      "minutes": "Minutes",
+      "date": "Date",
+      "descriptionPlaceholder": "What was done? (optional)",
+      "save": "Save",
+      "emptyTitle": "No time logged",
+      "deleteEntry": "Remove entry",
+      "noDescription": "No description",
+      "unknownUser": "User",
+      "addSuccess": "Time logged!",
+      "addError": "Error logging time",
+      "deleteSuccess": "Entry removed",
+      "deleteError": "You cannot delete this entry",
+      "noMinutesError": "Enter at least 1 minute"
+    },
+    "errors": {
+      "acceptForbidden": "Only the assigned agent can accept this ticket",
+      "acceptConflict": "This ticket cannot be accepted in its current state",
+      "notFound": "Ticket not found"
+    },
+    "readonly": {
+      "banner": "Accept the ticket to edit it",
+      "tooltipNotAssigned": "You are not assigned to this ticket"
     },
     "comments": {
       "title": "Comments",
@@ -61,13 +103,21 @@
     },
     "actions": {
       "assign": "Assign",
+      "accept": "Accept",
       "assignToMe": "Assign to me",
+      "claim": "Claim from queue",
+      "claimSuccess": "Ticket claimed successfully",
+      "claimErrorConflict": "This ticket has already been claimed by another agent",
+      "claimErrorForbidden": "You don't belong to this ticket's department",
+      "claimErrorNotFound": "Ticket not found",
+      "claimErrorGeneric": "Could not claim the ticket",
       "resolve": "Resolve",
       "close": "Close",
       "reopen": "Reopen",
       "cancel": "Cancel",
       "edit": "Edit",
-      "delete": "Delete"
+      "delete": "Delete",
+      "removeTag": "Remove {{tag}}"
     },
     "resolve": {
       "title": "Resolve ticket",
@@ -114,6 +164,7 @@
       "noClient": "No contact",
       "searchUser": "Search user...",
       "noUser": "No assignee",
+      "noDepartment": "No department",
       "searchOrganization": "Search organization...",
       "organizationLinked": "Linked organization",
       "urgentDueDateRequired": "Required for urgent priority",
@@ -145,7 +196,7 @@
     "newFromEmail": "New ticket by email",
     "newFromPortal": "New ticket from portal",
     "filterByAgent": "All agents",
-    "searchPlaceholder": "Search tickets...",
+    "searchPlaceholder": "Search number, title, or contact...",
     "view": "View",
     "viewKanban": "Kanban",
     "viewList": "List",
@@ -174,6 +225,7 @@
       "expiresLessThanHour": "Due in less than 1h"
     },
     "kanban": {
+      "queued": "Queued",
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",

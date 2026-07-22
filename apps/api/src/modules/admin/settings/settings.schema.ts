@@ -21,6 +21,7 @@ export const updateSettingsSchema = z.object({
   active_outbound_validity_hours: z.number().int().min(1).max(168).optional(),
   bot_assigned_message: z.string().max(1000).optional(),
   max_conversations_per_agent: z.number().int().min(1).max(500).nullable().optional(),
+  routing_skill_timeout_ms: z.number().int().min(30_000).max(600_000).default(120_000).optional(),
   lgpd_retention_enabled: z.boolean().optional(),
   lgpd_retention_days: z.number().int().min(1).max(3650).optional(),
   queue_notifications_enabled: z.boolean().optional(),
@@ -29,6 +30,7 @@ export const updateSettingsSchema = z.object({
   agent_assume_template: z.string().max(1000).optional(),
   expire_24h_action: z.enum(['close', 'keep_open']).optional(),
   expire_24h_message: z.string().max(1000).optional(),
+  ticket_auto_assign: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined

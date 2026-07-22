@@ -111,7 +111,9 @@ CSS:
 ```css
 html, body { height: 100%; overflow: hidden; }
 body { display: flex; flex-direction: column; }
-.main { display: grid; grid-template-columns: 68px 1fr; flex: 1; overflow: hidden; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.nav-rail { width: 68px; min-width: 68px; }
+.nav-rail.is-expanded { width: 216px; min-width: 216px; }
 .content { /* 1 coluna OU grid-template-columns: 1fr 380-420px */ overflow: hidden; }
 ```
 
@@ -140,8 +142,11 @@ Da esquerda para a direita:
 
 Todos os botões da topbar usam `.tb-btn`, `.tb-btn-primary` ou `.tb-icon-btn`.
 
-### Nav rail (68px de largura)
+### Nav rail (68px recolhida, 216px expandida)
 - Itens 44×44px, `border-radius: var(--r-lg)`.
+- Estado recolhido é o padrão inicial: 68px, apenas ícones, com `title`/`aria-label`.
+- Estado expandido: 216px, ícone + rótulo textual; a preferência pode ser persistida em `localStorage`.
+- Em viewports estreitos, a nav deve voltar ao comportamento recolhido para preservar área útil.
 - **Item ativo**: `background: var(--teal-dim); color: var(--teal);`
 - Hover: `background: var(--bg-4); color: var(--txt-2);`
 - Ícones SVG stroke-only, 18×18, `stroke-width: 1.4`.
@@ -436,7 +441,7 @@ O texto e o CTA do estado vazio devem vir do PRD da tela ou do guia de conteúdo
 Antes de entregar, confirme:
 
 - [ ] Topbar no padrão do shell autenticado (logo + breadcrumb + status + toggle tema + ações + avatar)
-- [ ] Nav rail com 68px, item ativo em teal-dim, link para outras páginas
+- [ ] Nav rail recolhida com 68px, expansão preservando item ativo em teal-dim e links para outras páginas
 - [ ] Tokens CSS usados a partir de `apps/web/src/styles/tokens.css`
 - [ ] Script anti-flash de tema no `<head>`
 - [ ] `lang="pt-BR"`, título da aba `ZiraDesk — Nome da página`

@@ -171,6 +171,19 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.ticketAutoAssign',
+        path: '/admin/ticket-auto-assign',
+        permission: 'settings:manage',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="9" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6.8 4.8h2.7M4.8 6.8v2.7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            <path d="M9 6.8h2a1 1 0 0 1 1 1V9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.tags',
         path: '/admin/conversation-tags',
         icon: (

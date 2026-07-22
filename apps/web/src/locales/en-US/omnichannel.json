@@ -15,14 +15,39 @@
       "7days": "7 days",
       "30days": "30 days",
       "90days": "90 days",
-      "custom": "Custom"
+      "custom": "Custom",
+      "dateFrom": "Start date",
+      "dateTo": "End date",
+      "dateFromClearedInfo": "End date was cleared because it was before the new start date",
+      "dateRangeError": "Maximum range: {{days}} days",
+      "dateToBeforeFromError": "End date cannot be before start date",
+      "agentAriaLabel": "Filter by agent",
+      "channelAriaLabel": "Filter by channel",
+      "departmentAriaLabel": "Filter by department",
+      "channelOptions": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram",
+        "email": "Email",
+        "chat": "Chat",
+        "liveChat": "Live Chat"
+      }
     },
     "cards": {
       "total": "Conversations",
       "tma": "Avg. Handle Time",
       "csat": "Avg. CSAT",
       "closed": "Closed",
-      "firstResponse": "First Response"
+      "firstResponse": "First Response",
+      "totalSubtitle": "{{count}} open",
+      "tmaSubtitle": "Average handling time",
+      "csatSubtitle": "{{count}} responses",
+      "closedSubtitle": "{{count}} closed",
+      "firstResponseSubtitle": "Average first response time"
+    },
+    "table": {
+      "agent": "Agent",
+      "total": "Total",
+      "closed": "Closed"
     },
     "charts": {
       "volume": "Conversation volume",
@@ -35,10 +60,16 @@
     },
     "byType": "Service Types",
     "byOutcome": "Outcomes",
+    "bySkill": {
+      "title": "By skill",
+      "skill": "Skill",
+      "noData": "No conversations routed by skill yet"
+    },
     "noDataPeriod": "No data in selected period",
     "conversations": "conversations",
     "tmaUnit": "min",
     "noData": "No data for the selected period",
+    "noDataHint": "Adjust the period or filters to view data.",
     "tabs": {
       "omnichannel": "Omnichannel",
       "tickets": "Tickets"
@@ -471,7 +502,9 @@
       "colContact": "Contact",
       "colStatus": "Status",
       "colWait": "Wait",
-      "colDate": "Date"
+      "colDate": "Date",
+      "openConversation": "Open conversation",
+      "openConversationWithProtocol": "Open conversation {{protocol}}"
     }
   },
   "composer": {
@@ -492,6 +525,7 @@
     "typeNotSupported": "File type not supported",
     "permissionDenied": "Microphone permission denied",
     "uploadError": "Error uploading file",
+    "unavailable": "Media unavailable",
     "downloadFile": "Download file",
     "browserNotSupported": "Browser does not support audio recording.",
     "sending": "Sending audio...",

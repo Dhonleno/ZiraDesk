@@ -15,14 +15,39 @@
       "7days": "7 dias",
       "30days": "30 dias",
       "90days": "90 dias",
-      "custom": "Personalizado"
+      "custom": "Personalizado",
+      "dateFrom": "Data inicial",
+      "dateTo": "Data final",
+      "dateFromClearedInfo": "Data final foi limpa pois era anterior à nova data inicial",
+      "dateRangeError": "Período máximo: {{days}} dias",
+      "dateToBeforeFromError": "A data final não pode ser anterior à data inicial",
+      "agentAriaLabel": "Filtrar por agente",
+      "channelAriaLabel": "Filtrar por canal",
+      "departmentAriaLabel": "Filtrar por departamento",
+      "channelOptions": {
+        "whatsapp": "WhatsApp",
+        "instagram": "Instagram",
+        "email": "E-mail",
+        "chat": "Chat",
+        "liveChat": "Live Chat"
+      }
     },
     "cards": {
       "total": "Atendimentos",
       "tma": "TMA",
       "csat": "CSAT Médio",
       "closed": "Encerrados",
-      "firstResponse": "1ª Resposta"
+      "firstResponse": "1ª Resposta",
+      "totalSubtitle": "{{count}} em aberto",
+      "tmaSubtitle": "Tempo médio de atendimento",
+      "csatSubtitle": "{{count}} respostas",
+      "closedSubtitle": "{{count}} encerrados",
+      "firstResponseSubtitle": "Tempo médio de primeira resposta"
+    },
+    "table": {
+      "agent": "Agente",
+      "total": "Total",
+      "closed": "Encerrados"
     },
     "charts": {
       "volume": "Volume de atendimentos",
@@ -35,10 +60,16 @@
     },
     "byType": "Tipos de Atendimento",
     "byOutcome": "Desfechos",
+    "bySkill": {
+      "title": "Por habilidade",
+      "skill": "Habilidade",
+      "noData": "Nenhum atendimento roteado por habilidade ainda"
+    },
     "noDataPeriod": "Nenhum dado no período",
     "conversations": "atendimentos",
     "tmaUnit": "min",
     "noData": "Sem dados para o período selecionado",
+    "noDataHint": "Ajuste o período ou os filtros para visualizar dados.",
     "tabs": {
       "omnichannel": "Omnichannel",
       "tickets": "Tickets"
@@ -471,7 +502,9 @@
       "colContact": "Contato",
       "colStatus": "Status",
       "colWait": "TME",
-      "colDate": "Data"
+      "colDate": "Data",
+      "openConversation": "Abrir atendimento",
+      "openConversationWithProtocol": "Abrir atendimento {{protocol}}"
     }
   },
   "composer": {
@@ -492,6 +525,7 @@
     "typeNotSupported": "Tipo de arquivo não suportado",
     "permissionDenied": "Permissão de microfone negada",
     "uploadError": "Erro ao enviar arquivo",
+    "unavailable": "Mídia indisponível",
     "downloadFile": "Baixar arquivo",
     "browserNotSupported": "Navegador não suporta gravação de áudio.",
     "sending": "Enviando áudio...",

@@ -46,8 +46,8 @@ ZiraDesk é um **SaaS operacional de atendimento (omnichannel + CRM + tickets)**
 ```html
 <body>
   <div class="topbar">…</div>      <!-- 52px, logo + breadcrumb + ações + theme toggle + avatar -->
-  <div class="main">               <!-- grid: 68px 1fr -->
-    <div class="nav-rail">…</div>  <!-- 68px, item ativo em teal-dim -->
+  <div class="main">               <!-- flex: nav-rail + content -->
+    <div class="nav-rail">…</div>  <!-- 68px recolhida, 216px expandida, item ativo em teal-dim -->
     <div class="content">…</div>   <!-- 1 ou 2 colunas; SÓ aqui rola -->
   </div>
 </body>
@@ -70,7 +70,7 @@ Não crie variações locais para estes itens:
 1. **Tokens CSS** de `apps/web/src/styles/tokens.css`.
 2. **Script anti-flash de tema** já usado pelo shell do app.
 3. **Topbar** completa (logo SVG themável, breadcrumb, status "Online", **theme toggle**, busca, notificações, ação primária, avatar, sair).
-4. **Nav-rail** com a ordem canônica + divisor + Configurações + rodapé (avatar + plano).
+4. **Nav-rail** com a ordem canônica + divisor + Configurações + rodapé (avatar + plano). Recolhida por padrão; quando expandida, mostra ícone + rótulo.
 5. **Handler do theme toggle** com persistência `localStorage['zd-theme']` + sync entre abas (`storage` event).
 
 > A logo usa classes themáveis (`.brand-logo-*`). "Zira" peso 700, "Desk" peso 300. Nunca emoji/headset.
@@ -114,7 +114,7 @@ Antes de considerar pronto (espelha `docs/design/PADRAO_DE_TELAS.md` §11):
 - [ ] Script anti-flash no `<head>`.
 - [ ] `lang="pt-BR"`, `<title>ZiraDesk — …</title>`.
 - [ ] Topbar no padrão do shell autenticado (logo + breadcrumb + status + theme toggle + ações + avatar).
-- [ ] Nav-rail 68px, item ativo em teal-dim, links `<a>` para outras páginas.
+- [ ] Nav-rail recolhida em 68px, expansível sem quebrar o conteúdo, item ativo em teal-dim, links `<a>` para outras páginas.
 - [ ] `html, body { overflow:hidden }`; rolagem só em áreas internas.
 - [ ] Toda cor via `var(--*)`; ícones SVG stroke `currentColor`.
 - [ ] Números/IDs/horários em mono.

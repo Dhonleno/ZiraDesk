@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import MDEditor from '@uiw/react-md-editor';
 import '@uiw/react-md-editor/markdown-editor.css';
@@ -26,6 +27,7 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
+import { isTicketReadonly } from '../../utils/ticketPermissions';
 
 const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   open:        ['in_progress', 'waiting'],
@@ -76,7 +78,20 @@ function formatTicketNumber(n: number): string {
   return `#${String(n).padStart(5, '0')}`;
 }
 
+function formatRelativeDate(value: string): string {
+  const diff = Date.now() - new Date(value).getTime();
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `${minutes}min atrás`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h atrás`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d atrás`;
+  return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 function statusLabel(status: TicketStatus, t: (key: string) => string): string {
+  if (status === 'queued') return t('tickets.kanban.queued');
   if (status === 'open') return t('tickets.kanban.open');
   if (status === 'in_progress') return t('tickets.kanban.inProgress');
   if (status === 'waiting') return t('tickets.kanban.waiting');
@@ -293,6 +308,61 @@ export function TicketDetailPage() {
     },
   });
 
+  const claimMutation = useMutation({
+    mutationFn: () => ticketsApi.claim(id ?? ''),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['ticket', id], updated);
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      toast.success(t('tickets.actions.claimSuccess'));
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 409) {
+          toast.error(t('tickets.actions.claimErrorConflict'));
+          return;
+        }
+        if (error.response?.status === 403) {
+          toast.error(t('tickets.actions.claimErrorForbidden'));
+          return;
+        }
+        if (error.response?.status === 404) {
+          toast.error(t('tickets.actions.claimErrorNotFound'));
+          return;
+        }
+      }
+      toast.error(t('tickets.actions.claimErrorGeneric'));
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: () => ticketsApi.accept(id ?? ''),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['ticket', id], updated);
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          toast.error(t('tickets.errors.acceptForbidden'));
+          return;
+        }
+        if (error.response?.status === 409) {
+          toast.error(t('tickets.errors.acceptConflict'));
+          return;
+        }
+        if (error.response?.status === 404) {
+          toast.error(t('tickets.errors.notFound'));
+          return;
+        }
+      }
+      toast.error(t('tickets.errorUpdate'));
+    },
+  });
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) => ticketsApi.uploadAttachment(id ?? '', file),
     onSuccess: async () => {
@@ -466,11 +536,12 @@ export function TicketDetailPage() {
   if (isPending || !ticket) {
     return (
       <PageShell>
-        <div className="ticket-detail-loading">{t('common.loading', { ns: 'admin', defaultValue: 'Carregando...' })}</div>
+        <div className="ticket-detail-loading">{t('loading', { ns: 'common' })}</div>
       </PageShell>
     );
   }
 
+  const readonly = isTicketReadonly(ticket, user ?? null);
   const currentTitle = sanitizeTicketTitle(ticket.title) || ticket.title;
   const dueState = dueTone(ticket.due_date ?? null);
   const sla = getSlaInfo(ticket.due_date, ticket.status, now);
@@ -531,13 +602,18 @@ export function TicketDetailPage() {
             <div className="ticket-detail-v2-breadcrumb">
               <span>{t('tickets.title')}</span>
               <span>/</span>
-              <strong>{formatTicketNumber(ticket.ticket_number)} - {truncatedTitle}</strong>
+              <strong>{formatTicketNumber(ticket.ticket_number)} — {truncatedTitle}</strong>
             </div>
           </div>
 
           <div className="ticket-detail-v2-topbar-right">
             <div className="ticket-dropdown-wrap" ref={statusRef}>
-              <button type="button" className="ticket-inline-badge" onClick={() => setStatusMenuOpen((v) => !v)}>
+              <button
+                type="button"
+                className="ticket-inline-badge"
+                disabled={readonly}
+                onClick={() => setStatusMenuOpen((v) => !v)}
+              >
                 {statusLabel(ticket.status, t)}
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
                   <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -573,6 +649,7 @@ export function TicketDetailPage() {
               <button
                 type="button"
                 className="ticket-inline-badge"
+                disabled={readonly}
                 onClick={() => setPriorityMenuOpen((v) => !v)}
                 style={{ color: priorityColor(ticket.priority) }}
               >
@@ -599,6 +676,28 @@ export function TicketDetailPage() {
                 </div>
               ) : null}
             </div>
+
+            {ticket.status === 'queued' ? (
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                disabled={claimMutation.isPending}
+                onClick={() => claimMutation.mutate()}
+              >
+                {t('tickets.actions.claim')}
+              </button>
+            ) : null}
+
+            {(ticket.status === 'queued' || ticket.status === 'open') && ticket.assigned_to === user?.id ? (
+              <button
+                type="button"
+                className="zd-btn zd-btn-primary"
+                onClick={() => acceptMutation.mutate()}
+                disabled={acceptMutation.isPending}
+              >
+                {t('tickets.actions.accept')}
+              </button>
+            ) : null}
 
             {ticket.status === 'open' ? (
               <button type="button" className="zd-btn" onClick={() => document.getElementById('ticket-assignee-select')?.focus()}>
@@ -664,41 +763,94 @@ export function TicketDetailPage() {
           </div>
         </header>
 
+        {readonly && ticket.status !== 'resolved' && ticket.status !== 'closed' ? (
+          <div
+            style={{
+              background: 'var(--bg-3)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 'var(--r-md)',
+              padding: '8px 12px',
+              fontSize: 12,
+              color: 'var(--txt-2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: '0 24px',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <rect x="3" y="6.5" width="8" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M4.5 6.5V4.5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            {t('tickets.readonly.banner')}
+          </div>
+        ) : null}
+
         <div className="ticket-detail-v2-layout">
           <main className="ticket-detail-v2-main">
-            <section className="ticket-detail-v2-title-block">
-              {titleEditing ? (
-                <input
-                  ref={titleInputRef}
-                  className="ticket-title-input"
-                  value={titleDraft}
-                  onChange={(event) => setTitleDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      saveTitle();
-                    }
+            <div className="ticket-detail-hero">
+              <div className="ticket-hero-icon">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path d="M3 8.5V5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v3a1.5 1.5 0 0 0 0 3v3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-3a1.5 1.5 0 0 0 0-3Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                  <path d="M10 4v2M10 14v2M10 8.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeDasharray="1 2" />
+                </svg>
+              </div>
+              <div className="ticket-hero-body">
+                <div className="ticket-hero-meta">
+                  <span className="ticket-number">{formatTicketNumber(ticket.ticket_number)}</span>
+                  <span className="ticket-hero-sep">·</span>
+                  <span className="ticket-hero-source">{t(`tickets.source.${ticket.source ?? 'manual'}`)}</span>
+                  <span className="ticket-hero-sep">·</span>
+                  <span className="ticket-hero-date">
+                    {t('tickets.fields.createdAt')} <time>{formatRelativeDate(ticket.created_at)}</time>
+                  </span>
+                  {ticket.updated_at !== ticket.created_at ? (
+                    <>
+                      <span className="ticket-hero-sep">·</span>
+                      <span className="ticket-hero-date">
+                        {t('tickets.fields.updatedAt')} <time>{formatRelativeDate(ticket.updated_at)}</time>
+                      </span>
+                    </>
+                  ) : null}
+                </div>
 
-                    if (event.key === 'Escape') {
-                      setTitleDraft(currentTitle);
-                      setTitleEditing(false);
-                    }
-                  }}
-                  onBlur={saveTitle}
-                  aria-label={t('tickets.detail.editTitle')}
-                />
-              ) : (
-                <h1 onClick={() => setTitleEditing(true)}>{currentTitle}</h1>
-              )}
-            </section>
+                {titleEditing ? (
+                  <input
+                    ref={titleInputRef}
+                    className="ticket-title-input ticket-hero-title-input"
+                    value={titleDraft}
+                    disabled={readonly}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        saveTitle();
+                      }
 
-            <section className="ticket-detail-section-v2 description-section-v2">
-              <header className="ticket-detail-section-head">
+                      if (event.key === 'Escape') {
+                        setTitleDraft(currentTitle);
+                        setTitleEditing(false);
+                      }
+                    }}
+                    onBlur={saveTitle}
+                    aria-label={t('tickets.detail.editTitle')}
+                  />
+                ) : (
+                  <h1 className="ticket-hero-title" onClick={() => { if (!readonly) setTitleEditing(true); }}>{currentTitle}</h1>
+                )}
+              </div>
+            </div>
+
+            <div className="ticket-tab-body">
+            <div className="ticket-tab-col-main">
+            <section className="ticket-dsec description-section-v2">
+              <div className="ticket-dsec-head">
                 <span>{t('tickets.fields.description')}</span>
                 {!descriptionEditing ? (
                   <button
                     type="button"
                     className="tb-icon-btn"
+                    disabled={readonly}
                     onClick={() => setDescriptionEditing(true)}
                     aria-label={t('tickets.fields.description')}
                     title={t('tickets.fields.description')}
@@ -708,84 +860,49 @@ export function TicketDetailPage() {
                     </svg>
                   </button>
                 ) : null}
-              </header>
+              </div>
 
-              {descriptionEditing ? (
-                <div className="ticket-description-editor" data-color-mode={appTheme}>
-                  <MDEditor
-                    value={descriptionDraft}
-                    onChange={(val) => setDescriptionDraft(val ?? '')}
-                    height={300}
-                    preview="live"
-                    visibleDragbar={false}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                    <button
-                      type="button"
-                      className="zd-btn zd-btn-secondary"
-                      onClick={() => {
-                        setDescriptionDraft(ticket.description ?? '');
-                        setDescriptionEditing(false);
-                      }}
-                    >
-                      {t('tickets.actions.cancel')}
-                    </button>
-                    <button
-                      type="button"
-                      className="zd-btn zd-btn-primary"
-                      disabled={updateMutation.isPending}
-                      onClick={saveDescription}
-                    >
-                      {t('tickets.detail.saveDescription')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="ticket-description-render" data-color-mode={appTheme}>
-                  <MDEditor.Markdown
-                    source={ticket.description ?? ''}
-                    style={{ background: 'transparent', color: 'var(--txt)' }}
-                  />
-                </div>
-              )}
-            </section>
-
-            <ChecklistSection ticketId={ticket.id} />
-            <TimeTrackingSection ticketId={ticket.id} />
-
-            <section className="ticket-detail-section-v2">
-              <header className="ticket-detail-section-head">
-                <span>{t('tickets.detail.addAttachment')}</span>
-                <button type="button" className="zd-btn" onClick={() => attachmentInputRef.current?.click()}>
-                  {t('tickets.detail.addAttachment')}
-                </button>
-                <input
-                  ref={attachmentInputRef}
-                  type="file"
-                  style={{ display: 'none' }}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    uploadMutation.mutate(file);
-                    event.target.value = '';
-                  }}
-                />
-              </header>
-
-              {attachments.length === 0 ? (
-                <div className="ticket-empty-inline">{t('tickets.detail.noAttachments')}</div>
-              ) : (
-                <div className="ticket-attachments-grid">
-                  {attachments.map((attachment) => (
-                    <AttachmentCard
-                      key={attachment.id}
-                      attachment={attachment}
-                      canDelete={attachment.user_id === user?.id}
-                      onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
+              <div className="ticket-dsec-body">
+                {descriptionEditing ? (
+                  <div className="ticket-description-editor" data-color-mode={appTheme}>
+                    <MDEditor
+                      value={descriptionDraft}
+                      onChange={(val) => setDescriptionDraft(val ?? '')}
+                      height={300}
+                      preview="live"
+                      visibleDragbar={false}
+                      textareaProps={{ disabled: readonly }}
                     />
-                  ))}
-                </div>
-              )}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="zd-btn zd-btn-secondary"
+                        onClick={() => {
+                          setDescriptionDraft(ticket.description ?? '');
+                          setDescriptionEditing(false);
+                        }}
+                      >
+                        {t('tickets.actions.cancel')}
+                      </button>
+                      <button
+                        type="button"
+                        className="zd-btn zd-btn-primary"
+                        disabled={updateMutation.isPending || readonly}
+                        onClick={saveDescription}
+                      >
+                        {t('tickets.detail.saveDescription')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="ticket-description-render" data-color-mode={appTheme}>
+                    <MDEditor.Markdown
+                      source={ticket.description ?? ''}
+                      style={{ background: 'transparent', color: 'var(--txt)' }}
+                    />
+                  </div>
+                )}
+              </div>
             </section>
 
             <section className="ticket-detail-section-v2">
@@ -807,7 +924,7 @@ export function TicketDetailPage() {
               </div>
 
               {activeTab === 'comments' ? (
-                <TicketComments ticketId={ticket.id} />
+                <TicketComments ticketId={ticket.id} disabled={readonly} />
               ) : (
                 <div className="ticket-history-list">
                   {timeline.length === 0 ? (
@@ -829,6 +946,56 @@ export function TicketDetailPage() {
                 </div>
               )}
             </section>
+            </div>
+
+            <div className="ticket-tab-col-side">
+              <ChecklistSection ticketId={ticket.id} />
+              <TimeTrackingSection ticketId={ticket.id} />
+
+              <section className="ticket-dsec">
+                <div className="ticket-dsec-head">
+                  <span>{t('tickets.fields.attachments')}</span>
+                  <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
+                    {t('tickets.detail.addAttachment')}
+                  </button>
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      uploadMutation.mutate(file);
+                      event.target.value = '';
+                    }}
+                  />
+                </div>
+                <div className="ticket-dsec-body">
+                  {attachments.length === 0 ? (
+                    <div className="ticket-empty-state">
+                      <div className="ticket-empty-icon">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                          <path d="M13.5 6.5 8 12a2 2 0 1 0 2.8 2.8l6-6a4 4 0 1 0-5.6-5.6l-6 6a2.5 2.5 0 0 0 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <p className="ticket-empty-title">{t('tickets.detail.noAttachments')}</p>
+                    </div>
+                  ) : (
+                    <div className="ticket-attachments-grid">
+                      {attachments.map((attachment) => (
+                        <AttachmentCard
+                          key={attachment.id}
+                          attachment={attachment}
+                          canDelete={attachment.user_id === user?.id}
+                          onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+            </div>
           </main>
 
           <aside className="ticket-detail-v2-sidebar">
@@ -838,13 +1005,16 @@ export function TicketDetailPage() {
                 <span>{t('tickets.fields.type')}</span>
                 <select
                   value={sidebarTypeId}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarTypeId(value);
                     queuePatch({ type_id: value || null });
                   }}
                 >
-                  <option value="">—</option>
+                  <option value="" style={{ color: 'var(--txt-3)', fontStyle: 'italic' }}>
+                    {t('notDefined', { ns: 'common' })}
+                  </option>
                   {ticketTypes.map((type) => (
                     <option key={type.id} value={type.id}>{type.name}</option>
                   ))}
@@ -881,6 +1051,7 @@ export function TicketDetailPage() {
                 <select
                   id="ticket-assignee-select"
                   value={sidebarAssignedTo}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarAssignedTo(value);
@@ -897,6 +1068,7 @@ export function TicketDetailPage() {
               <button
                 type="button"
                 className="zd-btn"
+                disabled={readonly}
                 onClick={() => {
                   if (!user?.id) return;
                   setSidebarAssignedTo(user.id);
@@ -926,6 +1098,7 @@ export function TicketDetailPage() {
                   className="ticket-due-date-input"
                   type="date"
                   value={sidebarDueDate}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarDueDate(value);
@@ -975,6 +1148,7 @@ export function TicketDetailPage() {
                 <span>{t('tickets.fields.category')}</span>
                 <select
                   value={sidebarCategory}
+                  disabled={readonly}
                   onChange={(event) => {
                     const value = event.target.value;
                     setSidebarCategory(value);
@@ -996,8 +1170,9 @@ export function TicketDetailPage() {
                       {tag}
                       <button
                         type="button"
+                        disabled={readonly}
                         onClick={() => updateTags(sidebarTags.filter((item) => item !== tag))}
-                        aria-label={`Remover ${tag}`}
+                        aria-label={t('tickets.actions.removeTag', { tag })}
                       >
                         ×
                       </button>
@@ -1007,6 +1182,7 @@ export function TicketDetailPage() {
 
                 <input
                   value={sidebarTagInput}
+                  disabled={readonly}
                   onChange={(event) => setSidebarTagInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ',') {

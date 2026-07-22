@@ -5,6 +5,7 @@
     "noResults": "No se encontraron tickets",
     "noSelection": "Seleccione un ticket para ver los detalles",
     "status": {
+      "queued": "En cola",
       "open": "Abierto",
       "in_progress": "En progreso",
       "waiting": "En espera",
@@ -32,6 +33,7 @@
       "priority": "Prioridad",
       "type": "Tipo",
       "assignedTo": "Asignado a",
+      "department": "Departamento",
       "client": "Contacto",
       "category": "Categoría",
       "dueDate": "Fecha límite",
@@ -42,7 +44,47 @@
       "noResponsible": "Sin responsable",
       "noClient": "Sin contacto vinculado",
       "noOrganization": "No vinculada",
-      "noDueDate": "Sin fecha límite"
+      "noDueDate": "Sin fecha límite",
+      "attachments": "Archivos adjuntos"
+    },
+    "validation": {
+      "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
+    },
+    "checklist": {
+      "title": "Lista de tareas",
+      "addTask": "+ Tarea",
+      "add": "Agregar",
+      "placeholder": "Descripción de la tarea...",
+      "deleteTask": "Eliminar elemento",
+      "emptyTitle": "Sin tareas",
+      "emptySub": "Agrega tareas para seguir el progreso"
+    },
+    "timeTracking": {
+      "title": "Tiempo trabajado",
+      "register": "+ Registrar",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "date": "Fecha",
+      "descriptionPlaceholder": "¿Qué se hizo? (opcional)",
+      "save": "Guardar",
+      "emptyTitle": "Sin tiempo registrado",
+      "deleteEntry": "Eliminar registro",
+      "noDescription": "Sin descripción",
+      "unknownUser": "Usuario",
+      "addSuccess": "¡Tiempo registrado!",
+      "addError": "Error al registrar el tiempo",
+      "deleteSuccess": "Registro eliminado",
+      "deleteError": "No puedes eliminar este registro",
+      "noMinutesError": "Ingrese al menos 1 minuto"
+    },
+    "errors": {
+      "acceptForbidden": "Solo el agente asignado puede aceptar este ticket",
+      "acceptConflict": "Este ticket no puede ser aceptado en su estado actual",
+      "notFound": "Ticket no encontrado"
+    },
+    "readonly": {
+      "banner": "Acepte el ticket para poder editarlo",
+      "tooltipNotAssigned": "No eres el responsable de este ticket"
     },
     "comments": {
       "title": "Comentarios",
@@ -61,13 +103,21 @@
     },
     "actions": {
       "assign": "Asignar",
+      "accept": "Aceptar",
       "assignToMe": "Asignarme",
+      "claim": "Reclamar de la cola",
+      "claimSuccess": "Ticket reclamado con éxito",
+      "claimErrorConflict": "Este ticket ya fue reclamado por otro agente",
+      "claimErrorForbidden": "No perteneces al departamento de este ticket",
+      "claimErrorNotFound": "Ticket no encontrado",
+      "claimErrorGeneric": "No fue posible reclamar el ticket",
       "resolve": "Resolver",
       "close": "Cerrar",
       "reopen": "Reabrir",
       "cancel": "Cancelar",
       "edit": "Editar",
-      "delete": "Eliminar"
+      "delete": "Eliminar",
+      "removeTag": "Eliminar {{tag}}"
     },
     "resolve": {
       "title": "Resolver ticket",
@@ -114,6 +164,7 @@
       "noClient": "Sin contacto",
       "searchUser": "Buscar usuario...",
       "noUser": "Sin asignación",
+      "noDepartment": "Sin departamento",
       "searchOrganization": "Buscar organización...",
       "organizationLinked": "Organización vinculada",
       "urgentDueDateRequired": "Obligatorio para prioridad urgente",
@@ -145,7 +196,7 @@
     "newFromEmail": "Nuevo ticket por e-mail",
     "newFromPortal": "Nuevo ticket desde el portal",
     "filterByAgent": "Todos los agentes",
-    "searchPlaceholder": "Buscar tickets...",
+    "searchPlaceholder": "Buscar número, título o contacto...",
     "view": "Vista",
     "viewKanban": "Kanban",
     "viewList": "Lista",
@@ -174,6 +225,7 @@
       "expiresLessThanHour": "Vence en menos de 1h"
     },
     "kanban": {
+      "queued": "En cola",
       "open": "Abierto",
       "inProgress": "En progreso",
       "waiting": "En espera",

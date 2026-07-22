@@ -1,26 +1,29 @@
 import { z } from 'zod';
 
-export const createTicketSchema = z.object({
+const ticketFieldsSchema = z.object({
   contact_id:      z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),
   conversation_id: z.string().uuid().optional(),
   source_conversation_id: z.string().uuid().optional(),
   title:           z.string().min(3).max(255),
   description:     z.string().optional(),
-  status:          z.enum(['open', 'in_progress', 'waiting']).default('open'),
+  status:          z.enum(['queued', 'open', 'in_progress', 'waiting']).default('open'),
   priority:        z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   category:        z.string().max(100).optional(),
   type_id:         z.string().uuid().nullable().optional(),
-  assigned_to:     z.string().uuid({ message: 'Responsável é obrigatório' }),
+  assigned_to:     z.string().uuid().nullable().optional(),
+  department_id:   z.string().uuid().nullable().optional(),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
 });
 
-export const updateTicketSchema = createTicketSchema
+export const createTicketSchema = ticketFieldsSchema;
+
+export const updateTicketSchema = ticketFieldsSchema
   .omit({ status: true })
   .partial()
   .extend({
-    status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+    status: z.enum(['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
     resolution_notes: z.string().trim().min(1).max(5000).optional(),
     waiting_reason: z.enum(['customer', 'internal', 'third_party']).nullable().optional(),
   })
@@ -39,9 +42,10 @@ export const listTicketsQuerySchema = z.object({
   page:        z.coerce.number().int().positive().default(1),
   per_page:    z.coerce.number().int().positive().max(100).default(20),
   search:      z.string().optional(),
-  status:      z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+  status:      z.enum(['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
   priority:    z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   assigned_to: z.string().uuid().optional(),
+  department_id: z.string().uuid().optional(),
   source:      z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
   contact_id:      z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),
@@ -53,9 +57,10 @@ export const listTicketsQuerySchema = z.object({
 export const exportTicketsQuerySchema = z.object({
   format: z.enum(['csv']).default('csv'),
   search: z.string().optional(),
-  status: z.enum(['open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
+  status: z.enum(['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   assigned_to: z.string().uuid().optional(),
+  department_id: z.string().uuid().optional(),
   source: z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
   contact_id: z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),

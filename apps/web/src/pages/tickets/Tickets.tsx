@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -35,13 +36,14 @@ import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
 import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
-type BoardStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
+type BoardStatus = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
 type TFn = TFunction<'tickets'>;
 
-const BOARD_COLUMNS: BoardStatus[] = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
+const BOARD_COLUMNS: BoardStatus[] = ['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed'];
 const CLOSED_COLUMN_MAX_ITEMS = 20;
 const STATUS_ACCENT: Record<BoardStatus, string> = {
+  queued: 'var(--amber)',
   open: 'var(--teal)',
   in_progress: 'var(--amber)',
   waiting: 'var(--blue)',
@@ -96,6 +98,7 @@ function getPriorityStyle(priority: TicketPriority, t: TFn) {
 }
 
 function statusLabel(status: BoardStatus, t: TFn): string {
+  if (status === 'queued') return t('tickets.kanban.queued');
   if (status === 'open') return t('tickets.kanban.open');
   if (status === 'in_progress') return t('tickets.kanban.inProgress');
   if (status === 'waiting') return t('tickets.kanban.waiting');
@@ -104,11 +107,11 @@ function statusLabel(status: BoardStatus, t: TFn): string {
 }
 
 function isReadonlyStatus(status: BoardStatus): boolean {
-  return status === 'closed';
+  return status === 'closed' || status === 'queued';
 }
 
 function canDropToStatus(status: BoardStatus): boolean {
-  return status !== 'closed';
+  return status !== 'closed' && status !== 'queued';
 }
 
 function getSlaLabel(sla: SlaInfo, t: TFn): string | null {
@@ -155,11 +158,15 @@ function TicketCard({
   t,
   now,
   onClick,
+  onClaim,
+  isClaiming,
 }: {
   ticket: Ticket;
   t: TFn;
   now: Date;
   onClick: () => void;
+  onClaim?: (ticketId: string) => void;
+  isClaiming?: boolean;
 }) {
   const priority = getPriorityStyle(ticket.priority, t);
   const sla = getSlaInfo(ticket.due_date, ticket.status, now);
@@ -169,10 +176,19 @@ function TicketCard({
     : 'var(--txt-2)';
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className="tickets-card"
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      aria-label={`${formatTicketNumber(ticket.ticket_number)} — ${sanitizeTicketTitle(ticket.title)}`}
       title={sanitizeTicketTitle(ticket.title)}
     >
       <div className="tickets-card-top">
@@ -209,7 +225,21 @@ function TicketCard({
           </span>
         ) : null}
       </div>
-    </button>
+
+      {ticket.status === 'queued' && onClaim ? (
+        <button
+          type="button"
+          className="tickets-card-claim-btn"
+          disabled={isClaiming}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClaim(ticket.id);
+          }}
+        >
+          {t('tickets.actions.claim')}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -357,6 +387,33 @@ export function TicketsPage() {
     },
   });
 
+  const claimMutation = useMutation({
+    mutationFn: (ticketId: string) => ticketsApi.claim(ticketId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+      void queryClient.invalidateQueries({ queryKey: ['tickets-board-closed'] });
+      toast.success(t('tickets.actions.claimSuccess'));
+    },
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 409) {
+          toast.error(t('tickets.actions.claimErrorConflict'));
+          return;
+        }
+        if (error.response?.status === 403) {
+          toast.error(t('tickets.actions.claimErrorForbidden'));
+          return;
+        }
+        if (error.response?.status === 404) {
+          toast.error(t('tickets.actions.claimErrorNotFound'));
+          return;
+        }
+      }
+      toast.error(t('tickets.actions.claimErrorGeneric'));
+    },
+  });
+
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(intervalId);
@@ -400,6 +457,7 @@ export function TicketsPage() {
 
   const grouped = useMemo(() => {
     const map: Record<BoardStatus, Ticket[]> = {
+      queued: [],
       open: [],
       in_progress: [],
       waiting: [],
@@ -603,7 +661,7 @@ export function TicketsPage() {
         </header>
 
         {isPending ? (
-          <div className="tickets-loading">{t('common.loading', { ns: 'admin', defaultValue: 'Carregando...' })}</div>
+          <div className="tickets-loading">{t('loading', { ns: 'common' })}</div>
         ) : null}
 
         {!isPending && view === 'kanban' ? (
@@ -664,6 +722,8 @@ export function TicketsPage() {
                               t={t}
                               now={now}
                               onClick={() => navigate(`/tickets/${ticket.id}`)}
+                              onClaim={(ticketId) => claimMutation.mutate(ticketId)}
+                              isClaiming={claimMutation.isPending}
                             />
                           ) : (
                             <SortableTicketCard
@@ -733,6 +793,8 @@ export function TicketsPage() {
                         t={t}
                         now={now}
                         onClick={() => navigate(`/tickets/${ticket.id}`)}
+                        onClaim={(ticketId) => claimMutation.mutate(ticketId)}
+                        isClaiming={claimMutation.isPending}
                       />
                     ))
                   )}

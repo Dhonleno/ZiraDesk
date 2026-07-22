@@ -252,7 +252,7 @@ export function CampaignCreateModal({ onClose, onCreated, retryFailedCampaign }:
               {isRetryingFailed ? t('retry.title') : t('create.title')}
             </div>
             <div style={{ fontSize: 11, color: 'var(--txt-3)', marginTop: 2 }}>
-              {t(`create.step${step}.title` as any)} — {t('common:step', { defaultValue: `Passo ${step} de 3` })}
+              {t(`create.step${step}.title` as any)} — {t('common:step', { current: step, total: 3 })}
             </div>
           </div>
           {/* Step indicators */}

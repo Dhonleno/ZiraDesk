@@ -78,7 +78,7 @@ export function MessageMedia({ message, conversationId, localMediaUrl, isOutgoin
   if (isError && !mediaUrl) {
     return (
       <div style={{ fontSize: 12, color: 'var(--txt-3)' }}>
-        {t('media.unavailable', { defaultValue: 'Mídia indisponível' })}
+        {t('media.unavailable')}
       </div>
     );
   }

@@ -17,12 +17,14 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  adminApi,
   omnichannelApi,
   ticketsApi,
   type MetricsByAgentPoint,
   type MetricsByChannelPoint,
   type MetricsByDepartmentPoint,
   type MetricsByOutcomePoint,
+  type MetricsBySkillPoint,
   type MetricsByTypePoint,
   type MetricsCsatPoint,
   type MetricsPeakHoursPoint,
@@ -297,6 +299,29 @@ function DepartmentChart({ data, title }: { data: MetricsByDepartmentPoint[]; ti
   );
 }
 
+function SkillChart({ data, title }: { data: MetricsBySkillPoint[]; title: string }) {
+  return (
+    <div className="chart-card">
+      <h3 className="chart-title">{title}</h3>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} layout="vertical">
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
+          <XAxis type="number" tick={{ fill: 'var(--txt-3)', fontSize: 11 }} />
+          <YAxis dataKey="skill" type="category" width={140} tick={{ fill: 'var(--txt-2)', fontSize: 11 }} />
+          <Tooltip
+            contentStyle={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line-2)',
+              borderRadius: 8,
+            }}
+          />
+          <Bar dataKey="total" fill="var(--teal)" radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function PeakHoursHeatmap({ data, title }: { data: MetricsPeakHoursPoint[]; title: string }) {
   const matrix: Record<number, Record<number, number>> = {};
   for (const item of data) {
@@ -392,15 +417,17 @@ function CsatChart({
 }
 
 function AgentTable({ data, title }: { data: MetricsByAgentPoint[]; title: string }) {
+  const { t } = useTranslation('omnichannel');
+
   return (
     <div className="chart-card">
       <h3 className="chart-title">{title}</h3>
       <table className="metrics-table">
         <thead>
           <tr>
-            <th>Agente</th>
-            <th>Total</th>
-            <th>Encerrados</th>
+            <th>{t('metrics.table.agent')}</th>
+            <th>{t('metrics.table.total')}</th>
+            <th>{t('metrics.table.closed')}</th>
             <th>TMA</th>
             <th>CSAT</th>
           </tr>
@@ -733,7 +760,7 @@ export function MetricsPage() {
   const [customTo, setCustomTo] = useState<string>('');
   const [agentId, setAgentId] = useState<string>('');
   const [channelType, setChannelType] = useState<string>('');
-  const [department, setDepartment] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<string>('');
   const maxDateRange = 365;
 
   const { dateFrom, dateTo } = useMemo(
@@ -747,9 +774,9 @@ export function MetricsPage() {
       date_to: dateTo,
       ...(agentId ? { agent_id: agentId } : {}),
       ...(channelType ? { channel_type: channelType } : {}),
-      ...(department ? { department } : {}),
+      ...(departmentId ? { department_id: departmentId } : {}),
     }),
-    [agentId, channelType, dateFrom, dateTo, department],
+    [agentId, channelType, dateFrom, dateTo, departmentId],
   );
 
   const { data: monitorData } = useQuery({
@@ -758,19 +785,31 @@ export function MetricsPage() {
     staleTime: 30_000,
   });
 
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin', 'departments', 'metrics-filter'],
+    queryFn: adminApi.departments.list,
+    staleTime: 60_000,
+  });
+
+  const activeDepartments = useMemo(
+    () => departments.filter((department) => department.isActive),
+    [departments],
+  );
+
   const { data, isLoading } = useQuery({
-    queryKey: ['metrics', period, customFrom, customTo, agentId, channelType, department],
+    queryKey: ['metrics', period, customFrom, customTo, agentId, channelType, departmentId],
     queryFn: async () => {
-      const [overview, volume, byAgent, byChannel, byDepartment, peakHours, csat] = await Promise.all([
+      const [overview, volume, byAgent, byChannel, byDepartment, bySkill, peakHours, csat] = await Promise.all([
         omnichannelApi.metrics.getOverview(filters),
         omnichannelApi.metrics.getVolume(filters),
         omnichannelApi.metrics.getByAgent(filters),
         omnichannelApi.metrics.getByChannel(filters),
         omnichannelApi.metrics.getByDepartment(filters),
+        omnichannelApi.metrics.getBySkill(filters),
         omnichannelApi.metrics.getPeakHours(filters),
         omnichannelApi.metrics.getCsat(filters),
       ]);
-      return { overview, volume, byAgent, byChannel, byDepartment, peakHours, csat };
+      return { overview, volume, byAgent, byChannel, byDepartment, bySkill, peakHours, csat };
     },
   });
 
@@ -916,14 +955,14 @@ export function MetricsPage() {
             <input
               type="date"
               className="filter-select"
-              aria-label="Data inicial"
+              aria-label={t('metrics.filters.dateFrom')}
               value={customFrom}
               onChange={(event) => {
                 const value = event.target.value;
                 setCustomFrom(value);
                 if (customTo && value > customTo) {
                   setCustomTo('');
-                  toast.info('Data final foi limpa pois era anterior à nova data inicial');
+                  toast.info(t('metrics.filters.dateFromClearedInfo'));
                   return;
                 }
                 if (customTo && value) {
@@ -932,7 +971,7 @@ export function MetricsPage() {
                   );
                   if (daysDiff > maxDateRange) {
                     setCustomTo('');
-                    toast.error(`Período máximo: ${maxDateRange} dias`);
+                    toast.error(t('metrics.filters.dateRangeError', { days: maxDateRange }));
                   }
                 }
               }}
@@ -940,12 +979,12 @@ export function MetricsPage() {
             <input
               type="date"
               className="filter-select"
-              aria-label="Data final"
+              aria-label={t('metrics.filters.dateTo')}
               value={customTo}
               onChange={(event) => {
                 const value = event.target.value;
                 if (customFrom && value < customFrom) {
-                  toast.error('A data final não pode ser anterior à data inicial');
+                  toast.error(t('metrics.filters.dateToBeforeFromError'));
                   return;
                 }
                 if (customFrom && value) {
@@ -953,7 +992,7 @@ export function MetricsPage() {
                     (new Date(value).getTime() - new Date(customFrom).getTime()) / 86400000,
                   );
                   if (daysDiff > maxDateRange) {
-                    toast.error(`Período máximo: ${maxDateRange} dias`);
+                    toast.error(t('metrics.filters.dateRangeError', { days: maxDateRange }));
                     return;
                   }
                 }
@@ -963,7 +1002,7 @@ export function MetricsPage() {
           </>
         ) : null}
 
-        <select className="filter-select" aria-label="Filtrar por agente" value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+        <select className="filter-select" aria-label={t('metrics.filters.agentAriaLabel')} value={agentId} onChange={(event) => setAgentId(event.target.value)}>
           <option value="">{t('metrics.filters.allAgents')}</option>
           {(monitorData?.agents ?? []).filter((a) => a.role === 'agent').map((agent) => (
             <option key={agent.id} value={agent.id}>
@@ -974,20 +1013,20 @@ export function MetricsPage() {
 
         {metricsTab === 'omnichannel' ? (
           <>
-            <select className="filter-select" aria-label="Filtrar por canal" value={channelType} onChange={(event) => setChannelType(event.target.value)}>
+            <select className="filter-select" aria-label={t('metrics.filters.channelAriaLabel')} value={channelType} onChange={(event) => setChannelType(event.target.value)}>
               <option value="">{t('metrics.filters.allChannels')}</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="instagram">Instagram</option>
-              <option value="email">E-mail</option>
-              <option value="chat">Chat</option>
-              <option value="live_chat">Live Chat</option>
+              <option value="whatsapp">{t('metrics.filters.channelOptions.whatsapp')}</option>
+              <option value="instagram">{t('metrics.filters.channelOptions.instagram')}</option>
+              <option value="email">{t('metrics.filters.channelOptions.email')}</option>
+              <option value="chat">{t('metrics.filters.channelOptions.chat')}</option>
+              <option value="live_chat">{t('metrics.filters.channelOptions.liveChat')}</option>
             </select>
 
-            <select className="filter-select" aria-label="Filtrar por departamento" value={department} onChange={(event) => setDepartment(event.target.value)}>
+            <select className="filter-select" aria-label={t('metrics.filters.departmentAriaLabel')} value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
               <option value="">{t('metrics.filters.allDepartments')}</option>
-              {(data?.byDepartment ?? []).map((item) => (
-                <option key={item.department} value={item.department}>
-                  {item.department}
+              {activeDepartments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
                 </option>
               ))}
             </select>
@@ -1001,35 +1040,35 @@ export function MetricsPage() {
             <MetricCard
               title={t('metrics.cards.total')}
               value={String(data?.overview.total.total ?? 0)}
-              subtitle={`${data?.overview.total.open ?? 0} em aberto`}
+              subtitle={t('metrics.cards.totalSubtitle', { count: data?.overview.total.open ?? 0 })}
               icon={<MetricIcon kind="total" />}
               color="var(--teal)"
             />
             <MetricCard
               title={t('metrics.cards.tma')}
               value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
-              subtitle="Tempo médio de atendimento"
+              subtitle={t('metrics.cards.tmaSubtitle')}
               icon={<MetricIcon kind="tma" />}
               color="var(--blue)"
             />
             <MetricCard
               title={t('metrics.cards.csat')}
               value={csatAverage !== null && csatAverage !== undefined ? String(csatAverage) : '—'}
-              subtitle={`${data?.overview.csat.total_responses ?? 0} respostas`}
+              subtitle={t('metrics.cards.csatSubtitle', { count: data?.overview.csat.total_responses ?? 0 })}
               icon={<MetricIcon kind="csat" />}
               color="var(--amber)"
             />
             <MetricCard
               title={t('metrics.cards.closed')}
               value={formatPercent(closedRate)}
-              subtitle={`${closedMetricValue(data?.overview.total as unknown as Record<string, unknown>)} encerrados`}
+              subtitle={t('metrics.cards.closedSubtitle', { count: closedMetricValue(data?.overview.total as unknown as Record<string, unknown>) })}
               icon={<MetricIcon kind="closed" />}
               color="var(--green)"
             />
             <MetricCard
               title={t('metrics.cards.firstResponse')}
               value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
-              subtitle="Tempo médio de primeira resposta"
+              subtitle={t('metrics.cards.firstResponseSubtitle')}
               icon={<MetricIcon kind="firstResponse" />}
               color="var(--purple)"
             />
@@ -1044,7 +1083,7 @@ export function MetricsPage() {
                   </svg>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('metrics.noData')}</div>
-                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>Ajuste o período ou os filtros para visualizar dados.</div>
+                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('metrics.noDataHint')}</div>
               </div>
             </div>
           ) : (
@@ -1057,6 +1096,9 @@ export function MetricsPage() {
               </div>
 
               <DepartmentChart data={data?.byDepartment ?? []} title={t('metrics.charts.byDepartment')} />
+              {(data?.bySkill?.length ?? 0) > 0 ? (
+                <SkillChart data={data?.bySkill ?? []} title={t('metrics.bySkill.title')} />
+              ) : null}
               <PeakHoursHeatmap data={data?.peakHours ?? []} title={t('metrics.charts.peakHours')} />
               <CsatChart data={csatDistribution} title={t('metrics.charts.csatDistribution')} />
               <AgentTable data={data?.byAgent ?? []} title={t('metrics.charts.agentPerformance')} />

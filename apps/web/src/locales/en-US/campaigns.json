@@ -54,7 +54,15 @@
     "cancelConfirm": "Are you sure you want to cancel this campaign?",
     "cancelScheduledTitle": "Cancel scheduled campaign",
     "cancelScheduledConfirm": "Are you sure you want to cancel this scheduled campaign?",
-    "cancelConfirmNamed": "Cancel the campaign \"{{name}}\"?"
+    "cancelConfirmNamed": "Cancel the campaign \"{{name}}\"?",
+    "pauseSuccess": "Campaign paused.",
+    "pauseError": "Error pausing campaign.",
+    "resumeSuccess": "Campaign resumed.",
+    "resumeError": "Error resuming campaign.",
+    "cancelSuccess": "Campaign canceled.",
+    "cancelError": "Error canceling campaign.",
+    "duplicateSuccess": "Campaign duplicated: \"{{name}}\"",
+    "duplicateError": "Error duplicating campaign."
   },
   "common": {
     "confirm": "Confirm",

@@ -200,8 +200,8 @@ export function CampaignDetail() {
 
   const pauseMutation = useMutation({
     mutationFn: () => campaignsApi.pause(id!),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaign', id] }); toast.success('Campanha pausada.'); },
-    onError: () => toast.error('Erro ao pausar.'),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['campaign', id] }); toast.success(t('actions.pauseSuccess')); },
+    onError: () => toast.error(t('actions.pauseError')),
   });
 
   const resumeMutation = useMutation({
@@ -209,12 +209,12 @@ export function CampaignDetail() {
     onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ['campaign', id] });
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success('Campanha retomada.');
+      toast.success(t('actions.resumeSuccess'));
       if (updated.status === 'running') {
         void queryClient.invalidateQueries({ queryKey: ['campaign', id] });
       }
     },
-    onError: () => toast.error('Erro ao retomar.'),
+    onError: () => toast.error(t('actions.resumeError')),
   });
 
   const cancelMutation = useMutation({
@@ -222,19 +222,19 @@ export function CampaignDetail() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['campaign', id] });
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success('Campanha cancelada.');
+      toast.success(t('actions.cancelSuccess'));
     },
-    onError: () => toast.error('Erro ao cancelar.'),
+    onError: () => toast.error(t('actions.cancelError')),
   });
 
   const duplicateMutation = useMutation({
     mutationFn: () => campaignsApi.duplicate(id!),
     onSuccess: (dup) => {
       void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast.success(`Campanha duplicada: "${dup.name}"`);
+      toast.success(t('actions.duplicateSuccess', { name: dup.name }));
       navigate(`/omnichannel/campaigns/${dup.id}`);
     },
-    onError: () => toast.error('Erro ao duplicar.'),
+    onError: () => toast.error(t('actions.duplicateError')),
   });
 
   const handleExportCsv = async () => {

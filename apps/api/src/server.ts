@@ -5,9 +5,11 @@ import './jobs/cleanup-csat.job.js'; // inicia cleanup horário de CSAT expirado
 import './jobs/waiting-expiry.job.js'; // fecha conversas waiting expiradas
 import './jobs/presence-cleanup.job.js'; // inicia cleanup de presença de agentes
 import './jobs/process-pending-queue.job.js'; // processa conversas pending periodicamente
+import './jobs/conversation-routing-retry.job.js'; // retenta roteamento por habilidade com timeout
 import './jobs/lgpd-retention.job.js'; // executa retenção/anonimização LGPD diária
 import './jobs/lgpd-sla.job.js'; // monitora SLA LGPD (notificações e alertas a cada 6h)
 import './jobs/ticket-sla.job.js'; // monitora SLA de tickets e escala prioridade
+import './jobs/ticket-sla-warning.job.js'; // alerta 30min antes do vencimento de SLA
 import './jobs/knowledge-index.job.js'; // inicia o worker de indexação de conhecimento
 import './jobs/recalculate-queue-positions.job.js'; // recalcula posições na fila e notifica clientes
 import './jobs/queue-expire-24h.job.js'; // encerra conversas sem atendimento após 24h na fila

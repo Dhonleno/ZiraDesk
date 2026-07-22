@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 interface ModalProps {
   open: boolean;
@@ -8,6 +9,7 @@ interface ModalProps {
   children: ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg';
   maxWidthPx?: number;
+  closeLabel?: string;
 }
 
 const widthBySize: Record<NonNullable<ModalProps['maxWidth']>, number> = {
@@ -16,7 +18,10 @@ const widthBySize: Record<NonNullable<ModalProps['maxWidth']>, number> = {
   lg: 720,
 };
 
-export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidthPx }: ModalProps) {
+export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidthPx, closeLabel }: ModalProps) {
+  const { t } = useTranslation('common');
+  const resolvedCloseLabel = closeLabel ?? t('close');
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -40,7 +45,6 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidt
           inset: 0,
           zIndex: 1000,
           background: 'var(--backdrop)',
-          backdropFilter: 'blur(6px)',
         }}
         onClick={onClose}
         aria-hidden
@@ -92,7 +96,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 'md', maxWidt
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            aria-label="Fechar"
+            aria-label={resolvedCloseLabel}
           >
             <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden>
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

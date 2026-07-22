@@ -10,6 +10,7 @@ import { botRoutes } from './bot/bot.routes.js';
 import { adminAutoAssignRoutes } from './auto-assign/index.js';
 import { adminPauseReasonsRoutes } from './pause-reasons/index.js';
 import { adminSkillsRoutes } from './skills/index.js';
+import { adminSkillsV2Routes } from './skills-v2/index.js';
 import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
 import { contactTagsRoutes } from './contact-tags/contact-tags.routes.js';
 import { adminTicketTypesRoutes } from './ticket-types/index.js';
@@ -23,6 +24,7 @@ import { smtpRoutes } from './smtp/smtp.routes.js';
 import { omnichannelLgpdRoutes } from './omnichannel-lgpd/omnichannel-lgpd.routes.js';
 import { adminLgpdRoutes } from './lgpd/lgpd.routes.js';
 import { queueConfigRoutes } from './queue-config/queue-config.routes.js';
+import { ticketSettingsRoutes } from './ticket-settings/ticket-settings.routes.js';
 import { voiceConfigRoutes } from './voice-config/voice-config.routes.js';
 import { adminDepartmentsRoutes } from './departments/index.js';
 
@@ -34,6 +36,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(botRoutes, { prefix: '/bot' });
   await app.register(adminAutoAssignRoutes);
   await app.register(adminSkillsRoutes);
+  await app.register(adminSkillsV2Routes);
   await app.register(adminPauseReasonsRoutes);
   await app.register(adminTicketTypesRoutes);
   await app.register(adminTicketCategoriesRoutes);
@@ -52,6 +55,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(omnichannelLgpdRoutes, { prefix: '/omnichannel' });
   await app.register(adminLgpdRoutes, { prefix: '/lgpd' });
   await app.register(queueConfigRoutes, { prefix: '/queue-config' });
+  await app.register(ticketSettingsRoutes, { prefix: '/ticket-settings' });
   await app.register(voiceConfigRoutes, { prefix: '/voice-config' });
   await app.register(adminDepartmentsRoutes);
 }

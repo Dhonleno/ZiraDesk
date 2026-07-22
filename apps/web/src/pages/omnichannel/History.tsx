@@ -244,6 +244,25 @@ function HistoryMedia({
   return <p>{message.content || `(${message.content_type})`}</p>;
 }
 
+function getTranscriptItemClass(message: OmnichannelHistoryMessage): string {
+  const senderType = message.sender_type.toLowerCase();
+  let variant = 'is-client';
+
+  if (senderType === 'agent') {
+    variant = 'is-agent';
+  } else if (senderType === 'bot') {
+    variant = 'is-bot';
+  } else if (senderType === 'system') {
+    variant = 'is-system';
+  }
+
+  return [
+    'history-transcript-item',
+    variant,
+    message.is_internal ? 'is-internal' : '',
+  ].filter(Boolean).join(' ');
+}
+
 function SortableHeader({
   column,
   label,
@@ -343,7 +362,7 @@ export function HistoryPage() {
     const values = new Map<string, string>();
     for (const row of historyResult?.data ?? []) {
       if (!row.bot_option_id) continue;
-      values.set(row.bot_option_id, row.bot_department ?? row.bot_option_id);
+      values.set(row.bot_option_id, row.department_name ?? row.bot_option_id);
     }
     return Array.from(values.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [historyResult?.data]);
@@ -623,7 +642,7 @@ export function HistoryPage() {
                             <span>{conversation.channel_type}</span>
                           </span>
                         </td>
-                        <td>{conversation.bot_department ?? '—'}</td>
+                        <td>{conversation.department_name ?? '—'}</td>
                         <td>
                           <span className={`status-badge ${STATUS_BADGE_CLASS[conversation.status] ?? 'status-open'}`}>
                             {t(`status.${conversation.status}`)}
@@ -701,7 +720,7 @@ export function HistoryPage() {
                           </div>
                           <div>
                             <strong>{t('history.columns.group')}</strong>
-                            <span>{(detailData.conversation.metadata?.bot_department as string | undefined) ?? '—'}</span>
+                            <span>{detailData.conversation.department_name ?? '—'}</span>
                           </div>
                         </div>
                       </section>
@@ -728,12 +747,12 @@ export function HistoryPage() {
                         )}
                       </section>
 
-                      <section className="history-detail-section">
+                      <section className="history-detail-section is-transcript">
                         <h3>{t('history.detail.transcript')}</h3>
                         {detailData.transcript.length > 0 ? (
                           <div className="history-transcript-list">
                             {detailData.transcript.map((message) => (
-                              <article key={message.id} className="history-transcript-item">
+                              <article key={message.id} className={getTranscriptItemClass(message)}>
                                 <header>
                                   <strong>{message.sender_name || message.sender_type}</strong>
                                   <span>{new Date(message.created_at).toLocaleString(i18n.language)}</span>

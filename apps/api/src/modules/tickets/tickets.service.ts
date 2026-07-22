@@ -2,6 +2,8 @@ import { prisma } from '../../config/database.js';
 import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
+import { ensureAgentAssignmentsInfrastructure } from '../omnichannel/conversations/auto-assign.service.js';
+import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
 import { buildTenantUrl } from '../../utils/url.js';
 import { randomUUID } from 'node:crypto';
@@ -53,6 +55,13 @@ export class PayloadTooLargeError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
 /* ── Row interfaces ──────────────────────────────────────────────────────── */
 interface TicketRow {
   id:               string;
@@ -80,6 +89,7 @@ interface TicketRow {
   priority:         string;
   category:         string | null;
   assigned_to:      string | null;
+  department_id:    string | null;
   resolved_at:      Date | null;
   resolution_notes: string | null;
   closed_at:        Date | null;
@@ -98,6 +108,7 @@ interface TicketRow {
   type_name:        string | null;
   type_icon:        string | null;
   type_color:       string | null;
+  department_name:  string | null;
 }
 
 interface TicketExportRow {
@@ -204,6 +215,7 @@ interface TicketTypeRuleRow {
 }
 
 const STATUS_TRANSITIONS: Record<string, ReadonlySet<string>> = {
+  queued:      new Set(['open', 'in_progress']), // open via claimTicketFromQueue, in_progress via acceptTicket
   open:        new Set(['in_progress', 'waiting']),
   in_progress: new Set(['open', 'waiting', 'resolved']),
   waiting:     new Set(['open', 'in_progress']),
@@ -260,6 +272,48 @@ async function getTicketTypeRules(typeId: string | null, db: RawExecutor = prism
   }
 
   return rows[0];
+}
+
+interface DepartmentAgentCandidateRow {
+  id: string;
+  name: string;
+}
+
+// Round-robin por departamento, com presença obrigatória (Bloco B): considera
+// apenas agente ativo (role='agent', status='active') vinculado ao
+// departamento, online, disponível e com heartbeat recente, ordenado pelo
+// mais antigo em last_assigned_at (agent_assignments), espelhando o critério
+// de resolveAgentForAssignment em omnichannel/conversations/auto-assign.service.ts.
+async function pickNextAgentForDepartment(
+  db: RawExecutor,
+  departmentId: string,
+): Promise<DepartmentAgentCandidateRow | null> {
+  const rows = await db.$queryRawUnsafe<DepartmentAgentCandidateRow[]>(
+    `SELECT u.id, u.name
+     FROM agent_departments ad
+     JOIN agent_assignments aa ON aa.user_id = ad.user_id
+     JOIN users u ON u.id = ad.user_id
+     WHERE ad.department_id = $1::uuid
+       AND u.status = 'active'
+       AND u.role = 'agent'
+       -- Bloco B: presença obrigatória (espelha resolveAgentForAssignment)
+       AND aa.status = 'online'
+       AND aa.is_available = true
+       AND aa.last_seen_at > NOW() - (${PRESENCE_TIMEOUT_MS / 60_000} * INTERVAL '1 minute')
+     ORDER BY aa.last_assigned_at ASC
+     LIMIT 1`,
+    departmentId,
+  );
+
+  const agent = rows[0];
+  if (!agent) return null;
+
+  await db.$executeRawUnsafe(
+    `UPDATE agent_assignments SET last_assigned_at = NOW() WHERE user_id = $1::uuid`,
+    agent.id,
+  );
+
+  return agent;
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -378,11 +432,23 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
 
   await db.$executeRawUnsafe(`
     ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES departments(id) ON DELETE SET NULL
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_tickets_department_id
+    ON tickets(department_id)
+    WHERE department_id IS NOT NULL
+  `);
+
+  await db.$executeRawUnsafe(`
+    ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
     ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS waiting_reason VARCHAR(30),
     ADD COLUMN IF NOT EXISTS sla_paused_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS sla_paused_duration_seconds INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS sla_warning_sent_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS escalated BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS csat_score SMALLINT,
@@ -584,7 +650,7 @@ const BASE_SELECT = `
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
     t.status, t.waiting_reason, t.sla_paused_at, t.sla_paused_duration_seconds, t.escalated, t.escalated_at,
     t.csat_score, t.csat_comment, t.csat_sent_at, t.csat_responded_at, t.csat_expires_at,
-    t.priority, t.category, t.assigned_to, t.resolved_at, t.resolution_notes, t.closed_at,
+    t.priority, t.category, t.assigned_to, t.department_id, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
@@ -595,18 +661,39 @@ const BASE_SELECT = `
     o.name        AS organization_name,
     tt.name       AS type_name,
     tt.icon       AS type_icon,
-    tt.color      AS type_color
+    tt.color      AS type_color,
+    dp.name       AS department_name
   FROM tickets t
   LEFT JOIN users         u  ON u.id  = t.assigned_to
   LEFT JOIN contacts      ct ON ct.id = t.contact_id
   LEFT JOIN organizations o  ON o.id  = t.organization_id
-  LEFT JOIN ticket_types  tt ON tt.id = t.type_id`;
+  LEFT JOIN ticket_types  tt ON tt.id = t.type_id
+  LEFT JOIN departments   dp ON dp.id = t.department_id`;
+
+const TICKET_SEARCH_CONDITION = `(
+  $1::text IS NULL
+  OR t.title ILIKE '%' || $1 || '%'
+  OR t.description ILIKE '%' || $1 || '%'
+  OR (
+    NULLIF(regexp_replace($1, '[^0-9]', '', 'g'), '') IS NOT NULL
+    AND (
+      lpad(t.ticket_number::text, 5, '0') ILIKE '%' || regexp_replace($1, '[^0-9]', '', 'g') || '%'
+      OR (
+        NULLIF(ltrim(regexp_replace($1, '[^0-9]', '', 'g'), '0'), '') IS NOT NULL
+        AND t.ticket_number::text ILIKE '%' || ltrim(regexp_replace($1, '[^0-9]', '', 'g'), '0') || '%'
+      )
+    )
+  )
+  OR ct.name ILIKE '%' || $1 || '%'
+  OR ct.email ILIKE '%' || $1 || '%'
+  OR o.name ILIKE '%' || $1 || '%'
+)`;
 
 /* ── listTickets ─────────────────────────────────────────────────────────── */
 export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
   return withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
-    const { page, per_page, search, status, priority, assigned_to, source, contact_id, organization_id, category, sort_by, sort_order } = query;
+    const { page, per_page, search, status, priority, assigned_to, department_id, source, contact_id, organization_id, category, sort_by, sort_order } = query;
     const offset = (page - 1) * per_page;
 
     const searchParam       = search          ?? null;
@@ -617,32 +704,37 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
     const contactParam      = contact_id      ?? null;
     const organizationParam = organization_id ?? null;
     const categoryParam     = category        ?? null;
+    const departmentParam   = department_id   ?? null;
 
     const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
 
     const where = `
-      WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+      WHERE ${TICKET_SEARCH_CONDITION}
         AND ($2::text IS NULL OR t.status         = $2)
         AND ($3::text IS NULL OR t.priority       = $3)
         AND ($4::uuid IS NULL OR t.assigned_to    = $4::uuid)
         AND ($5::text IS NULL OR t.source         = $5)
         AND ($6::uuid IS NULL OR t.contact_id     = $6::uuid)
         AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
-        AND ($8::text IS NULL OR t.category       = $8)`;
+        AND ($8::text IS NULL OR t.category       = $8)
+        AND ($9::uuid IS NULL OR t.department_id  = $9::uuid)`;
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `${BASE_SELECT}${where}
        ORDER BY ${sortCol} ${sortDir}
-       LIMIT $9 OFFSET $10`,
-      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
+       LIMIT $10 OFFSET $11`,
+      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
       per_page, offset,
     );
 
     const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
       `SELECT COUNT(*) AS count
-       FROM tickets t${where}`,
-      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam,
+       FROM tickets t
+       LEFT JOIN contacts      ct ON ct.id = t.contact_id
+       LEFT JOIN organizations o  ON o.id  = t.organization_id
+       ${where}`,
+      searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
     );
 
     const total = Number(countRows[0]?.count ?? 0);
@@ -666,6 +758,7 @@ export async function exportTickets(query: ExportTicketsQuery, schemaName?: stri
     const contactParam      = query.contact_id      ?? null;
     const organizationParam = query.organization_id ?? null;
     const categoryParam     = query.category        ?? null;
+    const departmentParam   = query.department_id   ?? null;
 
     const dateFrom = query.date_from ? new Date(query.date_from) : null;
     const dateTo = query.date_to ? new Date(query.date_to) : null;
@@ -692,7 +785,7 @@ export async function exportTickets(query: ExportTicketsQuery, schemaName?: stri
        LEFT JOIN contacts ct ON ct.id = t.contact_id
        LEFT JOIN organizations o ON o.id = t.organization_id
        LEFT JOIN ticket_types tt ON tt.id = t.type_id
-       WHERE ($1::text IS NULL OR t.title ILIKE '%' || $1 || '%' OR t.description ILIKE '%' || $1 || '%')
+       WHERE ${TICKET_SEARCH_CONDITION}
          AND ($2::text IS NULL OR t.status = $2)
          AND ($3::text IS NULL OR t.priority = $3)
          AND ($4::uuid IS NULL OR t.assigned_to = $4::uuid)
@@ -702,6 +795,7 @@ export async function exportTickets(query: ExportTicketsQuery, schemaName?: stri
          AND ($8::text IS NULL OR t.category = $8)
          AND ($9::timestamptz IS NULL OR t.created_at >= $9::timestamptz)
          AND ($10::timestamptz IS NULL OR t.created_at <= $10::timestamptz)
+         AND ($11::uuid IS NULL OR t.department_id = $11::uuid)
        ORDER BY t.created_at DESC
        LIMIT 10000`,
       searchParam,
@@ -714,6 +808,7 @@ export async function exportTickets(query: ExportTicketsQuery, schemaName?: stri
       categoryParam,
       dateFromParam,
       dateToParam,
+      departmentParam,
     );
   });
 }
@@ -749,6 +844,13 @@ export async function getTicket(id: string, schemaName?: string, db?: RawExecuto
 
 /* ── createTicket ────────────────────────────────────────────────────────── */
 export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string, schemaName?: string) {
+  const tenantRecord = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const tenantSettings = (tenantRecord?.settings as Record<string, unknown> | null) ?? {};
+  const ticketAutoAssign = tenantSettings['ticket_auto_assign'] === true;
+
   const { ticket, createdEvent } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
     const typeRules = await getTicketTypeRules(data.type_id ?? null, db);
@@ -761,12 +863,45 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       requireCategoryForWaiting: typeRules.require_category_for_waiting,
     });
 
-    const userExists = await db.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT id FROM users WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
-      data.assigned_to,
-    );
-    if (!userExists.length) {
-      throw new BusinessRuleError('Usuário responsável não encontrado ou inativo');
+    let finalAssignedTo = data.assigned_to ?? null;
+    let finalStatus: string = data.status;
+    const finalDepartmentId = data.department_id ?? null;
+
+    // Ticket precisa vir com agente explícito, departamento, ou ambos.
+    if (!finalDepartmentId && !finalAssignedTo) {
+      throw new BusinessRuleError('Ticket precisa ter um agente responsável ou um departamento');
+    }
+
+    // Se assigned_to já veio explícito, usa direto — ignora auto-assign e
+    // round-robin por departamento, mesmo que department_id também tenha sido informado.
+    // Auto-assign por departamento (round-robin): só atua quando o ticket
+    // chega só com departamento (sem agente explícito) e o tenant tem
+    // ticket_auto_assign ligado.
+    if (ticketAutoAssign && finalDepartmentId && !finalAssignedTo && schemaName) {
+      await ensureAgentAssignmentsInfrastructure(prisma, schemaName);
+      const nextAgent = await pickNextAgentForDepartment(db, finalDepartmentId);
+      if (nextAgent) {
+        finalAssignedTo = nextAgent.id;
+      } else {
+        // Sem agente online no departamento — ticket permanece queued até claim manual
+        finalStatus = 'queued';
+      }
+    }
+
+    // Departamento sem agente resolvido (auto-assign desligado ou sem candidato
+    // disponível) entra na fila para ser reivindicado via claimTicketFromQueue.
+    if (!finalAssignedTo && finalDepartmentId) {
+      finalStatus = 'queued';
+    }
+
+    if (finalAssignedTo) {
+      const userExists = await db.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM users WHERE id = $1::uuid AND status = 'active' LIMIT 1`,
+        finalAssignedTo,
+      );
+      if (!userExists.length) {
+        throw new BusinessRuleError('Usuário responsável não encontrado ou inativo');
+      }
     }
 
     const tagsLiteral = toPgArray(data.tags ?? []);
@@ -774,17 +909,17 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `INSERT INTO tickets
          (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
-          assigned_to, due_date, tags)
+          assigned_to, department_id, due_date, tags)
        VALUES
-         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::timestamptz, $13::text[])
+         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[])
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
-         NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
       data.contact_id      ?? null,
       data.organization_id ?? null,
       data.conversation_id ?? null,
@@ -792,10 +927,11 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       data.type_id ?? null,
       data.title,
       data.description     ?? null,
-      data.status,
+      finalStatus,
       data.priority,
       data.category        ?? null,
-      data.assigned_to     ?? null,
+      finalAssignedTo,
+      finalDepartmentId,
       data.due_date        ?? null,
       tagsLiteral,
     );
@@ -858,10 +994,29 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
 }
 
 /* ── updateTicket ────────────────────────────────────────────────────────── */
-export async function updateTicket(id: string, data: UpdateTicketInput, updatedBy: string, tenantId: string, schemaName?: string) {
+export async function updateTicket(
+  id: string,
+  data: UpdateTicketInput,
+  updatedBy: string,
+  role: string,
+  tenantId: string,
+  schemaName?: string,
+) {
   const { old, ticket, eventsToEmit } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
     const old = await getTicket(id, undefined, db);
+
+    const isAdminOrOwner = role === 'owner' || role === 'admin';
+    if (!isAdminOrOwner) {
+      // Agente: só pode editar se for o designado E ticket estiver em um status editável
+      if (old.assigned_to !== updatedBy) {
+        throw new ForbiddenError('Apenas o agente designado pode editar este ticket');
+      }
+      const AGENT_EDITABLE_STATUSES = ['in_progress', 'waiting', 'resolved'];
+      if (!AGENT_EDITABLE_STATUSES.includes(old.status)) {
+        throw new ForbiddenError('Aceite o ticket antes de editá-lo');
+      }
+    }
 
     const newStatus = data.status ?? old.status;
     ensureValidStatusTransition(old.status, newStatus);
@@ -891,6 +1046,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
     const typeIdValue = hasTypeId ? (data.type_id ?? null) : null;
     const hasAssignedTo = Object.prototype.hasOwnProperty.call(data, 'assigned_to');
     const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
+    const hasDepartmentId = Object.prototype.hasOwnProperty.call(data, 'department_id');
+    const departmentIdValue = hasDepartmentId ? (data.department_id ?? null) : null;
     let waitingReason: string | null | undefined;
     if (data.status === 'waiting') {
       waitingReason = data.waiting_reason ?? null;
@@ -936,6 +1093,7 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          tags            = COALESCE($11::text[], tags),
          resolution_notes = COALESCE($12::text, resolution_notes),
          waiting_reason  = CASE WHEN $13::boolean THEN $14::text ELSE waiting_reason END,
+         department_id   = CASE WHEN $16::boolean THEN $17::uuid ELSE department_id END,
          sla_paused_at    = ${slaPausedAtSql},
          sla_paused_duration_seconds = ${slaPausedDurationSql},
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
@@ -946,10 +1104,10 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
-         NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
       data.title ?? null,
       data.description ?? null,
       data.status ?? null,
@@ -965,6 +1123,8 @@ export async function updateTicket(id: string, data: UpdateTicketInput, updatedB
       hasWaitingReason,
       waitingReason ?? null,
       id,
+      hasDepartmentId,
+      departmentIdValue,
     );
 
     if (!rows[0]) throw new NotFoundError('Ticket');
@@ -1186,6 +1346,9 @@ export async function deleteTicket(id: string, deletedBy: string, tenantId: stri
 }
 
 /* ── assignTicket ────────────────────────────────────────────────────────── */
+// TODO(Bloco A+1): assignTicket ainda seta assigned_to diretamente, sem passar
+// por nenhuma regra de roteamento (assignRule). Migração para regras de
+// atribuição (por tipo, carga, skill etc.) fica para uma próxima entrega.
 export async function assignTicket(id: string, userId: string, assignedBy: string, tenantId: string) {
   await ensureTicketInfrastructure();
   const previous = await getTicket(id);
@@ -1196,10 +1359,10 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
        id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
        status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
        csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-       assigned_to, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+       assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
-       NULL AS type_name, NULL AS type_icon, NULL AS type_color`,
+       NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
     userId, id,
   );
 
@@ -1239,6 +1402,193 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
       href: `/tickets/${id}`,
     });
   } catch { /* socket não inicializado em testes */ }
+
+  return ticket;
+}
+
+/* ── claimTicketFromQueue ────────────────────────────────────────────────── */
+export async function claimTicketFromQueue(
+  ticketId: string,
+  userId: string,
+  tenantId: string,
+  schemaName?: string,
+) {
+  // FOR UPDATE só tem efeito real dentro de uma transação de verdade. Ao
+  // contrário de withOptionalSchema (que, sem schemaName, roda a query solta
+  // via `runner(prisma)`, fora de transação), aqui forçamos $transaction em
+  // ambos os caminhos para que o lock realmente sirva de proteção contra claim
+  // concorrente.
+  const runner = async (db: RawExecutor) => {
+    await ensureTicketInfrastructure(db);
+
+    // FOR UPDATE trava a linha pela duração da transação: uma segunda chamada
+    // concorrente de claim para o mesmo ticket bloqueia aqui até a primeira
+    // commitar, e então enxerga o status já atualizado — cai no ConflictError
+    // abaixo em vez de reatribuir o ticket duas vezes.
+    const currentRows = await db.$queryRawUnsafe<Array<{ status: string; department_id: string | null }>>(
+      `SELECT status, department_id FROM tickets WHERE id = $1::uuid LIMIT 1 FOR UPDATE`,
+      ticketId,
+    );
+    const current = currentRows[0];
+    if (!current) throw new NotFoundError('Ticket');
+    if (current.status !== 'queued') {
+      throw new ConflictError('Ticket não está na fila');
+    }
+
+    if (current.department_id) {
+      const belongs = await db.$queryRawUnsafe<Array<{ user_id: string }>>(
+        `SELECT user_id FROM agent_departments
+         WHERE department_id = $1::uuid AND user_id = $2::uuid
+         LIMIT 1`,
+        current.department_id,
+        userId,
+      );
+      if (belongs.length === 0) {
+        throw new ForbiddenError('Agente não pertence ao departamento deste ticket');
+      }
+    }
+
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `UPDATE tickets
+       SET assigned_to = $1::uuid,
+           status = 'open',
+           updated_at = NOW()
+       WHERE id = $2::uuid
+         AND status = 'queued'
+       RETURNING
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+         csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
+         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         NULL AS assignee_name, NULL AS assignee_avatar,
+         NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
+      userId,
+      ticketId,
+    );
+
+    // Defesa extra além do FOR UPDATE: se por algum motivo o status não era
+    // mais 'queued' no momento do UPDATE, falha explicitamente em vez de
+    // reatribuir silenciosamente.
+    if (!rows[0]) throw new ConflictError('Ticket não está na fila');
+    const ticket = rows[0];
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.claimed_from_queue', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      userId,
+      ticketId,
+      JSON.stringify({ status: 'queued' }),
+      JSON.stringify({ status: 'open', assigned_to: userId }),
+    );
+
+    // TODO(first-response SLA / fetchLastEvent): quando o cálculo de tempo de
+    // primeira resposta existir, pular tickets com status 'queued' — o
+    // relógio de primeira resposta deve começar aqui (claim → 'open'), não em
+    // 'created', já que o ticket ainda não foi visto por nenhum agente.
+    const claimedEvent = await logTicketEvent(
+      ticketId,
+      userId,
+      'claimed_from_queue',
+      'queued',
+      'open',
+      undefined,
+      db,
+    );
+
+    return { ticket, claimedEvent };
+  };
+
+  const { ticket, claimedEvent } = schemaName
+    ? await withTenantSchema(schemaName, runner)
+    : await prisma.$transaction(async (tx) => runner(tx as RawExecutor));
+
+  if (claimedEvent) emitTicketEvent(tenantId, ticketId, claimedEvent);
+
+  try {
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
+  } catch { /* socket não inicializado em testes */ }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+
+  return ticket;
+}
+
+/* ── acceptTicket ────────────────────────────────────────────────────────── */
+// Aceitação explícita pelo agente designado. Diferente de claimTicketFromQueue
+// (que resolve QUEM assume um ticket sem dono), aqui o dono já é conhecido —
+// não há corrida a proteger, por isso não usa SELECT FOR UPDATE.
+export async function acceptTicket(
+  ticketId: string,
+  userId: string,
+  tenantId: string,
+  schemaName?: string,
+) {
+  const { ticket, acceptedEvent } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+
+    const current = await getTicket(ticketId, undefined, db);
+
+    if (current.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente designado pode aceitar este ticket');
+    }
+
+    if (current.status !== 'queued' && current.status !== 'open') {
+      throw new ConflictError('Ticket não está em estado aceitável');
+    }
+
+    const rows = await db.$queryRawUnsafe<TicketRow[]>(
+      `UPDATE tickets
+       SET status = 'in_progress',
+           updated_at = NOW()
+       WHERE id = $1::uuid
+       RETURNING
+         id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
+         status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
+         csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
+         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         NULL AS assignee_name, NULL AS assignee_avatar,
+         NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
+         NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
+      ticketId,
+    );
+
+    if (!rows[0]) throw new NotFoundError('Ticket');
+    const ticket = rows[0];
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.accepted', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      userId,
+      ticketId,
+      JSON.stringify({ status: current.status }),
+      JSON.stringify({ status: 'in_progress' }),
+    );
+
+    const acceptedEvent = await logTicketEvent(
+      ticketId,
+      userId,
+      'accepted',
+      current.status,
+      'in_progress',
+      undefined,
+      db,
+    );
+
+    return { ticket, acceptedEvent };
+  });
+
+  if (acceptedEvent) emitTicketEvent(tenantId, ticketId, acceptedEvent);
+
+  try {
+    getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
+  } catch { /* socket não inicializado em testes */ }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
 
   return ticket;
 }
@@ -1317,8 +1667,24 @@ export async function listComments(ticketId: string, schemaName?: string) {
 }
 
 /* ── addComment ──────────────────────────────────────────────────────────── */
-export async function addComment(ticketId: string, data: CreateCommentInput, userId: string, tenantId: string) {
+export async function addComment(
+  ticketId: string,
+  data: CreateCommentInput,
+  userId: string,
+  role: string,
+  tenantId: string,
+) {
   const ticket = await getTicket(ticketId);
+
+  const isAdminOrOwner = role === 'owner' || role === 'admin';
+  if (!isAdminOrOwner) {
+    if (ticket.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente designado pode comentar neste ticket');
+    }
+    if (ticket.status !== 'in_progress') {
+      throw new ForbiddenError('Aceite o ticket antes de comentar');
+    }
+  }
 
   const rows = await prisma.$queryRawUnsafe<CommentRow[]>(
     `INSERT INTO ticket_comments (ticket_id, user_id, contact_id, source, content, is_internal)

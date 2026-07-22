@@ -3656,9 +3656,8 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(260px, 1fr));
+  grid-template-columns: repeat(6, minmax(260px, 1fr));
   gap: 16px;
-  height: calc(100vh - 180px);
   overflow-x: auto;
   overflow-y: hidden;
   padding: 16px;
@@ -3668,6 +3667,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -3896,6 +3896,34 @@
   box-shadow: 0 0 0 3px var(--red-dim);
 }
 
+.tickets-card-claim-btn {
+  margin-top: 8px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--teal);
+  border-radius: var(--r);
+  background: var(--teal);
+  color: var(--on-teal);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  height: 28px;
+  padding: 0 10px;
+}
+
+.tickets-card-claim-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.tickets-card-claim-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .tickets-list-board {
   flex: 1;
   min-height: 0;
@@ -4112,7 +4140,7 @@
   min-height: 0;
   overflow-y: auto;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .ticket-detail-v2-sidebar {
@@ -4121,15 +4149,6 @@
   display: grid;
   align-content: start;
   gap: 12px;
-}
-
-.ticket-detail-v2-title-block h1 {
-  margin: 0;
-  color: var(--txt);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.3;
-  cursor: text;
 }
 
 .ticket-title-input {
@@ -4143,6 +4162,189 @@
   font-weight: 600;
   padding: 0 10px;
   font-family: var(--font);
+}
+
+.ticket-title-input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-dim);
+}
+
+/* Hero do ticket (arquétipo B — Registro/Detalhe) */
+.ticket-detail-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 4px 0 0;
+}
+
+.ticket-hero-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-lg);
+  background: var(--teal-dim);
+  border: 1px solid rgba(0, 201, 167, .2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--teal);
+}
+
+.ticket-hero-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ticket-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--txt-3);
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.ticket-hero-meta time {
+  font-style: normal;
+}
+
+.ticket-number {
+  font-family: var(--mono);
+  color: var(--teal);
+  font-size: 11px;
+}
+
+.ticket-hero-sep {
+  color: var(--line-2);
+}
+
+.ticket-hero-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--txt);
+  letter-spacing: -0.3px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.ticket-hero-title-input {
+  font-size: 17px;
+  height: 30px;
+}
+
+/* Grid de 2 colunas do corpo das abas (1.4fr / 1fr) */
+.ticket-tab-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.ticket-tab-col-main,
+.ticket-tab-col-side {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.ticket-tab-col-main {
+  gap: 14px;
+}
+
+.ticket-tab-col-side {
+  gap: 12px;
+}
+
+/* Padrão de seção canônico (.dsec) */
+.ticket-dsec {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.ticket-dsec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-3);
+}
+
+.ticket-dsec-head .checklist-progress-text,
+.ticket-dsec-head .time-total-badge {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.ticket-dsec-body {
+  padding: 12px 14px;
+}
+
+.btn-ghost {
+  border: 1px solid var(--line-2);
+  background: var(--bg-3);
+  color: var(--txt-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  padding: 6px 12px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+/* Estado vazio canônico dentro de seções do detalhe */
+.ticket-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 12px;
+  text-align: center;
+}
+
+.ticket-empty-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--txt-3);
+  margin-bottom: 4px;
+}
+
+.ticket-empty-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt-2);
+  margin: 0;
+}
+
+.ticket-empty-sub {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin: 0;
 }
 
 .ticket-detail-section-v2,
@@ -4344,6 +4546,11 @@
   gap: 10px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-2);
+  padding-top: 4px;
 }
 
 .ticket-tabs-v2 button {
@@ -4588,6 +4795,10 @@
   .ticket-detail-v2-main,
   .ticket-detail-v2-sidebar {
     overflow: visible;
+  }
+
+  .ticket-tab-body {
+    grid-template-columns: 1fr;
   }
 }
 

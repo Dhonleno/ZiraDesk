@@ -25,7 +25,13 @@ async function run() {
          ADD COLUMN IF NOT EXISTS csat_sent_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS csat_responded_at TIMESTAMPTZ,
          ADD COLUMN IF NOT EXISTS csat_expires_at TIMESTAMPTZ,
-         ADD COLUMN IF NOT EXISTS ticket_number SERIAL`,
+         ADD COLUMN IF NOT EXISTS ticket_number SERIAL,
+         ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES "${tenant.schemaName}".departments(id) ON DELETE SET NULL`,
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "idx_tickets_department_id"
+         ON "${tenant.schemaName}".tickets(department_id)
+         WHERE department_id IS NOT NULL`,
       );
       logger.info(`✓ ${tenant.slug}`);
     } catch (err) {

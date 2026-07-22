@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset --force",
     "migrate:indexes": "tsx --env-file=.env src/scripts/migrate-conversations-indexes.ts",
     "migrate:ticket-fields": "tsx --env-file=.env src/scripts/migrate-ticket-resolution-fields.ts",
+    "migrate:sla-warning": "tsx --env-file=.env src/scripts/migrate-sla-warning.ts",
     "contacts:migrate-tags": "tsx --env-file=.env src/scripts/migrate-contact-tags.ts",
     "contacts:normalize-phones": "tsx --env-file=.env src/scripts/normalize-contact-phones.ts",
     "whatsapp:templates:resync": "tsx --env-file=.env src/scripts/resync-templates.ts",

@@ -36,7 +36,7 @@ interface Conversation {
   created_at: string;
   resolved_at: string | null;
   bot_option_id?: string | null;
-  bot_department?: string | null;
+  department_name?: string | null;
   csat_score?: number | null;
   csat_comment?: string | null;
   csat_stage?: 'sent' | 'waiting_comment' | 'done' | null;

@@ -37,7 +37,7 @@ import { BusinessHours as AdminBusinessHours } from './pages/admin/BusinessHours
 import { BotMenu as AdminBotMenu } from './pages/admin/BotMenu';
 import { AutoAssign as AdminAutoAssign } from './pages/admin/AutoAssign';
 import { PauseReasons as AdminPauseReasons } from './pages/admin/PauseReasons';
-import { Skills as AdminSkills } from './pages/admin/Skills';
+import { SkillsV2 as AdminSkillsV2 } from './pages/admin/SkillsV2';
 import { Departments as AdminDepartments } from './pages/admin/Departments';
 import { ConversationTags as AdminConversationTags } from './pages/admin/ConversationTags';
 import { TicketTypes as AdminTicketTypes } from './pages/admin/TicketTypes';
@@ -49,6 +49,7 @@ import { Integrations as AdminIntegrations } from './pages/admin/Integrations';
 import { Templates as AdminTemplates } from './pages/admin/Templates';
 import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
 import { QueueConfig as AdminQueueConfig } from './pages/admin/QueueConfig';
+import { TicketAutoAssign as AdminTicketAutoAssign } from './pages/admin/TicketAutoAssign';
 import { VoiceConfig as AdminVoiceConfig } from './pages/admin/VoiceConfig';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
@@ -300,7 +301,7 @@ export function App() {
               <Route path="bot" element={<AdminBotMenu />} />
               <Route path="auto-assign" element={<AdminAutoAssign />} />
               <Route path="pause-reasons" element={<AdminPauseReasons />} />
-              <Route path="skills" element={<AdminSkills />} />
+              <Route path="skills" element={<AdminSkillsV2 />} />
               <Route path="departments" element={<AdminDepartments />} />
               <Route path="quick-replies" element={<AdminQuickReplies />} />
               <Route path="templates" element={<AdminTemplates />} />
@@ -320,6 +321,7 @@ export function App() {
                 )}
               />
               <Route path="queue-config" element={<AdminQueueConfig />} />
+              <Route path="ticket-auto-assign" element={<AdminTicketAutoAssign />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />

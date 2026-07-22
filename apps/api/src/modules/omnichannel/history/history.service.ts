@@ -30,7 +30,7 @@ interface HistoryRow {
   assigned_avatar: string | null;
   channel_type: string;
   bot_option_id: string | null;
-  bot_department: string | null;
+  department_name: string | null;
   status: string;
   duration_seconds: number | bigint | null;
   wait_seconds: number | bigint | null;
@@ -65,6 +65,7 @@ interface HistoryConversationDetailRow {
   assigned_name: string | null;
   assigned_avatar: string | null;
   channel_name: string | null;
+  department_name: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -259,7 +260,7 @@ function buildHistoryWhereClause(filters: Omit<HistoryFilters, 'page' | 'perPage
   }
 
   if (filters.botOptionId) {
-    conditions.push(`c.metadata->>'bot_option_id' = ${pushParam(filters.botOptionId)}::text`);
+    conditions.push(`c.bot_option_id = ${pushParam(filters.botOptionId)}::uuid`);
   }
 
   if (filters.csatRating === 'none') {
@@ -299,6 +300,7 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
   const conversationsRef = `${safeSchema}.conversations`;
   const contactsRef = `${safeSchema}.contacts`;
   const usersRef = `${safeSchema}.users`;
+  const departmentsRef = `${safeSchema}.departments`;
 
   const { whereSql, params } = buildHistoryWhereClause(filters);
 
@@ -320,8 +322,8 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
        u.name AS assigned_name,
        u.avatar_url AS assigned_avatar,
        c.channel_type,
-       NULLIF(c.metadata->>'bot_option_id', '') AS bot_option_id,
-       COALESCE(NULLIF(c.metadata->>'bot_department', ''), '—') AS bot_department,
+       c.bot_option_id::text AS bot_option_id,
+       COALESCE(d.name, '—') AS department_name,
        c.status,
        GREATEST(EXTRACT(EPOCH FROM (COALESCE(c.closed_at, c.resolved_at, c.last_message_at, NOW()) - c.created_at)), 0)::bigint AS duration_seconds,
        CASE
@@ -333,6 +335,7 @@ export async function listHistory(filters: HistoryFilters, tenantId?: string) {
      FROM ${conversationsRef} c
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+     LEFT JOIN ${departmentsRef} d ON d.id = c.department_id
      ${whereSql}
      ORDER BY ${sortCol} ${sortDir} ${nullsClause}
      LIMIT ${limitToken}::integer OFFSET ${offsetToken}::integer`,
@@ -386,6 +389,7 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
   const auditLogsRef = `${safeSchema}.audit_logs`;
   const closeTypesRef = `${safeSchema}.conversation_close_types`;
   const closeOutcomesRef = `${safeSchema}.conversation_close_outcomes`;
+  const departmentsRef = `${safeSchema}.departments`;
 
   const detailRows = await prisma.$queryRawUnsafe<HistoryConversationDetailRow[]>(
     `SELECT
@@ -415,12 +419,14 @@ export async function getHistoryDetail(conversationId: string, tenantId?: string
        u.name AS assigned_name,
        u.avatar_url AS assigned_avatar,
        ch.name AS channel_name,
+       COALESCE(d.name, '—') AS department_name,
        c.metadata
      FROM ${conversationsRef} c
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      LEFT JOIN ${organizationsRef} org ON org.id = c.organization_id
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
      LEFT JOIN ${channelsRef} ch ON ch.id = c.channel_id
+     LEFT JOIN ${departmentsRef} d ON d.id = c.department_id
      LEFT JOIN ${closeTypesRef} ct_cfg ON ct_cfg.id = c.close_type_id
      LEFT JOIN ${closeOutcomesRef} co_cfg ON co_cfg.id = c.close_outcome_id
      WHERE c.id = $1::uuid
@@ -632,6 +638,7 @@ export async function exportHistoryCsv(
   const conversationsRef = `${safeSchema}.conversations`;
   const contactsRef = `${safeSchema}.contacts`;
   const usersRef = `${safeSchema}.users`;
+  const departmentsRef = `${safeSchema}.departments`;
 
   const { whereSql, params } = buildHistoryWhereClause(filters);
 
@@ -646,8 +653,8 @@ export async function exportHistoryCsv(
        u.name AS assigned_name,
        u.avatar_url AS assigned_avatar,
        c.channel_type,
-       NULLIF(c.metadata->>'bot_option_id', '') AS bot_option_id,
-       COALESCE(NULLIF(c.metadata->>'bot_department', ''), '—') AS bot_department,
+       c.bot_option_id::text AS bot_option_id,
+       COALESCE(d.name, '—') AS department_name,
        c.status,
        GREATEST(EXTRACT(EPOCH FROM (COALESCE(c.closed_at, c.resolved_at, c.last_message_at, NOW()) - c.created_at)), 0)::bigint AS duration_seconds,
        CASE
@@ -659,6 +666,7 @@ export async function exportHistoryCsv(
      FROM ${conversationsRef} c
      LEFT JOIN ${contactsRef} ct ON ct.id = c.contact_id
      LEFT JOIN ${usersRef} u ON u.id = c.assigned_to
+     LEFT JOIN ${departmentsRef} d ON d.id = c.department_id
      ${whereSql}
      ORDER BY c.created_at DESC`,
     ...params,
@@ -669,7 +677,7 @@ export async function exportHistoryCsv(
     contact: row.contact_name ?? row.contact_whatsapp ?? row.contact_phone ?? '—',
     agent: row.assigned_name ?? '—',
     channel: channelLabel(row.channel_type),
-    group: row.bot_department ?? '—',
+    group: row.department_name ?? '—',
     status: statusLabel(row.status),
     duration: formatDurationFromSeconds(toNumber(row.duration_seconds)),
     wait: row.wait_seconds === null ? '—' : formatDurationFromSeconds(toNumber(row.wait_seconds)),

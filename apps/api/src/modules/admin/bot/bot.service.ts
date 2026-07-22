@@ -8,6 +8,7 @@ import type {
 } from './bot.schema.js';
 
 type BotDbClient = Pick<typeof prisma, '$executeRawUnsafe' | '$queryRawUnsafe'>;
+type BotOptionSkillInput = { skill_id: string; required?: boolean };
 
 interface BotMenuRow {
   id: string;
@@ -182,10 +183,9 @@ export function formatBotMenu(menu: BotMenu): string {
 async function getFlatOptionsByMenuId(db: BotDbClient, menuId: string): Promise<RawBotOptionRow[]> {
   return db.$queryRawUnsafe<RawBotOptionRow[]>(
     `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
-            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
-            d.name AS department_name, bo.created_at
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order,
+            NULL::uuid AS department_id, NULL::text AS department_name, bo.created_at
      FROM bot_options bo
-     LEFT JOIN departments d ON d.id = bo.department_id
      WHERE bo.bot_menu_id = $1::uuid
      ORDER BY bo.sort_order ASC, bo.number ASC`,
     menuId,
@@ -199,8 +199,8 @@ async function getOptionsByParent(
 ): Promise<BotOption[]> {
   const rows = await db.$queryRawUnsafe<RawBotOptionRow[]>(
     `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
-            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
-            NULL::text AS department_name, bo.created_at
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order,
+            NULL::uuid AS department_id, NULL::text AS department_name, bo.created_at
      FROM bot_options bo
      WHERE bo.bot_menu_id = $1::uuid
        AND (($2::uuid IS NULL AND bo.parent_option_id IS NULL) OR bo.parent_option_id = $2::uuid)
@@ -215,8 +215,8 @@ async function getOptionsByParent(
 async function getOptionById(db: BotDbClient, optionId: string): Promise<BotOption | null> {
   const rows = await db.$queryRawUnsafe<RawBotOptionRow[]>(
     `SELECT bo.id, bo.bot_menu_id, bo.number, bo.label, bo.tag, bo.response, bo.has_submenu,
-            bo.submenu_greeting, bo.parent_option_id, bo.sort_order, bo.department_id,
-            NULL::text AS department_name, bo.created_at
+            bo.submenu_greeting, bo.parent_option_id, bo.sort_order,
+            NULL::uuid AS department_id, NULL::text AS department_name, bo.created_at
      FROM bot_options bo
      WHERE bo.id = $1::uuid
      LIMIT 1`,
@@ -264,6 +264,69 @@ async function ensureOptionNumberAvailable(
 
   if (rows[0]) {
     throw new ConflictError('Ja existe uma opcao com esse numero neste nivel');
+  }
+}
+
+async function ensureBotOptionSkillsInfrastructure(db: BotDbClient = prisma): Promise<void> {
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS skills (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_skills_name"
+    ON skills(name)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS bot_option_skills (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bot_option_id UUID NOT NULL REFERENCES bot_options(id) ON DELETE CASCADE,
+      skill_id      UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+      required      BOOLEAN NOT NULL DEFAULT true,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(bot_option_id, skill_id)
+    )
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_option"
+    ON bot_option_skills(bot_option_id)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "idx_bot_option_skills_skill"
+    ON bot_option_skills(skill_id)
+  `);
+}
+
+async function syncBotOptionSkills(
+  botOptionId: string,
+  skills?: BotOptionSkillInput[],
+  db: BotDbClient = prisma,
+): Promise<void> {
+  if (skills === undefined) return;
+
+  await ensureBotOptionSkillsInfrastructure(db);
+  await db.$executeRawUnsafe('DELETE FROM bot_option_skills WHERE bot_option_id = $1::uuid', botOptionId);
+
+  const deduped = new Map(skills.map((skill) => [skill.skill_id, skill.required ?? true]));
+  for (const [skillId, required] of deduped.entries()) {
+    await db.$executeRawUnsafe(
+      `INSERT INTO bot_option_skills (bot_option_id, skill_id, required)
+       VALUES ($1::uuid, $2::uuid, $3)
+       ON CONFLICT (bot_option_id, skill_id)
+       DO UPDATE SET required = EXCLUDED.required`,
+      botOptionId,
+      skillId,
+      required,
+    );
   }
 }
 
@@ -453,7 +516,7 @@ export async function addOption(data: CreateBotOptionInput): Promise<BotOption> 
      )
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
+               parent_option_id, sort_order, NULL::uuid AS department_id, NULL::text AS department_name, created_at`,
     menuId,
     parentOptionId,
     data.number,
@@ -465,7 +528,9 @@ export async function addOption(data: CreateBotOptionInput): Promise<BotOption> 
     data.sort_order,
   );
 
-  return normalizeOption(rows[0]!);
+  const option = normalizeOption(rows[0]!);
+  await syncBotOptionSkills(option.id, data.skills);
+  return option;
 }
 
 export async function addSubOption(parentId: string, data: CreateBotSubOptionInput): Promise<BotOption> {
@@ -506,10 +571,6 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
     throw new ConflictError('Resposta e obrigatoria para opcoes sem submenu');
   }
 
-  const nextDepartmentId = data.department_id === undefined
-    ? current.department_id
-    : (data.department_id ?? null);
-
   const rows = await prisma.$queryRawUnsafe<RawBotOptionRow[]>(
     `UPDATE bot_options
      SET number = $1,
@@ -519,11 +580,10 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
          has_submenu = $5,
          submenu_greeting = $6,
          parent_option_id = $7::uuid,
-         sort_order = COALESCE($8::integer, sort_order),
-         department_id = $10::uuid
+         sort_order = COALESCE($8::integer, sort_order)
      WHERE id = $9::uuid
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
+               parent_option_id, sort_order, NULL::uuid AS department_id, NULL::text AS department_name, created_at`,
     nextNumber,
     data.label?.trim() ?? null,
     data.tag === undefined ? current.tag : normalizeOptionalText(data.tag),
@@ -535,10 +595,11 @@ export async function updateOption(id: string, data: UpdateBotOptionInput): Prom
     nextParentOptionId,
     data.sort_order ?? null,
     id,
-    nextDepartmentId,
   );
 
-  return normalizeOption(rows[0]!);
+  const option = normalizeOption(rows[0]!);
+  await syncBotOptionSkills(option.id, data.skills);
+  return option;
 }
 
 export async function deleteOption(id: string): Promise<BotOption> {
@@ -548,7 +609,7 @@ export async function deleteOption(id: string): Promise<BotOption> {
     `DELETE FROM bot_options
      WHERE id = $1::uuid
      RETURNING id, bot_menu_id, number, label, tag, response, has_submenu, submenu_greeting,
-               parent_option_id, sort_order, department_id, NULL::text AS department_name, created_at`,
+               parent_option_id, sort_order, NULL::uuid AS department_id, NULL::text AS department_name, created_at`,
     id,
   );
 
@@ -628,7 +689,6 @@ async function handleTransferToAgent(
       bot_option_id: option?.id ?? null,
       bot_group: botGroup,
       bot_subject: botSubject,
-      bot_department: botGroup,
       bot_tag: botSubject,
       bot_path: [],
       bot_current_parent: null,
@@ -642,11 +702,9 @@ async function handleTransferToAgent(
      SET status = 'open',
          queue_entered_at = COALESCE(queue_entered_at, NOW()),
          bot_option_id = $1::uuid,
-         department_id = $5::uuid,
          metadata = COALESCE(metadata, '{}'::jsonb)
            || jsonb_build_object(
              'bot_option_id', $1::uuid,
-             'bot_department', $2::text,
              'bot_tag', $3::text,
              'bot_group', $2::text,
              'bot_subject', $3::text
@@ -656,7 +714,6 @@ async function handleTransferToAgent(
     botGroup ?? '',
     botSubject ?? '',
     conversationId,
-    option?.department_id ?? null,
   );
 
   return { type: 'choice', text: responseText, option };

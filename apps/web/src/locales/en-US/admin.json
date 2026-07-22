@@ -15,6 +15,7 @@
       "test": "Test",
       "invite": "Invite",
       "inviting": "Inviting...",
+      "loading": "Loading...",
       "saving": "Saving...",
       "noResults": "No results found",
       "errorSave": "Error saving",
@@ -27,6 +28,15 @@
         "minutesAgo": "{{count}} min ago",
         "hoursAgo": "{{count}}h ago",
         "daysAgo": "{{count}} days ago"
+      }
+    },
+    "ticketAutoAssign": {
+      "title": "Ticket Auto-Assign",
+      "subtitle": "Configure automatic ticket assignment by department (round-robin)",
+      "enabled": "Department auto-assign enabled",
+      "enabledHint": "When enabled, tickets created with a department and no agent are automatically distributed among the department's agents. If no agent is available, the ticket goes to the queue.",
+      "messages": {
+        "saved": "Settings saved successfully"
       }
     },
     "queueConfig": {
@@ -320,6 +330,10 @@
       "depth": "Level {{n}}",
       "parentOption": "Parent option",
       "noSubmenuGreeting": "No intro message",
+      "requiredSkills": "Required skills",
+      "requiredSkillsHint": "Agents must have every selected skill to receive conversations from this option.",
+      "skillRequired": "Required",
+      "noSkillsAvailable": "No active skills available",
       "option": {
         "number": "Number",
         "label": "Label",
@@ -364,6 +378,55 @@
       "close": "Close",
       "save": "Save",
       "saving": "Saving..."
+    },
+    "skillsV2": {
+      "title": "Skills",
+      "subtitle": "Manage independent skills for agents and bot options",
+      "new": "New skill",
+      "newTitle": "New skill",
+      "editTitle": "Edit skill",
+      "listTitle": "Skills",
+      "detailEyebrow": "Skill",
+      "selectTitle": "Select a skill",
+      "selectBody": "Choose a skill from the list to view linked agents and bot options.",
+      "emptyTitle": "No skills yet",
+      "emptyBody": "Create skills to organize conversation routing.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "deactivate": "Deactivate",
+      "deleteTitle": "Remove skill",
+      "deleteWarning": "This skill has no links and will be permanently removed.",
+      "softDeleteWarning": "This skill is linked to agents or bot options. It will be deactivated to preserve history.",
+      "counts": "{{agents}} agent(s) · {{botOptions}} option(s)",
+      "assignedAgents": "Agents with this skill",
+      "linkedBotOptions": "Linked bot options",
+      "assignAgent": "Assign agent",
+      "assign": "Assign",
+      "selectAgent": "Select an agent",
+      "noDescription": "No description.",
+      "noAgents": "No assigned agents.",
+      "noBotOptions": "No linked bot options.",
+      "required": "Required",
+      "optional": "Optional",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "agent": "Agent",
+        "level": "Level",
+        "isActive": "Active"
+      },
+      "levels": {
+        "junior": "Junior",
+        "intermediate": "Intermediate",
+        "senior": "Senior"
+      },
+      "messages": {
+        "created": "Skill created",
+        "updated": "Skill updated",
+        "deleted": "Skill removed",
+        "agentAssigned": "Agent assigned",
+        "agentRemoved": "Agent removed"
+      }
     },
     "departments": {
       "title": "Departments",
@@ -1013,6 +1076,13 @@
   },
   "nav": {
     "admin": "Administration",
+    "monitor": "Monitor",
+    "metrics": "Metrics",
+    "organizations": "Organizations",
+    "contacts": "Contacts",
+    "campaigns": "Campaigns",
+    "conversations": "Conversations",
+    "tickets": "Tickets",
     "users": "Users",
     "permissions": "Permissions and Access",
     "channels": "Channels",
@@ -1034,6 +1104,7 @@
     "webhooks": "Webhooks",
     "attendanceRules": "Attendance Rules",
     "queueConfig": "Queue Notifications",
+    "ticketAutoAssign": "Ticket Auto-Assign",
     "settings": "Settings",
     "lgpd": "LGPD",
     "history": "History",
