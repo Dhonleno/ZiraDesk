@@ -474,7 +474,16 @@
       "inviteUser": "Invitar usuario",
       "noUsers": "No se encontraron usuarios",
       "editUser": "Editar usuario",
-      "resetPassword": "Restablecer contraseña",
+      "resetPassword": {
+        "title": "Restablecer contraseña",
+        "emailMethod": "Enviar enlace por correo",
+        "emailDesc": "Se enviará un enlace de restablecimiento a {{email}}",
+        "provisionalMethod": "Generar contraseña provisional",
+        "provisionalDesc": "Se generará una contraseña temporal. El usuario deberá cambiarla en el primer acceso.",
+        "provisionalCreated": "Contraseña provisional generada correctamente.",
+        "provisionalWarning": "Guarda esta contraseña. No se mostrará de nuevo.",
+        "provisionalSent": "Contraseña provisional generada para {{name}}"
+      },
       "search": "Buscar usuario...",
       "confirmDeactivate": "Desactivar usuario",
       "confirmDeactivateMsg": "¿Seguro que quieres desactivar a {{name}}? Perderá el acceso inmediato al sistema.",

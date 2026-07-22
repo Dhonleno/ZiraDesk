@@ -19,6 +19,7 @@ import {
   updateUser,
   deleteUser,
   resetUserPassword,
+  generateProvisionalPassword,
   NotFoundError,
   ConflictError,
   ForbiddenError,
@@ -174,6 +175,27 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     try {
       await resetUserPassword(request.params.id, tenantId, schemaName);
       return reply.send({ success: true, data: { message: 'E-mail de redefinição enviado' } });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/:id/provisional-password', { preHandler: usersManageGuard }, async (request, reply) => {
+    const schemaName = resolveSchemaName(request);
+    if (!schemaName) {
+      return reply.code(500).send({
+        success: false,
+        error: { message: 'Schema do tenant não resolvido' },
+      });
+    }
+
+    try {
+      const result = await generateProvisionalPassword(request.params.id, request.user.id, schemaName);
+      return reply.send({ success: true, data: result });
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });

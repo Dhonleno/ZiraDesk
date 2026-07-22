@@ -1,5 +1,3 @@
-import { randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { Prisma } from '@prisma/client';
 import { env } from '../../../config/env.js';
@@ -10,6 +8,7 @@ import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
 import { ensureWebhooksInfrastructure } from '../../admin/webhooks/webhooks.service.js';
 import { ensureQueueNotificationsInfrastructure } from '../../omnichannel/queue/queue-notifications.infrastructure.js';
 import { ensureCampaignsInfrastructure } from '../../omnichannel/campaigns/campaigns.infrastructure.js';
+import { generateTempPassword, hashPassword } from '../../auth/auth.service.js';
 import {
   listUsers,
   inviteUser,
@@ -1193,8 +1192,8 @@ export async function createTenant(data: CreateTenantInput): Promise<{
     await provisionTenantSchema(schemaName);
 
     // Gera senha temporária (12 chars base64url)
-    const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
-    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO "${schemaName}".users (name, email, password_hash, role, status, language, settings, must_change_password)

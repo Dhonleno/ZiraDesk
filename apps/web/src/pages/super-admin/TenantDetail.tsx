@@ -363,7 +363,7 @@ export function TenantDetail() {
                         variant="secondary"
                         onClick={() => setResetUser(user)}
                       >
-                        {t('tenantAdmin.users.resetPassword')}
+                        {t('tenantAdmin.users.resetPassword.title')}
                       </Button>
                     </td>
                   </tr>
@@ -464,7 +464,7 @@ export function TenantDetail() {
       <Modal
         open={!!resetUser}
         onClose={() => setResetUser(null)}
-        title={t('tenantAdmin.users.resetPassword')}
+        title={t('tenantAdmin.users.resetPassword.title')}
         maxWidth="sm"
       >
         <div className="space-y-4">
@@ -487,7 +487,7 @@ export function TenantDetail() {
                 resetPasswordMutation.mutate(resetUser);
               }}
             >
-              {t('tenantAdmin.users.resetPassword')}
+              {t('tenantAdmin.users.resetPassword.title')}
             </Button>
           </div>
         </div>

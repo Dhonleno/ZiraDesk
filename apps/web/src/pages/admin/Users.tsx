@@ -533,7 +533,7 @@ export function Users() {
                                       {t('tenantAdmin.common.edit')}
                                     </DropdownItem>
                                     <DropdownItem onClick={() => { setResetUser(user); setOpenActionsUserId(null); }}>
-                                      {t('tenantAdmin.users.resetPassword')}
+                                      {t('tenantAdmin.users.resetPassword.title')}
                                     </DropdownItem>
                                     <DropdownItem
                                       color="var(--red)"

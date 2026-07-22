@@ -1,5 +1,4 @@
 import { randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
@@ -7,6 +6,7 @@ import { buildTenantUrl } from '../../../utils/url.js';
 import { logger } from '../../../config/logger.js';
 import { redis } from '../../../config/redis.js';
 import { hasTenantEmailProvider, sendEmail } from '../../../services/email.service.js';
+import { generateTempPassword, hashPassword } from '../../auth/auth.service.js';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.schema.js';
 import type { Role } from '@ziradesk/shared';
 
@@ -211,8 +211,8 @@ export async function inviteUser(
 
   if (!sendInviteEmail) {
     // Super-admin flow: usa senha provisória para acesso imediato
-    const tempPassword = randomBytes(9).toString('base64url').slice(0, 12);
-    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
     if (!previousUser) {
       const created = await prisma.$queryRawUnsafe<UserRow[]>(
@@ -246,7 +246,7 @@ export async function inviteUser(
   }
 
   // Fluxo regular: hash inutilizável — o usuário define a senha pelo link de convite
-  const unusableHash = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
+  const unusableHash = await hashPassword(randomBytes(32).toString('hex'));
 
   if (!previousUser) {
     const created = await prisma.$queryRawUnsafe<UserRow[]>(
@@ -452,6 +452,47 @@ export async function resetUserPassword(
 
   logger.info({ tenantId, userId: id }, '[ResetPassword] Email sent');
   return { success: true };
+}
+
+export async function generateProvisionalPassword(
+  id: string,
+  actorUserId: string,
+  schemaName: string,
+  options?: { allowOwner?: boolean },
+): Promise<{ tempPassword: string }> {
+  const user = await getUser(id, schemaName);
+  const usersRef = usersTable(schemaName);
+  if (user.role === 'owner' && !options?.allowOwner) {
+    throw new ForbiddenError('Não é possível redefinir a senha do proprietário da conta');
+  }
+
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hashPassword(tempPassword);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${usersRef}
+     SET password_hash = $1,
+         must_change_password = true,
+         updated_at = NOW()
+     WHERE id = $2::uuid`,
+    passwordHash,
+    id,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${validateSchemaName(schemaName)}".audit_logs (user_id, action, entity, entity_id, new_data)
+     VALUES ($1::uuid, 'user.provisional_password_generated', 'user', $2::uuid, $3::jsonb)`,
+    actorUserId,
+    id,
+    JSON.stringify({
+      actor_user_id: actorUserId,
+      target_user_id: id,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  logger.info({ actorUserId, userId: id }, '[ProvisionalPassword] Generated');
+  return { tempPassword };
 }
 
 export async function deleteUser(id: string, requesterId: string, schemaName: string) {

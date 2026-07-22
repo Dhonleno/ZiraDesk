@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/database.js';
@@ -257,6 +258,11 @@ export function refreshAccessToken(payload: UserPayload): string {
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_COST);
+}
+
+// Consolida as implementações antes duplicadas em tenants.service.ts e users.service.ts
+export function generateTempPassword(): string {
+  return randomBytes(9).toString('base64url').slice(0, 12);
 }
 
 export { REFRESH_TOKEN_TTL_SECONDS };

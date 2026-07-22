@@ -347,6 +347,66 @@ describe('Admin integration', () => {
     expect(rows[0]).toMatchObject({ role: 'admin' });
   });
 
+  it('POST /api/admin/users/:id/provisional-password gera senha temporária e força troca no próximo login', async () => {
+    const tenantA = await createTempTenant('provisional-pw');
+    const targetUser = await createTenantUser(tenantA, {
+      name: 'Provisional Target',
+      email: `provisional.target.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    const response = await createTestApp()
+      .post(`/api/admin/users/${targetUser.id}/provisional-password`)
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(typeof response.body.data.tempPassword).toBe('string');
+    expect(response.body.data.tempPassword).toHaveLength(12);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ must_change_password: boolean }>>(
+      `SELECT must_change_password
+         FROM "${tenantA.schemaName}".users
+        WHERE id = $1::uuid
+        LIMIT 1`,
+      targetUser.id,
+    );
+
+    expect(rows[0]).toMatchObject({ must_change_password: true });
+
+    const auditRows = await prisma.$queryRawUnsafe<Array<{ action: string; entity_id: string }>>(
+      `SELECT action, entity_id
+         FROM "${tenantA.schemaName}".audit_logs
+        WHERE action = 'user.provisional_password_generated'
+          AND entity_id = $1::uuid`,
+      targetUser.id,
+    );
+
+    expect(auditRows).toHaveLength(1);
+  });
+
+  it('POST /api/admin/users/:id/provisional-password rejeita redefinir senha do owner', async () => {
+    const tenantA = await createTempTenant('provisional-pw-owner');
+
+    const response = await createTestApp()
+      .post(`/api/admin/users/${tenantA.owner.id}/provisional-password`)
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(403);
+    expect(response.body.success).toBe(false);
+  });
+
+  it('POST /api/admin/users/:id/provisional-password retorna 404 para usuário inexistente', async () => {
+    const tenantA = await createTempTenant('provisional-pw-404');
+
+    const response = await createTestApp()
+      .post(`/api/admin/users/${randomUUID()}/provisional-password`)
+      .set(authHeader(tenantA));
+
+    expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
+  });
+
   it('GET /api/admin/channels lista canais do tenant', async () => {
     const tenantA = await createTempTenant('channels-a');
     const tenantB = await createTempTenant('channels-b');

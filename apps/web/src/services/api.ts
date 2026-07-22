@@ -1697,6 +1697,13 @@ export const adminApi = {
     return res.data;
   },
 
+  generateProvisionalPassword: async (id: string): Promise<{ tempPassword: string }> => {
+    const res = await api.post<{ success: boolean; data: { tempPassword: string } }>(
+      `/admin/users/${id}/provisional-password`,
+    );
+    return res.data.data;
+  },
+
   listUserLgpdRequests: async (params?: {
     page?: number; per_page?: number; user_id?: string;
     request_type?: string; status?: string;

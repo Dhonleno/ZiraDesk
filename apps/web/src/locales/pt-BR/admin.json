@@ -474,7 +474,16 @@
       "inviteUser": "Convidar usuário",
       "noUsers": "Nenhum usuário encontrado",
       "editUser": "Editar usuário",
-      "resetPassword": "Redefinir senha",
+      "resetPassword": {
+        "title": "Redefinir senha",
+        "emailMethod": "Enviar link por e-mail",
+        "emailDesc": "Um link de redefinição será enviado para {{email}}",
+        "provisionalMethod": "Gerar senha provisória",
+        "provisionalDesc": "Uma senha temporária será gerada. O usuário deverá alterá-la no primeiro acesso.",
+        "provisionalCreated": "Senha provisória gerada com sucesso.",
+        "provisionalWarning": "Anote esta senha. Ela não será exibida novamente.",
+        "provisionalSent": "Senha provisória gerada para {{name}}"
+      },
       "search": "Buscar usuário...",
       "confirmDeactivate": "Desativar usuário",
       "confirmDeactivateMsg": "Tem certeza que deseja desativar {{name}}? Ele perderá acesso imediato ao sistema.",

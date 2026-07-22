@@ -474,7 +474,16 @@
       "inviteUser": "Invite user",
       "noUsers": "No users found",
       "editUser": "Edit user",
-      "resetPassword": "Reset password",
+      "resetPassword": {
+        "title": "Reset password",
+        "emailMethod": "Send reset link by email",
+        "emailDesc": "A reset link will be sent to {{email}}",
+        "provisionalMethod": "Generate provisional password",
+        "provisionalDesc": "A temporary password will be generated. The user must change it on first login.",
+        "provisionalCreated": "Provisional password generated successfully.",
+        "provisionalWarning": "Save this password. It will not be shown again.",
+        "provisionalSent": "Provisional password generated for {{name}}"
+      },
       "search": "Search user...",
       "confirmDeactivate": "Deactivate user",
       "confirmDeactivateMsg": "Are you sure you want to deactivate {{name}}? They will immediately lose access to the system.",
