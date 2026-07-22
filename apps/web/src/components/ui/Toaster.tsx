@@ -1,23 +1,45 @@
 import { useTranslation } from 'react-i18next';
 import { useToastStore, type ToastType } from '../../stores/toast.store';
 
-const typeStyles: Record<Exclude<ToastType, 'help_request'>, { wrapper: string; icon: string }> = {
-  success: {
-    wrapper: 'border-[rgba(62,207,142,.25)] bg-bg-2 text-[#3ECF8E]',
-    icon: '✓',
-  },
-  error: {
-    wrapper: 'border-[rgba(248,113,113,.25)] bg-bg-2 text-[#F87171]',
-    icon: '✕',
-  },
-  info: {
-    wrapper: 'border-[rgba(96,165,250,.25)] bg-bg-2 text-[#60A5FA]',
-    icon: 'ℹ',
-  },
-  warning: {
-    wrapper: 'border-[rgba(245,158,11,.28)] bg-bg-2 text-[#F59E0B]',
-    icon: '⚠',
-  },
+const svgIconProps = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.4,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+
+const typeIcons: Record<Exclude<ToastType, 'help_request'>, JSX.Element> = {
+  success: (
+    <svg {...svgIconProps}>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  ),
+  error: (
+    <svg {...svgIconProps}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  ),
+  warning: (
+    <svg {...svgIconProps}>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  ),
+  info: (
+    <svg {...svgIconProps}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  ),
 };
 
 export function Toaster() {
@@ -25,10 +47,7 @@ export function Toaster() {
   const { toasts, removeToast } = useToastStore();
 
   return (
-    <div
-      className="fixed bottom-4 right-4 z-[1100] flex flex-col gap-2"
-      style={{ width: 'min(92vw, 420px)' }}
-    >
+    <div className="zd-toast-container">
       {toasts.map((toast) => {
         if (toast.type === 'help_request') {
           return (
@@ -83,34 +102,28 @@ export function Toaster() {
           );
         }
 
-        const { wrapper, icon } = typeStyles[toast.type];
         return (
-          <div
-            key={toast.id}
-            className={[
-              'flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur-sm',
-              'animate-in slide-in-from-right duration-200',
-              wrapper,
-            ].join(' ')}
-          >
-            <span className="mt-0.5 shrink-0 text-sm font-bold">{toast.icon ?? icon}</span>
-            <div className="flex-1">
-              <p className="text-sm text-txt">{toast.message}</p>
+          <div key={toast.id} className={`zd-toast zd-toast--${toast.type}`}>
+            <div className="zd-toast-icon">
+              {toast.icon ?? typeIcons[toast.type]}
+            </div>
+            <div className="zd-toast-content">
+              <span className="zd-toast-message">{toast.message}</span>
               {toast.linkHref && toast.linkLabel ? (
-                <a
-                  href={toast.linkHref}
-                  className="mt-1 inline-block text-xs font-medium text-teal hover:opacity-80"
-                >
+                <a href={toast.linkHref} className="zd-toast-link">
                   {toast.linkLabel}
                 </a>
               ) : null}
             </div>
             <button
               onClick={() => removeToast(toast.id)}
-              className="shrink-0 text-txt-3 hover:text-txt-2 transition-opacity"
+              className="zd-toast-close"
               aria-label={t('close')}
             >
-              ×
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
         );
