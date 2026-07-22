@@ -1110,6 +1110,17 @@
     "history": "History",
     "performance": "Performance",
     "queue": "Queue",
+    "analysis": "Analysis",
+    "crm": "CRM",
+    "tabs": {
+      "monitor": "Agents",
+      "queue": "Queue",
+      "metrics": "Metrics",
+      "performance": "Performance",
+      "history": "History",
+      "contacts": "Contacts",
+      "organizations": "Organizations"
+    },
     "groups": {
       "team": "Team",
       "attendance": "Attendance",

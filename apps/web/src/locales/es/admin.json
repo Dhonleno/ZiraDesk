@@ -1110,6 +1110,17 @@
     "history": "Historial",
     "performance": "Performance",
     "queue": "Cola",
+    "analysis": "Análisis",
+    "crm": "CRM",
+    "tabs": {
+      "monitor": "Agentes",
+      "queue": "Cola",
+      "metrics": "Métricas",
+      "performance": "Rendimiento",
+      "history": "Historial",
+      "contacts": "Contactos",
+      "organizations": "Organizaciones"
+    },
     "groups": {
       "team": "Equipo",
       "attendance": "Atención",

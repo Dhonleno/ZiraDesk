@@ -22,8 +22,11 @@ import { MetricsPage } from './pages/omnichannel/Metrics';
 import { HistoryPage } from './pages/omnichannel/History';
 import { PerformancePage } from './pages/omnichannel/Performance';
 import { QueuePage } from './pages/omnichannel/Queue';
+import { MonitorPage } from './pages/omnichannel/MonitorPage';
+import { AnalysePage } from './pages/omnichannel/AnalysePage';
 import { OrganizationsPage } from './pages/crm/Organizations';
 import { ContactsPage } from './pages/crm/Contacts';
+import { CrmPage } from './pages/crm/CrmPage';
 import { TicketsPage } from './pages/tickets/Tickets';
 import CreateTicket from './pages/tickets/CreateTicket';
 import { TicketDetailPage } from './pages/tickets/TicketDetail';
@@ -215,6 +218,7 @@ export function App() {
             <Route path="home" element={<HomePage />} />
             <Route path="agent-home" element={<AgentHome />} />
             <Route path="monitor" element={<TVDashboard />} />
+            <Route path="monitor-hub" element={<MonitorPage />} />
             <Route path="omnichannel" element={<Navigate to="/omnichannel/conversations" replace />} />
             <Route path="omnichannel/conversations" element={<ConversationsPage />} />
             <Route path="omnichannel/queue" element={<QueuePage />} />
@@ -245,7 +249,15 @@ export function App() {
                 </ProtectedRoute>
               )}
             />
-            <Route path="crm" element={<Navigate to="/crm/organizations" replace />} />
+            <Route
+              path="omnichannel/analyse"
+              element={(
+                <ProtectedRoute permission="metrics:view" redirectTo="/omnichannel/conversations">
+                  <AnalysePage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route path="crm" element={<CrmPage />} />
             <Route path="crm/organizations" element={<OrganizationsPage />} />
             <Route path="crm/organizations/:id" element={<OrganizationsPage />} />
             <Route

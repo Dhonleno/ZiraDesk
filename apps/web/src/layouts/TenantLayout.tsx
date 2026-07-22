@@ -203,8 +203,10 @@ function Breadcrumb() {
     '/omnichannel/metrics': 'Métricas',
     '/omnichannel/history': t('nav.history'),
     '/omnichannel/performance': t('nav.performance'),
+    '/omnichannel/analyse': t('nav.analysis'),
     '/crm/organizations': 'Organizações',
     '/crm/contacts':      'Contatos',
+    '/crm':               t('nav.crm'),
     '/tickets':           'Tickets',
     '/profile':           'Meu perfil',
     '/admin/users':       t('tenantAdmin.nav.users'),
@@ -391,8 +393,6 @@ export function TenantLayout() {
   const canAccessAdminData = canAny('settings:manage', 'users:manage');
   const canToggleAvailability = canAny('conversations:reply', 'conversations:manage');
   const canViewMetricsNav = canAny('metrics:view');
-  const canViewHistoryNav = canAny('metrics:view');
-  const canViewPerformanceNav = canAny('metrics:view');
   const canViewQueue = canAny('conversations:reply', 'conversations:manage');
   const canViewAdminNav = canAny('settings:manage', 'users:manage');
   const isImpersonating = !!impersonatedTenantName;
@@ -1182,20 +1182,14 @@ export function TenantLayout() {
             </svg>
           </NavItem>
 
-          {/* Fila */}
-          {canViewQueue && (
-            <NavItem to="/omnichannel/queue" title={t('nav.queue')} badge={queueCount} expanded={isNavExpanded}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-                <path d="M2 5h14M2 9h10M2 13h7"
-                  stroke="currentColor" strokeWidth="1.4"
-                  strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </NavItem>
-          )}
-
-          {/* Monitor */}
-          {isManager && (
-            <NavItem to="/monitor" title={t('nav.monitor')} expanded={isNavExpanded}>
+          {/* Monitor + Fila */}
+          {(isManager || canViewQueue) && (
+            <NavItem
+              to="/monitor-hub"
+              title={t('nav.monitor')}
+              expanded={isNavExpanded}
+              {...(canViewQueue ? { badge: queueCount } : {})}
+            >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 13.5V4.5h12v9H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
                 <path d="M6 11l2.3-2.8 2 1.7L12 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -1203,9 +1197,9 @@ export function TenantLayout() {
             </NavItem>
           )}
 
-          {/* Métricas */}
+          {/* Análise (Métricas + Histórico + Performance) */}
           {canViewMetricsNav && (
-            <NavItem to="/omnichannel/metrics" title={t('nav.metrics')} expanded={isNavExpanded}>
+            <NavItem to="/omnichannel/analyse" title={t('nav.analysis')} expanded={isNavExpanded}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
                 <path d="M3 14.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 <rect x="4" y="8.5" width="2.5" height="4" rx="0.8" stroke="currentColor" strokeWidth="1.3" />
@@ -1215,34 +1209,8 @@ export function TenantLayout() {
             </NavItem>
           )}
 
-          {canViewHistoryNav && (
-            <NavItem to="/omnichannel/history" title={t('nav.history')} expanded={isNavExpanded}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-                <circle cx="9" cy="9" r="6.2" stroke="currentColor" strokeWidth="1.4" />
-                <path d="M9 5.8v3.5l2.5 1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </NavItem>
-          )}
-
-          {canViewPerformanceNav && (
-            <NavItem to="/omnichannel/performance" title={t('nav.performance')} expanded={isNavExpanded}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-                <path d="M2 14l4-4 3 3 4-6 3 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </NavItem>
-          )}
-
-          {/* Organizações */}
-          <NavItem to="/crm/organizations" title={t('nav.organizations')} expanded={isNavExpanded}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <path d="M4 15V3.8A1.8 1.8 0 0 1 5.8 2h6.4A1.8 1.8 0 0 1 14 3.8V15" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-              <path d="M2.5 15h13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              <path d="M7 5h1M10 5h1M7 8h1M10 8h1M7 11h1M10 11h1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </NavItem>
-
-          {/* Contatos */}
-          <NavItem to="/crm/contacts" title={t('nav.contacts')} expanded={isNavExpanded}>
+          {/* CRM (Contatos + Organizações) */}
+          <NavItem to="/crm" title={t('nav.crm')} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
               <circle cx="9" cy="6.5" r="2.8" stroke="currentColor" strokeWidth="1.4"/>
               <path d="M3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
