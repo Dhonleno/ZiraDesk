@@ -104,6 +104,8 @@
     },
     "actions": {
       "assign": "Asignar",
+      "assignSuccess": "Ticket asignado",
+      "unassignSuccess": "Asignación eliminada",
       "accept": "Aceptar",
       "acceptSuccess": "Ticket aceptado",
       "resolveSuccess": "Ticket resuelto",

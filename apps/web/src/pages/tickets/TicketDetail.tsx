@@ -370,6 +370,13 @@ export function TicketDetailPage() {
       } else if (variables.status === 'open' && (previousStatus === 'resolved' || previousStatus === 'closed')) {
         toast.success(t('tickets.actions.reopenSuccess'));
       }
+      if (variables.assigned_to !== undefined) {
+        if (variables.assigned_to === null || variables.assigned_to === '') {
+          toast.success(t('tickets.actions.unassignSuccess'));
+        } else {
+          toast.success(t('tickets.actions.assignSuccess'));
+        }
+      }
       // Mudar status para outro status intermediário (ex.: waiting → open) ou
       // mudar prioridade não mostra toast — a mudança visual no badge já é feedback suficiente.
     },

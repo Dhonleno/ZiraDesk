@@ -105,6 +105,8 @@
     "actions": {
       "assign": "Atribuir",
       "assignToMe": "A mim",
+      "assignSuccess": "Ticket atribuído com sucesso",
+      "unassignSuccess": "Atribuição removida",
       "accept": "Aceitar",
       "acceptSuccess": "Ticket aceito com sucesso",
       "resolveSuccess": "Ticket resolvido",
