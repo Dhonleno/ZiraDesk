@@ -1,17 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import type { TicketPriority } from '../../services/api';
+import { getPriorityStyle } from '../../utils/ticketPriority';
 
 interface Props {
   priority: TicketPriority | string;
   size?: 'sm' | 'md';
 }
-
-const PRIORITY_CONFIG: Record<string, { color: string; pulse?: boolean }> = {
-  low:    { color: 'var(--txt-3)' },
-  medium: { color: 'var(--blue)' },
-  high:   { color: 'var(--amber)' },
-  urgent: { color: 'var(--red)', pulse: true },
-};
 
 const PRIORITY_KEY: Record<string, string> = {
   low:    'tickets.priority.low',
@@ -22,7 +16,7 @@ const PRIORITY_KEY: Record<string, string> = {
 
 export function TicketPriorityBadge({ priority, size = 'md' }: Props) {
   const { t } = useTranslation('tickets');
-  const cfg   = PRIORITY_CONFIG[priority] ?? { color: 'var(--blue)' };
+  const cfg   = getPriorityStyle(priority as TicketPriority, t);
   const isSm  = size === 'sm';
 
   const icon = (() => {

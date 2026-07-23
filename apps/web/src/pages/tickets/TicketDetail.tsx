@@ -30,6 +30,7 @@ import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { isTicketReadonly } from '../../utils/ticketPermissions';
+import { getPriorityStyle } from '../../utils/ticketPriority';
 
 const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   open:        ['in_progress', 'waiting'],
@@ -106,13 +107,6 @@ function priorityLabel(priority: TicketPriority, t: (key: string) => string): st
   if (priority === 'high') return t('tickets.priority.high');
   if (priority === 'medium') return t('tickets.priority.medium');
   return t('tickets.priority.low');
-}
-
-function priorityColor(priority: TicketPriority): string {
-  if (priority === 'urgent') return '#EF4444';
-  if (priority === 'high') return '#F59E0B';
-  if (priority === 'medium') return '#8B5CF6';
-  return 'var(--txt-2)';
 }
 
 function dueTone(value: string | null): 'normal' | 'near' | 'overdue' {
@@ -744,7 +738,7 @@ export function TicketDetailPage() {
                 className="ticket-inline-badge"
                 disabled={readonly}
                 onClick={() => setPriorityMenuOpen((v) => !v)}
-                style={{ color: priorityColor(ticket.priority) }}
+                style={{ color: getPriorityStyle(ticket.priority, t).color }}
               >
                 {priorityLabel(ticket.priority, t)}
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>

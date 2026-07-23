@@ -36,6 +36,7 @@ import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
 import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
+import { getPriorityStyle } from '../../utils/ticketPriority';
 
 type BoardStatus = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
@@ -80,22 +81,6 @@ function sanitizeTicketTitle(value: string): string {
     .replace(/[`*_~>#\[\]\(\)!]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function getPriorityStyle(priority: TicketPriority, t: TFn) {
-  if (priority === 'urgent') {
-    return { bg: 'var(--red-dim)', color: 'var(--red)', label: `! ${t('tickets.priority.urgent')}` };
-  }
-
-  if (priority === 'high') {
-    return { bg: 'var(--amber-dim)', color: 'var(--amber)', label: `↑ ${t('tickets.priority.high')}` };
-  }
-
-  if (priority === 'medium') {
-    return { bg: 'var(--purple-dim)', color: 'var(--purple)', label: `→ ${t('tickets.priority.medium')}` };
-  }
-
-  return { bg: 'var(--bg-4)', color: 'var(--txt-2)', label: `↓ ${t('tickets.priority.low')}` };
 }
 
 function statusLabel(status: BoardStatus, t: TFn): string {
@@ -203,7 +188,7 @@ function TicketCard({
     >
       <div className="tickets-card-top">
         <span className="tickets-card-id">{formatTicketNumber(ticket.ticket_number)}</span>
-        <span className="tickets-priority-badge" style={{ background: priority.bg, color: priority.color }}>
+        <span className="tickets-priority-badge" style={{ background: priority.bgColor, color: priority.color }}>
           {priority.label}
         </span>
       </div>
