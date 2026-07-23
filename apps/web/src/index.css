@@ -5222,6 +5222,23 @@
   opacity: 1;
 }
 
+.description-section-v2 .ticket-dsec-body {
+  background: var(--amber-dim);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  min-height: 80px;
+  cursor: text;
+  transition: background 0.15s;
+}
+
+.description-section-v2 .ticket-dsec-body:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.description-section-v2.editing .ticket-dsec-body {
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1.5px var(--teal);
+}
+
 .ticket-description-render {
   color: var(--txt);
   font-size: 13px;

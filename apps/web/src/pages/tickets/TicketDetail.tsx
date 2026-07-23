@@ -1028,7 +1028,7 @@ export function TicketDetailPage() {
 
             <div className="ticket-tab-body">
             <div className="ticket-tab-col-main">
-            <section className="ticket-dsec description-section-v2">
+            <section className={`ticket-dsec description-section-v2${descriptionEditing ? ' editing' : ''}`}>
               <div className="ticket-dsec-head">
                 <span>{t('tickets.fields.description')}</span>
                 {!descriptionEditing ? (
