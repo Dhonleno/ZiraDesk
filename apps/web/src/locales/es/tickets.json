@@ -21,6 +21,14 @@
       "urgent": "Urgente",
       "all": "Todas las prioridades"
     },
+    "columns": {
+      "number": "#",
+      "title": "Título",
+      "status": "Estado",
+      "priority": "Prioridad",
+      "agent": "Agente",
+      "updated": "Actualizado"
+    },
     "stats": {
       "open": "Abiertos",
       "inProgress": "En progreso",

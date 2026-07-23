@@ -37,6 +37,8 @@ import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
 import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { getPriorityStyle } from '../../utils/ticketPriority';
+import { TicketTableRow } from '../../components/tickets/TicketTableRow';
+import { TicketsPagination } from '../../components/tickets/TicketsPagination';
 
 type BoardStatus = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
@@ -286,7 +288,7 @@ function DroppableColumn({
 export function TicketsPage() {
   const { t } = useTranslation('tickets');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
@@ -297,7 +299,45 @@ export function TicketsPage() {
   const initialStatus = parseHighlightStatus(searchParams.get('status'));
   const filterOverdue = searchParams.get('overdue') === 'true';
 
-  const [view, setView] = useState<TicketView>('kanban');
+  // Persistidos na URL: navegar/recarregar mantém view, aba de status e página.
+  const view: TicketView = searchParams.get('view') === 'list' ? 'list' : 'kanban';
+  const setView = (next: TicketView) => {
+    setSearchParams((prev) => {
+      const updated = new URLSearchParams(prev);
+      updated.set('view', next);
+      return updated;
+    }, { replace: true });
+  };
+
+  const statusTab = searchParams.get('tab') ?? 'all';
+  const setStatusTab = (tab: string) => {
+    setSearchParams((prev) => {
+      const updated = new URLSearchParams(prev);
+      updated.set('tab', tab);
+      updated.delete('page');
+      return updated;
+    }, { replace: true });
+  };
+
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
+  const setPage = (next: number) => {
+    setSearchParams((prev) => {
+      const updated = new URLSearchParams(prev);
+      updated.set('page', String(next));
+      return updated;
+    }, { replace: true });
+  };
+
+  const updateFilterParam = (key: string, value: string) => {
+    setSearchParams((prev) => {
+      const updated = new URLSearchParams(prev);
+      if (value) updated.set(key, value);
+      else updated.delete(key);
+      updated.delete('page');
+      return updated;
+    }, { replace: true });
+  };
+
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState<TicketPriority | ''>(priorityParam);
   const [agentId, setAgentId] = useState(assignedToParam === 'me' ? user?.id ?? '' : assignedToParam);
@@ -364,6 +404,27 @@ export function TicketsPage() {
     }),
     staleTime: 25_000,
   });
+
+  const LIST_PER_PAGE = 50;
+  const listStatus = statusTab !== 'all' && isBoardStatus(statusTab) ? statusTab : undefined;
+
+  const { data: listData, isPending: isListPending } = useQuery({
+    queryKey: ['tickets-list', debouncedSearch, priority, agentId, category, filterOverdue, listStatus, page],
+    queryFn: () => ticketsApi.list({
+      ...buildBoardFilters(),
+      ...(listStatus ? { status: listStatus } : {}),
+      page,
+      per_page: LIST_PER_PAGE,
+    }),
+    enabled: view === 'list',
+    staleTime: 25_000,
+  });
+
+  // Volta para a página 1 sempre que um filtro ou a aba de status muda.
+  useEffect(() => {
+    if (page !== 1) setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, priority, agentId, category, filterOverdue, statusTab]);
 
   useEffect(() => {
     if (!highlightStatus || view !== 'kanban' || isPending) return;
@@ -584,7 +645,11 @@ export function TicketsPage() {
             <select
               className="tickets-inline-select"
               value={agentId}
-              onChange={(event) => setAgentId(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setAgentId(value);
+                updateFilterParam('assigned_to', value);
+              }}
               aria-label={t('tickets.filterByAgent')}
             >
               <option value="">{t('tickets.filterByAgent')}</option>
@@ -596,7 +661,11 @@ export function TicketsPage() {
             <select
               className="tickets-inline-select"
               value={priority}
-              onChange={(event) => setPriority(event.target.value as TicketPriority | '')}
+              onChange={(event) => {
+                const value = event.target.value as TicketPriority | '';
+                setPriority(value);
+                updateFilterParam('priority', value);
+              }}
               aria-label={t('tickets.priority.all')}
             >
               <option value="">{t('tickets.priority.all')}</option>
@@ -609,7 +678,11 @@ export function TicketsPage() {
             <select
               className="tickets-inline-select"
               value={category}
-              onChange={(event) => setCategory(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setCategory(value);
+                updateFilterParam('category', value);
+              }}
               aria-label={t('tickets.fields.category')}
             >
               <option value="">{t('tickets.fields.category')}</option>
@@ -784,55 +857,61 @@ export function TicketsPage() {
           </DndContext>
         ) : null}
 
-        {!isPending && view === 'list' ? (
-          <div className="tickets-list-board">
-            {BOARD_COLUMNS.map((column) => (
-              <section
-                key={column}
-                className={`tickets-list-section${isReadonlyStatus(column) ? ' tickets-column-readonly' : ''}`}
-              >
-                <header className="tickets-column-head">
-                  <div className="tickets-column-title-wrap">
-                    <span>{statusLabel(column, t)}</span>
-                    {isReadonlyStatus(column) ? (
-                      <span className="tickets-column-readonly-hint" title={t('tickets.kanban.readOnly')}>
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                          <rect x="2.5" y="5" width="7" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
-                          <path d="M4 5V3.8a2 2 0 1 1 4 0V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                        </svg>
-                        <span>{t('tickets.kanban.readOnly')}</span>
-                      </span>
-                    ) : null}
-                  </div>
-                  <span
-                    className={`tickets-column-count${isReadonlyStatus(column) ? ' tickets-column-count-muted' : ''}`}
-                    style={{ color: STATUS_ACCENT[column] }}
-                  >
-                    {isReadonlyStatus(column)
-                      ? (closedTicketsData?.meta.total ?? grouped[column].length)
-                      : grouped[column].length}
-                  </span>
-                </header>
+        {view === 'list' ? (
+          <div className="tickets-list-view">
+            <div className="tickets-status-tabs" role="tablist" aria-label={t('tickets.status.all')}>
+              {(['all', ...BOARD_COLUMNS] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={statusTab === tab}
+                  className={`tickets-status-tab${statusTab === tab ? ' active' : ''}`}
+                  onClick={() => setStatusTab(tab)}
+                >
+                  {tab === 'all' ? t('tickets.status.all') : statusLabel(tab, t)}
+                </button>
+              ))}
+            </div>
 
-                <div className="tickets-list-items">
-                  {grouped[column].length === 0 ? (
-                    <div className="tickets-list-empty">{t('tickets.kanban.empty')}</div>
-                  ) : (
-                    grouped[column].map((ticket) => (
-                      <TicketCard
+            <div className="tickets-table-wrap">
+              {isListPending ? (
+                <div className="tickets-loading">{t('loading', { ns: 'common' })}</div>
+              ) : (listData?.data.length ?? 0) === 0 ? (
+                <div className="tickets-table-empty">{t('tickets.noResults')}</div>
+              ) : (
+                <table className="tickets-table">
+                  <thead>
+                    <tr>
+                      <th>{t('tickets.columns.number')}</th>
+                      <th>{t('tickets.columns.title')}</th>
+                      <th>{t('tickets.columns.status')}</th>
+                      <th>{t('tickets.columns.priority')}</th>
+                      <th>{t('tickets.columns.agent')}</th>
+                      <th>{t('tickets.columns.updated')}</th>
+                      <th>SLA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(listData?.data ?? []).map((ticket) => (
+                      <TicketTableRow
                         key={ticket.id}
                         ticket={ticket}
-                        t={t}
                         now={now}
                         onClick={() => navigate(`/tickets/${ticket.id}`)}
-                        onClaim={(ticketId) => claimMutation.mutate(ticketId)}
-                        isClaiming={claimMutation.isPending}
                       />
-                    ))
-                  )}
-                </div>
-              </section>
-            ))}
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <TicketsPagination
+              page={page}
+              total={listData?.meta.total ?? 0}
+              perPage={LIST_PER_PAGE}
+              onPage={setPage}
+            />
           </div>
         ) : null}
       </section>
