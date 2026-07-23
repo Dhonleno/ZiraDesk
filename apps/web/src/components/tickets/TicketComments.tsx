@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode, type RefObject } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ticketsApi, type TicketComment } from '../../services/api';
+import { ticketsApi, adminApi, type TicketComment } from '../../services/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { subscribeToEvent } from '../../services/socket';
@@ -75,6 +75,29 @@ function AttachmentIcon({ mimeType }: { mimeType: string }) {
   );
 }
 
+function escapeMentionName(name: string): string {
+  return name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Renderiza o conteúdo salvo do comentário: substitui @[Nome](userId) por chips
+// estilizados. Usa tokens intermediários para não colidir com o escape de HTML
+// nem com o parser de links do parseMarkdown.
+function renderCommentHtml(content: string): string {
+  const names: string[] = [];
+  const withTokens = content.replace(/@\[([^\]]+)\]\([^)]+\)/g, (_match, name: string) => {
+    const token = `@@ZDMENTION${names.length}@@`;
+    names.push(name);
+    return token;
+  });
+
+  const html = parseMarkdown(withTokens);
+
+  return html.replace(/@@ZDMENTION(\d+)@@/g, (_match, index: string) => {
+    const name = names[Number(index)] ?? '';
+    return `<span class="mention-tag">@${escapeMentionName(name)}</span>`;
+  });
+}
+
 function normalizeEditorHtml(value: string): string {
   return value
     .replace(/<div><br><\/div>/gi, '<br>')
@@ -107,6 +130,12 @@ function serializeNodeToMarkdown(node: Node): string {
 
   const content = serializeChildrenToMarkdown(node);
   const tagName = node.tagName.toLowerCase();
+
+  // Chip de menção: serializa para a sintaxe @[Nome](userId) que o backend parseia.
+  if (node.classList.contains('mention') && node.dataset.userId) {
+    const name = content.replace(/^@/, '');
+    return `@[${name}](${node.dataset.userId})`;
+  }
 
   if (tagName === 'strong' || tagName === 'b') return `**${content}**`;
   if (tagName === 'em' || tagName === 'i') return `_${content}_`;
@@ -450,14 +479,34 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
     top: 0,
     left: 0,
   });
+  const [mention, setMention] = useState<{ active: boolean; query: string; anchorRect: DOMRect | null }>({
+    active: false,
+    query: '',
+    anchorRect: null,
+  });
+  const [mentionIndex, setMentionIndex] = useState(0);
   const comment = editorHtmlToMarkdown(editorHtml);
   const hasCommentContent = extractPlainTextFromHtml(editorHtml).length > 0;
+
+  const closeMention = () => setMention({ active: false, query: '', anchorRect: null });
 
   const { data: comments = [], isPending } = useQuery({
     queryKey: ['ticket-comments', ticketId],
     queryFn: () => ticketsApi.listComments(ticketId),
     staleTime: 30_000,
   });
+
+  // Agentes para o dropdown de @menção — só busca quando o dropdown está ativo.
+  const { data: mentionAgents } = useQuery({
+    queryKey: ['ticket-comment-mention-agents'],
+    queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
+    enabled: mention.active,
+    staleTime: 60_000,
+  });
+
+  const filteredAgents = (mentionAgents?.data ?? [])
+    .filter((agent) => agent.id !== user?.id && agent.name.toLowerCase().includes(mention.query.toLowerCase()))
+    .slice(0, 8);
 
   useEffect(() => {
     const unsubscribers = [
@@ -486,6 +535,11 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments.length]);
+
+  // Menção só existe em nota interna: fecha o dropdown ao voltar para público.
+  useEffect(() => {
+    if (!isInternal) setMention({ active: false, query: '', anchorRect: null });
+  }, [isInternal]);
 
   useEffect(() => {
     const updateSelectionToolbar = () => {
@@ -550,6 +604,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       setIsInternal(false);
       setCommentFiles([]);
       setSelectionToolbar({ visible: false, top: 0, left: 0 });
+      setMention({ active: false, query: '', anchorRect: null });
       if (editorRef.current) editorRef.current.innerHTML = '';
     },
     onError: () => toast.error('Erro ao enviar comentário'),
@@ -578,6 +633,88 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
   async function handleSubmit() {
     if (!comment.trim() && commentFiles.length === 0) return;
     await submitMutation.mutateAsync();
+  }
+
+  // Detecta se o cursor está logo após um "@palavra" para abrir o dropdown.
+  function detectMentionTrigger() {
+    if (!isInternal) {
+      closeMention();
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      closeMention();
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      closeMention();
+      return;
+    }
+    const beforeCursor = (node.textContent ?? '').slice(0, range.startOffset);
+    const atMatch = beforeCursor.match(/@(\w*)$/);
+    if (atMatch) {
+      const rect = range.getBoundingClientRect();
+      setMention({ active: true, query: atMatch[1] ?? '', anchorRect: rect });
+      setMentionIndex(0);
+    } else {
+      closeMention();
+    }
+  }
+
+  // Substitui o "@query" digitado por um chip não-editável com o userId.
+  function insertMention(agent: { id: string; name: string }) {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) {
+      closeMention();
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      closeMention();
+      return;
+    }
+
+    const text = node.textContent ?? '';
+    const caret = range.startOffset;
+    const atIndex = text.slice(0, caret).lastIndexOf('@');
+    if (atIndex === -1) {
+      closeMention();
+      return;
+    }
+
+    // Remove o "@query" digitado.
+    const deletion = document.createRange();
+    deletion.setStart(node, atIndex);
+    deletion.setEnd(node, caret);
+    deletion.deleteContents();
+
+    // Cria o chip de menção não-editável.
+    const chip = document.createElement('span');
+    chip.className = 'mention';
+    chip.dataset.userId = agent.id;
+    chip.setAttribute('contenteditable', 'false');
+    chip.textContent = `@${agent.name}`;
+
+    const trailing = document.createTextNode(' ');
+
+    deletion.insertNode(trailing);
+    deletion.insertNode(chip);
+
+    // Reposiciona o cursor após o espaço.
+    const after = document.createRange();
+    after.setStartAfter(trailing);
+    after.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(after);
+
+    closeMention();
+    setEditorHtml(normalizeEditorHtml(editor.innerHTML));
+    editor.focus();
   }
 
   const canDeleteAsAdmin = user?.role === 'owner' || user?.role === 'admin';
@@ -698,7 +835,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
                 <>
                   <div
                     className="comment-body"
-                    dangerouslySetInnerHTML={{ __html: parseMarkdown(comment.content) }}
+                    dangerouslySetInnerHTML={{ __html: renderCommentHtml(comment.content) }}
                   />
 
                   {comment.attachments?.length ? (
@@ -798,11 +935,39 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
                   event.currentTarget.innerHTML = '';
                   setEditorHtml('');
                   setSelectionToolbar({ visible: false, top: 0, left: 0 });
+                  closeMention();
                   return;
                 }
                 setEditorHtml(value);
+                detectMentionTrigger();
               }}
               onKeyDown={(event) => {
+                if (mention.active) {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeMention();
+                    return;
+                  }
+                  if (filteredAgents.length > 0) {
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      setMentionIndex((current) => Math.min(current + 1, filteredAgents.length - 1));
+                      return;
+                    }
+                    if (event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      setMentionIndex((current) => Math.max(current - 1, 0));
+                      return;
+                    }
+                    if (event.key === 'Enter' || event.key === 'Tab') {
+                      event.preventDefault();
+                      const chosen = filteredAgents[Math.min(mentionIndex, filteredAgents.length - 1)];
+                      if (chosen) insertMention(chosen);
+                      return;
+                    }
+                  }
+                }
+
                 if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
                   event.preventDefault();
                   void handleSubmit();
@@ -821,6 +986,42 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
                 }
               }}
             />
+
+            {mention.active && mention.anchorRect && (filteredAgents.length > 0 || mentionAgents) ? (
+              <div
+                className="mention-dropdown"
+                role="listbox"
+                style={{
+                  position: 'fixed',
+                  top: mention.anchorRect.bottom + 4,
+                  left: mention.anchorRect.left,
+                  zIndex: 1200,
+                }}
+              >
+                {filteredAgents.length > 0 ? (
+                  filteredAgents.map((agent, index) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === mentionIndex}
+                      className={`mention-option ${index === mentionIndex ? 'active' : ''}`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        insertMention(agent);
+                      }}
+                    >
+                      <span className="mention-avatar">{agent.name.slice(0, 2).toUpperCase()}</span>
+                      <span className="mention-option-name">{agent.name}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="mention-empty">
+                    {t('tickets.comments.mention.noResults', { defaultValue: 'Nenhum agente encontrado' })}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div className="composer-footer">

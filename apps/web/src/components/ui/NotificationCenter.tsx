@@ -26,6 +26,9 @@ function BackendNotificationIcon({ type }: { type: NotificationItem['type'] }) {
   if (type === 'ticket_assigned') {
     return <path d="M3 5.5V3h2.5L18 15.5 15.5 18 3 5.5zM5 5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
+  if (type === 'ticket_mention') {
+    return <path d="M16 8a4 4 0 10-.5 6M16 8v3.5a1.5 1.5 0 003 0V12a9 9 0 10-3.5 7.1M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
+  }
   if (type === 'conversation_assigned') {
     return <path d="M4 14V5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />;
   }
@@ -175,6 +178,12 @@ export function NotificationCenter() {
           title: 'Novo comentário no ticket',
           preview: readDataString(notification.data, 'title') || notification.message || '',
           iconType: 'ticket_comment',
+        };
+      case 'ticket_mention':
+        return {
+          title: 'Você foi mencionado',
+          preview: notification.message || readDataString(notification.data, 'title') || '',
+          iconType: 'ticket_mention',
         };
       case 'help_requested': {
         const agentName = readDataString(notification.data, 'agent_name');

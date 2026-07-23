@@ -3303,6 +3303,7 @@ export interface NotificationItem {
     | 'ticket_reopened'
     | 'conversation_assigned'
     | 'ticket_comment'
+    | 'ticket_mention'
     | 'conversation_message'
     | 'message_failed'
     | 'help_requested'

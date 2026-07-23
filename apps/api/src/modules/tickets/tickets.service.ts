@@ -1704,6 +1704,25 @@ export async function listComments(ticketId: string, schemaName?: string) {
   }));
 }
 
+/* ── menções (@) em notas internas ───────────────────────────────────────── */
+// Extrai user IDs (UUID) de @[Nome](userId) no conteúdo do comentário.
+function extractMentionIds(content: string): string[] {
+  const regex = /@\[[^\]]+\]\(([a-f0-9-]{36})\)/gi;
+  const ids: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    const id = match[1]!;
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+// Converte a sintaxe @[Nome](userId) para "@Nome" (texto puro) para envios
+// externos (email do cliente, espelho Redmine) que não devem expor o ID técnico.
+function stripMentions(content: string): string {
+  return content.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+}
+
 /* ── addComment ──────────────────────────────────────────────────────────── */
 export async function addComment(
   ticketId: string,
@@ -1773,6 +1792,51 @@ export async function addComment(
     }
   } catch { /* socket não inicializado em testes */ }
 
+  // Menções (@) — apenas em notas internas. Persistidas como audit_log
+  // 'ticket.mention' com user_id = mencionado (usado no filtro do feed) e
+  // notificação em tempo real. Inline (mesmo search_path da request); falha
+  // aqui não deve derrubar o comentário, então é defensivo.
+  if (data.is_internal) {
+    try {
+      const mentionedIds = extractMentionIds(data.content);
+      if (mentionedIds.length > 0) {
+        const authorRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
+          `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+          userId,
+        );
+        const authorName = authorRows[0]?.name ?? 'Agente';
+
+        for (const mentionedId of mentionedIds) {
+          if (mentionedId === userId) continue; // não notificar a si mesmo
+
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO audit_logs (user_id, action, entity, entity_id, new_data)
+             VALUES ($1::uuid, 'ticket.mention', 'ticket', $2::uuid, $3::jsonb)`,
+            mentionedId,
+            ticketId,
+            JSON.stringify({
+              ticket_id: ticketId,
+              ticket_title: ticket.title,
+              comment_id: comment.id,
+              mentioned_by: userId,
+              mentioned_by_name: authorName,
+            }),
+          );
+
+          try {
+            getSocketServer().to(`agent:${mentionedId}`).emit('notification:new', {
+              id: comment.id,
+              type: 'ticket_mention',
+              title: 'Você foi mencionado',
+              message: `${authorName} mencionou você em "${ticket.title}".`,
+              href: `/tickets/${ticketId}`,
+            });
+          } catch { /* socket não inicializado em testes */ }
+        }
+      }
+    } catch { /* falha ao processar menções não deve impedir o comentário */ }
+  }
+
   if (!data.is_internal) {
     void (async () => {
       const tenantInfo = await resolveTenantInfo(tenantId);
@@ -1790,7 +1854,7 @@ export async function addComment(
         ticketTitle: fullTicket.title,
         ticketPriority: fullTicket.priority,
         ticketUrl,
-        commentText: data.content,
+        commentText: stripMentions(data.content),
       });
     })().catch(() => {});
   }
@@ -1803,7 +1867,7 @@ export async function addComment(
       userId,
     );
     await syncCommentToRedmine(tenantId, schemaName, ticketId, {
-      content: comment.content,
+      content: stripMentions(comment.content),
       authorName: userRows[0]?.name ?? 'Agente',
       isInternal: comment.is_internal,
     });

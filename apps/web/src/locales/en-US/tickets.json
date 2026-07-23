@@ -100,7 +100,11 @@
       "send": "Send",
       "noComments": "No comments yet",
       "delete": "Delete comment",
-      "sending": "Sending..."
+      "sending": "Sending...",
+      "mention": {
+        "placeholder": "Search agent...",
+        "noResults": "No agent found"
+      }
     },
     "actions": {
       "assign": "Assign",

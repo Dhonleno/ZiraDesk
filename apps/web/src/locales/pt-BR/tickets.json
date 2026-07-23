@@ -100,7 +100,11 @@
       "send": "Enviar",
       "noComments": "Nenhum comentário ainda",
       "delete": "Excluir comentário",
-      "sending": "Enviando..."
+      "sending": "Enviando...",
+      "mention": {
+        "placeholder": "Buscar agente...",
+        "noResults": "Nenhum agente encontrado"
+      }
     },
     "actions": {
       "assign": "Atribuir",
