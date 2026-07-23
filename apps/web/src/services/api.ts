@@ -2708,6 +2708,7 @@ export interface ListTicketsParams {
   status?:      TicketStatus;
   priority?:    TicketPriority;
   assigned_to?: string;
+  overdue?:     boolean;
   source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
   contact_id?:  string;
   organization_id?: string;

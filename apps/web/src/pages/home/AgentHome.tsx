@@ -272,33 +272,33 @@ export default function AgentHome() {
                 </svg>
               }
               cta={t('agentHome.tickets.cta')}
-              onCta={() => navigate('/tickets')}
+              onCta={() => navigate('/tickets?assigned_to=me')}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <WorkspaceRow
                   color="teal"
                   label={t('agentHome.tickets.open')}
                   value={ticketsOpen ?? 0}
-                  onClick={() => navigate('/tickets?status=open')}
+                  onClick={() => navigate('/tickets?status=open&assigned_to=me')}
                 />
                 <WorkspaceRow
                   color="blue"
                   label={t('agentHome.tickets.inProgress')}
                   value={ticketsInProgress ?? 0}
-                  onClick={() => navigate('/tickets?status=in_progress')}
+                  onClick={() => navigate('/tickets?status=in_progress&assigned_to=me')}
                 />
                 <WorkspaceRow
                   color="purple"
                   label={t('agentHome.tickets.waiting')}
                   value={ticketsWaiting ?? 0}
-                  onClick={() => navigate('/tickets?status=waiting')}
+                  onClick={() => navigate('/tickets?status=waiting&assigned_to=me')}
                 />
                 {ticketsDueToday > 0 && (
                   <WorkspaceRow
                     color="amber"
                     label={t('agentHome.tickets.dueToday')}
                     value={ticketsDueToday}
-                    onClick={() => navigate('/tickets')}
+                    onClick={() => navigate('/tickets?overdue=true&assigned_to=me')}
                   />
                 )}
                 {ticketsOverdue > 0 && (
@@ -306,7 +306,7 @@ export default function AgentHome() {
                     color="red"
                     label={t('agentHome.tickets.overdue')}
                     value={ticketsOverdue}
-                    onClick={() => navigate('/tickets')}
+                    onClick={() => navigate('/tickets?overdue=true&assigned_to=me')}
                   />
                 )}
               </div>

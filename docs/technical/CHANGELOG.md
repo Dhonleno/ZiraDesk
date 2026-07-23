@@ -2,6 +2,10 @@
 
 ## [0.9.3] — Correção de anexos órfãos em tickets
 
+### Adicionado
+- Tickets: o kanban passa a inicializar filtros por URL (`assigned_to`, `priority`, `category`, `status`, `overdue`) e o widget "Meus tickets" envia links contextuais para os tickets do agente.
+- API Tickets: `GET /api/tickets` aceita `overdue=true` para filtrar tickets com prazo vencido.
+
 ### Corrigido
 - Tickets: a listagem de anexos agora valida a existência do objeto no storage, remove registros órfãos e evita que o detalhe do ticket tente pré-carregar previews que resultariam em 404.
 - Tickets: o autosave do detalhe consome cada patch debounced uma única vez, evitando loop de `PATCH` ao transferir/atribuir o ticket para outro agente.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
@@ -33,6 +33,7 @@ import { PageShell } from '../../components/layout/PageShell';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
+import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
 import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 
@@ -112,6 +113,15 @@ function isReadonlyStatus(status: BoardStatus): boolean {
 
 function canDropToStatus(status: BoardStatus): boolean {
   return status !== 'closed' && status !== 'queued';
+}
+
+function parseTicketPriority(value: string | null): TicketPriority | '' {
+  if (value === 'low' || value === 'medium' || value === 'high' || value === 'urgent') return value;
+  return '';
+}
+
+function parseHighlightStatus(value: string | null): BoardStatus | '' {
+  return value && isBoardStatus(value) ? value : '';
 }
 
 function getSlaLabel(sla: SlaInfo, t: TFn): string | null {
@@ -291,21 +301,46 @@ function DroppableColumn({
 export function TicketsPage() {
   const { t } = useTranslation('tickets');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const user = useAuthStore((state) => state.user);
+
+  const assignedToParam = searchParams.get('assigned_to') ?? '';
+  const priorityParam = parseTicketPriority(searchParams.get('priority'));
+  const categoryParam = searchParams.get('category') ?? '';
+  const initialStatus = parseHighlightStatus(searchParams.get('status'));
+  const filterOverdue = searchParams.get('overdue') === 'true';
 
   const [view, setView] = useState<TicketView>('kanban');
   const [search, setSearch] = useState('');
-  const [priority, setPriority] = useState<TicketPriority | ''>('');
-  const [agentId, setAgentId] = useState('');
-  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState<TicketPriority | ''>(priorityParam);
+  const [agentId, setAgentId] = useState(assignedToParam === 'me' ? user?.id ?? '' : assignedToParam);
+  const [category, setCategory] = useState(categoryParam);
+  const [highlightStatus, setHighlightStatus] = useState<BoardStatus | ''>(initialStatus);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const debouncedSearch = useDebounce(search, 250);
 
-  const listQueryKey = ['tickets-board', debouncedSearch, priority, agentId, category] as const;
+  useEffect(() => {
+    setAgentId(assignedToParam === 'me' ? user?.id ?? '' : assignedToParam);
+  }, [assignedToParam, user?.id]);
+
+  useEffect(() => {
+    setPriority(priorityParam);
+  }, [priorityParam]);
+
+  useEffect(() => {
+    setCategory(categoryParam);
+  }, [categoryParam]);
+
+  useEffect(() => {
+    setHighlightStatus(initialStatus);
+  }, [initialStatus]);
+
+  const listQueryKey = ['tickets-board', debouncedSearch, priority, agentId, category, filterOverdue] as const;
 
   const buildBoardFilters = (): ListTicketsParams => {
     const params: ListTicketsParams = {
@@ -317,6 +352,7 @@ export function TicketsPage() {
     if (priority) params.priority = priority;
     if (agentId) params.assigned_to = agentId;
     if (category) params.category = category;
+    if (filterOverdue) params.overdue = true;
 
     return params;
   };
@@ -335,7 +371,7 @@ export function TicketsPage() {
   });
 
   const { data: closedTicketsData } = useQuery({
-    queryKey: ['tickets-board-closed', debouncedSearch, priority, agentId, category],
+    queryKey: ['tickets-board-closed', debouncedSearch, priority, agentId, category, filterOverdue],
     queryFn: () => ticketsApi.list({
       ...buildBoardFilters(),
       status: 'closed',
@@ -343,6 +379,12 @@ export function TicketsPage() {
     }),
     staleTime: 25_000,
   });
+
+  useEffect(() => {
+    if (!highlightStatus || view !== 'kanban' || isPending) return;
+    const col = document.querySelector(`[data-status="${highlightStatus}"]`);
+    col?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+  }, [highlightStatus, isPending, view]);
 
   const { data: agentsData } = useQuery({
     queryKey: ['tickets-filter-agents'],
@@ -677,6 +719,11 @@ export function TicketsPage() {
                   key={column}
                   className={`tickets-column${isReadonlyStatus(column) ? ' tickets-column-readonly' : ''}`}
                   id={column}
+                  data-status={column}
+                  style={highlightStatus === column ? {
+                    borderColor: STATUS_ACCENT[column],
+                    boxShadow: `0 0 0 1px ${STATUS_ACCENT[column]}`,
+                  } : undefined}
                 >
                   <header className="tickets-column-head">
                     <div className="tickets-column-title-wrap">

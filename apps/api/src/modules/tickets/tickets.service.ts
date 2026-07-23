@@ -700,7 +700,7 @@ const TICKET_SEARCH_CONDITION = `(
 export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
   return withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
-    const { page, per_page, search, status, priority, assigned_to, department_id, source, contact_id, organization_id, category, sort_by, sort_order } = query;
+    const { page, per_page, search, status, priority, assigned_to, overdue, department_id, source, contact_id, organization_id, category, sort_by, sort_order } = query;
     const offset = (page - 1) * per_page;
 
     const searchParam       = search          ?? null;
@@ -712,6 +712,7 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
     const organizationParam = organization_id ?? null;
     const categoryParam     = category        ?? null;
     const departmentParam   = department_id   ?? null;
+    const overdueParam      = overdue         ?? false;
 
     const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
@@ -725,14 +726,18 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
         AND ($6::uuid IS NULL OR t.contact_id     = $6::uuid)
         AND ($7::uuid IS NULL OR t.organization_id = $7::uuid)
         AND ($8::text IS NULL OR t.category       = $8)
-        AND ($9::uuid IS NULL OR t.department_id  = $9::uuid)`;
+        AND ($9::uuid IS NULL OR t.department_id  = $9::uuid)
+        AND ($10::boolean IS FALSE OR (
+          t.due_date IS NOT NULL
+          AND (t.due_date + (t.sla_paused_duration_seconds || ' seconds')::interval) < NOW()
+        ))`;
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `${BASE_SELECT}${where}
        ORDER BY ${sortCol} ${sortDir}
-       LIMIT $10 OFFSET $11`,
+       LIMIT $11 OFFSET $12`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
-      per_page, offset,
+      overdueParam, per_page, offset,
     );
 
     const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
@@ -742,6 +747,7 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
        LEFT JOIN organizations o  ON o.id  = t.organization_id
        ${where}`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
+      overdueParam,
     );
 
     const total = Number(countRows[0]?.count ?? 0);

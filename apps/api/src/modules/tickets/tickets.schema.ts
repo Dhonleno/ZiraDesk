@@ -45,6 +45,7 @@ export const listTicketsQuerySchema = z.object({
   status:      z.enum(['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed']).optional(),
   priority:    z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   assigned_to: z.string().uuid().optional(),
+  overdue:     z.coerce.boolean().optional(),
   department_id: z.string().uuid().optional(),
   source:      z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
   contact_id:      z.string().uuid().optional(),

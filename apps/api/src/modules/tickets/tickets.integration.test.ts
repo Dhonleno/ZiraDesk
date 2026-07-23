@@ -336,6 +336,35 @@ describe('Tickets integration', () => {
     expect(returnedIds).toEqual([firstMatch.id, secondMatch.id].sort());
   });
 
+  it('GET /api/tickets filtra tickets vencidos por overdue=true', async () => {
+    const overdueTicket = await createTicket({
+      title: uniqueText('Ticket vencido'),
+      status: 'open',
+      priority: 'medium',
+      due_date: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    await createTicket({
+      title: uniqueText('Ticket no prazo'),
+      status: 'open',
+      priority: 'medium',
+      due_date: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+    await createTicket({
+      title: uniqueText('Ticket sem vencimento'),
+      status: 'open',
+      priority: 'medium',
+    });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ overdue: 'true', assigned_to: TEST_USER_ID })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.meta.total).toBe(1);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([overdueTicket.id]);
+  });
+
   it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
     const { organization, contact } = await createOrganizationAndContact();
     const ticket = await createTicket({
