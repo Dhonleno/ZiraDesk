@@ -1451,6 +1451,8 @@ export async function claimTicketFromQueue(
   tenantId: string,
   schemaName?: string,
 ) {
+  const tenantSettings = await loadTenantSettings(tenantId);
+
   // FOR UPDATE só tem efeito real dentro de uma transação de verdade. Ao
   // contrário de withOptionalSchema (que, sem schemaName, roda a query solta
   // via `runner(prisma)`, fora de transação), aqui forçamos $transaction em
@@ -1463,14 +1465,22 @@ export async function claimTicketFromQueue(
     // concorrente de claim para o mesmo ticket bloqueia aqui até a primeira
     // commitar, e então enxerga o status já atualizado — cai no ConflictError
     // abaixo em vez de reatribuir o ticket duas vezes.
-    const currentRows = await db.$queryRawUnsafe<Array<{ status: string; department_id: string | null }>>(
-      `SELECT status, department_id FROM tickets WHERE id = $1::uuid LIMIT 1 FOR UPDATE`,
+    const currentRows = await db.$queryRawUnsafe<Array<{ status: string; department_id: string | null; priority: string; due_date: Date | null }>>(
+      `SELECT status, department_id, priority, due_date FROM tickets WHERE id = $1::uuid LIMIT 1 FOR UPDATE`,
       ticketId,
     );
     const current = currentRows[0];
     if (!current) throw new NotFoundError('Ticket');
     if (current.status !== 'queued') {
       throw new ConflictError('Ticket não está na fila');
+    }
+
+    // SLA automático: define o prazo ao reivindicar da fila, se ainda não
+    // houver um (não sobrescreve prazo manual já definido).
+    let computedDueDate: Date | null = null;
+    if (!current.due_date) {
+      const hours = computeSlaHours(current.priority, tenantSettings);
+      if (hours !== null) computedDueDate = new Date(Date.now() + hours * 3_600_000);
     }
 
     if (current.department_id) {
@@ -1490,6 +1500,7 @@ export async function claimTicketFromQueue(
       `UPDATE tickets
        SET assigned_to = $1::uuid,
            status = 'open',
+           due_date = COALESCE($3::timestamptz, due_date),
            updated_at = NOW()
        WHERE id = $2::uuid
          AND status = 'queued'
@@ -1503,6 +1514,7 @@ export async function claimTicketFromQueue(
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
       userId,
       ticketId,
+      computedDueDate?.toISOString() ?? null,
     );
 
     // Defesa extra além do FOR UPDATE: se por algum motivo o status não era
@@ -1554,6 +1566,29 @@ export async function claimTicketFromQueue(
   return ticket;
 }
 
+/* ── SLA automático ──────────────────────────────────────────────────────── */
+// Defaults por prioridade (horas até o vencimento) — espelham os defaults de
+// settings.service.slaSettings, aplicados quando sla_auto_enabled está ligado
+// mas a hora específica não foi salva no tenant.settings.
+const SLA_DEFAULT_HOURS: Record<string, number> = { urgent: 4, high: 8, medium: 24, low: 72 };
+
+// Retorna as horas de SLA para a prioridade, ou null se o SLA automático
+// estiver desligado / prioridade sem política.
+function computeSlaHours(priority: string, settings: Record<string, unknown>): number | null {
+  if (settings['sla_auto_enabled'] !== true) return null;
+  const raw = settings[`sla_hours_${priority}`];
+  if (typeof raw === 'number' && raw > 0) return raw;
+  return SLA_DEFAULT_HOURS[priority] ?? null;
+}
+
+async function loadTenantSettings(tenantId: string): Promise<Record<string, unknown>> {
+  const tenantRow = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  return (tenantRow?.settings as Record<string, unknown> | null) ?? {};
+}
+
 /* ── acceptTicket ────────────────────────────────────────────────────────── */
 // Aceitação explícita pelo agente designado. Diferente de claimTicketFromQueue
 // (que resolve QUEM assume um ticket sem dono), aqui o dono já é conhecido —
@@ -1564,6 +1599,8 @@ export async function acceptTicket(
   tenantId: string,
   schemaName?: string,
 ) {
+  const tenantSettings = await loadTenantSettings(tenantId);
+
   const { ticket, acceptedEvent } = await withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
 
@@ -1577,9 +1614,18 @@ export async function acceptTicket(
       throw new ConflictError('Ticket não está em estado aceitável');
     }
 
+    // SLA automático: define o prazo ao aceitar, se ainda não houver um
+    // (não sobrescreve prazo manual já definido).
+    let computedDueDate: Date | null = null;
+    if (!current.due_date) {
+      const hours = computeSlaHours(current.priority, tenantSettings);
+      if (hours !== null) computedDueDate = new Date(Date.now() + hours * 3_600_000);
+    }
+
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `UPDATE tickets
        SET status = 'in_progress',
+           due_date = COALESCE($2::timestamptz, due_date),
            updated_at = NOW()
        WHERE id = $1::uuid
        RETURNING
@@ -1591,6 +1637,7 @@ export async function acceptTicket(
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
       ticketId,
+      computedDueDate?.toISOString() ?? null,
     );
 
     if (!rows[0]) throw new NotFoundError('Ticket');

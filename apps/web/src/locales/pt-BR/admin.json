@@ -39,6 +39,22 @@
         "saved": "Configurações salvas com sucesso"
       }
     },
+    "slaPolicy": {
+      "title": "Política de SLA",
+      "subtitle": "Define o prazo automático de resolução ao aceitar um ticket.",
+      "description": "Calcula o prazo com base na prioridade quando o ticket é aceito (não sobrescreve prazos definidos manualmente).",
+      "autoEnabled": "Calcular prazo automaticamente ao aceitar ticket",
+      "hours": "horas",
+      "priority": {
+        "urgent": "Urgente",
+        "high": "Alta",
+        "medium": "Média",
+        "low": "Baixa"
+      },
+      "messages": {
+        "saved": "Política de SLA salva com sucesso"
+      }
+    },
     "queueConfig": {
       "title": "Notificações de Fila",
       "subtitle": "Configure as mensagens enviadas automaticamente durante o atendimento na fila",
@@ -1108,6 +1124,7 @@
     "attendanceRules": "Regras de Atendimento",
     "queueConfig": "Notificações de Fila",
     "ticketAutoAssign": "Auto-atribuição de Tickets",
+    "slaPolicy": "Política de SLA",
     "settings": "Configurações",
     "lgpd": "LGPD",
     "history": "Histórico",

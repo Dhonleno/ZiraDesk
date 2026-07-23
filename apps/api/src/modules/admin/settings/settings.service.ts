@@ -76,6 +76,20 @@ function resolveRoutingSkillTimeoutMs(value: unknown): number {
   return parsed;
 }
 
+// Política de SLA por prioridade (horas até o vencimento). Defaults aplicados
+// na leitura; a computação do due_date acontece em tickets.service (acceptTicket).
+const DEFAULT_SLA_HOURS = { urgent: 4, high: 8, medium: 24, low: 72 } as const;
+
+function slaSettings(s: Record<string, unknown>) {
+  return {
+    sla_auto_enabled: (s.sla_auto_enabled as boolean | undefined) ?? false,
+    sla_hours_urgent: typeof s.sla_hours_urgent === 'number' ? s.sla_hours_urgent : DEFAULT_SLA_HOURS.urgent,
+    sla_hours_high:   typeof s.sla_hours_high === 'number' ? s.sla_hours_high : DEFAULT_SLA_HOURS.high,
+    sla_hours_medium: typeof s.sla_hours_medium === 'number' ? s.sla_hours_medium : DEFAULT_SLA_HOURS.medium,
+    sla_hours_low:    typeof s.sla_hours_low === 'number' ? s.sla_hours_low : DEFAULT_SLA_HOURS.low,
+  };
+}
+
 export async function readLogoFile(fileName: string): Promise<Buffer | null> {
   if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   try {
@@ -146,6 +160,7 @@ export async function getSettings(tenantId: string) {
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
+    ...slaSettings(s),
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -228,6 +243,11 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.ticket_auto_assign !== undefined
       ? { ticket_auto_assign: data.ticket_auto_assign }
       : {}),
+    ...(data.sla_auto_enabled !== undefined ? { sla_auto_enabled: data.sla_auto_enabled } : {}),
+    ...(data.sla_hours_urgent !== undefined ? { sla_hours_urgent: data.sla_hours_urgent } : {}),
+    ...(data.sla_hours_high !== undefined ? { sla_hours_high: data.sla_hours_high } : {}),
+    ...(data.sla_hours_medium !== undefined ? { sla_hours_medium: data.sla_hours_medium } : {}),
+    ...(data.sla_hours_low !== undefined ? { sla_hours_low: data.sla_hours_low } : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -279,6 +299,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     expire_24h_action: (s.expire_24h_action as 'close' | 'keep_open' | undefined) ?? 'close',
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
+    ...slaSettings(s),
   };
 }
 

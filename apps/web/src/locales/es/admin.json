@@ -39,6 +39,22 @@
         "saved": "Configuración guardada con éxito"
       }
     },
+    "slaPolicy": {
+      "title": "Política de SLA",
+      "subtitle": "Define el plazo automático de resolución al aceptar un ticket.",
+      "description": "Calcula el plazo según la prioridad cuando se acepta el ticket (no sobrescribe plazos definidos manualmente).",
+      "autoEnabled": "Calcular plazo automáticamente al aceptar el ticket",
+      "hours": "horas",
+      "priority": {
+        "urgent": "Urgente",
+        "high": "Alta",
+        "medium": "Media",
+        "low": "Baja"
+      },
+      "messages": {
+        "saved": "Política de SLA guardada con éxito"
+      }
+    },
     "queueConfig": {
       "title": "Notificaciones de Cola",
       "subtitle": "Configure los mensajes enviados automáticamente durante la atención en cola",
@@ -1114,6 +1130,7 @@
     "attendanceRules": "Reglas de Atención",
     "queueConfig": "Notificaciones de Cola",
     "ticketAutoAssign": "Auto-asignación de Tickets",
+    "slaPolicy": "Política de SLA",
     "settings": "Configuración",
     "lgpd": "LGPD",
     "history": "Historial",

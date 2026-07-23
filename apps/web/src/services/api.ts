@@ -28,6 +28,11 @@ interface TenantSettings {
   max_conversations_per_agent?: number | null;
   lgpd_retention_enabled?: boolean;
   lgpd_retention_days?: number;
+  sla_auto_enabled?: boolean;
+  sla_hours_urgent?: number;
+  sla_hours_high?: number;
+  sla_hours_medium?: number;
+  sla_hours_low?: number;
   created_at?: string;
   plan?: {
     id: string;

@@ -289,6 +289,16 @@ const NAV_GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        label: 'nav.slaPolicy',
+        path: '/admin/sla-policy',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M8 5.5v3l2 1.5M6 1.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
     ],
   },
   {

@@ -148,6 +148,14 @@ async function setTicketAutoAssign(enabled: boolean): Promise<void> {
   });
 }
 
+async function setSlaSettings(settings: Record<string, string | number | boolean>): Promise<void> {
+  const { id } = requireSuiteTenant();
+  await prisma.tenant.update({
+    where: { id },
+    data: { settings },
+  });
+}
+
 async function createDepartmentWithAgent(presence: {
   status: 'online' | 'offline';
   isAvailable: boolean;
@@ -803,6 +811,50 @@ describe('Tickets integration', () => {
       .set(authHeader());
 
     expect(response.status).toBe(409);
+  });
+
+  it('POST /api/tickets/:id/accept — SLA automático preenche due_date pela prioridade', async () => {
+    await setSlaSettings({ sla_auto_enabled: true, sla_hours_high: 5 });
+    try {
+      const ticket = await createTicket({ status: 'open', priority: 'high', assigned_to: TEST_USER_ID });
+      const before = Date.now();
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/accept`)
+        .set(authHeader());
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.due_date).toBeTruthy();
+      const diffHours = (new Date(response.body.data.due_date).getTime() - before) / 3_600_000;
+      expect(diffHours).toBeGreaterThan(4.9);
+      expect(diffHours).toBeLessThan(5.2);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/accept — SLA automático não sobrescreve due_date manual', async () => {
+    await setSlaSettings({ sla_auto_enabled: true, sla_hours_high: 5 });
+    try {
+      const manualDue = new Date(Date.now() + 100 * 3_600_000).toISOString();
+      const ticket = await createTicket({
+        status: 'open',
+        priority: 'high',
+        assigned_to: TEST_USER_ID,
+        due_date: manualDue,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/accept`)
+        .set(authHeader());
+
+      expect(response.status).toBe(200);
+      // Prazo manual (~100h) preservado, não recalculado para ~5h.
+      const diffHours = (new Date(response.body.data.due_date).getTime() - Date.now()) / 3_600_000;
+      expect(diffHours).toBeGreaterThan(90);
+    } finally {
+      await setSlaSettings({});
+    }
   });
 
   it('PATCH /api/tickets/:id — agente designado fecha ticket resolved → 200', async () => {

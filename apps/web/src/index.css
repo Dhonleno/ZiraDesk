@@ -670,6 +670,42 @@
   font-weight: 500;
 }
 
+/* ── Política de SLA (admin) ──────────────────────────────────────────────── */
+.sla-hours-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.sla-hours-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sla-hours-input input {
+  width: 90px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+}
+
+.sla-hours-input input:focus {
+  border-color: var(--teal);
+}
+
+.sla-hours-input span {
+  font-size: 12px;
+  color: var(--txt-3);
+}
+
 .ticket-comment {
   display: flex;
   gap: 10px;

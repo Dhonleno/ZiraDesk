@@ -53,6 +53,7 @@ import { Templates as AdminTemplates } from './pages/admin/Templates';
 import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
 import { QueueConfig as AdminQueueConfig } from './pages/admin/QueueConfig';
 import { TicketAutoAssign as AdminTicketAutoAssign } from './pages/admin/TicketAutoAssign';
+import { SlaPolicy as AdminSlaPolicy } from './pages/admin/SlaPolicy';
 import { VoiceConfig as AdminVoiceConfig } from './pages/admin/VoiceConfig';
 import { AdminLayout } from './layouts/AdminLayout';
 import { Toaster } from './components/ui/Toaster';
@@ -338,6 +339,7 @@ export function App() {
               />
               <Route path="queue-config" element={<AdminQueueConfig />} />
               <Route path="ticket-auto-assign" element={<AdminTicketAutoAssign />} />
+              <Route path="sla-policy" element={<AdminSlaPolicy />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             <Route path="settings/upgrade" element={<Upgrade />} />

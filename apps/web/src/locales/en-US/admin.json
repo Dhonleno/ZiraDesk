@@ -39,6 +39,22 @@
         "saved": "Settings saved successfully"
       }
     },
+    "slaPolicy": {
+      "title": "SLA Policy",
+      "subtitle": "Automatically sets the resolution deadline when a ticket is accepted.",
+      "description": "Calculates the deadline based on priority when the ticket is accepted (does not override manually set deadlines).",
+      "autoEnabled": "Auto-calculate deadline when ticket is accepted",
+      "hours": "hours",
+      "priority": {
+        "urgent": "Urgent",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "messages": {
+        "saved": "SLA policy saved successfully"
+      }
+    },
     "queueConfig": {
       "title": "Queue Notifications",
       "subtitle": "Configure messages sent automatically during queue attendance",
@@ -1114,6 +1130,7 @@
     "attendanceRules": "Attendance Rules",
     "queueConfig": "Queue Notifications",
     "ticketAutoAssign": "Ticket Auto-Assign",
+    "slaPolicy": "SLA Policy",
     "settings": "Settings",
     "lgpd": "LGPD",
     "history": "History",

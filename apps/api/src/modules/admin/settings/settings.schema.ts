@@ -31,6 +31,11 @@ export const updateSettingsSchema = z.object({
   expire_24h_action: z.enum(['close', 'keep_open']).optional(),
   expire_24h_message: z.string().max(1000).optional(),
   ticket_auto_assign: z.boolean().optional(),
+  sla_auto_enabled: z.boolean().optional(),
+  sla_hours_urgent: z.number().int().min(1).max(8760).optional(),
+  sla_hours_high:   z.number().int().min(1).max(8760).optional(),
+  sla_hours_medium: z.number().int().min(1).max(8760).optional(),
+  sla_hours_low:    z.number().int().min(1).max(8760).optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined
