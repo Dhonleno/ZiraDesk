@@ -91,7 +91,6 @@ export function SlaPolicy() {
                   onChange={(e) => update({ sla_auto_enabled: e.target.checked })}
                 />
                 <span
-                  onClick={() => update({ sla_auto_enabled: !current.sla_auto_enabled })}
                   style={{
                     position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
                     backgroundColor: current.sla_auto_enabled ? 'var(--teal)' : 'var(--line-2)',

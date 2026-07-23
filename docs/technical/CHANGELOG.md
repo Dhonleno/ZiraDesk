@@ -1,5 +1,10 @@
 # Changelog — ZiraDesk
 
+## [0.9.5] — Correção do toggle de SLA automático
+
+### Corrigido
+- Admin SLA: removido o handler duplicado no toggle de SLA automático, mantendo apenas o `onChange` do checkbox para evitar disparo duplo ao alternar a política.
+
 ## [0.9.4] — Correção do menu de ações do detalhe de tickets
 
 ### Corrigido
