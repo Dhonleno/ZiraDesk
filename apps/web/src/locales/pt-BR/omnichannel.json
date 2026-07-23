@@ -92,6 +92,16 @@
       "noData": "Nenhum dado no período",
       "allCategories": "Todas as categorias",
       "tickets": "tickets"
+    },
+    "ticketCsat": {
+      "title": "CSAT de Tickets",
+      "avgScore": "Nota média",
+      "responses": "Respostas",
+      "responseRate": "Taxa de resposta",
+      "distribution": "Distribuição de notas",
+      "byAgent": "Por agente",
+      "allAgents": "Todos os agentes",
+      "noData": "Nenhuma avaliação registrada no período"
     }
   },
   "new": "Novo atendimento",

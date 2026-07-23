@@ -5,7 +5,7 @@ import { requireFeature } from '../../middleware/entitlement.js';
 import { hasRole } from '../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { prisma } from '../../config/database.js';
-import { getTicketsMetrics } from './tickets-metrics.service.js';
+import { getTicketsMetrics, getTicketCsatMetrics } from './tickets-metrics.service.js';
 
 const guard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt, hasRole('owner', 'admin', 'agent')];
 
@@ -14,6 +14,13 @@ const ticketsMetricsQuerySchema = z.object({
   date_to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato esperado: YYYY-MM-DD'),
   agent_id:  z.string().uuid().optional(),
   category:  z.string().min(1).optional(),
+});
+
+const ticketsCsatQuerySchema = z.object({
+  date_from:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato esperado: YYYY-MM-DD'),
+  date_to:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato esperado: YYYY-MM-DD'),
+  agent_id:      z.string().uuid().optional(),
+  department_id: z.string().uuid().optional(),
 });
 
 function buildUtcDate(year: number, month: number, day: number, h = 0, m = 0, s = 0): Date {
@@ -79,6 +86,51 @@ export async function ticketsMetricsRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send({
         success: false,
         error: { message: error instanceof Error ? error.message : 'Erro ao carregar métricas de tickets' },
+      });
+    }
+  });
+
+  app.get('/metrics/csat', { preHandler: guard }, async (request, reply) => {
+    const parsed = ticketsCsatQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Query inválida', details: parsed.error.flatten() },
+      });
+    }
+
+    const { date_from, date_to, agent_id, department_id } = parsed.data;
+
+    const fromParts = parseDateParts(date_from);
+    const toParts   = parseDateParts(date_to);
+    const dateFrom  = buildUtcDate(fromParts.year, fromParts.month, fromParts.day, 0, 0, 0);
+    const dateTo    = buildUtcDate(toParts.year,   toParts.month,   toParts.day,   23, 59, 59);
+
+    if (dateFrom > dateTo) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Período inválido: date_from maior que date_to' },
+      });
+    }
+
+    const dateToExclusive = new Date(
+      buildUtcDate(toParts.year, toParts.month, toParts.day).getTime() + 24 * 60 * 60 * 1000,
+    );
+
+    try {
+      const schemaName = await resolveSchemaName(request);
+      const csatFilters: import('./tickets-metrics.service.js').TicketCsatMetricsFilters = {
+        dateFrom,
+        dateToExclusive,
+        ...(agent_id ? { agentId: agent_id } : {}),
+        ...(department_id ? { departmentId: department_id } : {}),
+      };
+      const data = await getTicketCsatMetrics(csatFilters, schemaName);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Erro ao carregar CSAT de tickets' },
       });
     }
   });

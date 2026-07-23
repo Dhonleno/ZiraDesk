@@ -3304,6 +3304,7 @@ export interface NotificationItem {
     | 'conversation_assigned'
     | 'ticket_comment'
     | 'ticket_mention'
+    | 'ticket_sla_warning'
     | 'conversation_message'
     | 'message_failed'
     | 'help_requested'
@@ -4139,6 +4140,39 @@ export interface TicketsMetricsData {
   byType:     TicketsMetricsByTypePoint[];
 }
 
+export interface TicketCsatMetricsParams {
+  date_from:      string;
+  date_to:        string;
+  agent_id?:      string;
+  department_id?: string;
+}
+
+export interface TicketCsatOverview {
+  avgScore:       number | null;
+  totalSent:      number;
+  totalResponses: number;
+  responseRate:   number;
+}
+
+export interface TicketCsatDistributionPoint {
+  score:      number;
+  count:      number;
+  percentage: number;
+}
+
+export interface TicketCsatByAgentPoint {
+  agentId:        string;
+  agentName:      string;
+  avgScore:       number | null;
+  totalResponses: number;
+}
+
+export interface TicketCsatMetricsData {
+  overview:     TicketCsatOverview;
+  distribution: TicketCsatDistributionPoint[];
+  byAgent:      TicketCsatByAgentPoint[];
+}
+
 // ── Tickets Types ─────────────────────────────────────────────────────────────
 
 export const ticketsApi = {
@@ -4323,6 +4357,11 @@ export const ticketsApi = {
 
   getMetrics: async (params: TicketsMetricsParams): Promise<TicketsMetricsData> => {
     const res = await api.get<{ success: boolean; data: TicketsMetricsData }>('/tickets/metrics', { params });
+    return res.data.data;
+  },
+
+  getCsatMetrics: async (params: TicketCsatMetricsParams): Promise<TicketCsatMetricsData> => {
+    const res = await api.get<{ success: boolean; data: TicketCsatMetricsData }>('/tickets/metrics/csat', { params });
     return res.data.data;
   },
 

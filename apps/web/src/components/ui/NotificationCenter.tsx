@@ -29,6 +29,9 @@ function BackendNotificationIcon({ type }: { type: NotificationItem['type'] }) {
   if (type === 'ticket_mention') {
     return <path d="M16 8a4 4 0 10-.5 6M16 8v3.5a1.5 1.5 0 003 0V12a9 9 0 10-3.5 7.1M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
   }
+  if (type === 'ticket_sla_warning') {
+    return <path d="M12 8v4l2.5 2.5M12 3a9 9 0 100 18 9 9 0 000-18z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />;
+  }
   if (type === 'conversation_assigned') {
     return <path d="M4 14V5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />;
   }
@@ -184,6 +187,12 @@ export function NotificationCenter() {
           title: 'Você foi mencionado',
           preview: notification.message || readDataString(notification.data, 'title') || '',
           iconType: 'ticket_mention',
+        };
+      case 'ticket_sla_warning':
+        return {
+          title: 'SLA próximo de vencer',
+          preview: notification.message || readDataString(notification.data, 'title') || '',
+          iconType: 'ticket_sla_warning',
         };
       case 'help_requested': {
         const agentName = readDataString(notification.data, 'agent_name');

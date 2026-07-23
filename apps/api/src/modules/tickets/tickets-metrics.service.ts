@@ -7,6 +7,31 @@ export interface TicketsMetricsFilters {
   category?: string;
 }
 
+export interface TicketCsatMetricsFilters {
+  dateFrom: Date;
+  dateToExclusive: Date;
+  agentId?: string;
+  departmentId?: string;
+}
+
+interface CsatOverviewRow {
+  avg_score: number | string | null;
+  total_sent: bigint;
+  total_responses: bigint;
+  score_1: bigint;
+  score_2: bigint;
+  score_3: bigint;
+  score_4: bigint;
+  score_5: bigint;
+}
+
+interface CsatAgentRow {
+  agent_id: string;
+  agent_name: string | null;
+  avg_score: number | string | null;
+  total_responses: bigint;
+}
+
 interface OverviewRow {
   total: bigint;
   open: bigint;
@@ -54,6 +79,12 @@ function toNumber(value: unknown): number {
 function toPercentage(count: number, total: number): number {
   if (total <= 0) return 0;
   return Number(((count / total) * 100).toFixed(2));
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 async function withTenantSchema<T>(
@@ -275,6 +306,108 @@ export async function getTicketsMetrics(filters: TicketsMetricsFilters, schemaNa
         type:       r.type,
         count:      toNumber(r.count),
         percentage: toPercentage(toNumber(r.count), typeTotal),
+      })),
+    };
+  });
+}
+
+function buildCsatWhere(
+  params: unknown[],
+  filters: TicketCsatMetricsFilters,
+  alias = 't',
+): string {
+  const p = alias ? `${alias}.` : '';
+  params.push(filters.dateFrom);
+  const fromIdx = params.length;
+  params.push(filters.dateToExclusive);
+  const toIdx = params.length;
+
+  // Janela pelo envio do CSAT (csat_sent_at) — reflete avaliações disparadas no período.
+  const clauses = [
+    `${p}csat_sent_at IS NOT NULL`,
+    `${p}csat_sent_at >= $${fromIdx}::timestamptz`,
+    `${p}csat_sent_at < $${toIdx}::timestamptz`,
+  ];
+
+  if (filters.agentId) {
+    params.push(filters.agentId);
+    clauses.push(`${p}assigned_to = $${params.length}::uuid`);
+  }
+
+  if (filters.departmentId) {
+    params.push(filters.departmentId);
+    clauses.push(`${p}department_id = $${params.length}::uuid`);
+  }
+
+  return clauses.join(' AND ');
+}
+
+export async function getTicketCsatMetrics(filters: TicketCsatMetricsFilters, schemaName: string) {
+  return withTenantSchema(schemaName, async (tx) => {
+    // ── Overview + distribuição ───────────────────────────────────────────────
+    const overviewParams: unknown[] = [];
+    const overviewWhere = buildCsatWhere(overviewParams, filters);
+
+    const [overviewRow] = await tx.$queryRawUnsafe<CsatOverviewRow[]>(
+      `SELECT
+         ROUND(AVG(t.csat_score) FILTER (WHERE t.csat_score IS NOT NULL)::numeric, 2) AS avg_score,
+         COUNT(*)                                                AS total_sent,
+         COUNT(*) FILTER (WHERE t.csat_responded_at IS NOT NULL) AS total_responses,
+         COUNT(*) FILTER (WHERE t.csat_score = 1)                AS score_1,
+         COUNT(*) FILTER (WHERE t.csat_score = 2)                AS score_2,
+         COUNT(*) FILTER (WHERE t.csat_score = 3)                AS score_3,
+         COUNT(*) FILTER (WHERE t.csat_score = 4)                AS score_4,
+         COUNT(*) FILTER (WHERE t.csat_score = 5)                AS score_5
+       FROM tickets t
+       WHERE ${overviewWhere}`,
+      ...overviewParams,
+    );
+
+    // ── Por agente ────────────────────────────────────────────────────────────
+    const agentParams: unknown[] = [];
+    const agentWhere = buildCsatWhere(agentParams, filters);
+
+    const agentRows = await tx.$queryRawUnsafe<CsatAgentRow[]>(
+      `SELECT
+         t.assigned_to                                          AS agent_id,
+         u.name                                                 AS agent_name,
+         ROUND(AVG(t.csat_score) FILTER (WHERE t.csat_score IS NOT NULL)::numeric, 2) AS avg_score,
+         COUNT(*) FILTER (WHERE t.csat_responded_at IS NOT NULL) AS total_responses
+       FROM tickets t
+       LEFT JOIN users u ON u.id = t.assigned_to
+       WHERE t.assigned_to IS NOT NULL
+         AND ${agentWhere}
+       GROUP BY t.assigned_to, u.name
+       HAVING COUNT(*) FILTER (WHERE t.csat_responded_at IS NOT NULL) > 0
+       ORDER BY avg_score DESC NULLS LAST`,
+      ...agentParams,
+    );
+
+    const totalSent = toNumber(overviewRow?.total_sent);
+    const totalResponses = toNumber(overviewRow?.total_responses);
+
+    const distribution = [1, 2, 3, 4, 5].map((score) => {
+      const count = toNumber(overviewRow?.[`score_${score}` as keyof CsatOverviewRow]);
+      return {
+        score,
+        count,
+        percentage: toPercentage(count, totalResponses),
+      };
+    });
+
+    return {
+      overview: {
+        avgScore:       toNullableNumber(overviewRow?.avg_score),
+        totalSent,
+        totalResponses,
+        responseRate:   toPercentage(totalResponses, totalSent),
+      },
+      distribution,
+      byAgent: agentRows.map((r) => ({
+        agentId:        r.agent_id,
+        agentName:      r.agent_name ?? 'Agente removido',
+        avgScore:       toNullableNumber(r.avg_score),
+        totalResponses: toNumber(r.total_responses),
       })),
     };
   });

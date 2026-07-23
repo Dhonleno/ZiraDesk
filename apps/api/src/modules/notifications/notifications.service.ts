@@ -7,6 +7,7 @@ type NotificationType =
   | 'conversation_assigned'
   | 'ticket_comment'
   | 'ticket_mention'
+  | 'ticket_sla_warning'
   | 'conversation_message'
   | 'message_failed'
   | 'help_requested'
@@ -237,6 +238,27 @@ function toNotification(row: NotificationRow): NotificationItem {
     };
   }
 
+  if (row.action === 'ticket.sla_warning') {
+    const payload = row.new_data ?? {};
+    const ticketTitle = row.ticket_title ?? String(payload['ticket_title'] ?? '');
+    const warningTicketId = String(payload['ticket_id'] ?? row.entity_id ?? '');
+    return {
+      id: row.id,
+      type: 'ticket_sla_warning',
+      title: 'SLA próximo de vencer',
+      message: ticketTitle
+        ? `O ticket "${ticketTitle}" está próximo de vencer o SLA.`
+        : 'Um ticket está próximo de vencer o SLA.',
+      read: row.read,
+      created_at: row.created_at,
+      href: `/tickets/${warningTicketId}`,
+      data: {
+        ...(row.new_data ?? {}),
+        title: ticketTitle,
+      },
+    };
+  }
+
   if (row.action === 'ticket.mention') {
     const payload = row.new_data ?? {};
     const byName = String(payload['mentioned_by_name'] ?? 'Alguém');
@@ -304,6 +326,9 @@ function notificationsWhereClause(): string {
     al.action = 'ticket.mention'
     AND al.user_id = $1::uuid
   ) OR (
+    al.action = 'ticket.sla_warning'
+    AND al.user_id = $1::uuid
+  ) OR (
     al.action = 'conversation.message'
     AND al.new_data->>'assigned_to' = $1
   ) OR (
@@ -356,6 +381,7 @@ export async function listNotifications(
          WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          WHEN al.action = 'ticket.mention' THEN (al.new_data->>'ticket_id')::uuid
+         WHEN al.action = 'ticket.sla_warning' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
      LEFT JOIN ${conversationsRef} c
@@ -437,6 +463,7 @@ export async function markAllNotificationsRead(userId: string, schemaName: strin
          WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          WHEN al.action = 'ticket.mention' THEN (al.new_data->>'ticket_id')::uuid
+         WHEN al.action = 'ticket.sla_warning' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
      WHERE ${notificationsWhereClause()}
@@ -497,6 +524,7 @@ export async function deleteAllReadNotifications(userId: string, schemaName: str
          WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          WHEN al.action = 'ticket.mention' THEN (al.new_data->>'ticket_id')::uuid
+         WHEN al.action = 'ticket.sla_warning' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
      WHERE ${notificationsWhereClause()}

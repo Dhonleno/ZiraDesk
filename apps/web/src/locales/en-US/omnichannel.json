@@ -92,6 +92,16 @@
       "noData": "No data for the selected period",
       "allCategories": "All categories",
       "tickets": "tickets"
+    },
+    "ticketCsat": {
+      "title": "Ticket CSAT",
+      "avgScore": "Average score",
+      "responses": "Responses",
+      "responseRate": "Response rate",
+      "distribution": "Score distribution",
+      "byAgent": "By agent",
+      "allAgents": "All agents",
+      "noData": "No ratings recorded in the period"
     }
   },
   "new": "New conversation",

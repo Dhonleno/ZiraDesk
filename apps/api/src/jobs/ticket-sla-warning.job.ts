@@ -3,6 +3,7 @@ import { prisma } from '../config/database.js';
 import { logger } from '../config/logger.js';
 import { bullmqConnection } from '../config/redis.js';
 import { sendEmail } from '../services/email.service.js';
+import { getSocketServer } from '../socket/index.js';
 import { buildTenantUrl } from '../utils/url.js';
 import { renderTicketSlaWarning } from '../modules/tickets/emails/ticket-sla-warning.email.js';
 
@@ -23,6 +24,7 @@ interface WarningTicketRow {
   ticket_number: number;
   title: string;
   due_date: Date;
+  assigned_to: string | null;
   assignee_email: string | null;
   creator_email: string | null;
 }
@@ -89,6 +91,7 @@ export async function processTicketSlaWarningForTenant(tenant: TenantRow): Promi
        t.ticket_number,
        t.title,
        t.due_date,
+       t.assigned_to,
        ua.email AS assignee_email,
        ${createdBySelect}
      FROM ${schema}.tickets t
@@ -142,6 +145,33 @@ export async function processTicketSlaWarningForTenant(tenant: TenantRow): Promi
         `UPDATE ${schema}.tickets SET sla_warning_sent_at = NOW() WHERE id = $1::uuid`,
         ticket.id,
       );
+
+      // Notificação in-app para o responsável (feed do NotificationCenter).
+      // Job roda fora de request → audit_logs precisa do prefixo de schema.
+      if (ticket.assigned_to) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO ${schema}.audit_logs (user_id, action, entity, entity_id, new_data)
+           VALUES ($1::uuid, 'ticket.sla_warning', 'ticket', $2::uuid, $3::jsonb)`,
+          ticket.assigned_to,
+          ticket.id,
+          JSON.stringify({
+            ticket_id: ticket.id,
+            ticket_title: ticket.title,
+            due_date: ticket.due_date,
+            minutes_until_breach: minutesUntilBreach,
+          }),
+        );
+
+        try {
+          getSocketServer().to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+            id: ticket.id,
+            type: 'ticket_sla_warning',
+            title: 'SLA próximo de vencer',
+            message: `O ticket "${ticket.title}" vence em breve.`,
+            href: `/tickets/${ticket.id}`,
+          });
+        } catch { /* socket não inicializado em testes */ }
+      }
 
       logger.info({ tenantId: tenant.id, ticketId: ticket.id, ticketNum }, '[TicketSLAWarning] Warning sent');
     } catch (err) {

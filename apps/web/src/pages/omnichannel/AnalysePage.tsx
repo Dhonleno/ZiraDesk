@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { MetricsPage } from './Metrics';
 import { PerformancePage } from './Performance';
 import { HistoryPage } from './History';
+import { TicketCsatMetrics } from './TicketCsatMetrics';
 
-type AnalyseTab = 'metrics' | 'performance' | 'history';
+type AnalyseTab = 'metrics' | 'performance' | 'history' | 'ticketCsat';
 
 export function AnalysePage() {
   const { t } = useTranslation('admin');
@@ -34,6 +35,13 @@ export function AnalysePage() {
         >
           {t('nav.tabs.history')}
         </button>
+        <button
+          type="button"
+          className={`omni-tab${activeTab === 'ticketCsat' ? ' active' : ''}`}
+          onClick={() => setActiveTab('ticketCsat')}
+        >
+          {t('nav.tabs.ticketCsat')}
+        </button>
       </div>
 
       {/* Desmonta/remonta ao trocar — cada sub-página mantém seu próprio filtro local */}
@@ -41,6 +49,7 @@ export function AnalysePage() {
         {activeTab === 'metrics' && <MetricsPage />}
         {activeTab === 'performance' && <PerformancePage />}
         {activeTab === 'history' && <HistoryPage />}
+        {activeTab === 'ticketCsat' && <TicketCsatMetrics />}
       </div>
     </div>
   );
