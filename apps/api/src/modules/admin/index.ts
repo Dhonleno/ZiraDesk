@@ -14,6 +14,7 @@ import { adminSkillsV2Routes } from './skills-v2/index.js';
 import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
 import { contactTagsRoutes } from './contact-tags/contact-tags.routes.js';
 import { adminTicketTypesRoutes } from './ticket-types/index.js';
+import { adminCustomFieldsRoutes } from './custom-fields/index.js';
 import { adminTicketCategoriesRoutes } from './ticket-categories/index.js';
 import { closeConfigRoutes } from './close-config/close-config.routes.js';
 import { aiAdminRoutes } from './ai/ai-admin.routes.js';
@@ -39,6 +40,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(adminSkillsV2Routes);
   await app.register(adminPauseReasonsRoutes);
   await app.register(adminTicketTypesRoutes);
+  await app.register(adminCustomFieldsRoutes);
   await app.register(adminTicketCategoriesRoutes);
   await app.register(closeConfigRoutes, { prefix: '/close-config' });
   await app.register(conversationTagsAdminRoutes, { prefix: '/conversation-tags' });

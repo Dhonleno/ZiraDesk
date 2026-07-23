@@ -106,6 +106,10 @@
         "noResults": "Ningún agente encontrado"
       }
     },
+    "customFields": {
+      "title": "Campos personalizados",
+      "requiredError": "El campo '{{field}}' es obligatorio"
+    },
     "actions": {
       "assign": "Asignar",
       "assignSuccess": "Ticket asignado",

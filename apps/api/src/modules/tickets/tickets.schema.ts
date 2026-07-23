@@ -15,6 +15,7 @@ const ticketFieldsSchema = z.object({
   department_id:   z.string().uuid().nullable().optional(),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
+  custom_fields:   z.record(z.string(), z.unknown()).optional(),
 });
 
 export const createTicketSchema = ticketFieldsSchema;

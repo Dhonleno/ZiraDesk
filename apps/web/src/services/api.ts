@@ -394,6 +394,41 @@ export interface TicketType {
   updated_at: string;
 }
 
+export type CustomFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select';
+
+export interface CustomFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  field_key: string;
+  field_type: CustomFieldType;
+  options: CustomFieldOption[];
+  required: boolean;
+  visible_in_portal: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomFieldCreatePayload {
+  name: string;
+  field_key: string;
+  field_type: CustomFieldType;
+  options?: CustomFieldOption[];
+  required?: boolean;
+  visible_in_portal?: boolean;
+  sort_order?: number;
+}
+
+export type CustomFieldUpdatePayload = Partial<Omit<CustomFieldCreatePayload, 'field_key' | 'field_type'>> & {
+  is_active?: boolean;
+};
+
 export interface VoiceConfig {
   id: string;
   tenantId: string;
@@ -2050,6 +2085,28 @@ export const adminApi = {
     },
   },
 
+  customFields: {
+    list: async (): Promise<CustomFieldDefinition[]> => {
+      const res = await api.get<{ success: boolean; data: CustomFieldDefinition[] }>('/admin/custom-fields');
+      return res.data.data;
+    },
+
+    create: async (data: CustomFieldCreatePayload): Promise<CustomFieldDefinition> => {
+      const res = await api.post<{ success: boolean; data: CustomFieldDefinition }>('/admin/custom-fields', data);
+      return res.data.data;
+    },
+
+    update: async (id: string, data: CustomFieldUpdatePayload): Promise<CustomFieldDefinition> => {
+      const res = await api.patch<{ success: boolean; data: CustomFieldDefinition }>(`/admin/custom-fields/${id}`, data);
+      return res.data.data;
+    },
+
+    delete: async (id: string): Promise<{ deleted: boolean; deactivated: boolean }> => {
+      const res = await api.delete<{ success: boolean; data: { deleted: boolean; deactivated: boolean } }>(`/admin/custom-fields/${id}`);
+      return res.data.data;
+    },
+  },
+
   ticketCategories: {
     list: async (): Promise<TicketCategory[]> => {
       const res = await api.get<{ success: boolean; data: TicketCategory[] }>('/admin/ticket-categories');
@@ -2753,6 +2810,7 @@ export interface CreateTicketPayload {
   source_conversation_id?: string;
   due_date?:       string;
   tags?:           string[];
+  custom_fields?:  Record<string, unknown>;
 }
 
 export interface CreateCommentPayload {

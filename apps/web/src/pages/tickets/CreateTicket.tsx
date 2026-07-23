@@ -15,6 +15,7 @@ import {
 } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
+import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import {
   buildCreateTicketPayload,
   getTicketConditionalRequirements,
@@ -38,6 +39,7 @@ interface CreateTicketForm {
   category: string;
   due_date: string;
   tags: string[];
+  custom_fields: Record<string, unknown>;
 }
 
 type SubmitMode = 'open' | 'new';
@@ -73,6 +75,7 @@ function buildDraft(form: CreateTicketForm): TicketCreateDraft {
     category: form.category,
     due_date: form.due_date || undefined,
     tags: form.tags,
+    custom_fields: form.custom_fields,
   };
 }
 
@@ -100,6 +103,7 @@ export default function CreateTicket() {
     category: '',
     due_date: '',
     tags: [],
+    custom_fields: {},
   });
 
   const [contactSearch, setContactSearch] = useState('');
@@ -119,6 +123,12 @@ export default function CreateTicket() {
     queryFn: adminApi.ticketCategories.list,
     staleTime: 60_000,
   });
+  const { data: customFieldDefs = [] } = useQuery({
+    queryKey: ['admin', 'custom-fields'],
+    queryFn: adminApi.customFields.list,
+    staleTime: 5 * 60_000,
+  });
+  const activeCustomFields = customFieldDefs.filter((field) => field.is_active);
   const selectedType = useMemo(
     () => ticketTypes.find((item) => item.id === form.type_id) ?? null,
     [form.type_id, ticketTypes],
@@ -184,6 +194,15 @@ export default function CreateTicket() {
         throw new Error(validation.errors[0] ?? 'Dados inválidos para criar ticket');
       }
 
+      const missingRequired = activeCustomFields.find((field) => {
+        if (!field.required) return false;
+        const value = form.custom_fields[field.field_key];
+        return value === undefined || value === null || value === '';
+      });
+      if (missingRequired) {
+        throw new Error(t('tickets.customFields.requiredError', { field: missingRequired.name }));
+      }
+
       const payload = buildCreateTicketPayload(draft);
       const ticket = await ticketsApi.create(payload);
 
@@ -218,6 +237,7 @@ export default function CreateTicket() {
         category: '',
         due_date: '',
         tags: [],
+        custom_fields: {},
       }));
       setContactName('');
       setOrgName('');
@@ -652,6 +672,24 @@ export default function CreateTicket() {
                 ))}
               </select>
             </div>
+
+            {activeCustomFields.map((field) => (
+              <div key={field.id} className="ct-field">
+                <label className="ct-label">
+                  {field.name}
+                  {field.required ? <span className="required"> *</span> : null}
+                </label>
+                <CustomFieldInput
+                  field={field}
+                  className="cf-input"
+                  value={form.custom_fields[field.field_key]}
+                  onChange={(value) => setForm((prev) => ({
+                    ...prev,
+                    custom_fields: { ...prev.custom_fields, [field.field_key]: value },
+                  }))}
+                />
+              </div>
+            ))}
           </aside>
         </div>
       </form>

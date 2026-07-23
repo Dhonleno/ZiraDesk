@@ -922,9 +922,9 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `INSERT INTO tickets
          (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
-          assigned_to, department_id, due_date, tags)
+          assigned_to, department_id, due_date, tags, custom_fields)
        VALUES
-         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[])
+         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[], $15::jsonb)
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
@@ -947,6 +947,7 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       finalDepartmentId,
       data.due_date        ?? null,
       tagsLiteral,
+      JSON.stringify(data.custom_fields ?? {}),
     );
 
     const ticket = rows[0]!;
@@ -1061,6 +1062,8 @@ export async function updateTicket(
     const assignedToValue = hasAssignedTo ? (data.assigned_to ?? null) : null;
     const hasDepartmentId = Object.prototype.hasOwnProperty.call(data, 'department_id');
     const departmentIdValue = hasDepartmentId ? (data.department_id ?? null) : null;
+    const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
+    const customFieldsValue = hasCustomFields ? JSON.stringify(data.custom_fields ?? {}) : null;
     let waitingReason: string | null | undefined;
     if (data.status === 'waiting') {
       waitingReason = data.waiting_reason ?? null;
@@ -1107,6 +1110,7 @@ export async function updateTicket(
          resolution_notes = COALESCE($12::text, resolution_notes),
          waiting_reason  = CASE WHEN $13::boolean THEN $14::text ELSE waiting_reason END,
          department_id   = CASE WHEN $16::boolean THEN $17::uuid ELSE department_id END,
+         custom_fields   = CASE WHEN $18::boolean THEN $19::jsonb ELSE custom_fields END,
          sla_paused_at    = ${slaPausedAtSql},
          sla_paused_duration_seconds = ${slaPausedDurationSql},
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
@@ -1138,6 +1142,8 @@ export async function updateTicket(
       id,
       hasDepartmentId,
       departmentIdValue,
+      hasCustomFields,
+      customFieldsValue,
     );
 
     if (!rows[0]) throw new NotFoundError('Ticket');

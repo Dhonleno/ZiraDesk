@@ -299,6 +299,16 @@ const NAV_GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        label: 'nav.customFields',
+        path: '/admin/custom-fields',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="2" y="3" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="2" y="9.5" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        ),
+      },
     ],
   },
   {

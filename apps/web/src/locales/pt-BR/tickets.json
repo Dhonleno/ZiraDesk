@@ -106,6 +106,10 @@
         "noResults": "Nenhum agente encontrado"
       }
     },
+    "customFields": {
+      "title": "Campos customizados",
+      "requiredError": "O campo '{{field}}' é obrigatório"
+    },
     "actions": {
       "assign": "Atribuir",
       "assignToMe": "A mim",

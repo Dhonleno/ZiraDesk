@@ -706,6 +706,24 @@
   color: var(--txt-3);
 }
 
+/* ── Campos customizados no CreateTicket ──────────────────────────────────── */
+.ct-field .cf-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 0.75rem;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+}
+
+.ct-field .cf-input:focus {
+  border-color: var(--teal);
+}
+
 .ticket-comment {
   display: flex;
   gap: 10px;

@@ -106,6 +106,10 @@
         "noResults": "No agent found"
       }
     },
+    "customFields": {
+      "title": "Custom fields",
+      "requiredError": "The field '{{field}}' is required"
+    },
     "actions": {
       "assign": "Assign",
       "assignSuccess": "Ticket assigned",

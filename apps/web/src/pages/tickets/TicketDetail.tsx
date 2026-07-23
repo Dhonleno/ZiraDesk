@@ -27,6 +27,7 @@ import { SourceBadge } from '../../components/tickets/SourceBadge';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
 import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { TicketComments } from '../../components/tickets/TicketComments';
+import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { isTicketReadonly } from '../../utils/ticketPermissions';
@@ -249,6 +250,7 @@ export function TicketDetailPage() {
   const [sidebarCategory, setSidebarCategory] = useState('');
   const [sidebarTagInput, setSidebarTagInput] = useState('');
   const [sidebarTags, setSidebarTags] = useState<string[]>([]);
+  const [sidebarCustomFields, setSidebarCustomFields] = useState<Record<string, unknown>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
@@ -311,6 +313,13 @@ export function TicketDetailPage() {
     queryFn: adminApi.ticketTypes.list,
     staleTime: 60_000,
   });
+
+  const { data: customFieldDefs = [] } = useQuery({
+    queryKey: ['admin', 'custom-fields'],
+    queryFn: adminApi.customFields.list,
+    staleTime: 5 * 60_000,
+  });
+  const activeCustomFields = customFieldDefs.filter((field) => field.is_active);
 
   const { data: categoriesData } = useQuery({
     queryKey: ['ticket-categories-options'],
@@ -494,6 +503,7 @@ export function TicketDetailPage() {
     setSidebarAssignedTo(ticket.assigned_to ?? '');
     setSidebarDueDate(ticket.due_date ? new Date(ticket.due_date).toISOString().slice(0, 10) : '');
     setSidebarCategory(ticket.category ?? '');
+    setSidebarCustomFields((ticket.custom_fields as Record<string, unknown>) ?? {});
     setSidebarTags(ticket.tags ?? []);
   }, [ticket]);
 
@@ -1375,6 +1385,27 @@ export function TicketDetailPage() {
                 />
               </div>
             </section>
+
+            {activeCustomFields.length > 0 ? (
+              <section className="ticket-sidebar-section">
+                <h2>{t('tickets.customFields.title')}</h2>
+                {activeCustomFields.map((field) => (
+                  <label key={field.id} className="ticket-sidebar-field">
+                    <span>{field.name}{field.required ? ' *' : ''}</span>
+                    <CustomFieldInput
+                      field={field}
+                      value={sidebarCustomFields[field.field_key]}
+                      disabled={readonly}
+                      onChange={(value) => {
+                        const next = { ...sidebarCustomFields, [field.field_key]: value };
+                        setSidebarCustomFields(next);
+                        queuePatch({ custom_fields: next });
+                      }}
+                    />
+                  </label>
+                ))}
+              </section>
+            ) : null}
           </aside>
         </div>
       </section>

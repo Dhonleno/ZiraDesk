@@ -857,6 +857,50 @@ describe('Tickets integration', () => {
     }
   });
 
+  it('POST /api/tickets salva custom_fields e GET retorna', async () => {
+    const created = await createTestApp()
+      .post('/api/tickets')
+      .set(authHeader())
+      .send({
+        title: uniqueText('Ticket CF'),
+        assigned_to: TEST_USER_ID,
+        custom_fields: { tier: 'gold' },
+      });
+
+    expect(created.status).toBe(201);
+
+    const response = await createTestApp()
+      .get(`/api/tickets/${created.body.data.id}`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.custom_fields).toEqual({ tier: 'gold' });
+  });
+
+  it('PATCH /api/tickets/:id atualiza custom_fields', async () => {
+    const ticket = await createTicket({ custom_fields: { tier: 'gold' } });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader())
+      .send({ custom_fields: { tier: 'silver' } });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.custom_fields).toEqual({ tier: 'silver' });
+  });
+
+  it('PATCH /api/tickets/:id sem custom_fields preserva o valor existente', async () => {
+    const ticket = await createTicket({ custom_fields: { tier: 'gold' } });
+
+    const response = await createTestApp()
+      .patch(`/api/tickets/${ticket.id}`)
+      .set(authHeader())
+      .send({ priority: 'high' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.custom_fields).toEqual({ tier: 'gold' });
+  });
+
   it('PATCH /api/tickets/:id — agente designado fecha ticket resolved → 200', async () => {
     const ticket = await createTicket({ status: 'in_progress', assigned_to: TEST_USER_ID });
 

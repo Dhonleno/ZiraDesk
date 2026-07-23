@@ -55,6 +55,34 @@
         "saved": "Política de SLA salva com sucesso"
       }
     },
+    "customFields": {
+      "title": "Campos customizados",
+      "subtitle": "Defina campos adicionais para coletar informações específicas nos tickets",
+      "new": "Novo campo",
+      "editTitle": "Editar campo",
+      "name": "Nome",
+      "fieldKey": "Chave do campo",
+      "fieldType": "Tipo",
+      "options": "Opções",
+      "optionLabel": "Rótulo",
+      "optionValue": "Valor",
+      "addOption": "Adicionar opção",
+      "required": "Obrigatório",
+      "visiblePortal": "Visível no portal",
+      "inactive": "Inativo",
+      "saved": "Campo salvo com sucesso",
+      "deleted": "Campo removido",
+      "nameRequired": "Informe o nome do campo",
+      "keyInvalid": "Chave inválida: apenas letras minúsculas, números e _ (começando por letra)",
+      "optionsRequired": "Adicione ao menos uma opção",
+      "types": {
+        "text": "Texto",
+        "number": "Número",
+        "date": "Data",
+        "boolean": "Sim/Não",
+        "select": "Lista de opções"
+      }
+    },
     "queueConfig": {
       "title": "Notificações de Fila",
       "subtitle": "Configure as mensagens enviadas automaticamente durante o atendimento na fila",
@@ -1125,6 +1153,7 @@
     "queueConfig": "Notificações de Fila",
     "ticketAutoAssign": "Auto-atribuição de Tickets",
     "slaPolicy": "Política de SLA",
+    "customFields": "Campos customizados",
     "settings": "Configurações",
     "lgpd": "LGPD",
     "history": "Histórico",

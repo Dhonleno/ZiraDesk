@@ -26,6 +26,7 @@ export interface TicketCreateDraft {
   source_conversation_id?: string | undefined;
   due_date?: string | undefined;
   tags?: string[] | undefined;
+  custom_fields?: Record<string, unknown> | undefined;
   require_due_date_for_urgent_override?: boolean | undefined;
   require_category_for_waiting_override?: boolean | undefined;
 }
@@ -189,6 +190,10 @@ export function buildCreateTicketPayload(draft: TicketCreateDraft): CreateTicket
 
   const tags = (draft.tags ?? []).map((item) => item.trim()).filter(Boolean);
   if (tags.length > 0) payload.tags = tags;
+
+  if (draft.custom_fields && Object.keys(draft.custom_fields).length > 0) {
+    payload.custom_fields = draft.custom_fields;
+  }
 
   return payload;
 }

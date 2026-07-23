@@ -859,6 +859,32 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "${schemaName}".ticket_custom_field_definitions (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      field_key   VARCHAR(50)  NOT NULL,
+      field_type  VARCHAR(20)  NOT NULL,
+      options     JSONB        NOT NULL DEFAULT '[]',
+      required    BOOLEAN      NOT NULL DEFAULT false,
+      visible_in_portal BOOLEAN NOT NULL DEFAULT false,
+      sort_order  INTEGER      NOT NULL DEFAULT 0,
+      is_active   BOOLEAN      NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_ticket_custom_field_key"
+    ON "${schemaName}".ticket_custom_field_definitions (LOWER(field_key))
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_ticket_custom_field_name"
+    ON "${schemaName}".ticket_custom_field_definitions (LOWER(name))
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "${schemaName}".ticket_categories (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(100) NOT NULL,

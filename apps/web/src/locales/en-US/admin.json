@@ -55,6 +55,34 @@
         "saved": "SLA policy saved successfully"
       }
     },
+    "customFields": {
+      "title": "Custom fields",
+      "subtitle": "Define additional fields to collect specific information on tickets",
+      "new": "New field",
+      "editTitle": "Edit field",
+      "name": "Name",
+      "fieldKey": "Field key",
+      "fieldType": "Type",
+      "options": "Options",
+      "optionLabel": "Label",
+      "optionValue": "Value",
+      "addOption": "Add option",
+      "required": "Required",
+      "visiblePortal": "Visible in portal",
+      "inactive": "Inactive",
+      "saved": "Field saved successfully",
+      "deleted": "Field removed",
+      "nameRequired": "Enter the field name",
+      "keyInvalid": "Invalid key: lowercase letters, numbers and _ only (starting with a letter)",
+      "optionsRequired": "Add at least one option",
+      "types": {
+        "text": "Text",
+        "number": "Number",
+        "date": "Date",
+        "boolean": "Yes/No",
+        "select": "Options list"
+      }
+    },
     "queueConfig": {
       "title": "Queue Notifications",
       "subtitle": "Configure messages sent automatically during queue attendance",
@@ -1131,6 +1159,7 @@
     "queueConfig": "Queue Notifications",
     "ticketAutoAssign": "Ticket Auto-Assign",
     "slaPolicy": "SLA Policy",
+    "customFields": "Custom fields",
     "settings": "Settings",
     "lgpd": "LGPD",
     "history": "History",
