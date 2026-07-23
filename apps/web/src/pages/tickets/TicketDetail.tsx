@@ -257,6 +257,15 @@ export function TicketDetailPage() {
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const isMutatingRef = useRef(false);
+  const lastErrorRef = useRef<number>(0);
+
+  function reportUpdateError(message: string) {
+    const now = Date.now();
+    if (now - lastErrorRef.current < 2000) return;
+    lastErrorRef.current = now;
+    toast.error(message);
+  }
 
   const { data: ticket, isPending } = useQuery({
     queryKey: ['ticket', id],
@@ -304,6 +313,7 @@ export function TicketDetailPage() {
       subscribeToEvent<{ ticket?: Ticket; ticketId?: string }>('ticket:updated', (data) => {
         const updatedId = data.ticket?.id ?? data.ticketId;
         if (updatedId !== id) return;
+        if (isMutatingRef.current) return; // ignorar eco da própria mutation
 
         if (data.ticket) {
           queryClient.setQueryData(['ticket', id], data.ticket);
@@ -323,7 +333,15 @@ export function TicketDetailPage() {
   }, [id, queryClient]);
 
   const updateMutation = useMutation({
-    mutationFn: (patch: Partial<CreateTicketPayload>) => ticketsApi.update(id ?? '', patch),
+    mutationFn: (patch: Partial<CreateTicketPayload>) => {
+      isMutatingRef.current = true;
+      return ticketsApi.update(id ?? '', patch);
+    },
+    onSettled: () => {
+      // Liberar após a mutation completar (sucesso ou erro); delay pequeno
+      // para cobrir o eco assíncrono do próprio evento via socket.
+      setTimeout(() => { isMutatingRef.current = false; }, 800);
+    },
     onSuccess: (updated, variables) => {
       const previousStatus = ticket?.status;
       queryClient.setQueryData(['ticket', id], updated);
@@ -343,12 +361,18 @@ export function TicketDetailPage() {
       // mudar prioridade não mostra toast — a mudança visual no badge já é feedback suficiente.
     },
     onError: () => {
-      toast.error(t('tickets.errorUpdate'));
+      reportUpdateError(t('tickets.errorUpdate'));
     },
   });
 
   const claimMutation = useMutation({
-    mutationFn: () => ticketsApi.claim(id ?? ''),
+    mutationFn: () => {
+      isMutatingRef.current = true;
+      return ticketsApi.claim(id ?? '');
+    },
+    onSettled: () => {
+      setTimeout(() => { isMutatingRef.current = false; }, 800);
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData(['ticket', id], updated);
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -359,24 +383,30 @@ export function TicketDetailPage() {
     onError: (error: unknown) => {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 409) {
-          toast.error(t('tickets.actions.claimErrorConflict'));
+          reportUpdateError(t('tickets.actions.claimErrorConflict'));
           return;
         }
         if (error.response?.status === 403) {
-          toast.error(t('tickets.actions.claimErrorForbidden'));
+          reportUpdateError(t('tickets.actions.claimErrorForbidden'));
           return;
         }
         if (error.response?.status === 404) {
-          toast.error(t('tickets.actions.claimErrorNotFound'));
+          reportUpdateError(t('tickets.actions.claimErrorNotFound'));
           return;
         }
       }
-      toast.error(t('tickets.actions.claimErrorGeneric'));
+      reportUpdateError(t('tickets.actions.claimErrorGeneric'));
     },
   });
 
   const acceptMutation = useMutation({
-    mutationFn: () => ticketsApi.accept(id ?? ''),
+    mutationFn: () => {
+      isMutatingRef.current = true;
+      return ticketsApi.accept(id ?? '');
+    },
+    onSettled: () => {
+      setTimeout(() => { isMutatingRef.current = false; }, 800);
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData(['ticket', id], updated);
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -387,19 +417,19 @@ export function TicketDetailPage() {
     onError: (error: unknown) => {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 403) {
-          toast.error(t('tickets.errors.acceptForbidden'));
+          reportUpdateError(t('tickets.errors.acceptForbidden'));
           return;
         }
         if (error.response?.status === 409) {
-          toast.error(t('tickets.errors.acceptConflict'));
+          reportUpdateError(t('tickets.errors.acceptConflict'));
           return;
         }
         if (error.response?.status === 404) {
-          toast.error(t('tickets.errors.notFound'));
+          reportUpdateError(t('tickets.errors.notFound'));
           return;
         }
       }
-      toast.error(t('tickets.errorUpdate'));
+      reportUpdateError(t('tickets.errorUpdate'));
     },
   });
 
