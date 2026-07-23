@@ -49,6 +49,19 @@ export interface TenantSettings {
   };
 }
 
+export interface PublicTenantSettings {
+  agent_can_delete_tickets: boolean;
+  agent_can_export_tickets: boolean;
+  agent_can_manage_contacts: boolean;
+  agent_can_view_reports: boolean;
+  agent_can_transfer_conversations: boolean;
+  agent_can_manage_campaigns: boolean;
+  ticket_auto_assign: boolean;
+  sla_auto_enabled: boolean;
+  routing_skill_timeout_ms: number;
+  business_hours_enabled: boolean;
+}
+
 export interface MyProfile {
   id: string;
   name: string;
@@ -1594,6 +1607,13 @@ export const skillsV2Api = {
     const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
       `/admin/skills-v2/bot-options/${botOptionId}/${skillId}`,
     );
+    return res.data.data;
+  },
+};
+
+export const tenantApi = {
+  getPublicSettings: async (): Promise<PublicTenantSettings> => {
+    const res = await api.get<{ success: boolean; data: PublicTenantSettings }>('/admin/settings/public');
     return res.data.data;
   },
 };

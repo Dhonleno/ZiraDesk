@@ -1,5 +1,14 @@
 # Changelog — ZiraDesk
 
+## [0.9.8] — Settings públicos para agentes
+
+### Adicionado
+- API/Admin Settings: novo `GET /api/admin/settings/public`, autenticado para qualquer role do tenant, retorna somente permissões granulares de agente e flags operacionais não sensíveis.
+- Web/Tickets: listagem e detalhe passam a consumir settings públicos para espelhar `agent_can_export_tickets` e `agent_can_delete_tickets` na UI.
+
+### Segurança / Infraestrutura
+- Settings públicos usam payload allowlist e não expõem campos administrativos, tokens, chaves, secrets ou configurações de webhook/SMTP.
+
 ## [0.9.7] — Ajustes visuais no detalhe de tickets
 
 ### Corrigido

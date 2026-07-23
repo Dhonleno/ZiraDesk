@@ -30,9 +30,9 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
-import { isTicketReadonly } from '../../utils/ticketPermissions';
+import { canDeleteTicket, isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
-import { usePermission } from '../../hooks/usePermission';
+import { useTenantSettings } from '../../hooks/useTenantSettings';
 
 const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   open:        ['in_progress', 'waiting'],
@@ -236,8 +236,8 @@ export function TicketDetailPage() {
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
   const appTheme = useAppTheme();
-  const { can } = usePermission();
-  const canDeleteTicket = can('tickets:delete');
+  const { data: tenantSettings } = useTenantSettings();
+  const canDelete = canDeleteTicket(user ?? null, tenantSettings ?? null);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -659,7 +659,7 @@ export function TicketDetailPage() {
   }
 
   function toggleActionsMenu() {
-    if (!canDeleteTicket) return;
+    if (!canDelete) return;
 
     setActionsMenuOpen((isOpen) => {
       const nextOpen = !isOpen;
@@ -880,7 +880,7 @@ export function TicketDetailPage() {
               </button>
             ) : null}
 
-            {canDeleteTicket ? (
+            {canDelete ? (
               <div className="ticket-actions-wrap" ref={actionsMenuRef}>
                 <button
                   type="button"
@@ -900,7 +900,7 @@ export function TicketDetailPage() {
               </div>
             ) : null}
 
-            {canDeleteTicket && actionsMenuOpen && actionsMenuPosition ? createPortal(
+            {canDelete && actionsMenuOpen && actionsMenuPosition ? createPortal(
               <div
                 ref={actionsMenuPortalRef}
                 className="ticket-actions-menu"

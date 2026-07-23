@@ -5,6 +5,7 @@ import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import { updateSettingsSchema } from './settings.schema.js';
 import {
+  getPublicSettings,
   getSettings,
   logoMimeTypeFromFileName,
   readLogoFile,
@@ -37,6 +38,11 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const data = await getSettings(request.user.tenantId!);
+    return reply.send({ success: true, data });
+  });
+
+  app.get('/public', { preHandler: [authMiddleware, tenantSchemaFromJwt] }, async (request, reply) => {
+    const data = await getPublicSettings(request.user.tenantId!);
     return reply.send({ success: true, data });
   });
 

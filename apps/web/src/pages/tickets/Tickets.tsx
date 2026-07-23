@@ -35,8 +35,10 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { subscribeToEvent } from '../../services/socket';
+import { useTenantSettings } from '../../hooks/useTenantSettings';
 import { getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { getPriorityStyle } from '../../utils/ticketPriority';
+import { canExportTickets } from '../../utils/ticketPermissions';
 import { TicketTableRow } from '../../components/tickets/TicketTableRow';
 import { TicketsPagination } from '../../components/tickets/TicketsPagination';
 
@@ -292,6 +294,8 @@ export function TicketsPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
+  const { data: tenantSettings } = useTenantSettings();
+  const canExport = canExportTickets(user ?? null, tenantSettings ?? null);
 
   const assignedToParam = searchParams.get('assigned_to') ?? '';
   const priorityParam = parseTicketPriority(searchParams.get('priority'));
@@ -605,6 +609,8 @@ export function TicketsPage() {
   }
 
   async function handleExportCSV() {
+    if (!canExport) return;
+
     setIsExporting(true);
 
     try {
@@ -707,7 +713,7 @@ export function TicketsPage() {
           </div>
 
           <div className="tickets-header-actions">
-            <PermissionGate permission="tickets:view">
+            {canExport ? (
               <button type="button" className="tickets-secondary-btn" onClick={() => void handleExportCSV()} disabled={isExporting}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                   <path
@@ -719,7 +725,7 @@ export function TicketsPage() {
                 </svg>
                 {isExporting ? t('tickets.exporting') : t('tickets.exportCsv')}
               </button>
-            </PermissionGate>
+            ) : null}
 
             <PermissionGate permission="tickets:edit">
               <button type="button" className="tickets-primary-btn" onClick={() => navigate('/tickets/new')}>

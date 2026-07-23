@@ -108,6 +108,22 @@ function agentPermissionSettings(s: Record<string, unknown>) {
   };
 }
 
+export async function getPublicSettings(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { settings: true },
+  });
+  const s = (tenant?.settings as Record<string, unknown>) ?? {};
+
+  return {
+    ...agentPermissionSettings(s),
+    ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
+    sla_auto_enabled: (s.sla_auto_enabled as boolean | undefined) ?? false,
+    routing_skill_timeout_ms: resolveRoutingSkillTimeoutMs(s.routing_skill_timeout_ms),
+    business_hours_enabled: (s.business_hours_enabled as boolean | undefined) ?? false,
+  };
+}
+
 export async function readLogoFile(fileName: string): Promise<Buffer | null> {
   if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   try {

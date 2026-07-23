@@ -240,6 +240,96 @@ afterAll(async () => {
 });
 
 describe('Admin integration', () => {
+  it('GET /api/admin/settings/public permite agent e retorna apenas settings públicos', async () => {
+    const tenantA = await createTempTenant('settings-public');
+    const agent = await createTenantUser(tenantA, {
+      name: 'Public Settings Agent',
+      email: `public.settings.agent.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    await prisma.tenant.update({
+      where: { id: tenantA.id },
+      data: {
+        settings: {
+          agent_can_delete_tickets: true,
+          agent_can_export_tickets: false,
+          agent_can_manage_contacts: true,
+          agent_can_view_reports: false,
+          agent_can_transfer_conversations: true,
+          agent_can_manage_campaigns: false,
+          ticket_auto_assign: true,
+          sla_auto_enabled: true,
+          routing_skill_timeout_ms: 90_000,
+          business_hours_enabled: true,
+          smtp_password: 'smtp-secret',
+          webhook_secret: 'webhook-secret',
+          whatsapp_token: 'whatsapp-secret',
+          api_key: 'api-secret',
+        },
+      },
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/settings/public')
+      .set(authHeader(tenantA, agent));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toMatchObject({
+      agent_can_delete_tickets: true,
+      agent_can_export_tickets: false,
+      agent_can_manage_contacts: true,
+      agent_can_view_reports: false,
+      agent_can_transfer_conversations: true,
+      agent_can_manage_campaigns: false,
+      ticket_auto_assign: true,
+      sla_auto_enabled: true,
+      routing_skill_timeout_ms: 90_000,
+      business_hours_enabled: true,
+    });
+    expect(response.body.data).not.toHaveProperty('smtp_password');
+    expect(response.body.data).not.toHaveProperty('webhook_secret');
+    expect(response.body.data).not.toHaveProperty('whatsapp_token');
+    expect(response.body.data).not.toHaveProperty('api_key');
+  });
+
+  it('GET /api/admin/settings/public retorna agent_can_delete_tickets false para agent quando configurado', async () => {
+    const tenantA = await createTempTenant('settings-public-delete-false');
+    const agent = await createTenantUser(tenantA, {
+      name: 'Delete Disabled Agent',
+      email: `delete.disabled.agent.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    await prisma.tenant.update({
+      where: { id: tenantA.id },
+      data: { settings: { agent_can_delete_tickets: false } },
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/settings/public')
+      .set(authHeader(tenantA, agent));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.agent_can_delete_tickets).toBe(false);
+  });
+
+  it('GET /api/admin/settings continua negando agent', async () => {
+    const tenantA = await createTempTenant('settings-admin-restricted');
+    const agent = await createTenantUser(tenantA, {
+      name: 'Restricted Settings Agent',
+      email: `restricted.settings.agent.${uniqueToken()}@ziradesk.test`,
+      role: 'agent',
+    });
+
+    const response = await createTestApp()
+      .get('/api/admin/settings')
+      .set(authHeader(tenantA, agent));
+
+    expect(response.status).toBe(403);
+  });
+
   it('GET /api/admin/users lista usuários apenas do tenant autenticado', async () => {
     const tenantA = await createTempTenant('a');
     const tenantB = await createTempTenant('b');
