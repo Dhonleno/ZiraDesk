@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -26,11 +27,11 @@ import { SourceBadge } from '../../components/tickets/SourceBadge';
 import ChecklistSection from '../../components/tickets/ChecklistSection';
 import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { TicketComments } from '../../components/tickets/TicketComments';
-import { PermissionGate } from '../../components/ui/PermissionGate';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
+import { usePermission } from '../../hooks/usePermission';
 
 const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   open:        ['in_progress', 'waiting'],
@@ -228,6 +229,8 @@ export function TicketDetailPage() {
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
   const appTheme = useAppTheme();
+  const { can } = usePermission();
+  const canDeleteTicket = can('tickets:delete');
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -254,6 +257,7 @@ export function TicketDetailPage() {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [actionsMenuPosition, setActionsMenuPosition] = useState<{ top: number; right: number } | null>(null);
 
   const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload> | null>(null);
   const debouncedPatch = useDebounce(pendingPatch, 500);
@@ -261,6 +265,7 @@ export function TicketDetailPage() {
   const statusRef = useRef<HTMLDivElement | null>(null);
   const priorityRef = useRef<HTMLDivElement | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const actionsMenuPortalRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const isMutatingRef = useRef(false);
@@ -505,15 +510,19 @@ export function TicketDetailPage() {
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
-      if (statusRef.current && !statusRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (statusRef.current && !statusRef.current.contains(target)) {
         setStatusMenuOpen(false);
       }
 
-      if (priorityRef.current && !priorityRef.current.contains(event.target as Node)) {
+      if (priorityRef.current && !priorityRef.current.contains(target)) {
         setPriorityMenuOpen(false);
       }
 
-      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+      const clickedActionsTrigger = actionsMenuRef.current?.contains(target) ?? false;
+      const clickedActionsMenu = actionsMenuPortalRef.current?.contains(target) ?? false;
+      if (!clickedActionsTrigger && !clickedActionsMenu) {
         setActionsMenuOpen(false);
       }
     };
@@ -521,6 +530,28 @@ export function TicketDetailPage() {
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = actionsMenuRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setActionsMenuPosition({
+        top: rect.bottom + 6,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [actionsMenuOpen]);
 
   useEffect(() => {
     if (!id) return;
@@ -609,6 +640,24 @@ export function TicketDetailPage() {
     }
 
     setSidebarTagInput('');
+  }
+
+  function toggleActionsMenu() {
+    if (!canDeleteTicket) return;
+
+    setActionsMenuOpen((isOpen) => {
+      const nextOpen = !isOpen;
+      if (nextOpen) {
+        const rect = actionsMenuRef.current?.getBoundingClientRect();
+        if (rect) {
+          setActionsMenuPosition({
+            top: rect.bottom + 6,
+            right: Math.max(8, window.innerWidth - rect.right),
+          });
+        }
+      }
+      return nextOpen;
+    });
   }
 
   async function handleDelete() {
@@ -815,38 +864,50 @@ export function TicketDetailPage() {
               </button>
             ) : null}
 
-            <div className="ticket-actions-wrap" ref={actionsMenuRef}>
-              <button
-                type="button"
-                className="ticket-actions-trigger"
-                aria-label={t('tickets.actions.edit')}
-                title={t('tickets.actions.edit')}
-                onClick={() => setActionsMenuOpen((v) => !v)}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                  <circle cx="7" cy="2.5" r="1.2" fill="currentColor" />
-                  <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-                  <circle cx="7" cy="11.5" r="1.2" fill="currentColor" />
-                </svg>
-              </button>
+            {canDeleteTicket ? (
+              <div className="ticket-actions-wrap" ref={actionsMenuRef}>
+                <button
+                  type="button"
+                  className="ticket-actions-trigger"
+                  aria-label={t('tickets.actions.more')}
+                  title={t('tickets.actions.more')}
+                  aria-haspopup="menu"
+                  aria-expanded={actionsMenuOpen}
+                  onClick={toggleActionsMenu}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <circle cx="7" cy="2.5" r="1.2" fill="currentColor" />
+                    <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                    <circle cx="7" cy="11.5" r="1.2" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
 
-              {actionsMenuOpen ? (
-                <div className="ticket-actions-menu">
-                  <PermissionGate permission="tickets:delete">
-                    <button
-                      type="button"
-                      className="ticket-actions-menu-item danger"
-                      onClick={() => {
-                        setActionsMenuOpen(false);
-                        setShowDeleteConfirm(true);
-                      }}
-                    >
-                      {t('tickets.delete')}
-                    </button>
-                  </PermissionGate>
-                </div>
-              ) : null}
-            </div>
+            {canDeleteTicket && actionsMenuOpen && actionsMenuPosition ? createPortal(
+              <div
+                ref={actionsMenuPortalRef}
+                className="ticket-actions-menu"
+                role="menu"
+                style={{
+                  top: actionsMenuPosition.top,
+                  right: actionsMenuPosition.right,
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ticket-actions-menu-item danger"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    setShowDeleteConfirm(true);
+                  }}
+                >
+                  {t('tickets.delete')}
+                </button>
+              </div>,
+              document.body,
+            ) : null}
           </div>
         </header>
 

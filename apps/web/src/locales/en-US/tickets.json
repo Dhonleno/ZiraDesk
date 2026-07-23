@@ -123,6 +123,7 @@
       "reopen": "Reopen",
       "cancel": "Cancel",
       "edit": "Edit",
+      "more": "More actions",
       "delete": "Delete",
       "removeTag": "Remove {{tag}}"
     },

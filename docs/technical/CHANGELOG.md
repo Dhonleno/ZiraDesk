@@ -1,5 +1,10 @@
 # Changelog — ZiraDesk
 
+## [0.9.4] — Correção do menu de ações do detalhe de tickets
+
+### Corrigido
+- Tickets: o menu de três pontos do detalhe não abre mais vazio para perfis sem permissão de exclusão e passa a renderizar fora dos painéis com `overflow`, evitando corte visual no cabeçalho.
+
 ## [0.9.3] — Correção de anexos órfãos em tickets
 
 ### Adicionado

@@ -4616,14 +4616,12 @@
 }
 
 .ticket-actions-menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
+  position: fixed;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: var(--r);
   box-shadow: var(--shadow-pop);
-  z-index: 100;
+  z-index: 1200;
   min-width: 170px;
   padding: 4px 0;
 }
