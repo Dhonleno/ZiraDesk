@@ -11,7 +11,8 @@
       "waiting": "Aguardando",
       "resolved": "Resolvido",
       "closed": "Fechado",
-      "all": "Todos"
+      "all": "Todos",
+      "resolvedBanner": "Este ticket foi resolvido. Aguardando avaliação do cliente ou fechamento."
     },
     "priority": {
       "low": "Baixa",
@@ -105,6 +106,10 @@
       "assign": "Atribuir",
       "assignToMe": "A mim",
       "accept": "Aceitar",
+      "acceptSuccess": "Ticket aceito com sucesso",
+      "resolveSuccess": "Ticket resolvido",
+      "closeSuccess": "Ticket fechado",
+      "reopenSuccess": "Ticket reaberto",
       "claim": "Assumir da fila",
       "claimSuccess": "Ticket assumido com sucesso",
       "claimErrorConflict": "Este ticket já foi assumido por outro agente",

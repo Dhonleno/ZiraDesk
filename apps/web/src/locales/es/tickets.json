@@ -11,7 +11,8 @@
       "waiting": "En espera",
       "resolved": "Resuelto",
       "closed": "Cerrado",
-      "all": "Todos"
+      "all": "Todos",
+      "resolvedBanner": "Este ticket ha sido resuelto. Esperando evaluación del cliente o cierre."
     },
     "priority": {
       "low": "Baja",
@@ -104,6 +105,10 @@
     "actions": {
       "assign": "Asignar",
       "accept": "Aceptar",
+      "acceptSuccess": "Ticket aceptado",
+      "resolveSuccess": "Ticket resuelto",
+      "closeSuccess": "Ticket cerrado",
+      "reopenSuccess": "Ticket reabierto",
       "assignToMe": "Asignarme",
       "claim": "Reclamar de la cola",
       "claimSuccess": "Ticket reclamado con éxito",

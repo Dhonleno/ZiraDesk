@@ -11,7 +11,8 @@
       "waiting": "Waiting",
       "resolved": "Resolved",
       "closed": "Closed",
-      "all": "All"
+      "all": "All",
+      "resolvedBanner": "This ticket has been resolved. Awaiting customer feedback or closure."
     },
     "priority": {
       "low": "Low",
@@ -104,6 +105,10 @@
     "actions": {
       "assign": "Assign",
       "accept": "Accept",
+      "acceptSuccess": "Ticket accepted",
+      "resolveSuccess": "Ticket resolved",
+      "closeSuccess": "Ticket closed",
+      "reopenSuccess": "Ticket reopened",
       "assignToMe": "Assign to me",
       "claim": "Claim from queue",
       "claimSuccess": "Ticket claimed successfully",

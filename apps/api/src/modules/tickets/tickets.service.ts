@@ -1297,6 +1297,31 @@ export async function updateTicket(
     })().catch(() => {});
   }
 
+  if ((old.status === 'resolved' || old.status === 'closed') && ticket.status === 'open') {
+    await withOptionalSchema(schemaName, (db) =>
+      db.$executeRawUnsafe(
+        `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+         VALUES ($1::uuid, 'ticket.reopened', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+        updatedBy,
+        id,
+        JSON.stringify({ status: old.status }),
+        JSON.stringify({ status: 'open', assigned_to: ticket.assigned_to }),
+      ),
+    );
+
+    if (ticket.assigned_to && ticket.assigned_to !== updatedBy) {
+      try {
+        getSocketServer().to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+          id,
+          type: 'ticket_reopened',
+          title: 'Ticket reaberto',
+          message: `O ticket "${ticket.title}" foi reaberto.`,
+          href: `/tickets/${id}`,
+        });
+      } catch { /* socket não inicializado em testes */ }
+    }
+  }
+
   void dispatchWebhook(tenantId, 'ticket.updated', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });

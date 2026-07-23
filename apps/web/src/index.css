@@ -4645,6 +4645,18 @@
   color: var(--red);
 }
 
+.ticket-resolved-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: var(--green-dim);
+  border-bottom: 1px solid var(--green-dim);
+  font-size: 12px;
+  color: var(--green);
+  flex-shrink: 0;
+}
+
 .ticket-detail-v2-layout {
   flex: 1;
   min-height: 0;

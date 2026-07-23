@@ -3299,6 +3299,7 @@ export interface NotificationItem {
   id: string;
   type:
     | 'ticket_assigned'
+    | 'ticket_reopened'
     | 'conversation_assigned'
     | 'ticket_comment'
     | 'conversation_message'

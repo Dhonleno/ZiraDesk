@@ -460,13 +460,27 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
   });
 
   useEffect(() => {
-    const unsub = subscribeToEvent<{ comment?: TicketComment; ticketId?: string }>('ticket:comment_added', (data) => {
-      const receivedTicketId = data.ticketId ?? data.comment?.ticket_id;
-      if (receivedTicketId === ticketId) {
-        void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
-      }
-    });
-    return unsub;
+    const unsubscribers = [
+      subscribeToEvent<{ comment?: TicketComment; ticketId?: string }>('ticket:comment_added', (data) => {
+        const receivedTicketId = data.ticketId ?? data.comment?.ticket_id;
+        if (receivedTicketId === ticketId) {
+          void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+        }
+      }),
+      subscribeToEvent<{ ticketId?: string }>('ticket:comment_updated', (data) => {
+        if (data.ticketId === ticketId) {
+          void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+        }
+      }),
+      subscribeToEvent<{ ticketId?: string }>('ticket:comment_deleted', (data) => {
+        if (data.ticketId === ticketId) {
+          void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
+        }
+      }),
+    ];
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, [ticketId, queryClient]);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
   adminApi,
   ticketsApi,
   type CreateTicketPayload,
+  type Ticket,
   type TicketAttachment,
   type TicketPriority,
   type TicketStatus,
@@ -17,6 +18,7 @@ import {
 } from '../../services/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
+import { subscribeToEvent } from '../../services/socket';
 import { useDebounce } from '../../hooks/useDebounce';
 import { PageShell } from '../../components/layout/PageShell';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
@@ -295,13 +297,50 @@ export function TicketDetailPage() {
     staleTime: 60_000,
   });
 
+  useEffect(() => {
+    if (!id) return undefined;
+
+    const unsubscribers = [
+      subscribeToEvent<{ ticket?: Ticket; ticketId?: string }>('ticket:updated', (data) => {
+        const updatedId = data.ticket?.id ?? data.ticketId;
+        if (updatedId !== id) return;
+
+        if (data.ticket) {
+          queryClient.setQueryData(['ticket', id], data.ticket);
+        } else {
+          void queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+        }
+      }),
+      subscribeToEvent<{ ticketId?: string }>('ticket:event', (data) => {
+        if (data.ticketId !== id) return;
+        void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      }),
+    ];
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [id, queryClient]);
+
   const updateMutation = useMutation({
     mutationFn: (patch: Partial<CreateTicketPayload>) => ticketsApi.update(id ?? '', patch),
-    onSuccess: (updated) => {
+    onSuccess: (updated, variables) => {
+      const previousStatus = ticket?.status;
       queryClient.setQueryData(['ticket', id], updated);
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
       void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
       void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+
+      // Toast contextual por tipo de mudança
+      if (variables.status === 'resolved') {
+        toast.success(t('tickets.actions.resolveSuccess'));
+      } else if (variables.status === 'closed') {
+        toast.success(t('tickets.actions.closeSuccess'));
+      } else if (variables.status === 'open' && (previousStatus === 'resolved' || previousStatus === 'closed')) {
+        toast.success(t('tickets.actions.reopenSuccess'));
+      }
+      // Mudar status para outro status intermediário (ex.: waiting → open) ou
+      // mudar prioridade não mostra toast — a mudança visual no badge já é feedback suficiente.
     },
     onError: () => {
       toast.error(t('tickets.errorUpdate'));
@@ -343,6 +382,7 @@ export function TicketDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['tickets'] });
       void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
       void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      toast.success(t('tickets.actions.acceptSuccess'));
     },
     onError: (error: unknown) => {
       if (axios.isAxiosError(error)) {
@@ -762,6 +802,16 @@ export function TicketDetailPage() {
             </div>
           </div>
         </header>
+
+        {ticket.status === 'resolved' ? (
+          <div className="ticket-resolved-banner">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M4.5 7.2l1.8 1.8 3.2-3.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>{t('tickets.status.resolvedBanner')}</span>
+          </div>
+        ) : null}
 
         {readonly && ticket.status !== 'resolved' && ticket.status !== 'closed' ? (
           <div

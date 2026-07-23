@@ -3,6 +3,7 @@ import { quoteIdent } from '../omnichannel/conversations/protocols.js';
 
 type NotificationType =
   | 'ticket_assigned'
+  | 'ticket_reopened'
   | 'conversation_assigned'
   | 'ticket_comment'
   | 'conversation_message'
@@ -88,6 +89,22 @@ function toNotification(row: NotificationRow): NotificationItem {
       type: 'ticket_assigned',
       title: 'Ticket atribuído',
       message: row.ticket_title ? `Você recebeu o ticket "${row.ticket_title}".` : 'Você recebeu um novo ticket.',
+      read: row.read,
+      created_at: row.created_at,
+      href: `/tickets/${row.entity_id ?? ''}`,
+      data: {
+        ...(row.new_data ?? {}),
+        title: row.ticket_title,
+      },
+    };
+  }
+
+  if (row.action === 'ticket.reopened') {
+    return {
+      id: row.id,
+      type: 'ticket_reopened',
+      title: 'Ticket reaberto',
+      message: row.ticket_title ? `O ticket "${row.ticket_title}" foi reaberto.` : 'Um ticket foi reaberto.',
       read: row.read,
       created_at: row.created_at,
       href: `/tickets/${row.entity_id ?? ''}`,
@@ -250,6 +267,10 @@ function notificationsWhereClause(): string {
     al.action = 'ticket.assigned'
     AND al.new_data->>'assigned_to' = $1
   ) OR (
+    al.action = 'ticket.reopened'
+    AND al.new_data->>'assigned_to' = $1
+    AND (al.user_id IS NULL OR al.user_id <> $1::uuid)
+  ) OR (
     al.action = 'conversation.assigned'
     AND al.new_data->>'assigned_to' = $1
   ) OR (
@@ -306,6 +327,7 @@ export async function listNotifications(
      LEFT JOIN ${ticketsRef} t
        ON t.id = CASE
          WHEN al.action = 'ticket.assigned' THEN al.entity_id
+         WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
@@ -385,6 +407,7 @@ export async function markAllNotificationsRead(userId: string, schemaName: strin
      LEFT JOIN ${ticketsRef} t
        ON t.id = CASE
          WHEN al.action = 'ticket.assigned' THEN al.entity_id
+         WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
@@ -443,6 +466,7 @@ export async function deleteAllReadNotifications(userId: string, schemaName: str
      LEFT JOIN ${ticketsRef} t
        ON t.id = CASE
          WHEN al.action = 'ticket.assigned' THEN al.entity_id
+         WHEN al.action = 'ticket.reopened' THEN al.entity_id
          WHEN al.action = 'ticket.comment_added' THEN (al.new_data->>'ticket_id')::uuid
          ELSE NULL
        END
