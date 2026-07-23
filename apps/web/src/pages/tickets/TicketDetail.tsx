@@ -202,7 +202,13 @@ function AttachmentCard({
           <AuthedImage src={attachment.file_url} alt={attachment.filename} />
         </a>
       ) : (
-        <a href={attachment.file_url} target="_blank" rel="noreferrer" className="ticket-attachment-file">
+        <a
+          href={attachment.file_url}
+          target="_blank"
+          rel="noreferrer"
+          className="ticket-attachment-file"
+          data-ext={attachment.filename.split('.').pop() ?? 'file'}
+        >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
             <path d="M4 2.5h6l4 4v9A1.5 1.5 0 0 1 12.5 17h-8A1.5 1.5 0 0 1 3 15.5v-11A2 2 0 0 1 4 2.5Z" stroke="currentColor" strokeWidth="1.3" />
             <path d="M10 2.5v4h4" stroke="currentColor" strokeWidth="1.3" />
@@ -1225,24 +1231,21 @@ export function TicketDetailPage() {
 
             <section className="ticket-sidebar-section">
               <h2>{t('tickets.detail.sections.assignment')}</h2>
-              <label className="ticket-sidebar-field">
-                <span>{t('tickets.fields.assignedTo')}</span>
-                <select
-                  id="ticket-assignee-select"
-                  value={sidebarAssignedTo}
-                  disabled={readonly}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setSidebarAssignedTo(value);
-                    queuePatch({ assigned_to: value || null });
-                  }}
-                >
-                  <option value="">{t('tickets.fields.noResponsible')}</option>
-                  {(agentsData?.data ?? []).map((agent) => (
-                    <option key={agent.id} value={agent.id}>{agent.name}</option>
-                  ))}
-                </select>
-              </label>
+              <select
+                id="ticket-assignee-select"
+                value={sidebarAssignedTo}
+                disabled={readonly}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSidebarAssignedTo(value);
+                  queuePatch({ assigned_to: value || null });
+                }}
+              >
+                <option value="">{t('tickets.fields.noResponsible')}</option>
+                {(agentsData?.data ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                ))}
+              </select>
 
               <button
                 type="button"
@@ -1281,56 +1284,53 @@ export function TicketDetailPage() {
               </div>
             </section>
 
-            <section className="ticket-sidebar-section">
+            <section className={`ticket-sidebar-section ${dueState}`}>
               <h2>{t('tickets.detail.sections.dueDate')}</h2>
-              <label className={`ticket-sidebar-field ${dueState}`}>
-                <span>{t('tickets.fields.dueDate')}</span>
-                <input
-                  className="ticket-due-date-input"
-                  type="date"
-                  value={sidebarDueDate}
-                  disabled={readonly}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setSidebarDueDate(value);
-                    queuePatch({ due_date: value ? `${value}T00:00:00.000Z` : '' });
+              <input
+                className="ticket-due-date-input"
+                type="date"
+                value={sidebarDueDate}
+                disabled={readonly}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSidebarDueDate(value);
+                  queuePatch({ due_date: value ? `${value}T00:00:00.000Z` : '' });
+                }}
+              />
+
+              {ticket.due_date && (sla.status === 'warning' || sla.status === 'overdue') ? (
+                <span
+                  className={`ticket-sla-badge ${sla.status}`}
+                  style={{
+                    background: getSlaBg(sla.status),
+                    color: getSlaColor(sla.status),
+                    borderColor: `${getSlaColor(sla.status)}40`,
                   }}
-                />
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
+                    <circle cx="5.5" cy="5.5" r="4.2" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M5.5 3.2v2.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    <circle cx="5.5" cy="7.6" r=".6" fill="currentColor" />
+                  </svg>
+                  {slaLabel}
+                </span>
+              ) : null}
 
-                {ticket.due_date && (sla.status === 'warning' || sla.status === 'overdue') ? (
-                  <span
-                    className={`ticket-sla-badge ${sla.status}`}
+              {dueDateFormatted ? (
+                <span className="ticket-sla-date">{dueDateFormatted}</span>
+              ) : null}
+
+              {slaProgress !== null ? (
+                <div className="ticket-sla-progress-track">
+                  <div
+                    className="ticket-sla-progress-fill"
                     style={{
-                      background: getSlaBg(sla.status),
-                      color: getSlaColor(sla.status),
-                      borderColor: `${getSlaColor(sla.status)}40`,
+                      width: `${slaProgress}%`,
+                      background: getSlaColor(sla.status),
                     }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden>
-                      <circle cx="5.5" cy="5.5" r="4.2" stroke="currentColor" strokeWidth="1.2" />
-                      <path d="M5.5 3.2v2.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                      <circle cx="5.5" cy="7.6" r=".6" fill="currentColor" />
-                    </svg>
-                    {slaLabel}
-                  </span>
-                ) : null}
-
-                {dueDateFormatted ? (
-                  <span className="ticket-sla-date">{dueDateFormatted}</span>
-                ) : null}
-
-                {slaProgress !== null ? (
-                  <div className="ticket-sla-progress-track">
-                    <div
-                      className="ticket-sla-progress-fill"
-                      style={{
-                        width: `${slaProgress}%`,
-                        background: getSlaColor(sla.status),
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </label>
+                  />
+                </div>
+              ) : null}
             </section>
 
             <section className="ticket-sidebar-section">

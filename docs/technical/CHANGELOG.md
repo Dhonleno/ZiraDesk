@@ -1,5 +1,16 @@
 # Changelog — ZiraDesk
 
+## [0.9.7] — Ajustes visuais no detalhe de tickets
+
+### Corrigido
+- Tickets: removidos labels duplicados nas seções de atribuição e prazo do painel lateral, preservando o destaque de prazo vencido.
+- Tickets: card de anexos do detalhe recebeu hover, badge de extensão e botão de remoção com estados visuais alinhados ao design system.
+
+## [0.9.6] — Correção visual dos checkboxes do checklist
+
+### Corrigido
+- Tickets: checkboxes do checklist no detalhe passam a usar estilo customizado com tokens do design system, evitando aparência nativa inconsistente entre navegadores.
+
 ## [0.9.5] — Correção do toggle de SLA automático
 
 ### Corrigido

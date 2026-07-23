@@ -1333,12 +1333,36 @@
   background: var(--bg-3);
 }
 
-.checklist-checkbox {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--teal);
+.checklist-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--bg-3);
   cursor: pointer;
   flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+}
+
+.checklist-item input[type="checkbox"]:checked {
+  background: var(--teal);
+  border-color: var(--teal);
+}
+
+.checklist-item input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
 
 .checklist-label {
@@ -5155,9 +5179,14 @@
 
 .ticket-attachment-item {
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-3);
+  transition: border-color 0.15s;
+}
+
+.ticket-attachment-item:hover {
+  border-color: var(--line-2);
 }
 
 .ticket-attachment-thumb {
@@ -5173,43 +5202,68 @@
 }
 
 .ticket-attachment-file {
-  height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--txt-2);
+  height: 88px;
+  background: var(--bg-4);
+  color: var(--txt-3);
+  font-size: 11px;
+  text-decoration: none;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ticket-attachment-file::before {
+  content: attr(data-ext);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--teal);
+  text-transform: uppercase;
 }
 
 .ticket-attachment-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
   padding: 6px 8px;
+  font-size: 11px;
+  color: var(--txt-2);
+  border-top: 1px solid var(--line);
+  gap: 4px;
 }
 
 .ticket-attachment-meta span {
-  min-width: 0;
-  flex: 1;
-  font-size: 11px;
-  color: var(--txt-2);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .ticket-attachment-meta button {
-  border: none;
-  background: transparent;
-  color: var(--txt-3);
-  cursor: pointer;
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
   border-radius: 50%;
+  border: none;
+  background: var(--bg-4);
+  color: var(--txt-3);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
 }
 
 .ticket-attachment-meta button:hover {
-  color: var(--red);
   background: var(--red-dim);
+  color: var(--red);
 }
 
 .omni-page-tabs {
@@ -5399,7 +5453,9 @@
 }
 
 .ticket-sidebar-field input,
-.ticket-sidebar-field select {
+.ticket-sidebar-field select,
+.ticket-sidebar-section > input,
+.ticket-sidebar-section > select {
   width: 100%;
   height: 32px;
   border-radius: var(--r);
@@ -5409,10 +5465,13 @@
   font-size: 12px;
   font-family: var(--font);
   padding: 0 10px;
+  margin-bottom: 10px;
 }
 
 .ticket-sidebar-field input:focus,
-.ticket-sidebar-field select:focus {
+.ticket-sidebar-field select:focus,
+.ticket-sidebar-section > input:focus,
+.ticket-sidebar-section > select:focus {
   outline: none;
   border-color: var(--teal);
   box-shadow: 0 0 0 3px var(--teal-dim);
@@ -5422,12 +5481,14 @@
   border: 1px solid var(--line) !important;
 }
 
-.ticket-sidebar-field.overdue .ticket-due-date-input {
+.ticket-sidebar-field.overdue .ticket-due-date-input,
+.ticket-sidebar-section.overdue .ticket-due-date-input {
   border: 1px solid var(--red) !important;
   color: var(--red);
 }
 
-.ticket-sidebar-field.near .ticket-due-date-input {
+.ticket-sidebar-field.near .ticket-due-date-input,
+.ticket-sidebar-section.near .ticket-due-date-input {
   border: 1px solid var(--amber) !important;
 }
 
