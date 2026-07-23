@@ -227,9 +227,6 @@ export function QueuePage() {
         background: 'var(--bg-2)',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
-          {t('queue.title')}
-        </span>
         {total > 0 && (
           <span style={{
             fontSize: 11,

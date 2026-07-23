@@ -396,11 +396,7 @@ export function PerformancePage() {
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div className="monitor-page history-page performance-page">
-        <div className="monitor-header history-header">
-          <div>
-            <h1>{t('performance.title')}</h1>
-            <p>{t('performance.subtitle')}</p>
-          </div>
+        <div className="monitor-header history-header" style={{ justifyContent: 'flex-end' }}>
           <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
               <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

@@ -675,8 +675,8 @@ export function TVDashboard() {
     (conversation) => minutesSince(conversation.created_at, now) > BOT_STUCK_THRESHOLD_MINUTES,
   ).length;
   const botGridTemplateRows = activeTab === 'realtime'
-    ? '48px auto auto auto auto minmax(0, 1fr)'
-    : '48px auto minmax(0, 1fr)';
+    ? 'auto auto auto auto minmax(0, 1fr)'
+    : 'auto minmax(0, 1fr)';
 
   return (
     <div
@@ -693,13 +693,47 @@ export function TVDashboard() {
         gap: 12,
       }}
     >
-      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ display: 'grid', gap: 2 }}>
-          <strong style={{ fontSize: 22, fontWeight: 600, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-            {t('tv.title')}
-          </strong>
-          <span style={{ fontSize: 12, color: 'var(--txt-2)' }}>{t('tv.subtitle')}</span>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <nav
+          aria-label={t('monitor.tabs')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            width: 'max-content',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--r)',
+            background: 'var(--bg-2)',
+            padding: 3,
+          }}
+        >
+          {([
+            ['realtime', t('monitor.realtimeTab')],
+            ['bot', t('monitor.bot.tab')],
+          ] as const).map(([tab, label]) => {
+            const selected = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  border: '1px solid transparent',
+                  borderRadius: 'var(--r)',
+                  background: selected ? 'var(--bg-3)' : 'transparent',
+                  color: selected ? 'var(--txt)' : 'var(--txt-2)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 24, color: 'var(--teal)' }}>{formatClock(now)}</div>
@@ -735,47 +769,7 @@ export function TVDashboard() {
             )}
           </button>
         </div>
-      </header>
-
-      <nav
-        aria-label={t('monitor.tabs')}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          width: 'max-content',
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--r)',
-          background: 'var(--bg-2)',
-          padding: 3,
-        }}
-      >
-        {([
-          ['realtime', t('monitor.realtimeTab')],
-          ['bot', t('monitor.bot.tab')],
-        ] as const).map(([tab, label]) => {
-          const selected = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                border: '1px solid transparent',
-                borderRadius: 'var(--r)',
-                background: selected ? 'var(--bg-3)' : 'transparent',
-                color: selected ? 'var(--txt)' : 'var(--txt-2)',
-                fontSize: 12,
-                fontWeight: 600,
-                padding: '6px 10px',
-                cursor: 'pointer',
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </nav>
+      </div>
 
       {activeTab === 'realtime' ? (
         <>

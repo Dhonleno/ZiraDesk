@@ -47,13 +47,6 @@ function getGoalStatusColor(status?: PerformanceMetricStatus | null): TokenColor
   return 'teal';
 }
 
-function getSaudacao(t: (key: string) => string): string {
-  const h = new Date().getHours();
-  if (h < 12) return t('home.greeting.morning');
-  if (h < 18) return t('home.greeting.afternoon');
-  return t('home.greeting.evening');
-}
-
 async function listAssignedTickets(agentId: string): Promise<Ticket[]> {
   const firstPage = await ticketsApi.list({
     assigned_to: agentId,
@@ -210,22 +203,10 @@ export default function AgentHome() {
   return (
     <PageShell padding={0}>
       <div className="monitor-area">
-        {/* PAGE HEAD */}
-        <div className="page-head" style={{ padding: '14px 24px', flexShrink: 0 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.4px', color: 'var(--txt)', margin: 0 }}>
-              {getSaudacao(t)}, {user?.name?.split(' ')[0]}.
-            </h1>
-            <p style={{ fontSize: 11, color: 'var(--txt-3)', margin: '2px 0 0' }}>
-              {t('agentHome.subtitle')}
-            </p>
-          </div>
-        </div>
-
         {/* SCROLL AREA */}
         <div
           className="monitor-scroll"
-          style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
+          style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}
         >
           {/* LINHA 1: Atendimentos + Tickets */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

@@ -905,19 +905,16 @@ export function MetricsPage() {
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div className="monitor-page">
-        <div className="monitor-header">
-        <div>
-          <h1>{t('metrics.title')}</h1>
-        </div>
         {metricsTab === 'omnichannel' ? (
+        <div className="monitor-header" style={{ justifyContent: 'flex-end' }}>
           <button className="zd-btn zd-btn-primary" onClick={exportCsv} type="button">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
               <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             {t('metrics.export')}
           </button>
+        </div>
         ) : null}
-      </div>
 
       <div className="metrics-main-tabs">
         <button
