@@ -36,6 +36,12 @@ export const updateSettingsSchema = z.object({
   sla_hours_high:   z.number().int().min(1).max(8760).optional(),
   sla_hours_medium: z.number().int().min(1).max(8760).optional(),
   sla_hours_low:    z.number().int().min(1).max(8760).optional(),
+  agent_can_delete_tickets:         z.boolean().optional(),
+  agent_can_export_tickets:         z.boolean().optional(),
+  agent_can_manage_contacts:        z.boolean().optional(),
+  agent_can_view_reports:           z.boolean().optional(),
+  agent_can_transfer_conversations: z.boolean().optional(),
+  agent_can_manage_campaigns:       z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (
     data.inactivity_warning_minutes !== undefined

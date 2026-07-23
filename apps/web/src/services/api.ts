@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/auth.store';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface TenantSettings {
+export interface TenantSettings {
   id: string;
   slug?: string;
   name: string;
@@ -33,6 +33,12 @@ interface TenantSettings {
   sla_hours_high?: number;
   sla_hours_medium?: number;
   sla_hours_low?: number;
+  agent_can_delete_tickets?: boolean;
+  agent_can_export_tickets?: boolean;
+  agent_can_manage_contacts?: boolean;
+  agent_can_view_reports?: boolean;
+  agent_can_transfer_conversations?: boolean;
+  agent_can_manage_campaigns?: boolean;
   created_at?: string;
   plan?: {
     id: string;

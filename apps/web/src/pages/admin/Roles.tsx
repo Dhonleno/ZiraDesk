@@ -1,13 +1,84 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { hasPermission, ROLE_PERMISSIONS, type Permission, type Role } from '@ziradesk/shared';
 import { PermissionGate } from '../../components/ui/PermissionGate';
 import { PageShell } from '../../components/layout/PageShell';
-import { adminApi } from '../../services/api';
+import { adminApi, type TenantSettings } from '../../services/api';
 import { usePermission } from '../../hooks/usePermission';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
+
+type AgentPermissionKey =
+  | 'agent_can_delete_tickets'
+  | 'agent_can_export_tickets'
+  | 'agent_can_manage_contacts'
+  | 'agent_can_view_reports'
+  | 'agent_can_transfer_conversations'
+  | 'agent_can_manage_campaigns';
+
+type AgentPermissionsForm = Record<AgentPermissionKey, boolean>;
+
+const AGENT_PERMISSIONS_DEFAULTS: AgentPermissionsForm = {
+  agent_can_delete_tickets: false,
+  agent_can_export_tickets: true,
+  agent_can_manage_contacts: true,
+  agent_can_view_reports: true,
+  agent_can_transfer_conversations: true,
+  agent_can_manage_campaigns: true,
+};
+
+const AGENT_PERMISSION_KEYS: AgentPermissionKey[] = [
+  'agent_can_delete_tickets',
+  'agent_can_export_tickets',
+  'agent_can_manage_contacts',
+  'agent_can_view_reports',
+  'agent_can_transfer_conversations',
+  'agent_can_manage_campaigns',
+];
+
+function agentPermissionsFromSettings(settings?: TenantSettings): AgentPermissionsForm {
+  return {
+    agent_can_delete_tickets: settings?.agent_can_delete_tickets ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_delete_tickets,
+    agent_can_export_tickets: settings?.agent_can_export_tickets ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_export_tickets,
+    agent_can_manage_contacts: settings?.agent_can_manage_contacts ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_manage_contacts,
+    agent_can_view_reports: settings?.agent_can_view_reports ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_view_reports,
+    agent_can_transfer_conversations:
+      settings?.agent_can_transfer_conversations ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_transfer_conversations,
+    agent_can_manage_campaigns: settings?.agent_can_manage_campaigns ?? AGENT_PERMISSIONS_DEFAULTS.agent_can_manage_campaigns,
+  };
+}
+
+// Mesmo pill-switch usado em SlaPolicy.tsx/TicketAutoAssign.tsx/CustomFields.tsx
+// — não há um componente <Toggle> compartilhado no projeto ainda.
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label style={{ position: 'relative', display: 'inline-block', width: 36, height: 20, flexShrink: 0 }}>
+      <input
+        type="checkbox"
+        style={{ opacity: 0, width: 0, height: 0 }}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span
+        onClick={() => onChange(!checked)}
+        style={{
+          position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: checked ? 'var(--teal)' : 'var(--line-2)',
+          borderRadius: 10, transition: '.2s',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute', height: 14, width: 14,
+            left: checked ? 19 : 3,
+            bottom: 3, backgroundColor: 'white', borderRadius: '50%', transition: '.2s',
+          }}
+        />
+      </span>
+    </label>
+  );
+}
 
 type AssignableRole = Exclude<Role, 'super_admin'> | 'supervisor';
 
@@ -119,6 +190,19 @@ export function Roles() {
   });
 
   const viewerEnabled = canUseViewerRole(settings?.plan?.features);
+
+  const [agentPermissionsForm, setAgentPermissionsForm] = useState<AgentPermissionsForm | null>(null);
+  const agentPermissions = agentPermissionsForm ?? agentPermissionsFromSettings(settings);
+
+  const updateAgentPermissionsMutation = useMutation({
+    mutationFn: (values: AgentPermissionsForm) => adminApi.updateSettings(values),
+    onSuccess: () => {
+      setAgentPermissionsForm(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      toast.success(t('tenantAdmin.agentPermissions.saved'));
+    },
+    onError: () => toast.error(t('tenantAdmin.agentPermissions.saveError')),
+  });
 
   const availableRoles = useMemo<AssignableRole[]>(() => (
     viewerEnabled
@@ -347,6 +431,52 @@ export function Roles() {
             </table>
           </div>
         </section>
+
+        <PermissionGate permission="settings:manage">
+          <section className="space-y-3">
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>
+              {t('tenantAdmin.agentPermissions.title')}
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--txt-2)', marginTop: 0 }}>
+              {t('tenantAdmin.agentPermissions.subtitle')}
+            </p>
+            <div className="rounded-xl" style={{ border: '1px solid var(--line)', background: 'var(--bg)' }}>
+              {AGENT_PERMISSION_KEYS.map((key, index) => (
+                <div
+                  key={key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderBottom: index < AGENT_PERMISSION_KEYS.length - 1 ? '1px solid var(--line)' : 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: 'var(--txt)' }}>
+                    {t(`tenantAdmin.agentPermissions.${key}`)}
+                  </span>
+                  <Toggle
+                    checked={agentPermissions[key]}
+                    onChange={(value) => setAgentPermissionsForm({ ...agentPermissions, [key]: value })}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="tb-btn tb-btn-primary"
+                onClick={() => updateAgentPermissionsMutation.mutate(agentPermissions)}
+                disabled={updateAgentPermissionsMutation.isPending}
+              >
+                {updateAgentPermissionsMutation.isPending
+                  ? t('tenantAdmin.common.saving')
+                  : t('tenantAdmin.common.save')}
+              </button>
+            </div>
+          </section>
+        </PermissionGate>
       </div>
     </PageShell>
   );

@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { requireFeature } from '../../../middleware/entitlement.js';
 import { requirePermission } from '../../../middleware/rbac.js';
+import { requireTenantPermission } from '../../../middleware/tenantPermission.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
 import {
   listCampaignsQuerySchema,
@@ -45,6 +46,10 @@ async function ensureCampaignsInfrastructureMiddleware(request: FastifyRequest):
 
 const replyGuard = [...guard, ensureCampaignsInfrastructureMiddleware, requirePermission('conversations:reply')];
 const manageGuard = [...guard, ensureCampaignsInfrastructureMiddleware, requirePermission('conversations:manage')];
+// Criar/editar campanha já funciona hoje via conversations:reply (todo agente
+// tem essa permissão estática) — este guard adiciona uma trava por tenant em
+// cima disso, default true para não regredir o comportamento atual.
+const manageCampaignsGuard = [...replyGuard, requireTenantPermission('agent_can_manage_campaigns')];
 
 export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<void> {
 
@@ -62,7 +67,7 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
   });
 
   // POST /api/omnichannel/campaigns
-  app.post('/', { preHandler: replyGuard }, async (request, reply) => {
+  app.post('/', { preHandler: manageCampaignsGuard }, async (request, reply) => {
     const parsed = createCampaignBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });
@@ -107,7 +112,7 @@ export async function omnichannelCampaignsRoutes(app: FastifyInstance): Promise<
   });
 
   // PATCH /api/omnichannel/campaigns/:id
-  app.patch<{ Params: { id: string } }>('/:id', { preHandler: replyGuard }, async (request, reply) => {
+  app.patch<{ Params: { id: string } }>('/:id', { preHandler: manageCampaignsGuard }, async (request, reply) => {
     const parsed = updateCampaignBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ success: false, error: { message: 'Dados inválidos', details: parsed.error.flatten() } });

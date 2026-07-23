@@ -90,6 +90,24 @@ function slaSettings(s: Record<string, unknown>) {
   };
 }
 
+// Permissões granulares do agente. Defaults escolhidos para NÃO regredir o
+// comportamento atual: tickets:view e conversations:reply já são concedidos
+// ao agente no RBAC estático (@ziradesk/shared), então exportar tickets e
+// gerenciar campanhas já funcionam hoje — os defaults replicam isso (true).
+// Deletar ticket é a exceção: tickets:delete nunca foi concedido ao agente,
+// então o default aqui (false) preserva o bloqueio atual até o tenant optar
+// por liberar.
+function agentPermissionSettings(s: Record<string, unknown>) {
+  return {
+    agent_can_delete_tickets:         (s.agent_can_delete_tickets as boolean | undefined) ?? false,
+    agent_can_export_tickets:         (s.agent_can_export_tickets as boolean | undefined) ?? true,
+    agent_can_manage_contacts:        (s.agent_can_manage_contacts as boolean | undefined) ?? true,
+    agent_can_view_reports:           (s.agent_can_view_reports as boolean | undefined) ?? true,
+    agent_can_transfer_conversations: (s.agent_can_transfer_conversations as boolean | undefined) ?? true,
+    agent_can_manage_campaigns:       (s.agent_can_manage_campaigns as boolean | undefined) ?? true,
+  };
+}
+
 export async function readLogoFile(fileName: string): Promise<Buffer | null> {
   if (!/^[a-zA-Z0-9-]+\.(png|jpg|webp|svg)$/.test(fileName)) return null;
   try {
@@ -161,6 +179,7 @@ export async function getSettings(tenantId: string) {
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     ...slaSettings(s),
+    ...agentPermissionSettings(s),
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -248,6 +267,24 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.sla_hours_high !== undefined ? { sla_hours_high: data.sla_hours_high } : {}),
     ...(data.sla_hours_medium !== undefined ? { sla_hours_medium: data.sla_hours_medium } : {}),
     ...(data.sla_hours_low !== undefined ? { sla_hours_low: data.sla_hours_low } : {}),
+    ...(data.agent_can_delete_tickets !== undefined
+      ? { agent_can_delete_tickets: data.agent_can_delete_tickets }
+      : {}),
+    ...(data.agent_can_export_tickets !== undefined
+      ? { agent_can_export_tickets: data.agent_can_export_tickets }
+      : {}),
+    ...(data.agent_can_manage_contacts !== undefined
+      ? { agent_can_manage_contacts: data.agent_can_manage_contacts }
+      : {}),
+    ...(data.agent_can_view_reports !== undefined
+      ? { agent_can_view_reports: data.agent_can_view_reports }
+      : {}),
+    ...(data.agent_can_transfer_conversations !== undefined
+      ? { agent_can_transfer_conversations: data.agent_can_transfer_conversations }
+      : {}),
+    ...(data.agent_can_manage_campaigns !== undefined
+      ? { agent_can_manage_campaigns: data.agent_can_manage_campaigns }
+      : {}),
   };
 
   const updated = await prisma.tenant.update({
@@ -300,6 +337,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     expire_24h_message: (s.expire_24h_message as string | undefined) ?? DEFAULT_EXPIRE_24H_MESSAGE,
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     ...slaSettings(s),
+    ...agentPermissionSettings(s),
   };
 }
 

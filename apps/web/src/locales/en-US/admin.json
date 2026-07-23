@@ -83,6 +83,18 @@
         "select": "Options list"
       }
     },
+    "agentPermissions": {
+      "title": "Agent permissions",
+      "subtitle": "Owner and Admin have full access. Configure what the Agent can do beyond the default.",
+      "saved": "Permission updated successfully",
+      "saveError": "Error saving permission",
+      "agent_can_delete_tickets": "Delete tickets",
+      "agent_can_export_tickets": "Export tickets (CSV)",
+      "agent_can_manage_contacts": "Create and edit contacts",
+      "agent_can_view_reports": "View metrics and reports",
+      "agent_can_transfer_conversations": "Transfer conversations",
+      "agent_can_manage_campaigns": "Create and edit campaigns"
+    },
     "queueConfig": {
       "title": "Queue Notifications",
       "subtitle": "Configure messages sent automatically during queue attendance",

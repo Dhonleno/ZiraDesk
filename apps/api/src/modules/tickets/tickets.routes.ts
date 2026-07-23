@@ -4,6 +4,7 @@ import { hasPermission } from '@ziradesk/shared';
 import { prisma } from '../../config/database.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
+import { requireTenantPermission } from '../../middleware/tenantPermission.js';
 import { tenantSchemaFromJwt } from '../../middleware/tenantSchemaFromJwt.js';
 import { maskEmail, maskPhone, maskDocument, maskName } from '../../utils/pii-mask.js';
 import {
@@ -55,7 +56,11 @@ import {
 const guard = [authMiddleware, tenantSchemaFromJwt];
 const ticketsViewGuard = [...guard, requirePermission('tickets:view')];
 const ticketsEditGuard = [...guard, requirePermission('tickets:edit')];
-const ticketsDeleteGuard = [...guard, requirePermission('tickets:delete')];
+// Owner/admin sempre podem deletar (tickets:delete no RBAC estático já os
+// cobre); demais roles nunca tinham essa permissão estática — agora é
+// configurável por tenant via tenant.settings.agent_can_delete_tickets
+// (default false, preservando o bloqueio atual até o tenant liberar).
+const ticketsDeleteGuard = [...guard, requireTenantPermission('agent_can_delete_tickets')];
 const RELATION_TYPES = new Set(['relates_to', 'duplicates', 'blocks', 'is_blocked_by']);
 
 function canViewFullPii(role: string): boolean {
@@ -160,7 +165,9 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/tickets/export?format=csv
-  app.get('/export', { preHandler: ticketsViewGuard }, async (request, reply) => {
+  app.get('/export', {
+    preHandler: [...ticketsViewGuard, requireTenantPermission('agent_can_export_tickets')],
+  }, async (request, reply) => {
     const parsed = exportTicketsQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.code(400).send({

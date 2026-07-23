@@ -83,6 +83,18 @@
         "select": "Lista de opções"
       }
     },
+    "agentPermissions": {
+      "title": "Permissões do agente",
+      "subtitle": "Owner e Admin têm acesso total. Configure o que o Agente pode fazer além do padrão.",
+      "saved": "Permissão atualizada com sucesso",
+      "saveError": "Erro ao salvar permissão",
+      "agent_can_delete_tickets": "Deletar tickets",
+      "agent_can_export_tickets": "Exportar tickets (CSV)",
+      "agent_can_manage_contacts": "Criar e editar contatos",
+      "agent_can_view_reports": "Ver métricas e relatórios",
+      "agent_can_transfer_conversations": "Transferir atendimentos",
+      "agent_can_manage_campaigns": "Criar e editar campanhas"
+    },
     "queueConfig": {
       "title": "Notificações de Fila",
       "subtitle": "Configure as mensagens enviadas automaticamente durante o atendimento na fila",
