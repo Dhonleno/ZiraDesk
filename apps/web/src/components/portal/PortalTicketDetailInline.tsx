@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { portalApi, type PortalTicketDetail } from '../../services/api';
@@ -11,8 +12,27 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M12 11v5M12 8h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function PortalTicketDetailInline({ ticket }: { ticket: PortalTicketDetail }) {
   const { t, i18n } = useTranslation('portal');
+  const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [comment, setComment] = useState('');
@@ -33,15 +53,6 @@ export function PortalTicketDetailInline({ ticket }: { ticket: PortalTicketDetai
       toast.success(t('ticket.messages.commentSuccess'));
     },
     onError: () => toast.error(t('ticket.messages.commentError')),
-  });
-
-  const reopenMutation = useMutation({
-    mutationFn: () => portalApi.reopenTicket(ticket.id),
-    onSuccess: async () => {
-      await invalidateTicket();
-      toast.success(t('ticket.reopenSuccess'));
-    },
-    onError: () => toast.error(t('ticket.reopenError')),
   });
 
   const csatMutation = useMutation({
@@ -70,7 +81,6 @@ export function PortalTicketDetailInline({ ticket }: { ticket: PortalTicketDetai
     }
   };
 
-  const canReopen = ticket.status === 'resolved';
   const csatExpired = Boolean(ticket.csat_expires_at) && new Date(ticket.csat_expires_at!) < new Date();
   const showCsat = ticket.status === 'resolved' && !ticket.csat_responded_at && !csatExpired;
   const alreadyRated = Boolean(ticket.csat_responded_at);
@@ -127,25 +137,50 @@ export function PortalTicketDetailInline({ ticket }: { ticket: PortalTicketDetai
         ))}
         {ticket.comments.length === 0 ? <p className="portal-empty">{t('ticket.noComments')}</p> : null}
 
-        <div className="portal-comment-form">
-          <label className="sr-only" htmlFor="portal-ticket-comment">{t('ticket.addComment')}</label>
-          <textarea
-            id="portal-ticket-comment"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            placeholder={t('ticket.commentPlaceholder')}
-            aria-label={t('ticket.addComment')}
-            rows={3}
-          />
-          <button
-            type="button"
-            className="portal-btn-primary portal-btn-inline"
-            disabled={!comment.trim() || addCommentMutation.isPending}
-            onClick={() => addCommentMutation.mutate(comment.trim())}
-          >
-            {addCommentMutation.isPending ? t('ticket.addCommentLoading') : t('ticket.addComment')}
-          </button>
-        </div>
+        {ticket.status === 'closed' ? (
+          <div className="portal-closed-notice">
+            <LockIcon />
+            <div>
+              <p>{t('ticket.closedTitle')}</p>
+              <p>{t('ticket.closedSub')}</p>
+              <button
+                type="button"
+                className="portal-btn-primary portal-btn-inline"
+                onClick={() => navigate('/portal/tickets/new')}
+              >
+                {t('ticket.openNewTicket')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {ticket.status === 'resolved' && (
+              <p className="portal-reopen-hint">
+                <InfoIcon />
+                {t('ticket.resolvedCommentHint')}
+              </p>
+            )}
+            <div className="portal-comment-form">
+              <label className="sr-only" htmlFor="portal-ticket-comment">{t('ticket.addComment')}</label>
+              <textarea
+                id="portal-ticket-comment"
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder={t('ticket.commentPlaceholder')}
+                aria-label={t('ticket.addComment')}
+                rows={3}
+              />
+              <button
+                type="button"
+                className="portal-btn-primary portal-btn-inline"
+                disabled={!comment.trim() || addCommentMutation.isPending}
+                onClick={() => addCommentMutation.mutate(comment.trim())}
+              >
+                {addCommentMutation.isPending ? t('ticket.addCommentLoading') : t('ticket.addComment')}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {showCsat && (
@@ -191,20 +226,6 @@ export function PortalTicketDetailInline({ ticket }: { ticket: PortalTicketDetai
             ))}
           </div>
           {ticket.csat_comment ? <p className="portal-csat-comment">{ticket.csat_comment}</p> : null}
-        </div>
-      )}
-
-      {canReopen && (
-        <div className="portal-reopen-bar">
-          <span>{t('ticket.reopenHint')}</span>
-          <button
-            type="button"
-            className="portal-btn-primary portal-btn-inline"
-            disabled={reopenMutation.isPending}
-            onClick={() => reopenMutation.mutate()}
-          >
-            {reopenMutation.isPending ? t('ticket.reopenLoading') : t('ticket.reopen')}
-          </button>
         </div>
       )}
     </div>

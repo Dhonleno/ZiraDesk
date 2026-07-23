@@ -25,6 +25,7 @@ import {
   portalLogin,
   portalMe,
   PortalAuthError,
+  PortalBusinessRuleError,
   PortalForbiddenError,
   PortalNotFoundError,
   reopenTicketByContact,
@@ -368,6 +369,9 @@ export async function portalRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof PortalNotFoundError) {
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      }
+      if (err instanceof PortalBusinessRuleError) {
+        return reply.code(422).send({ success: false, error: { message: err.message } });
       }
       throw err;
     }

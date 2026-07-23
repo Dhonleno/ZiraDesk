@@ -48,6 +48,7 @@ function buildPortalAttachmentStorageKey(ticketId: string, attachmentId: string,
 export class PortalAuthError extends Error {}
 export class PortalNotFoundError extends Error {}
 export class PortalForbiddenError extends Error {}
+export class PortalBusinessRuleError extends Error {}
 
 export interface PortalJwtPayload {
   contactId: string;
@@ -909,8 +910,8 @@ export async function addPortalComment(
 ) {
   const schema = quoteIdent(portalUser.schemaName);
 
-  const tickets = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id
+  const tickets = await prisma.$queryRawUnsafe<Array<{ id: string; status: string; assigned_to: string | null }>>(
+    `SELECT id, status, assigned_to
      FROM ${schema}.tickets
      WHERE id = $1::uuid
        AND (
@@ -923,7 +924,11 @@ export async function addPortalComment(
     portalUser.organizationId,
   );
 
-  if (!tickets[0]) throw new PortalNotFoundError('Ticket não encontrado');
+  const ticket = tickets[0];
+  if (!ticket) throw new PortalNotFoundError('Ticket não encontrado');
+  if (ticket.status === 'closed') {
+    throw new PortalBusinessRuleError('Este ticket está fechado. Abra um novo ticket para continuar.');
+  }
 
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -958,6 +963,38 @@ export async function addPortalComment(
 
   const comment = rows[0];
   if (!comment) throw new PortalNotFoundError('Falha ao registrar comentário');
+
+  if (ticket.status === 'resolved') {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ${schema}.tickets
+       SET status = 'open', resolved_at = NULL, updated_at = NOW()
+       WHERE id = $1::uuid`,
+      ticketId,
+    );
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO ${schema}.ticket_events
+         (ticket_id, user_id, event_type, old_value, new_value, metadata)
+       VALUES ($1::uuid, NULL, 'status_changed', 'resolved', 'open',
+               '{"source": "portal_comment"}'::jsonb)`,
+      ticketId,
+    );
+
+    try {
+      const io = getSocketServer();
+      io.to(`tenant:${portalUser.tenantId}`).emit('ticket:updated', { ticketId });
+      if (ticket.assigned_to) {
+        io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+          type: 'ticket_reopened_by_contact',
+          title: 'Ticket reaberto pelo cliente',
+          message: 'O cliente comentou em um ticket resolvido, reabrindo-o automaticamente.',
+          href: `/tickets/${ticketId}`,
+        });
+      }
+    } catch {
+      // socket pode não estar disponível em testes
+    }
+  }
 
   try {
     getSocketServer().to(`tenant:${portalUser.tenantId}`).emit('ticket:comment_added', {

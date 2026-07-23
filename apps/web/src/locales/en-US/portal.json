@@ -93,6 +93,10 @@
     "reopenHint": "This ticket was resolved. If the issue persists, you can reopen it.",
     "reopenSuccess": "Ticket reopened successfully.",
     "reopenError": "Couldn't reopen the ticket",
+    "closedTitle": "This ticket is closed",
+    "closedSub": "Comments cannot be added to closed tickets.",
+    "openNewTicket": "Open new ticket",
+    "resolvedCommentHint": "Adding a comment will automatically reopen this ticket.",
     "details": {
       "type": "Type",
       "priority": "Priority",

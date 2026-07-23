@@ -93,6 +93,10 @@
     "reopenHint": "Este ticket foi resolvido. Se o problema persistir, você pode reabri-lo.",
     "reopenSuccess": "Ticket reaberto com sucesso.",
     "reopenError": "Não foi possível reabrir o ticket",
+    "closedTitle": "Este ticket está fechado",
+    "closedSub": "Não é possível adicionar comentários em tickets fechados.",
+    "openNewTicket": "Abrir novo ticket",
+    "resolvedCommentHint": "Comentar neste ticket irá reabri-lo automaticamente.",
     "details": {
       "type": "Tipo",
       "priority": "Prioridade",

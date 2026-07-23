@@ -713,4 +713,91 @@ describe('Portal integration', () => {
       title: 'Chamado criado via portal',
     });
   });
+
+  it('POST /api/portal/tickets/:id/comments em ticket resolved reabre o ticket automaticamente', async () => {
+    const schemaName = requireSuiteTenant().schemaName;
+    const ticketId = await createTicketRecord(schemaName, requireSuiteContact().id, 'Ticket resolvido', { status: 'resolved' });
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'POST',
+      url: `/api/portal/tickets/${ticketId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { content: 'Ainda estou com o mesmo problema.' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ status: string; resolved_at: Date | null }>>(
+      `SELECT status, resolved_at FROM "${schemaName}".tickets WHERE id = $1::uuid`,
+      ticketId,
+    );
+    expect(rows[0]).toMatchObject({ status: 'open', resolved_at: null });
+
+    const events = await prisma.$queryRawUnsafe<Array<{ event_type: string; old_value: string; new_value: string }>>(
+      `SELECT event_type, old_value, new_value FROM "${schemaName}".ticket_events WHERE ticket_id = $1::uuid`,
+      ticketId,
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ event_type: 'status_changed', old_value: 'resolved', new_value: 'open' }),
+    );
+  });
+
+  it('POST /api/portal/tickets/:id/comments em ticket closed retorna 422 e não insere o comentário', async () => {
+    const schemaName = requireSuiteTenant().schemaName;
+    const ticketId = await createTicketRecord(schemaName, requireSuiteContact().id, 'Ticket fechado', { status: 'closed' });
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'POST',
+      url: `/api/portal/tickets/${ticketId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { content: 'Tentando comentar em ticket fechado.' },
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.message).toEqual(expect.any(String));
+
+    const comments = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${schemaName}".ticket_comments WHERE ticket_id = $1::uuid`,
+      ticketId,
+    );
+    expect(comments).toHaveLength(0);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+      `SELECT status FROM "${schemaName}".tickets WHERE id = $1::uuid`,
+      ticketId,
+    );
+    expect(rows[0]).toMatchObject({ status: 'closed' });
+  });
+
+  it('POST /api/portal/tickets/:id/comments em ticket open mantém o status inalterado', async () => {
+    const schemaName = requireSuiteTenant().schemaName;
+    const ticketId = await createTicketRecord(schemaName, requireSuiteContact().id, 'Ticket aberto', { status: 'open' });
+    const token = await loginAndGetToken();
+
+    const response = await portalRequest({
+      method: 'POST',
+      url: `/api/portal/tickets/${ticketId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { content: 'Mais uma informação sobre o chamado.' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+      `SELECT status FROM "${schemaName}".tickets WHERE id = $1::uuid`,
+      ticketId,
+    );
+    expect(rows[0]).toMatchObject({ status: 'open' });
+
+    const events = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${schemaName}".ticket_events WHERE ticket_id = $1::uuid`,
+      ticketId,
+    );
+    expect(events).toHaveLength(0);
+  });
 });
