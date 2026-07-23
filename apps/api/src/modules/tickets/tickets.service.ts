@@ -1901,6 +1901,38 @@ export async function deleteComment(commentId: string, userId: string, role: str
 }
 
 /* ── attachments ─────────────────────────────────────────────────────────── */
+async function filterExistingAttachments(
+  db: RawExecutor,
+  attachments: TicketAttachmentRow[],
+): Promise<TicketAttachmentRow[]> {
+  const storage = getStorage();
+  const checked = await Promise.all(
+    attachments.map(async (attachment) => {
+      const key = buildAttachmentStorageKey(attachment.ticket_id, attachment.id, attachment.filename);
+      try {
+        return {
+          attachment,
+          exists: await storage.exists(key),
+        };
+      } catch (error) {
+        logger.warn({ err: error, attachmentId: attachment.id }, 'Falha ao verificar anexo no storage');
+        return { attachment, exists: true };
+      }
+    }),
+  );
+
+  const missing = checked.filter((item) => !item.exists).map((item) => item.attachment);
+  for (const attachment of missing) {
+    await db.$executeRawUnsafe(
+      `DELETE FROM ticket_attachments WHERE id = $1::uuid`,
+      attachment.id,
+    );
+    logger.warn({ attachmentId: attachment.id, ticketId: attachment.ticket_id }, 'Anexo órfão removido da listagem');
+  }
+
+  return checked.filter((item) => item.exists).map((item) => item.attachment);
+}
+
 export async function listAttachments(ticketId: string, schemaName?: string): Promise<TicketAttachmentRow[]> {
   if (schemaName) {
     return withTenantSchema(schemaName, async (db) => {
@@ -1915,7 +1947,7 @@ export async function listAttachments(ticketId: string, schemaName?: string): Pr
         ticketId,
       );
 
-      return rows;
+      return filterExistingAttachments(db, rows);
     });
   }
 
@@ -1930,7 +1962,7 @@ export async function listAttachments(ticketId: string, schemaName?: string): Pr
     ticketId,
   );
 
-  return rows;
+  return filterExistingAttachments(prisma, rows);
 }
 
 export async function addAttachment(params: {

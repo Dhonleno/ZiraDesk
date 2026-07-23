@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import type { Readable } from 'node:stream';
 import { StorageObjectNotFoundError, type StorageProvider } from './storage.interface.js';
@@ -60,6 +61,21 @@ export class R2StorageProvider implements StorageProvider {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return true;
+    } catch (error) {
+      const storageError = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (storageError.name === 'NotFound' || storageError.name === 'NoSuchKey' || storageError.$metadata?.httpStatusCode === 404) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   getUrl(key: string): string {

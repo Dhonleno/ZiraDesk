@@ -249,7 +249,7 @@ export function TicketDetailPage() {
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
-  const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload>>({});
+  const [pendingPatch, setPendingPatch] = useState<Partial<CreateTicketPayload> | null>(null);
   const debouncedPatch = useDebounce(pendingPatch, 500);
 
   const statusRef = useRef<HTMLDivElement | null>(null);
@@ -259,6 +259,7 @@ export function TicketDetailPage() {
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const isMutatingRef = useRef(false);
   const lastErrorRef = useRef<number>(0);
+  const lastConsumedPatchRef = useRef<Partial<CreateTicketPayload> | null>(null);
 
   function reportUpdateError(message: string) {
     const now = Date.now();
@@ -508,12 +509,14 @@ export function TicketDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!ticket) return;
+    if (!id) return;
     if (!debouncedPatch || Object.keys(debouncedPatch).length === 0) return;
+    if (lastConsumedPatchRef.current === debouncedPatch) return;
 
+    lastConsumedPatchRef.current = debouncedPatch;
+    setPendingPatch(null);
     updateMutation.mutate(debouncedPatch);
-    setPendingPatch({});
-  }, [debouncedPatch, ticket, updateMutation]);
+  }, [debouncedPatch, id]);
 
   const truncatedTitle = useMemo(() => {
     if (!ticket) return '';
@@ -532,7 +535,7 @@ export function TicketDetailPage() {
   }, [categoriesData?.data, sidebarCategory]);
 
   function queuePatch(patch: Partial<CreateTicketPayload>) {
-    setPendingPatch((prev) => ({ ...prev, ...patch }));
+    setPendingPatch((prev) => ({ ...(prev ?? {}), ...patch }));
   }
 
   function patchStatus(status: TicketStatus) {

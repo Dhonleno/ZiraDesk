@@ -14,6 +14,10 @@ class InMemoryStorageProvider implements StorageProvider {
     this.files.delete(key);
   }
 
+  async exists(key: string): Promise<boolean> {
+    return this.files.has(key);
+  }
+
   getUrl(key: string): string {
     return `/api/files/${key}`;
   }

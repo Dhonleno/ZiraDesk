@@ -1290,7 +1290,7 @@ R2_PUBLIC_URL=
 
 ### Divergência 2 — Storage (MinIO/S3 documentado mas não implementado)
 **Doc dizia:** uploads via MinIO S3-compatible com variáveis `STORAGE_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET`
-**Realidade:** avatares de usuários são salvos em `public/uploads/avatars/` (disco local); logos de tenant em `public/uploads/logos/` (disco local). Não há integração com MinIO, Cloudflare R2 ou qualquer S3 no código atual. As variáveis de storage não existem no `.env.example`.
+**Realidade atual:** a divergência foi encerrada na estabilização. O código usa `StorageProvider` com implementações local e Cloudflare R2 (`STORAGE_PROVIDER=local|r2` + `R2_*`) para avatares, logos e anexos de tickets. O contrato do provider cobre `upload`, `delete`, `exists`, `getUrl` e `download`; tickets validam a existência do objeto antes de listar anexos para remover registros órfãos.
 
 ### Divergência 3 — Status dos Sprints 3 e 4 vs código real
 **Doc marcada (por instrução):** Sprint 3 (CRM) ❌ não iniciado · Sprint 4 (Tickets) ❌ não iniciado

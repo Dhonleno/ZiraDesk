@@ -1,5 +1,11 @@
 # Changelog — ZiraDesk
 
+## [0.9.3] — Correção de anexos órfãos em tickets
+
+### Corrigido
+- Tickets: a listagem de anexos agora valida a existência do objeto no storage, remove registros órfãos e evita que o detalhe do ticket tente pré-carregar previews que resultariam em 404.
+- Tickets: o autosave do detalhe consome cada patch debounced uma única vez, evitando loop de `PATCH` ao transferir/atribuir o ticket para outro agente.
+
 ## [0.9.2] — Skills v2, roteamento AND logic, reorganização de nav e bloqueadores de produção
 
 ### Adicionado

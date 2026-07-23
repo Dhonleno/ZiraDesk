@@ -573,6 +573,43 @@ describe('Tickets integration', () => {
     expect(response.body.error.message).toBe('Arquivo do anexo não encontrado');
   });
 
+  it('GET /api/tickets/:id/attachments remove anexos órfãos do storage da listagem', async () => {
+    const ticket = await createTicket();
+
+    const upload = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/attachments`)
+      .set(authHeader())
+      .attach('file', Buffer.from('conteudo perdido'), {
+        filename: 'preview-perdido.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(upload.status).toBe(201);
+    const attachmentId = upload.body.data.id as string;
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE "${requireSuiteTenant().schemaName}".ticket_attachments
+       SET filename = 'preview-ausente.txt'
+       WHERE id = $1::uuid`,
+      attachmentId,
+    );
+
+    const response = await createTestApp()
+      .get(`/api/tickets/${ticket.id}/attachments`)
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*)::bigint AS count
+       FROM "${requireSuiteTenant().schemaName}".ticket_attachments
+       WHERE id = $1::uuid`,
+      attachmentId,
+    );
+    expect(Number(rows[0]?.count ?? 0n)).toBe(0);
+  });
+
   it('DELETE /api/tickets/attachments/:id remove do storage e do banco', async () => {
     const ticket = await createTicket();
 

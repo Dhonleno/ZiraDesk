@@ -25,6 +25,19 @@ export class LocalStorageProvider implements StorageProvider {
     await fs.rm(filePath, { force: true });
   }
 
+  async exists(key: string): Promise<boolean> {
+    const filePath = resolvePath(key);
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   getUrl(key: string): string {
     return `/api/files/${key}`;
   }

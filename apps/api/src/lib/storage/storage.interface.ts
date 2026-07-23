@@ -10,6 +10,8 @@ export interface StorageProvider {
   upload(key: string, buffer: Buffer, mimetype: string): Promise<string>;
   /** Remove o objeto pelo key. Não lança erro se não existir. */
   delete(key: string): Promise<void>;
+  /** Verifica se o objeto existe sem baixar seu conteúdo. */
+  exists(key: string): Promise<boolean>;
   /** Retorna a URL pública para um key conhecido sem fazer I/O. */
   getUrl(key: string): string;
   /** Baixa o conteúdo do objeto (usado para proxy de downloads autenticados). */
