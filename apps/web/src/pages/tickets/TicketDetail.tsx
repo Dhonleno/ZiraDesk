@@ -152,6 +152,18 @@ function getSlaLabel(sla: SlaInfo, t: TFunction<'tickets'>): string | null {
   return t('tickets.sla.expiresHours', { count: remainingHours });
 }
 
+function TicketTypeIcon({ icon, color }: { icon: string; color?: string | null | undefined }) {
+  return (
+    <span
+      className="ticket-hero-type-icon"
+      style={{ color: color ?? undefined }}
+      aria-hidden
+    >
+      {icon}
+    </span>
+  );
+}
+
 function AuthedImage({ src, alt }: { src: string; alt: string }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const token = useAuthStore((s) => s.token);
@@ -872,11 +884,22 @@ export function TicketDetailPage() {
         <div className="ticket-detail-v2-layout">
           <main className="ticket-detail-v2-main">
             <div className="ticket-detail-hero">
-              <div className="ticket-hero-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-                  <path d="M3 8.5V5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v3a1.5 1.5 0 0 0 0 3v3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-3a1.5 1.5 0 0 0 0-3Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                  <path d="M10 4v2M10 14v2M10 8.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeDasharray="1 2" />
-                </svg>
+              <div
+                className="ticket-hero-icon"
+                style={ticket.type_color ? {
+                  background: `${ticket.type_color}22`,
+                  borderColor: `${ticket.type_color}44`,
+                  color: ticket.type_color,
+                } : undefined}
+              >
+                {ticket.type_icon ? (
+                  <TicketTypeIcon icon={ticket.type_icon} color={ticket.type_color} />
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <path d="M3 8.5V5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v3a1.5 1.5 0 0 0 0 3v3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-3a1.5 1.5 0 0 0 0-3Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                    <path d="M10 4v2M10 14v2M10 8.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeDasharray="1 2" />
+                  </svg>
+                )}
               </div>
               <div className="ticket-hero-body">
                 <div className="ticket-hero-meta">
@@ -1165,10 +1188,22 @@ export function TicketDetailPage() {
             <section className="ticket-sidebar-section">
               <h2>{t('tickets.detail.sections.contact')}</h2>
               <div className="ticket-sidebar-contact">
-                <Link to={ticket.contact_id ? `/crm/contacts/${ticket.contact_id}?id=${ticket.contact_id}` : '/crm/contacts'}>
-                  <ContactAvatar id={ticket.contact_id ?? ticket.id} name={ticket.contact_name ?? t('tickets.fields.noClient')} size={26} />
-                  <span>{ticket.contact_name ?? t('tickets.fields.noClient')}</span>
-                </Link>
+                {ticket.contact_id ? (
+                  <Link to={`/crm/contacts/${ticket.contact_id}?id=${ticket.contact_id}`}>
+                    <ContactAvatar id={ticket.contact_id} name={ticket.contact_name ?? t('tickets.fields.noClient')} size={26} />
+                    <span>{ticket.contact_name ?? t('tickets.fields.noClient')}</span>
+                  </Link>
+                ) : (
+                  <div className="ticket-sidebar-contact-main">
+                    <div className="ticket-contact-avatar ticket-contact-avatar--empty">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                        <circle cx="7" cy="4.5" r="2.3" stroke="currentColor" strokeWidth="1.2" />
+                        <path d="M2.8 12a4.2 4.2 0 0 1 8.4 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <span>{t('tickets.fields.noClient')}</span>
+                  </div>
+                )}
                 {ticket.organization_name ? <small>{ticket.organization_name}</small> : null}
               </div>
             </section>

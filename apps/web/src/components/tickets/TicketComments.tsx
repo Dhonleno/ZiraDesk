@@ -27,8 +27,8 @@ function Avatar({ name }: { name: string }) {
   return (
     <span
       style={{
-        width: 28,
-        height: 28,
+        width: 32,
+        height: 32,
         borderRadius: '50%',
         flexShrink: 0,
         background: 'var(--bg-4)',
@@ -36,7 +36,7 @@ function Avatar({ name }: { name: string }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: 600,
         color: 'var(--txt-2)',
       }}
@@ -597,7 +597,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
         {t('tickets.comments.listTitle', { defaultValue: 'Comentários e notas' })}
       </h4>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
         {isPending ? (
           <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center' }}>Carregando...</p>
         ) : null}
