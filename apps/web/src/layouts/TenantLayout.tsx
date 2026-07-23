@@ -256,9 +256,11 @@ function Breadcrumb() {
   if (!staticLabel) return null;
 
   const iconEl = isCRM ? (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <circle cx="7" cy="5" r="2.3" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M2 12c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <rect x="4" y="2.5" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M4 5.5h1.6M4 9h1.6M4 12.5h1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      <circle cx="10.4" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M8 12c0-1.4 1.1-2.3 2.4-2.3s2.4.9 2.4 2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   ) : isTickets ? (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -1212,8 +1214,10 @@ export function TenantLayout() {
           {/* CRM (Contatos + Organizações) */}
           <NavItem to="/crm" title={t('nav.crm')} expanded={isNavExpanded}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-              <circle cx="9" cy="6.5" r="2.8" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <rect x="4" y="2.5" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M4 5.5h1.6M4 9h1.6M4 12.5h1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <circle cx="10.4" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M8 12c0-1.4 1.1-2.3 2.4-2.3s2.4.9 2.4 2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
             </svg>
           </NavItem>
 
