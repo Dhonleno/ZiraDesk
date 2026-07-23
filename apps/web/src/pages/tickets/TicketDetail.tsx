@@ -367,6 +367,7 @@ export function TicketDetailPage() {
         toast.success(t('tickets.actions.resolveSuccess'));
       } else if (variables.status === 'closed') {
         toast.success(t('tickets.actions.closeSuccess'));
+        setTimeout(() => navigate('/tickets'), 1000);
       } else if (variables.status === 'open' && (previousStatus === 'resolved' || previousStatus === 'closed')) {
         toast.success(t('tickets.actions.reopenSuccess'));
       }
