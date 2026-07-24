@@ -20,7 +20,7 @@ import {
 } from './goals.service.js';
 
 export async function omnichannelGoalsRoutes(app: FastifyInstance): Promise<void> {
-  const guard = [authMiddleware, requireFeature('sla'), tenantSchemaFromJwt, requirePermission('metrics:view')];
+  const guard = [authMiddleware, requireFeature('reports'), tenantSchemaFromJwt, requirePermission('metrics:view')];
 
   app.get('/goals', { preHandler: guard }, async (request, reply) => {
     const parsed = goalsQuerySchema.safeParse(request.query);
