@@ -1380,25 +1380,6 @@
   gap: 12px;
 }
 
-.monitor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.monitor-header h1 {
-  margin: 0;
-  color: var(--txt);
-  font-size: 22px;
-}
-
-.monitor-header p {
-  margin: 2px 0 0;
-  color: var(--txt-2);
-  font-size: 13px;
-}
-
 .metrics-page {
   padding: 16px 20px;
   background: var(--bg);
@@ -2255,14 +2236,6 @@
   gap: 0;
 }
 
-.history-header h1 {
-  margin: 0;
-}
-
-.history-header {
-  margin-bottom: 12px;
-}
-
 .history-filters-grid {
   display: grid;
   grid-template-columns: 2fr repeat(6, minmax(0, 1fr));
@@ -2866,12 +2839,6 @@
   border: none;
   padding: 0 2px;
   display: block;
-}
-
-.history-goals-head {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
 }
 
 .history-goals-grid {

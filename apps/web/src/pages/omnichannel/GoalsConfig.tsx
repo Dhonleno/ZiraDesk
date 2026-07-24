@@ -330,15 +330,6 @@ export function GoalsConfig() {
 
   return (
     <div className="history-goals-wrap">
-      <div className="history-goals-head">
-        <button className="zd-btn zd-btn-primary" type="button" onClick={openForCreate}>
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-            <path d="M6.5 2.5v8M2.5 6.5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-          {t('goals.new')}
-        </button>
-      </div>
-
       <div className="history-goals-grid">
         {goals.map((goal) => (
           <article key={goal.id} className="history-goal-card">

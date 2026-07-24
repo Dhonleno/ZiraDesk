@@ -396,16 +396,6 @@ export function PerformancePage() {
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div className="monitor-page history-page performance-page">
-        <div className="monitor-header history-header" style={{ justifyContent: 'flex-end' }}>
-          <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-              <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {t('performance.exportCsv')}
-          </button>
-        </div>
-
         <div className="performance-filter-bar">
           <select
             className="filter-select"
@@ -462,6 +452,14 @@ export function PerformancePage() {
               />
             </>
           ) : null}
+
+          <button className="metrics-export-btn" style={{ marginLeft: 'auto' }} type="button" onClick={handleExport}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+              <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {t('performance.exportCsv')}
+          </button>
         </div>
 
         <div className="performance-kpis-grid">

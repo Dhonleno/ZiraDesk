@@ -435,18 +435,6 @@ export function HistoryPage() {
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
       <div className="monitor-page history-page">
-        {activeTab === 'history' ? (
-          <div className="monitor-header history-header" style={{ justifyContent: 'flex-end' }}>
-            <button className="zd-btn zd-btn-primary" type="button" onClick={handleExport}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-                <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {t('history.exportCsv')}
-            </button>
-          </div>
-        ) : null}
-
         <div className="history-tabs" role="tablist" aria-label={t('history.tabs.label')}>
           <button
             type="button"
@@ -474,7 +462,8 @@ export function HistoryPage() {
         <div className={`history-tab-content ${activeTab === 'goals' ? 'is-goals' : 'is-history'}`}>
           {activeTab === 'history' ? (
             <>
-            <div className="history-filters-grid">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+            <div className="history-filters-grid" style={{ flex: '1 1 480px' }}>
               <div className="history-search-box">
                 <input
                   className="zd-input"
@@ -579,6 +568,15 @@ export function HistoryPage() {
                   />
                 </>
               ) : null}
+            </div>
+
+              <button className="metrics-export-btn" style={{ flexShrink: 0 }} type="button" onClick={handleExport}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                  <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M2.5 8.5v2h8v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t('history.exportCsv')}
+              </button>
             </div>
 
             <div className="history-result-count">{t('history.found', { count: historyResult?.meta.total ?? 0 })}</div>
