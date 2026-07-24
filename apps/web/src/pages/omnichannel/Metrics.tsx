@@ -33,7 +33,7 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { PageShell } from '../../components/layout/PageShell';
 
-type MetricsTab = 'omnichannel' | 'tickets';
+type DataSource = 'omnichannel' | 'tickets';
 
 type PeriodKey = 'today' | '7' | '30' | '90' | 'custom';
 
@@ -126,20 +126,17 @@ interface MetricCardProps {
   value: string;
   subtitle?: string;
   icon: ReactNode;
-  color: string;
 }
 
-function MetricCard({ title, value, subtitle, icon, color }: MetricCardProps) {
+function MetricCard({ title, value, subtitle, icon }: MetricCardProps) {
   return (
-    <div className="metric-card">
-      <div className="metric-card-header">
-        <span className="metric-title">{title}</span>
-        <div className="metric-icon" style={{ background: `${color}22`, color }}>
-          {icon}
-        </div>
+    <div className="metrics-kpi-item">
+      <div className="metrics-kpi-header">
+        <span className="metrics-kpi-label">{title}</span>
+        <span className="metrics-kpi-icon">{icon}</span>
       </div>
-      <div className="metric-value">{value}</div>
-      {subtitle ? <div className="metric-subtitle">{subtitle}</div> : null}
+      <div className="metrics-kpi-value">{value}</div>
+      {subtitle ? <div className="metrics-kpi-sub">{subtitle}</div> : null}
     </div>
   );
 }
@@ -754,7 +751,7 @@ function TicketsMetricsTab({ filters, agentId, t }: TicketsMetricsTabProps) {
 export function MetricsPage() {
   const { t } = useTranslation('omnichannel');
   const toast = useToast();
-  const [metricsTab, setMetricsTab] = useState<MetricsTab>('omnichannel');
+  const [dataSource, setDataSource] = useState<DataSource>('omnichannel');
   const [period, setPeriod] = useState<PeriodKey>('7');
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
@@ -904,36 +901,8 @@ export function MetricsPage() {
 
   return (
     <PageShell padding={0} contentStyle={{ overflow: 'hidden' }}>
-      <div className="monitor-page">
-        {metricsTab === 'omnichannel' ? (
-        <div className="monitor-header" style={{ justifyContent: 'flex-end' }}>
-          <button className="zd-btn zd-btn-primary" onClick={exportCsv} type="button">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {t('metrics.export')}
-          </button>
-        </div>
-        ) : null}
-
-      <div className="metrics-main-tabs">
-        <button
-          type="button"
-          className={`period-tab${metricsTab === 'omnichannel' ? ' active' : ''}`}
-          onClick={() => setMetricsTab('omnichannel')}
-        >
-          {t('metrics.tabs.omnichannel')}
-        </button>
-        <button
-          type="button"
-          className={`period-tab${metricsTab === 'tickets' ? ' active' : ''}`}
-          onClick={() => setMetricsTab('tickets')}
-        >
-          {t('metrics.tabs.tickets')}
-        </button>
-      </div>
-
-      <div className="filters-bar">
+      <div className="monitor-page metrics-page">
+      <div className="metrics-filters">
         <div className="period-tabs">
           {PERIODS.map((item) => (
             <button
@@ -1008,7 +977,7 @@ export function MetricsPage() {
           ))}
         </select>
 
-        {metricsTab === 'omnichannel' ? (
+        {dataSource === 'omnichannel' ? (
           <>
             <select className="filter-select" aria-label={t('metrics.filters.channelAriaLabel')} value={channelType} onChange={(event) => setChannelType(event.target.value)}>
               <option value="">{t('metrics.filters.allChannels')}</option>
@@ -1029,45 +998,59 @@ export function MetricsPage() {
             </select>
           </>
         ) : null}
+
+        <select
+          className="filter-select"
+          aria-label={t('metrics.source.ariaLabel')}
+          value={dataSource}
+          onChange={(event) => setDataSource(event.target.value as DataSource)}
+        >
+          <option value="omnichannel">{t('metrics.source.omnichannel')}</option>
+          <option value="tickets">{t('metrics.source.tickets')}</option>
+        </select>
+
+        {dataSource === 'omnichannel' ? (
+          <button className="metrics-export-btn" style={{ marginLeft: 'auto' }} onClick={exportCsv} type="button">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M6 1.5v5.7M3.8 5.2 6 7.4l2.2-2.2M1.7 8.8h8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {t('metrics.export')}
+          </button>
+        ) : null}
       </div>
 
-      {metricsTab === 'omnichannel' ? (
+      {dataSource === 'omnichannel' ? (
         <>
-          <div className="metrics-grid">
+          <div className="metrics-kpi-row">
             <MetricCard
               title={t('metrics.cards.total')}
               value={String(data?.overview.total.total ?? 0)}
               subtitle={t('metrics.cards.totalSubtitle', { count: data?.overview.total.open ?? 0 })}
               icon={<MetricIcon kind="total" />}
-              color="var(--teal)"
             />
             <MetricCard
               title={t('metrics.cards.tma')}
               value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
               subtitle={t('metrics.cards.tmaSubtitle')}
               icon={<MetricIcon kind="tma" />}
-              color="var(--blue)"
             />
             <MetricCard
               title={t('metrics.cards.csat')}
               value={csatAverage !== null && csatAverage !== undefined ? String(csatAverage) : '—'}
               subtitle={t('metrics.cards.csatSubtitle', { count: data?.overview.csat.total_responses ?? 0 })}
               icon={<MetricIcon kind="csat" />}
-              color="var(--amber)"
             />
             <MetricCard
               title={t('metrics.cards.closed')}
               value={formatPercent(closedRate)}
               subtitle={t('metrics.cards.closedSubtitle', { count: closedMetricValue(data?.overview.total as unknown as Record<string, unknown>) })}
               icon={<MetricIcon kind="closed" />}
-              color="var(--green)"
             />
             <MetricCard
               title={t('metrics.cards.firstResponse')}
               value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
               subtitle={t('metrics.cards.firstResponseSubtitle')}
               icon={<MetricIcon kind="firstResponse" />}
-              color="var(--purple)"
             />
           </div>
 

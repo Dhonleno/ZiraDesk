@@ -70,7 +70,8 @@
     "tmaUnit": "min",
     "noData": "No data for the selected period",
     "noDataHint": "Adjust the period or filters to view data.",
-    "tabs": {
+    "source": {
+      "ariaLabel": "Select data source",
       "omnichannel": "Omnichannel",
       "tickets": "Tickets"
     },

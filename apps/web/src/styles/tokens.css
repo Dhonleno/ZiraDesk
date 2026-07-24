@@ -1399,6 +1399,11 @@
   font-size: 13px;
 }
 
+.metrics-page {
+  padding: 16px 20px;
+  background: var(--bg);
+}
+
 .performance-context-note {
   margin-top: 6px;
   display: inline-flex;
@@ -1944,6 +1949,55 @@
   color: var(--txt-3);
 }
 
+.metrics-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.metrics-kpi-item {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+}
+
+.metrics-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.metrics-kpi-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metrics-kpi-icon {
+  display: flex;
+  color: var(--txt-3);
+  opacity: 0.6;
+}
+
+.metrics-kpi-value {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--txt);
+  line-height: 1;
+  font-family: var(--mono);
+}
+
+.metrics-kpi-sub {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin-top: 4px;
+}
+
 .chart-card {
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -1965,12 +2019,31 @@
   margin-bottom: 12px;
 }
 
-.filters-bar {
+.metrics-filters {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+.metrics-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.metrics-export-btn:hover {
+  background: var(--bg-4);
+  color: var(--txt);
 }
 
 .period-tabs {
@@ -3072,7 +3145,8 @@
 }
 
 @media (max-width: 1200px) {
-  .metrics-grid {
+  .metrics-grid,
+  .metrics-kpi-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -3090,7 +3164,8 @@
 }
 
 @media (max-width: 900px) {
-  .metrics-grid {
+  .metrics-grid,
+  .metrics-kpi-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3116,7 +3191,8 @@
 }
 
 @media (max-width: 640px) {
-  .metrics-grid {
+  .metrics-grid,
+  .metrics-kpi-row {
     grid-template-columns: 1fr;
   }
 
