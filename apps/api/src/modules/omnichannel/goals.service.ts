@@ -5,8 +5,9 @@ import type { CreateGoalInput, UpdateGoalInput } from './goals.schema.js';
 interface GoalRow {
   id: string;
   name: string;
-  scope: 'global' | 'agent' | 'group';
+  scope: 'global' | 'agent' | 'group' | 'department';
   agent_id: string | null;
+  department_id: string | null;
   bot_option_id: string | null;
   period: 'daily' | 'weekly' | 'monthly';
   goal_tma_minutes: number | null;
@@ -18,16 +19,18 @@ interface GoalRow {
   created_at: Date;
   updated_at: Date;
   agent_name: string | null;
+  department_name: string | null;
   bot_option_label: string | null;
 }
 
-type GoalScope = 'global' | 'agent';
+type GoalScope = 'global' | 'agent' | 'department';
 type GoalPeriod = GoalRow['period'];
 
 interface NormalizedGoalPayload {
   name: string;
   scope: GoalScope;
   agentId: string | null;
+  departmentId: string | null;
   period: GoalPeriod;
   goalTmaMinutes: number | null;
   goalTmeMinutes: number | null;
@@ -106,6 +109,20 @@ export async function ensureGoalsInfrastructure(schemaName: string): Promise<voi
       )
     `);
 
+    // Metas por departamento — coluna adicionada de forma idempotente para tenants existentes.
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE ${schemaRef}.performance_goals
+      ADD COLUMN IF NOT EXISTS department_id UUID
+    `);
+
+    // Uma meta por departamento+período (a UNIQUE base não cobre department_id, e NULLs nela
+    // não colidem entre si; este índice parcial garante unicidade das metas de departamento).
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_performance_goals_department_period
+      ON ${schemaRef}.performance_goals(department_id, period)
+      WHERE scope = 'department'
+    `);
+
     await prisma.$executeRawUnsafe(`
       CREATE INDEX IF NOT EXISTS idx_performance_goals_active
       ON ${schemaRef}.performance_goals(is_active)
@@ -127,6 +144,8 @@ function mapGoalRow(row: GoalRow) {
     scope: row.scope,
     agentId: row.agent_id,
     agentName: row.agent_name,
+    departmentId: row.department_id,
+    departmentName: row.department_name,
     botOptionId: row.bot_option_id,
     botOptionLabel: row.bot_option_label,
     period: row.period,
@@ -141,16 +160,20 @@ function mapGoalRow(row: GoalRow) {
   };
 }
 
-function normalizeScopeTargets(scope: GoalScope, agentId: string | null) {
-  if (scope === 'global') {
-    return { agentId: null };
+function normalizeScopeTargets(scope: GoalScope, agentId: string | null, departmentId: string | null) {
+  if (scope === 'agent') {
+    if (!agentId) throw new Error('agentId é obrigatório para metas por agente');
+    return { agentId, departmentId: null };
   }
-  if (!agentId) throw new Error('agentId é obrigatório para metas por agente');
-  return { agentId };
+  if (scope === 'department') {
+    if (!departmentId) throw new Error('departmentId é obrigatório para metas por departamento');
+    return { agentId: null, departmentId };
+  }
+  return { agentId: null, departmentId: null };
 }
 
 function toGoalScope(value: GoalRow['scope'] | GoalScope): GoalScope | null {
-  if (value === 'global' || value === 'agent') return value;
+  if (value === 'global' || value === 'agent' || value === 'department') return value;
   return null;
 }
 
@@ -158,12 +181,14 @@ function toNormalizedPayload(input: CreateGoalInput): NormalizedGoalPayload {
   const targets = normalizeScopeTargets(
     input.scope,
     input.agentId ?? null,
+    input.departmentId ?? null,
   );
 
   return {
     name: input.name.trim(),
     scope: input.scope,
     agentId: targets.agentId,
+    departmentId: targets.departmentId,
     period: input.period,
     goalTmaMinutes: input.goalTmaMinutes ?? null,
     goalTmeMinutes: input.goalTmeMinutes ?? null,
@@ -182,6 +207,7 @@ async function findGoalById(schemaName: string, id: string): Promise<GoalRow | n
       g.name,
       g.scope,
       g.agent_id,
+      g.department_id,
       g.bot_option_id,
       g.period,
       g.goal_tma_minutes,
@@ -193,9 +219,11 @@ async function findGoalById(schemaName: string, id: string): Promise<GoalRow | n
       g.created_at,
       g.updated_at,
       u.name AS agent_name,
+      d.name AS department_name,
       bo.label AS bot_option_label
     FROM ${schemaRef}.performance_goals g
     LEFT JOIN ${schemaRef}.users u ON u.id = g.agent_id
+    LEFT JOIN ${schemaRef}.departments d ON d.id = g.department_id
     LEFT JOIN ${schemaRef}.bot_options bo ON bo.id = g.bot_option_id
     WHERE g.id = $1::uuid
     LIMIT 1
@@ -221,6 +249,7 @@ export async function listGoals(schemaName: string, includeInactive = false) {
       g.name,
       g.scope,
       g.agent_id,
+      g.department_id,
       g.bot_option_id,
       g.period,
       g.goal_tma_minutes,
@@ -232,9 +261,11 @@ export async function listGoals(schemaName: string, includeInactive = false) {
       g.created_at,
       g.updated_at,
       u.name AS agent_name,
+      d.name AS department_name,
       bo.label AS bot_option_label
     FROM ${schemaRef}.performance_goals g
     LEFT JOIN ${schemaRef}.users u ON u.id = g.agent_id
+    LEFT JOIN ${schemaRef}.departments d ON d.id = g.department_id
     LEFT JOIN ${schemaRef}.bot_options bo ON bo.id = g.bot_option_id
     ${whereSql}
     ORDER BY g.created_at DESC
@@ -255,6 +286,7 @@ export async function createGoal(schemaName: string, payload: CreateGoalInput) {
         name,
         scope,
         agent_id,
+        department_id,
         bot_option_id,
         period,
         goal_tma_minutes,
@@ -269,19 +301,21 @@ export async function createGoal(schemaName: string, payload: CreateGoalInput) {
         $2::varchar,
         $3::uuid,
         $4::uuid,
-        $5::varchar,
-        $6::integer,
+        $5::uuid,
+        $6::varchar,
         $7::integer,
         $8::integer,
-        $9::numeric,
-        $10::integer,
-        $11::boolean
+        $9::integer,
+        $10::numeric,
+        $11::integer,
+        $12::boolean
       )
       RETURNING
         id,
         name,
         scope,
         agent_id,
+        department_id,
         bot_option_id,
         period,
         goal_tma_minutes,
@@ -293,11 +327,13 @@ export async function createGoal(schemaName: string, payload: CreateGoalInput) {
         created_at,
         updated_at,
         NULL::text AS agent_name,
+        NULL::text AS department_name,
         NULL::text AS bot_option_label
     `,
     normalized.name,
     normalized.scope,
     normalized.agentId,
+    normalized.departmentId,
     null,
     normalized.period,
     normalized.goalTmaMinutes,
@@ -328,15 +364,17 @@ export async function updateGoal(schemaName: string, id: string, payload: Update
 
   const mergedScope = toGoalScope(payload.scope ?? current.scope);
   if (!mergedScope) {
-    throw new Error('Metas por grupo não podem ser editadas. Crie uma meta global ou por agente.');
+    throw new Error('Metas por grupo não podem ser editadas. Crie uma meta global, por agente ou por departamento.');
   }
   const mergedAgentId = payload.agentId !== undefined ? payload.agentId : current.agent_id;
-  const targets = normalizeScopeTargets(mergedScope, mergedAgentId);
+  const mergedDepartmentId = payload.departmentId !== undefined ? payload.departmentId : current.department_id;
+  const targets = normalizeScopeTargets(mergedScope, mergedAgentId, mergedDepartmentId);
 
   const normalized: NormalizedGoalPayload = {
     name: (payload.name ?? current.name).trim(),
     scope: mergedScope,
     agentId: targets.agentId,
+    departmentId: targets.departmentId,
     period: (payload.period ?? current.period) as GoalPeriod,
     goalTmaMinutes: payload.goalTmaMinutes !== undefined ? payload.goalTmaMinutes : current.goal_tma_minutes,
     goalTmeMinutes: payload.goalTmeMinutes !== undefined ? payload.goalTmeMinutes : current.goal_tme_minutes,
@@ -355,14 +393,15 @@ export async function updateGoal(schemaName: string, id: string, payload: Update
         name = $2::varchar,
         scope = $3::varchar,
         agent_id = $4::uuid,
-        bot_option_id = $5::uuid,
-        period = $6::varchar,
-        goal_tma_minutes = $7::integer,
-        goal_tme_minutes = $8::integer,
-        goal_sla_percent = $9::integer,
-        goal_csat_min = $10::numeric,
-        goal_volume_min = $11::integer,
-        is_active = $12::boolean,
+        department_id = $5::uuid,
+        bot_option_id = $6::uuid,
+        period = $7::varchar,
+        goal_tma_minutes = $8::integer,
+        goal_tme_minutes = $9::integer,
+        goal_sla_percent = $10::integer,
+        goal_csat_min = $11::numeric,
+        goal_volume_min = $12::integer,
+        is_active = $13::boolean,
         updated_at = NOW()
       WHERE id = $1::uuid
     `,
@@ -370,6 +409,7 @@ export async function updateGoal(schemaName: string, id: string, payload: Update
     normalized.name,
     normalized.scope,
     normalized.agentId,
+    normalized.departmentId,
     null,
     normalized.period,
     normalized.goalTmaMinutes,

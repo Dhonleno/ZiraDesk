@@ -437,7 +437,12 @@
     "name": "Nombre de la meta",
     "scope": {
       "global": "Global (todos los agentes)",
-      "agent": "Por agente"
+      "agent": "Por agente",
+      "department": "Por departamento"
+    },
+    "fields": {
+      "department": "Departamento",
+      "selectDepartment": "Selecciona un departamento"
     },
     "period": {
       "daily": "Diario",
@@ -456,6 +461,7 @@
       "nameMax": "Usa como máximo {{max}} caracteres.",
       "nameHint": "Hasta {{max}} caracteres.",
       "agentRequired": "Selecciona un agente para esta meta.",
+      "departmentRequired": "Selecciona un departamento para esta meta.",
       "integer": "Usa solo números enteros.",
       "number": "Informa un número válido.",
       "range": "Informa un valor entre {{min}} y {{max}}.",

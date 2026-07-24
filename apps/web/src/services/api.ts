@@ -3154,13 +3154,14 @@ export interface OmnichannelHistoryDetail {
   transcript: OmnichannelHistoryMessage[];
 }
 
-export type GoalScope = 'global' | 'agent';
+export type GoalScope = 'global' | 'agent' | 'department';
 export type GoalPeriod = 'daily' | 'weekly' | 'monthly';
 
 export interface GoalPayload {
   name: string;
   scope: GoalScope;
   agentId?: string | null;
+  departmentId?: string | null;
   period: GoalPeriod;
   goalTmaMinutes?: number | null;
   goalTmeMinutes?: number | null;
@@ -3176,6 +3177,8 @@ export interface OmnichannelGoal {
   scope: GoalScope | 'group';
   agentId: string | null;
   agentName: string | null;
+  departmentId?: string | null;
+  departmentName?: string | null;
   botOptionId?: string | null;
   botOptionLabel?: string | null;
   period: GoalPeriod;
@@ -3273,12 +3276,22 @@ export interface OmnichannelPerformanceResponse {
 }
 
 export interface PerformanceByGroupRow {
+  department_id?: string | null;
   group_name: string;
   total_conversations: number;
   avg_tma_minutes: number | null;
   avg_tme_minutes: number | null;
   avg_csat: number | null;
   sla_percent: number | null;
+  goal?: OmnichannelPerformanceGoal | null;
+  goal_status?: {
+    tma: PerformanceMetricStatus | null;
+    tme: PerformanceMetricStatus | null;
+    sla: PerformanceMetricStatus | null;
+    csat: PerformanceMetricStatus | null;
+    volume: PerformanceMetricStatus | null;
+    overall: PerformanceMetricStatus | null;
+  } | null;
 }
 
 export interface PerformanceByGroupResponse {

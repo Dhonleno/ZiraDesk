@@ -437,7 +437,12 @@
     "name": "Goal name",
     "scope": {
       "global": "Global (all agents)",
-      "agent": "By agent"
+      "agent": "By agent",
+      "department": "By department"
+    },
+    "fields": {
+      "department": "Department",
+      "selectDepartment": "Select a department"
     },
     "period": {
       "daily": "Daily",
@@ -456,6 +461,7 @@
       "nameMax": "Use at most {{max}} characters.",
       "nameHint": "Up to {{max}} characters.",
       "agentRequired": "Select an agent for this goal.",
+      "departmentRequired": "Select a department for this goal.",
       "integer": "Use whole numbers only.",
       "number": "Enter a valid number.",
       "range": "Enter a value between {{min}} and {{max}}.",

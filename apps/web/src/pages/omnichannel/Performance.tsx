@@ -531,6 +531,7 @@ export function PerformancePage() {
                       <th>{t('performance.columns.tme')}</th>
                       <th>{t('performance.columns.sla')}</th>
                       <th>{t('performance.columns.csat')}</th>
+                      <th>{t('performance.columns.status')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -544,8 +545,8 @@ export function PerformancePage() {
                         <td>
                           <MetricCell
                             value={row.total_conversations}
-                            status="no_goal"
-                            goal={null}
+                            status={row.goal_status?.volume ?? 'no_goal'}
+                            goal={row.goal?.goal_volume_min ?? null}
                             format="number"
                             type="min"
                           />
@@ -553,8 +554,8 @@ export function PerformancePage() {
                         <td>
                           <MetricCell
                             value={row.avg_tma_minutes}
-                            status="no_goal"
-                            goal={null}
+                            status={row.goal_status?.tma ?? 'no_goal'}
+                            goal={row.goal?.goal_tma_minutes ?? null}
                             format="minutes"
                             type="max"
                           />
@@ -562,8 +563,8 @@ export function PerformancePage() {
                         <td>
                           <MetricCell
                             value={row.avg_tme_minutes}
-                            status="no_goal"
-                            goal={null}
+                            status={row.goal_status?.tme ?? 'no_goal'}
+                            goal={row.goal?.goal_tme_minutes ?? null}
                             format="minutes"
                             type="max"
                           />
@@ -571,8 +572,8 @@ export function PerformancePage() {
                         <td>
                           <MetricCell
                             value={row.sla_percent}
-                            status="no_goal"
-                            goal={null}
+                            status={row.goal_status?.sla ?? 'no_goal'}
+                            goal={row.goal?.goal_sla_percent ?? null}
                             format="percent"
                             type="min"
                           />
@@ -580,11 +581,14 @@ export function PerformancePage() {
                         <td>
                           <MetricCell
                             value={row.avg_csat}
-                            status="no_goal"
-                            goal={null}
+                            status={row.goal_status?.csat ?? 'no_goal'}
+                            goal={row.goal?.goal_csat_min ?? null}
                             format="csat"
                             type="min"
                           />
+                        </td>
+                        <td>
+                          <StatusBadge status={row.goal_status?.overall ?? 'no_goal'} labels={statusLabels} />
                         </td>
                       </tr>
                     ))}

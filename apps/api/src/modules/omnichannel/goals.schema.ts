@@ -24,8 +24,9 @@ const nullableCsat = z.preprocess(toNullableNumber, z.union([z.number().min(1).m
 
 const goalBaseSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  scope: z.enum(['global', 'agent']),
+  scope: z.enum(['global', 'agent', 'department']),
   agentId: nullableUuid.optional(),
+  departmentId: nullableUuid.optional(),
   period: z.enum(['daily', 'weekly', 'monthly']),
   goalTmaMinutes: nullableGoalMinutes.optional(),
   goalTmeMinutes: nullableGoalMinutes.optional(),
@@ -41,6 +42,13 @@ export const createGoalSchema = goalBaseSchema.superRefine((value, ctx) => {
       code: z.ZodIssueCode.custom,
       message: 'agentId é obrigatório quando scope = agent',
       path: ['agentId'],
+    });
+  }
+  if (value.scope === 'department' && !value.departmentId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'departmentId é obrigatório quando scope = department',
+      path: ['departmentId'],
     });
   }
 });

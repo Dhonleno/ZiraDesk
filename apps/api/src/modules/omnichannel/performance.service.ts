@@ -23,8 +23,9 @@ interface PerformanceRowDb {
 interface GoalDbRow {
   id: string;
   name: string;
-  scope: 'global' | 'agent';
+  scope: 'global' | 'agent' | 'department';
   agent_id: string | null;
+  department_id: string | null;
   bot_option_id: string | null;
   period: GoalPeriod;
   goal_tma_minutes: number | null;
@@ -276,6 +277,14 @@ function pickGoalForAgent(
   if (agentGoal) return agentGoal;
 
   return goals.find((goal) => goal.scope === 'global') ?? null;
+}
+
+function pickGoalForDepartment(
+  goals: GoalDbRow[],
+  departmentId: string | null,
+): GoalDbRow | null {
+  if (!departmentId) return null;
+  return goals.find((goal) => goal.scope === 'department' && goal.department_id === departmentId) ?? null;
 }
 
 export async function listPerformance(
@@ -581,6 +590,7 @@ export async function listPerformance(
 }
 
 interface PerformanceByGroupRowDb {
+  department_id: string | null;
   group_name: string | null;
   total_conversations: number | bigint | null;
   avg_tma_minutes: number | null;
@@ -594,6 +604,8 @@ export async function listPerformanceByGroup(
   query: PerformanceQuery,
   timezone: string,
 ) {
+  await ensureGoalsInfrastructure(schemaName);
+
   const dateRange = resolveDateRange(
     query.period,
     timezone,
@@ -638,6 +650,7 @@ export async function listPerformanceByGroup(
       SELECT
         c.id,
         c.bot_option_id,
+        c.department_id,
         COALESCE(d.name, '—') AS group_name,
         c.created_at,
         c.conversation_type,
@@ -673,6 +686,7 @@ export async function listPerformanceByGroup(
       WHERE ${whereClause}
     )
     SELECT
+      fc.department_id::text AS department_id,
       fc.group_name,
       COUNT(DISTINCT fc.id)::bigint AS total_conversations,
       AVG(
@@ -704,24 +718,85 @@ export async function listPerformanceByGroup(
         )
       ) AS sla_percent
     FROM filtered_conversations fc
-    GROUP BY fc.group_name
+    GROUP BY fc.department_id, fc.group_name
     ORDER BY total_conversations DESC
   `, ...params);
 
+  const goalPeriod = mapRangeToGoalPeriod(query.period, dateRange.dateFromLocal, dateRange.dateToLocal);
+  const goals = await prisma.$queryRawUnsafe<GoalDbRow[]>(`
+    SELECT
+      id,
+      name,
+      scope,
+      agent_id,
+      department_id,
+      bot_option_id,
+      period,
+      goal_tma_minutes,
+      goal_tme_minutes,
+      goal_sla_percent,
+      goal_csat_min,
+      goal_volume_min
+    FROM ${safeSchema}.performance_goals
+    WHERE is_active = true
+      AND period = $1::varchar
+      AND scope = 'department'
+    ORDER BY updated_at DESC
+  `, goalPeriod);
+
   return {
-    data: rows.map((row) => ({
-      group_name: row.group_name ?? '—',
-      total_conversations: toNumber(row.total_conversations),
-      avg_tma_minutes: toNullableNumber(row.avg_tma_minutes),
-      avg_tme_minutes: toNullableNumber(row.avg_tme_minutes),
-      avg_csat: toNullableNumber(row.avg_csat),
-      sla_percent: toNullableNumber(row.sla_percent),
-    })),
+    data: rows.map((row) => {
+      const goal = pickGoalForDepartment(goals, row.department_id);
+      const totalConversations = toNumber(row.total_conversations);
+      const avgTma = toNullableNumber(row.avg_tma_minutes);
+      const avgTme = toNullableNumber(row.avg_tme_minutes);
+      const avgCsat = toNullableNumber(row.avg_csat);
+      const slaPercent = toNullableNumber(row.sla_percent);
+
+      const goalPayload = goal ? {
+        id: goal.id,
+        name: goal.name,
+        scope: goal.scope,
+        period: goal.period,
+        goal_tma_minutes: goal.goal_tma_minutes,
+        goal_tme_minutes: goal.goal_tme_minutes,
+        goal_sla_percent: goal.goal_sla_percent,
+        goal_csat_min: goal.goal_csat_min,
+        goal_volume_min: goal.goal_volume_min,
+      } : null;
+
+      const tmaStatus = checkGoal(avgTma, goal?.goal_tma_minutes ?? null, 'max');
+      const tmeStatus = checkGoal(avgTme, goal?.goal_tme_minutes ?? null, 'max');
+      const slaStatus = checkGoal(slaPercent, goal?.goal_sla_percent ?? null, 'min');
+      const csatStatus = checkGoal(avgCsat, goal?.goal_csat_min ?? null, 'min');
+      const volumeStatus = checkGoal(totalConversations, goal?.goal_volume_min ?? null, 'min');
+      const overallStatus = resolveOverallStatus([tmaStatus, tmeStatus, slaStatus, csatStatus, volumeStatus]);
+
+      return {
+        department_id: row.department_id,
+        group_name: row.group_name ?? '—',
+        total_conversations: totalConversations,
+        avg_tma_minutes: avgTma,
+        avg_tme_minutes: avgTme,
+        avg_csat: avgCsat,
+        sla_percent: slaPercent,
+        goal: goalPayload,
+        goal_status: goal ? {
+          tma: tmaStatus,
+          tme: tmeStatus,
+          sla: slaStatus,
+          csat: csatStatus,
+          volume: volumeStatus,
+          overall: overallStatus,
+        } : null,
+      };
+    }),
     applied_filters: {
       ...query,
       date_from: dateRange.dateFromLocal,
       date_to: dateRange.dateToLocal,
       timezone,
+      goal_period: goalPeriod,
     },
   };
 }

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import axios from 'axios';
-import { omnichannelApi, type GoalPayload, type GoalScope, type OmnichannelGoal } from '../../services/api';
+import { adminApi, omnichannelApi, type GoalPayload, type GoalScope, type OmnichannelGoal } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 
 type GoalFormState = {
@@ -11,6 +11,7 @@ type GoalFormState = {
   name: string;
   scope: GoalScope;
   agentId: string;
+  departmentId: string;
   period: 'daily' | 'weekly' | 'monthly';
   goalTmaMinutes: string;
   goalTmeMinutes: string;
@@ -41,6 +42,7 @@ const EMPTY_FORM: GoalFormState = {
   name: '',
   scope: 'global',
   agentId: '',
+  departmentId: '',
   period: 'monthly',
   goalTmaMinutes: '',
   goalTmeMinutes: '',
@@ -96,6 +98,10 @@ function buildGoalValidationErrors(form: GoalFormState, t: TFunction<'omnichanne
     errors.agentId = t('goals.validation.agentRequired');
   }
 
+  if (form.scope === 'department' && !form.departmentId) {
+    errors.departmentId = t('goals.validation.departmentRequired');
+  }
+
   const validateIntRange = (field: NumericGoalField, min: number, max: number) => {
     const value = parseOptionalNumber(form[field]);
     if (value === null) return;
@@ -136,12 +142,14 @@ function GoalFieldMessage({ error, hint }: { error?: string | undefined; hint?: 
 }
 
 function mapGoalToForm(goal: OmnichannelGoal): GoalFormState {
-  const normalizedScope: GoalScope = goal.scope === 'agent' ? 'agent' : 'global';
+  const normalizedScope: GoalScope =
+    goal.scope === 'agent' ? 'agent' : goal.scope === 'department' ? 'department' : 'global';
   return {
     id: goal.id,
     name: goal.name,
     scope: normalizedScope,
     agentId: goal.agentId ?? '',
+    departmentId: goal.departmentId ?? '',
     period: goal.period,
     goalTmaMinutes: toInputString(goal.goalTmaMinutes),
     goalTmeMinutes: toInputString(goal.goalTmeMinutes),
@@ -200,6 +208,18 @@ export function GoalsConfig() {
     queryFn: omnichannelApi.monitor,
     staleTime: 30_000,
   });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin', 'departments'],
+    queryFn: adminApi.departments.list,
+    enabled: form.scope === 'department',
+    staleTime: 60_000,
+  });
+
+  const activeDepartments = useMemo(
+    () => departments.filter((department) => department.isActive),
+    [departments],
+  );
 
   const sortedAgents = useMemo(
     () => [...(monitorData?.agents ?? [])].filter((a) => a.role === 'agent').sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
@@ -269,6 +289,7 @@ export function GoalsConfig() {
       scope: form.scope,
       period: form.period,
       agentId: form.scope === 'agent' ? (form.agentId || null) : null,
+      departmentId: form.scope === 'department' ? (form.departmentId || null) : null,
       goalTmaMinutes: toNullableInt(normalizeDecimalInput(form.goalTmaMinutes)),
       goalTmeMinutes: toNullableInt(normalizeDecimalInput(form.goalTmeMinutes)),
       goalSlaPercent: toNullableInt(normalizeDecimalInput(form.goalSlaPercent)),
@@ -281,6 +302,7 @@ export function GoalsConfig() {
 
   const canSave = form.name.trim().length > 0
     && (form.scope !== 'agent' || Boolean(form.agentId))
+    && (form.scope !== 'department' || Boolean(form.departmentId))
     && !hasValidationErrors;
 
   const goalMetricDefs = [
@@ -323,6 +345,10 @@ export function GoalsConfig() {
 
     if (goal.scope === 'group') {
       return goal.botOptionLabel ?? t('history.filters.group');
+    }
+
+    if (goal.scope === 'department') {
+      return goal.departmentName ?? t('goals.fields.department');
     }
 
     return goal.agentName ?? t('goals.scope.agent');
@@ -438,14 +464,19 @@ export function GoalsConfig() {
                 <select
                   className="filter-select"
                   value={form.scope}
-                  onChange={(event) => setForm((prev) => ({
-                    ...prev,
-                    scope: event.target.value as GoalScope,
-                    agentId: event.target.value === 'agent' ? prev.agentId : '',
-                  }))}
+                  onChange={(event) => {
+                    const nextScope = event.target.value as GoalScope;
+                    setForm((prev) => ({
+                      ...prev,
+                      scope: nextScope,
+                      agentId: nextScope === 'agent' ? prev.agentId : '',
+                      departmentId: nextScope === 'department' ? prev.departmentId : '',
+                    }));
+                  }}
                 >
                   <option value="global">{t('goals.scope.global')}</option>
                   <option value="agent">{t('goals.scope.agent')}</option>
+                  <option value="department">{t('goals.scope.department')}</option>
                 </select>
               </label>
 
@@ -464,6 +495,24 @@ export function GoalsConfig() {
                     ))}
                   </select>
                   <GoalFieldMessage error={validationErrors.agentId} />
+                </label>
+              ) : null}
+
+              {form.scope === 'department' ? (
+                <label>
+                  <span>{t('goals.fields.department')}</span>
+                  <select
+                    className={`filter-select${validationErrors.departmentId ? ' is-invalid' : ''}`}
+                    value={form.departmentId}
+                    aria-invalid={Boolean(validationErrors.departmentId)}
+                    onChange={(event) => setForm((prev) => ({ ...prev, departmentId: event.target.value }))}
+                  >
+                    <option value="">{t('goals.fields.selectDepartment')}</option>
+                    {activeDepartments.map((department) => (
+                      <option key={department.id} value={department.id}>{department.name}</option>
+                    ))}
+                  </select>
+                  <GoalFieldMessage error={validationErrors.departmentId} />
                 </label>
               ) : null}
 
