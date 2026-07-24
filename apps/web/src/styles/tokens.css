@@ -2234,6 +2234,7 @@
 
 .history-page {
   gap: 0;
+  padding-top: 8px;
 }
 
 .history-filters-grid {
