@@ -1030,7 +1030,7 @@ export function MetricsPage() {
             />
             <MetricCard
               title={t('metrics.cards.tma')}
-              value={`${data?.overview.tma ?? 0}${t('metrics.tmaUnit')}`}
+              value={formatTmr(data?.overview.tma ?? 0)}
               subtitle={t('metrics.cards.tmaSubtitle')}
               icon={<MetricIcon kind="tma" />}
             />
@@ -1048,7 +1048,7 @@ export function MetricsPage() {
             />
             <MetricCard
               title={t('metrics.cards.firstResponse')}
-              value={`${data?.overview.first_response_minutes ?? 0}${t('metrics.tmaUnit')}`}
+              value={formatTmr(data?.overview.first_response_minutes ?? 0)}
               subtitle={t('metrics.cards.firstResponseSubtitle')}
               icon={<MetricIcon kind="firstResponse" />}
             />
