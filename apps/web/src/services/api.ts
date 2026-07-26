@@ -998,6 +998,7 @@ export interface CrmOrganizationConversation {
   protocol: string | null;
   subject: string | null;
   department_name: string | null;
+  contact_name: string | null;
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;

@@ -144,6 +144,8 @@
         "outro": "Other"
       }
     },
+    "noConversations": "No conversations yet",
+    "noConversationsSub": "Conversations from this organization will appear here",
     "conversations": {
       "empty": "No conversations found",
       "channel": "Channel",

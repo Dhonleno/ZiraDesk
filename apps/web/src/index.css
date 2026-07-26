@@ -6667,6 +6667,105 @@
   padding-top: 16px;
 }
 
+/* ── Aba Conversas do OrganizationDetail ── */
+
+.org-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background .1s;
+}
+
+.org-conv-item:hover {
+  background: var(--bg-3);
+}
+
+.org-conv-item:last-child {
+  border-bottom: none;
+}
+
+.org-conv-item:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
+.org-conv-channel-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.org-conv-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.org-conv-protocol {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-conv-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.org-conv-contact {
+  font-size: 11px;
+  color: var(--txt-2);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.org-conv-sep {
+  font-size: 11px;
+  color: var(--txt-3);
+  flex-shrink: 0;
+}
+
+.org-conv-preview {
+  font-size: 11px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.org-conv-status-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.org-conv-date {
+  font-size: 10px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
 /* ── DatePicker ── */
 
 .datepicker-trigger {
