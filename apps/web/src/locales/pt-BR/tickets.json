@@ -218,6 +218,9 @@
       "api": "API"
     },
     "filters": {
+      "searchAgent": "Buscar agente...",
+      "allAgents": "Todos os agentes",
+      "noAgentsFound": "Nenhum agente encontrado",
       "label": "Filtros",
       "clearAll": "Limpar filtros",
       "all": "Todos",

@@ -42,6 +42,7 @@ import { canExportTickets } from '../../utils/ticketPermissions';
 import { TicketTableRow } from '../../components/tickets/TicketTableRow';
 import { TicketsPagination } from '../../components/tickets/TicketsPagination';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { AgentCombobox } from '../../components/tickets/AgentCombobox';
 
 type BoardStatus = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
@@ -203,6 +204,16 @@ function TicketCard({
       </div>
 
       <div className="tickets-card-title">{sanitizeTicketTitle(ticket.title) || ticket.title}</div>
+
+      {ticket.contact_name ? (
+        <div className="tickets-card-contact">
+          <svg viewBox="0 0 14 14" fill="none" width="11" height="11" aria-hidden>
+            <circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M2 12c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          <span>{ticket.contact_name}</span>
+        </div>
+      ) : null}
 
       {ticket.category ? <div className="tickets-card-category">{ticket.category}</div> : null}
 
@@ -710,21 +721,14 @@ export function TicketsPage() {
           </div>
 
           <div className="tickets-inline-filters">
-            <select
-              className="tickets-inline-select"
+            <AgentCombobox
+              agents={agentsData?.data ?? []}
               value={agentId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setAgentId(value);
-                updateFilterParam('assigned_to', value);
+              onChange={(id) => {
+                setAgentId(id);
+                updateFilterParam('assigned_to', id);
               }}
-              aria-label={t('tickets.filterByAgent')}
-            >
-              <option value="">{t('tickets.filterByAgent')}</option>
-              {(agentsData?.data ?? []).map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name}</option>
-              ))}
-            </select>
+            />
 
             <select
               className="tickets-inline-select"
