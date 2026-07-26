@@ -283,9 +283,23 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   // configurado passamos por ele e ganhamos auto-assign, regras de tipo, evento
   // 'created' e webhook ticket.created; sem isso, mantemos o INSERT direto para
   // não quebrar o inbound de quem ainda não configurou.
-  const inboundDepartmentId = typeof tenant.settings?.['inbound_email_department_id'] === 'string'
-    ? (tenant.settings['inbound_email_department_id'] as string)
+  // Prioriza o departamento configurado no canal de email (tela de canais);
+  // tenant.settings.inbound_email_department_id segue como fallback.
+  const channelRows = await prisma.$queryRawUnsafe<Array<{ settings: Record<string, unknown> | null }>>(
+    `SELECT settings
+     FROM ${schema}.channels
+     WHERE type = 'email' AND status = 'active'
+     ORDER BY created_at ASC
+     LIMIT 1`,
+  );
+  const channelDepartmentId = typeof channelRows[0]?.settings?.['default_department_id'] === 'string'
+    ? (channelRows[0].settings['default_department_id'] as string)
     : null;
+
+  const inboundDepartmentId = channelDepartmentId
+    ?? (typeof tenant.settings?.['inbound_email_department_id'] === 'string'
+      ? (tenant.settings['inbound_email_department_id'] as string)
+      : null);
 
   let ticket: { id: string; title: string; status: string; source: string } | undefined;
 
@@ -309,7 +323,7 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   } else {
     app.log.warn(
       { tenantSlug: tenant.slug },
-      '[Email Webhook] inbound_email_department_id não configurado — ticket criado sem roteamento',
+      '[Email Webhook] departamento padrão não configurado no canal de email — ticket criado sem roteamento',
     );
 
     const createdRows = await prisma.$queryRawUnsafe<Array<{
@@ -440,7 +454,9 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   if (env.RESEND_API_KEY && sendConfirmation) {
     const resend = new Resend(env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `suporte@${tenant.slug}.ziradesk.com`,
+      // Mesmo domínio que extractTenantFromEmail aceita, para que a resposta do
+      // cliente ao e-mail de confirmação volte para o inbound.
+      from: `suporte@${tenant.slug}.${inboundDomain()}`,
       to: senderEmail,
       subject: `Re: ${inbound.subject || 'Ticket recebido'}`,
       html: `

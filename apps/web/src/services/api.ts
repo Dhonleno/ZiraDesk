@@ -1644,6 +1644,13 @@ export const adminApi = {
     return res.data.data;
   },
 
+  getEmailInboundAddress: async (): Promise<{ address: string; alias: string }> => {
+    const res = await api.get<{ success: boolean; data: { address: string; alias: string } }>(
+      '/admin/channels/email/inbound-address',
+    );
+    return res.data.data;
+  },
+
   getUsage: async (): Promise<UsageSummary> => {
     const res = await api.get<{ success: boolean; data: UsageSummary }>('/admin/usage');
     return res.data.data;

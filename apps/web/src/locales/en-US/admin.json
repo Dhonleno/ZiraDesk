@@ -657,6 +657,16 @@
         "deleted": "Channel removed",
         "testSuccess": "Channel connected successfully",
         "testFail": "Connection failed — check your credentials"
+      },
+      "email": {
+        "inboundTitle": "Receive emails as tickets",
+        "inboundDesc": "Set up forwarding in your email to automatically create tickets.",
+        "step1": "Go to your email settings (e.g. support@company.com)",
+        "step2": "Enable automatic forwarding to the address below",
+        "step3": "Done! Received emails will be converted into tickets",
+        "defaultDept": "Default department",
+        "defaultDeptHint": "Tickets created by email will be routed to this department",
+        "noDept": "No department (general queue)"
       }
     },
     "quickReplies": {

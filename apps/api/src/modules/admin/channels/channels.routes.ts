@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthUser } from '@ziradesk/shared';
+import { prisma } from '../../../config/database.js';
+import { env } from '../../../config/env.js';
 import { authMiddleware } from '../../../middleware/auth.js';
 import { hasRole } from '../../../middleware/rbac.js';
 import { tenantSchemaFromJwt } from '../../../middleware/tenantSchemaFromJwt.js';
@@ -23,6 +25,30 @@ function resolveSchemaName(user: unknown): string | null {
 }
 
 export async function channelsRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/admin/channels/email/inbound-address — antes de /:id
+  // O formato precisa casar com extractTenantFromEmail em email.webhook.ts,
+  // senão o tenant configura um forward que o webhook nunca reconhece.
+  app.get('/email/inbound-address', { preHandler: guard }, async (request, reply) => {
+    const tenantId = (request.user as AuthUser).tenantId;
+    const tenant = tenantId
+      ? await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
+      : null;
+
+    if (!tenant) {
+      return reply.code(404).send({ success: false, error: { message: 'Tenant não encontrado' } });
+    }
+
+    const domain = (env.INBOUND_EMAIL_DOMAIN ?? 'ziradesk.com').trim().toLowerCase();
+
+    return reply.send({
+      success: true,
+      data: {
+        address: `suporte@${tenant.slug}.${domain}`,
+        alias: `tickets+${tenant.slug}@${domain}`,
+      },
+    });
+  });
+
   app.get('/', { preHandler: guard }, async (request, reply) => {
     const schemaName = resolveSchemaName(request.user);
     if (!schemaName) {

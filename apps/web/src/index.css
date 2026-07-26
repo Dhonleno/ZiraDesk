@@ -6667,6 +6667,109 @@
   padding-top: 16px;
 }
 
+/* ── Configuração de inbound no canal de email ── */
+
+.channel-config-section {
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.channel-config-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt);
+  margin: 0 0 4px;
+}
+
+.channel-config-section-desc {
+  font-size: 12px;
+  color: var(--txt-3);
+  margin: 0 0 10px;
+}
+
+.inbound-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin-bottom: 10px;
+}
+
+.inbound-address-code {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--teal);
+  word-break: break-all;
+}
+
+.inbound-copy-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--font);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .1s;
+}
+
+.inbound-copy-btn:hover:not(:disabled) {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+.inbound-copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbound-steps {
+  padding-left: 16px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--txt-2);
+  line-height: 1.8;
+}
+
+.channel-config-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.channel-config-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-2);
+}
+
+.channel-config-hint {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin: 2px 0 6px;
+}
+
+.channel-config-field select {
+  height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--font);
+  padding: 0 8px;
+  outline: none;
+}
+
 /* ── Níveis de atendimento (N1/N2/N3) ── */
 
 .ticket-level-badge-row {

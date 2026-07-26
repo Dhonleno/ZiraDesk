@@ -657,6 +657,16 @@
         "deleted": "Canal eliminado",
         "testSuccess": "Canal conectado con éxito",
         "testFail": "Error de conexión — verifica las credenciales"
+      },
+      "email": {
+        "inboundTitle": "Recibir emails como tickets",
+        "inboundDesc": "Configure el reenvío en su email para crear tickets automáticamente.",
+        "step1": "Acceda a la configuración de su email (ej: soporte@empresa.com)",
+        "step2": "Active el reenvío automático a la dirección de abajo",
+        "step3": "¡Listo! Los emails recibidos se convertirán en tickets",
+        "defaultDept": "Departamento por defecto",
+        "defaultDeptHint": "Los tickets creados por email serán dirigidos a este departamento",
+        "noDept": "Sin departamento (cola general)"
       }
     },
     "quickReplies": {

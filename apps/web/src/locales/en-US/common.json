@@ -10,6 +10,8 @@
   "success": "Success",
   "confirm": "Confirm",
   "search": "Search",
+  "copy": "Copy",
+  "copied": "Copied!",
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
