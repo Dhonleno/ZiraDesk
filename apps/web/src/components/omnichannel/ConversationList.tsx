@@ -11,7 +11,9 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
 import { avatarClass } from '../../utils/avatar';
+import { isConversationBotControlled } from '../../utils/conversationNotifications';
 import { notifySound, shouldShowDesktopNotification } from '../../utils/notify';
+import { playNewConversationSound, playNewMessageSound } from '../../hooks/useChatSounds';
 
 interface ConversationItem {
   id: string;
@@ -434,7 +436,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       // - conversa atribuída a mim OU em fila
       // - aba em foco (document.hidden === false)
       if (isClientMessage && shouldNotifyByAssignee && !isBrowserTabHidden()) {
-        notifySound('message');
+        playNewMessageSound();
       }
 
       // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
@@ -493,6 +495,21 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
         markNewConversation(conversationId);
       }
 
+      // Mesmas regras já aplicadas à mensagem nova: nada durante o bot,
+      // e só para conversa que cai na fila (ainda sem agente atribuído).
+      if (data.conversation?.status === 'bot') return;
+      if (isConversationBotControlled(data.conversation)) return;
+
+      const assignedTo =
+        data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+      if (assignedTo) return;
+
+      if (!isBrowserTabHidden()) {
+        playNewConversationSound();
+      }
     };
 
     const handleAssigned = (data: { conversationId?: string }) => {
