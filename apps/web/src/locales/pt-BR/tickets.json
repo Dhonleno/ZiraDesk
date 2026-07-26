@@ -217,6 +217,17 @@
       "whatsapp": "WhatsApp",
       "api": "API"
     },
+    "filters": {
+      "label": "Filtros",
+      "clearAll": "Limpar filtros",
+      "all": "Todos",
+      "department": "Departamento",
+      "type": "Tipo",
+      "source": "Origem",
+      "tag": "Tag",
+      "createdFrom": "Criado a partir de",
+      "createdTo": "Criado até"
+    },
     "filterBySource": "Todas as origens",
     "newFromEmail": "Novo ticket por e-mail",
     "newFromPortal": "Novo ticket pelo portal",

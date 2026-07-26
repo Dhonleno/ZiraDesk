@@ -6667,6 +6667,106 @@
   padding-top: 16px;
 }
 
+/* ── Filtros avançados do kanban de tickets ── */
+
+.tickets-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 30px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.tickets-filter-btn:hover {
+  background: var(--bg-4);
+}
+
+.tickets-filter-btn.active {
+  background: var(--teal-dim);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.tickets-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--teal);
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+
+.tickets-filter-clear {
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r);
+  white-space: nowrap;
+  transition: color .15s;
+}
+
+.tickets-filter-clear:hover {
+  color: var(--red);
+}
+
+.tickets-filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.tickets-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.tickets-filter-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tickets-filter-group select,
+.tickets-filter-group .datepicker-trigger {
+  height: 32px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
 /* ── Aba Conversas do OrganizationDetail ── */
 
 .org-conv-item {

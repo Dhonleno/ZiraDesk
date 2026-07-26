@@ -700,7 +700,7 @@ const TICKET_SEARCH_CONDITION = `(
 export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
   return withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
-    const { page, per_page, search, status, priority, assigned_to, overdue, department_id, source, contact_id, organization_id, category, sort_by, sort_order } = query;
+    const { page, per_page, search, status, priority, assigned_to, overdue, department_id, type_id, tag, source, contact_id, organization_id, category, created_from, created_to, sort_by, sort_order } = query;
     const offset = (page - 1) * per_page;
 
     const searchParam       = search          ?? null;
@@ -713,6 +713,10 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
     const categoryParam     = category        ?? null;
     const departmentParam   = department_id   ?? null;
     const overdueParam      = overdue         ?? false;
+    const typeParam         = type_id         ?? null;
+    const tagParam          = tag             ?? null;
+    const createdFromParam  = created_from    ?? null;
+    const createdToParam    = created_to      ?? null;
 
     const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
@@ -730,14 +734,18 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
         AND ($10::boolean IS FALSE OR (
           t.due_date IS NOT NULL
           AND (t.due_date + (t.sla_paused_duration_seconds || ' seconds')::interval) < NOW()
-        ))`;
+        ))
+        AND ($11::uuid IS NULL OR t.type_id       = $11::uuid)
+        AND ($12::text IS NULL OR $12::text = ANY(t.tags))
+        AND ($13::timestamptz IS NULL OR t.created_at >= $13::timestamptz)
+        AND ($14::timestamptz IS NULL OR t.created_at <= $14::timestamptz)`;
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `${BASE_SELECT}${where}
        ORDER BY ${sortCol} ${sortDir}
-       LIMIT $11 OFFSET $12`,
+       LIMIT $15 OFFSET $16`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
-      overdueParam, per_page, offset,
+      overdueParam, typeParam, tagParam, createdFromParam, createdToParam, per_page, offset,
     );
 
     const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
@@ -747,7 +755,7 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
        LEFT JOIN organizations o  ON o.id  = t.organization_id
        ${where}`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
-      overdueParam,
+      overdueParam, typeParam, tagParam, createdFromParam, createdToParam,
     );
 
     const total = Number(countRows[0]?.count ?? 0);
@@ -755,6 +763,24 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
       data: rows,
       meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
     };
+  });
+}
+
+/* ── listTicketTags ──────────────────────────────────────────────────────── */
+// tags é TEXT[] (não jsonb): unnest, não jsonb_array_elements_text.
+export async function listTicketTags(schemaName?: string): Promise<string[]> {
+  return withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+
+    const rows = await db.$queryRawUnsafe<Array<{ tag: string }>>(
+      `SELECT DISTINCT unnest(tags) AS tag
+       FROM tickets
+       WHERE cardinality(tags) > 0
+       ORDER BY tag ASC
+       LIMIT 100`,
+    );
+
+    return rows.map((row) => row.tag);
   });
 }
 

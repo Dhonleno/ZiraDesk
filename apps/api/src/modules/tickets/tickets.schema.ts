@@ -48,10 +48,15 @@ export const listTicketsQuerySchema = z.object({
   assigned_to: z.string().uuid().optional(),
   overdue:     z.coerce.boolean().optional(),
   department_id: z.string().uuid().optional(),
+  type_id:     z.string().uuid().optional(),
+  // tags é text[] no banco — o filtro casa um valor exato com = ANY(t.tags).
+  tag:         z.string().min(1).max(50).optional(),
   source:      z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
   contact_id:      z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),
   category:    z.string().optional(),
+  created_from: z.string().datetime({ offset: true }).optional(),
+  created_to:   z.string().datetime({ offset: true }).optional(),
   sort_by:     z.enum(['created_at', 'updated_at', 'priority', 'due_date']).default('created_at'),
   sort_order:  z.enum(['asc', 'desc']).default('desc'),
 });

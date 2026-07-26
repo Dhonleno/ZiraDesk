@@ -2798,12 +2798,15 @@ export interface ListTicketsParams {
   priority?:    TicketPriority;
   assigned_to?: string;
   overdue?:     boolean;
+  department_id?: string;
+  type_id?:     string;
+  tag?:         string;
   source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
   contact_id?:  string;
   organization_id?: string;
   category?:    string;
-  date_from?:   string;
-  date_to?:     string;
+  created_from?: string;
+  created_to?:   string;
   sort_by?:     'created_at' | 'updated_at' | 'priority' | 'due_date';
   sort_order?:  'asc' | 'desc';
 }
@@ -4273,6 +4276,11 @@ export const ticketsApi = {
 
   getStats: async (): Promise<TicketStats> => {
     const res = await api.get<{ success: boolean; data: TicketStats }>('/tickets/stats');
+    return res.data.data;
+  },
+
+  listTags: async (): Promise<string[]> => {
+    const res = await api.get<{ success: boolean; data: string[] }>('/tickets/tags');
     return res.data.data;
   },
 

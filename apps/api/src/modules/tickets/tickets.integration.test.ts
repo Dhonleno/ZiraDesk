@@ -373,6 +373,111 @@ describe('Tickets integration', () => {
     expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([overdueTicket.id]);
   });
 
+  it('GET /api/tickets filtra por department_id', async () => {
+    const { departmentId } = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    const inDepartment = await createTicket({
+      title: uniqueText('Ticket com depto'),
+      department_id: departmentId,
+    });
+    await createTicket({ title: uniqueText('Ticket sem depto') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ department_id: departmentId })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([inDepartment.id]);
+  });
+
+  it('GET /api/tickets filtra por tag exata no array text[]', async () => {
+    const tagged = await createTicket({
+      title: uniqueText('Ticket com tag'),
+      tags: ['bug', 'regressao'],
+    });
+    await createTicket({ title: uniqueText('Ticket outra tag'), tags: ['melhoria'] });
+    await createTicket({ title: uniqueText('Ticket sem tag') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ tag: 'bug' })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([tagged.id]);
+
+    // Não deve casar por prefixo: 'bu' não é a tag 'bug'.
+    const partial = await createTestApp()
+      .get('/api/tickets')
+      .query({ tag: 'bu' })
+      .set(authHeader());
+
+    expect(partial.status).toBe(200);
+    expect(partial.body.meta.total).toBe(0);
+  });
+
+  it('GET /api/tickets filtra por type_id', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const typeRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".ticket_types (name)
+       VALUES ($1)
+       RETURNING id`,
+      uniqueText('Tipo Filtro'),
+    );
+    const typeId = typeRows[0]?.id;
+    if (!typeId) throw new Error('Falha ao criar tipo de teste');
+
+    const typed = await createTicket({ title: uniqueText('Ticket tipado'), type_id: typeId });
+    await createTicket({ title: uniqueText('Ticket sem tipo') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ type_id: typeId })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([typed.id]);
+  });
+
+  it('GET /api/tickets filtra por created_from e created_to', async () => {
+    const created = await createTicket({ title: uniqueText('Ticket periodo') });
+
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const inRange = await createTestApp()
+      .get('/api/tickets')
+      .query({ created_from: past, created_to: future })
+      .set(authHeader());
+
+    expect(inRange.status).toBe(200);
+    expect(inRange.body.data.map((ticket: { id: string }) => ticket.id)).toContain(created.id);
+
+    const outOfRange = await createTestApp()
+      .get('/api/tickets')
+      .query({ created_from: future })
+      .set(authHeader());
+
+    expect(outOfRange.status).toBe(200);
+    expect(outOfRange.body.meta.total).toBe(0);
+  });
+
+  it('GET /api/tickets/tags retorna tags únicas ordenadas', async () => {
+    await createTicket({ title: uniqueText('Ticket tags A'), tags: ['zeta', 'alfa'] });
+    await createTicket({ title: uniqueText('Ticket tags B'), tags: ['alfa'] });
+
+    const response = await createTestApp()
+      .get('/api/tickets/tags')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    const tags = response.body.data as string[];
+    expect(tags).toContain('alfa');
+    expect(tags).toContain('zeta');
+    expect(tags.filter((tag) => tag === 'alfa')).toHaveLength(1);
+    expect([...tags].sort()).toEqual(tags);
+  });
+
   it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
     const { organization, contact } = await createOrganizationAndContact();
     const ticket = await createTicket({

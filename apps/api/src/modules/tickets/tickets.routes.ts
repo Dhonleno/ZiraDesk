@@ -21,6 +21,7 @@ import {
 } from './tickets.schema.js';
 import {
   listTickets,
+  listTicketTags,
   exportTickets,
   getTicket,
   createTicket,
@@ -162,6 +163,13 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/stats', { preHandler: ticketsViewGuard }, async (_request, reply) => {
     const stats = await getStats();
     return reply.send({ success: true, data: stats });
+  });
+
+  // GET /api/tickets/tags — antes de /:id, como /stats
+  app.get('/tags', { preHandler: ticketsViewGuard }, async (request, reply) => {
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    const tags = await listTicketTags(schemaName);
+    return reply.send({ success: true, data: tags });
   });
 
   // GET /api/tickets/export?format=csv
