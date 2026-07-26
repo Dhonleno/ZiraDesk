@@ -5,7 +5,7 @@
     "noResults": "No se encontraron tickets",
     "noSelection": "Seleccione un ticket para ver los detalles",
     "status": {
-      "queued": "En cola",
+      "queued": "Esperando asignación",
       "open": "Abierto",
       "in_progress": "En progreso",
       "waiting": "En espera",
@@ -275,7 +275,7 @@
       "expiresLessThanHour": "Vence en menos de 1h"
     },
     "kanban": {
-      "queued": "En cola",
+      "queued": "Esperando asignación",
       "open": "Abierto",
       "inProgress": "En progreso",
       "waiting": "En espera",

@@ -5,7 +5,7 @@
     "noResults": "No tickets found",
     "noSelection": "Select a ticket to view details",
     "status": {
-      "queued": "Queued",
+      "queued": "Awaiting assignment",
       "open": "Open",
       "in_progress": "In Progress",
       "waiting": "Waiting",
@@ -275,7 +275,7 @@
       "expiresLessThanHour": "Due in less than 1h"
     },
     "kanban": {
-      "queued": "Queued",
+      "queued": "Awaiting assignment",
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",
