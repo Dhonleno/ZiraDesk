@@ -128,7 +128,8 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      const data = await updateChannel(request.params.id, parsed.data, schemaName);
+      const tenantId = (request.user as AuthUser).tenantId;
+      const data = await updateChannel(request.params.id, parsed.data, schemaName, tenantId);
       return reply.send({ success: true, data });
     } catch (err) {
       if (err instanceof NotFoundError)

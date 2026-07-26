@@ -1,4 +1,5 @@
 import { prisma } from '../../../config/database.js';
+import type { Prisma } from '@prisma/client';
 import { env } from '../../../config/env.js';
 import { redis } from '../../../config/redis.js';
 import { decryptCredentials, encryptCredentials } from '../../../utils/crypto.js';
@@ -67,6 +68,12 @@ interface NgrokTunnel {
 
 function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function extractMetaErrorMessage(payload: unknown): string | null {
@@ -439,7 +446,7 @@ export async function createChannel(data: CreateChannelInput, schemaName: string
   return rows[0]!;
 }
 
-export async function updateChannel(id: string, data: UpdateChannelInput, schemaName: string) {
+export async function updateChannel(id: string, data: UpdateChannelInput, schemaName: string, tenantId?: string) {
   const tableRef = channelsTable(schemaName);
   await ensureChannelsInfrastructure(schemaName);
   const existingRows = await prisma.$queryRawUnsafe<ChannelRow[]>(
@@ -492,7 +499,7 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
   const encryptedCredentials = encryptCredentials(mergedCredentials);
   const credentialsJson = JSON.stringify(encryptedCredentials);
 
-  const currentSettings = (existingRows[0].settings as Record<string, unknown>) ?? {};
+  const currentSettings = asRecord(existingRows[0].settings);
   const mergedSettings = data.settings ? { ...currentSettings, ...data.settings } : currentSettings;
 
   const rows = await prisma.$queryRawUnsafe<ChannelRowPublic[]>(
@@ -509,7 +516,34 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
     data.status ?? null,
     id,
   );
-  return rows[0]!;
+  const updatedChannel = rows[0]!;
+
+  if (
+    tenantId
+    && existingRows[0].type === 'email'
+    && data.settings
+    && Object.prototype.hasOwnProperty.call(data.settings, 'inbound_email_address')
+  ) {
+    const inboundEmailAddress = asTrimmedString(data.settings['inbound_email_address']);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const currentTenantSettings = asRecord(tenant?.settings);
+    const nextTenantSettings: Prisma.InputJsonObject = {
+      ...(currentTenantSettings as Prisma.InputJsonObject),
+      inbound_email_address: inboundEmailAddress,
+    };
+
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        settings: nextTenantSettings,
+      },
+    });
+  }
+
+  return updatedChannel;
 }
 
 export async function deleteChannel(id: string, schemaName: string) {

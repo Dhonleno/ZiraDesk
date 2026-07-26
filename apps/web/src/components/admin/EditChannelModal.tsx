@@ -113,7 +113,10 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
       // settings é mesclado no backend (channels.service), então enviar só a
       // chave do departamento não apaga o restante.
       const settings = channel.type === 'email'
-        ? { default_department_id: form.defaultDepartmentId || null }
+        ? {
+            inbound_email_address: inboundData?.address ?? '',
+            default_department_id: form.defaultDepartmentId || null,
+          }
         : undefined;
 
       await adminApi.updateChannel(channelId, {
