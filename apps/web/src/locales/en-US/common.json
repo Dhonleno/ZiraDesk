@@ -19,6 +19,12 @@
   "step": "Step {{current}} of {{total}}",
   "previous": "Previous",
   "next": "Next",
+  "selectDate": "Select date",
+  "today": "Today",
+  "tomorrow": "Tomorrow",
+  "nextWeek": "Next week",
+  "nextMonth": "Next month",
+  "clear": "Clear",
   "language": {
     "label": "Language",
     "ptBR": "Portuguese",

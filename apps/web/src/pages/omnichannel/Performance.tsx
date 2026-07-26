@@ -16,6 +16,7 @@ import {
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { AgentDetailModal } from '../../components/omnichannel/AgentDetailModal';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 const PERIOD_PRESETS: Array<{ labelKey: string; value: HistoryPeriodPreset }> = [
   { labelKey: 'history.periods.today', value: 'today' },
@@ -436,19 +437,19 @@ export function PerformancePage() {
 
           {filters.period === 'custom' ? (
             <>
-              <input
+              <DatePicker
                 className="filter-select"
-                type="date"
                 value={filters.date_from ?? ''}
-                onChange={(event) => handleCustomDateChange('date_from', event.target.value)}
-                aria-label={t('history.filters.startDate')}
+                onChange={(date) => handleCustomDateChange('date_from', date)}
+                ariaLabel={t('history.filters.startDate')}
+                placeholder={t('history.filters.startDate')}
               />
-              <input
+              <DatePicker
                 className="filter-select"
-                type="date"
                 value={filters.date_to ?? ''}
-                onChange={(event) => handleCustomDateChange('date_to', event.target.value)}
-                aria-label={t('history.filters.endDate')}
+                onChange={(date) => handleCustomDateChange('date_to', date)}
+                ariaLabel={t('history.filters.endDate')}
+                placeholder={t('history.filters.endDate')}
               />
             </>
           ) : null}

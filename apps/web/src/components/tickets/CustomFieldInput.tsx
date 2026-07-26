@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { CustomFieldDefinition } from '../../services/api';
+import { DatePicker } from '../ui/DatePicker';
 
 interface Props {
   field: CustomFieldDefinition;
@@ -29,12 +30,11 @@ export function CustomFieldInput({ field, value, disabled = false, className, on
 
     case 'date':
       return (
-        <input
-          type="date"
-          className={className}
+        <DatePicker
+          {...(className ? { className } : {})}
           value={typeof value === 'string' ? value : ''}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(date) => onChange(date)}
         />
       );
 

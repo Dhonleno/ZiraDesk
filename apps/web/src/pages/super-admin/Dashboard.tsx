@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 type TenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
 
@@ -518,12 +519,11 @@ export function Dashboard() {
               <label className="sa-modal-label" htmlFor="dashboard-trial-ends-at">
                 {t('superAdmin.tenants.trialEndsAt')}
               </label>
-              <input
+              <DatePicker
                 id="dashboard-trial-ends-at"
-                type="date"
                 className="sa-select"
                 value={trialEndsAt}
-                onChange={(event) => setTrialEndsAt(event.target.value)}
+                onChange={setTrialEndsAt}
               />
             </>
           )}

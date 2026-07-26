@@ -14,6 +14,7 @@ import {
 import { useToast } from '../../stores/toast.store';
 import { useMediaUrl } from '../../hooks/useMediaUrl';
 import { GoalsConfig } from './GoalsConfig';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 type SortBy =
   | 'created_at' | 'protocol_number' | 'contact_name' | 'assigned_name'
@@ -552,19 +553,19 @@ export function HistoryPage() {
 
               {filters.period === 'custom' ? (
                 <>
-                  <input
+                  <DatePicker
                     className="filter-select"
-                    type="date"
                     value={filters.date_from ?? ''}
-                    onChange={(event) => updateFilterParams({ date_from: event.target.value || null })}
-                    aria-label={t('history.filters.startDate')}
+                    onChange={(date) => updateFilterParams({ date_from: date || null })}
+                    ariaLabel={t('history.filters.startDate')}
+                    placeholder={t('history.filters.startDate')}
                   />
-                  <input
+                  <DatePicker
                     className="filter-select"
-                    type="date"
                     value={filters.date_to ?? ''}
-                    onChange={(event) => updateFilterParams({ date_to: event.target.value || null })}
-                    aria-label={t('history.filters.endDate')}
+                    onChange={(date) => updateFilterParams({ date_to: date || null })}
+                    ariaLabel={t('history.filters.endDate')}
+                    placeholder={t('history.filters.endDate')}
                   />
                 </>
               ) : null}

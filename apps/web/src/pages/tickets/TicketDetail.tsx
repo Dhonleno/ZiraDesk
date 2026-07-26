@@ -29,6 +29,7 @@ import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { TicketComments } from '../../components/tickets/TicketComments';
 import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { DatePicker } from '../../components/ui/DatePicker';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { canDeleteTicket, isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
@@ -1305,15 +1306,13 @@ export function TicketDetailPage() {
 
             <section className={`ticket-sidebar-section ${dueState}`}>
               <h2>{t('tickets.detail.sections.dueDate')}</h2>
-              <input
+              <DatePicker
                 className="ticket-due-date-input"
-                type="date"
                 value={sidebarDueDate}
                 disabled={readonly}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSidebarDueDate(value);
-                  queuePatch({ due_date: value ? `${value}T00:00:00.000Z` : '' });
+                onChange={(date) => {
+                  setSidebarDueDate(date);
+                  queuePatch({ due_date: date ? `${date}T00:00:00.000Z` : '' });
                 }}
               />
 

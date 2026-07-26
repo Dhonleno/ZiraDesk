@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
+import { DatePicker } from '../ui/DatePicker';
 import { ticketsApi, contactsApi, organizationsApi, adminApi } from '../../services/api';
 import type { CrmContact, CrmOrganization } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
@@ -580,7 +581,10 @@ export function CreateTicketModal({ open, onClose, defaultValues, onCreated }: P
               {conditional.dueDateRequired ? (
                 <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 6 }}>{t('tickets.form.urgentDueDateRequired')}</div>
               ) : null}
-              <input type="date" {...register('due_date')} style={selectStyle} />
+              <DatePicker
+                value={watch('due_date') ?? ''}
+                onChange={(date) => setValue('due_date', date)}
+              />
             </div>
           </div>
 

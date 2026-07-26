@@ -10,6 +10,7 @@ import {
 import { PageShell } from '../../components/layout/PageShell';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../stores/toast.store';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 interface HolidayDraft {
   date: string;
@@ -535,11 +536,11 @@ export function BusinessHours() {
                 {t('tenantAdmin.businessHours.addHoliday')}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 160px 130px 130px auto', gap: 8 }}>
-                <input
-                  type="date"
-                  aria-label={t('tenantAdmin.businessHours.holidayDate')}
+                <DatePicker
+                  ariaLabel={t('tenantAdmin.businessHours.holidayDate')}
+                  placeholder={t('tenantAdmin.businessHours.holidayDate')}
                   value={holidayDraft.date}
-                  onChange={(event) => setHolidayDraft((current) => ({ ...current, date: event.target.value }))}
+                  onChange={(date) => setHolidayDraft((current) => ({ ...current, date }))}
                   className="zd-input"
                 />
                 <input

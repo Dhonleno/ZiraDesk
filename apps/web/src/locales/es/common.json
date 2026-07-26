@@ -19,6 +19,12 @@
   "step": "Paso {{current}} de {{total}}",
   "previous": "Anterior",
   "next": "Siguiente",
+  "selectDate": "Seleccionar fecha",
+  "today": "Hoy",
+  "tomorrow": "Mañana",
+  "nextWeek": "Próxima semana",
+  "nextMonth": "Próximo mes",
+  "clear": "Limpiar",
   "language": {
     "label": "Idioma",
     "ptBR": "Portugués",
