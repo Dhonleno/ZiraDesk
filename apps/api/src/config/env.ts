@@ -48,6 +48,9 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
+  // Domínio dos endereços de inbound. Sem esta variável o webhook continua
+  // usando ziradesk.com, mas um deploy em outro domínio não rotearia nada.
+  INBOUND_EMAIL_DOMAIN: optionalTrimmedString(),
   // Storage
   STORAGE_PROVIDER: z.enum(['local', 'r2']).default('local'),
   R2_ACCOUNT_ID: z.string().optional(),

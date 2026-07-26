@@ -777,6 +777,96 @@ describe('Omnichannel webhooks integration', () => {
     expect(ticket.source).toBe('email');
   });
 
+  it('POST /api/webhooks/email sem segredo válido não cria ticket', async () => {
+    const { slug, schemaName } = requireGlobalTenant();
+    const messageId = `<unauthorized-${randomUUID()}@resend.dev>`;
+
+    const response = await createTestApp()
+      .post('/api/webhooks/email')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', 'Bearer segredo-errado')
+      .send({
+        type: 'email.received',
+        data: {
+          from: `intruso-${randomUUID()}@example.com`,
+          to: [`suporte@${slug}.ziradesk.com`],
+          message_id: messageId,
+          subject: 'Tentativa sem segredo',
+          text: 'corpo',
+        },
+      });
+
+    // A rota sempre responde 200 (Resend não deve reenfileirar); o que importa
+    // é que nada foi gravado.
+    expect(response.status).toBe(200);
+    await delay(400);
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM "${schemaName}".tickets WHERE email_message_id = $1 LIMIT 1`,
+      messageId,
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('POST /api/webhooks/email com inbound_email_department_id passa por createTicket', async () => {
+    const { id: tenantId, slug, schemaName } = requireGlobalTenant();
+    const messageId = `<routed-${randomUUID()}@resend.dev>`;
+
+    const departmentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".departments (name) VALUES ($1) RETURNING id`,
+      `Inbound ${randomUUID().slice(0, 8)}`,
+    );
+    const departmentId = departmentRows[0]?.id;
+    if (!departmentId) throw new Error('Falha ao criar departamento de inbound');
+
+    const tenantBefore = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { inbound_email_department_id: departmentId } },
+    });
+
+    try {
+      const response = await createTestApp()
+        .post('/api/webhooks/email')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${env.RESEND_WEBHOOK_SECRET}`)
+        .send({
+          type: 'email.received',
+          data: {
+            from: `roteado-${randomUUID()}@example.com`,
+            to: [`suporte@${slug}.ziradesk.com`],
+            message_id: messageId,
+            subject: 'Ticket roteado por departamento',
+            text: 'Preciso de ajuda.',
+          },
+        });
+
+      expect(response.status).toBe(200);
+
+      const ticket = await waitFor(async () => {
+        const rows = await prisma.$queryRawUnsafe<Array<{
+          id: string; source: string; department_id: string | null;
+        }>>(
+          `SELECT id, source, department_id
+           FROM "${schemaName}".tickets
+           WHERE email_message_id = $1
+           LIMIT 1`,
+          messageId,
+        );
+        return rows[0] ?? null;
+      });
+
+      // createTicket hardcodava source='manual'; o parâmetro interno preserva 'email'.
+      expect(ticket.source).toBe('email');
+      expect(ticket.department_id).toBe(departmentId);
+    } finally {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { settings: (tenantBefore?.settings ?? {}) as Prisma.InputJsonValue },
+      });
+    }
+  });
+
   it('Email de remetente sem contato vinculado cria contato automaticamente', async () => {
     const { slug, schemaName } = requireGlobalTenant();
     const senderEmail = `novo-contato-${Date.now()}@example.com`;

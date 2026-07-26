@@ -585,7 +585,9 @@ export async function ensureTicketInfrastructureForSchema(schemaName: string): P
 
 async function logTicketEvent(
   ticketId: string,
-  userId: string,
+  // null para eventos do sistema (webhook de inbound); ticket_events.user_id
+  // é nullable e referencia users(id).
+  userId: string | null,
   eventType: string,
   oldValue?: string | null,
   newValue?: string | null,
@@ -899,7 +901,17 @@ export async function getTicket(id: string, schemaName?: string, db?: RawExecuto
 }
 
 /* ── createTicket ────────────────────────────────────────────────────────── */
-export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string, schemaName?: string) {
+// `options` não faz parte do createTicketSchema de propósito: origem e
+// email_message_id são definidos por quem cria (webhook de email, portal), não
+// pelo cliente da API. createdBy aceita null para criações do sistema —
+// audit_logs.user_id e ticket_events.user_id são nullable.
+export async function createTicket(
+  data: CreateTicketInput,
+  createdBy: string | null,
+  tenantId: string,
+  schemaName?: string,
+  options?: { source?: string; emailMessageId?: string | null },
+) {
   const tenantRecord = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { settings: true },
@@ -965,9 +977,9 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `INSERT INTO tickets
          (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
-          assigned_to, department_id, due_date, tags, custom_fields, level)
+          assigned_to, department_id, due_date, tags, custom_fields, level, email_message_id)
        VALUES
-         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[], $15::jsonb, $16)
+         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $17, $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[], $15::jsonb, $16, $18)
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
@@ -992,6 +1004,8 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       tagsLiteral,
       JSON.stringify(data.custom_fields ?? {}),
       data.level           ?? null,
+      options?.source      ?? 'manual',
+      options?.emailMessageId ?? null,
     );
 
     const ticket = rows[0]!;
