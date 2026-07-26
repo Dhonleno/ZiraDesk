@@ -161,7 +161,8 @@
       "webhooks": "Webhooks",
       "settings": "Configurações",
       "history": "Histórico",
-      "performance": "Performance"
+      "performance": "Performance",
+      "supportLevels": "Níveis de Atendimento"
     },
     "autoAssign": {
       "title": "Distribuição Automática",
@@ -1073,6 +1074,16 @@
       "disabledNotice": "O Agente de IA está desativado.",
       "disabledHint": "Configure e ative para começar a responder automaticamente. A base de conhecimento pode ser preparada antes de ativar.",
       "getApiKey": "Obter chave em platform.openai.com →"
+    },
+    "supportLevels": {
+      "title": "Níveis de Atendimento",
+      "subtitle": "Configure N1, N2 e N3 com departamentos e rótulos personalizados",
+      "enabled": "Habilitar níveis de atendimento",
+      "enabledHint": "Permite escalar tickets entre N1, N2 e N3",
+      "levelLabel": "Rótulo do nível",
+      "department": "Departamento",
+      "noDept": "Sem departamento configurado",
+      "saved": "Níveis de atendimento salvos"
     }
   },
   "roles": {

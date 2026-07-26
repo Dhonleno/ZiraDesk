@@ -54,7 +54,8 @@
       "noClient": "Sin contacto vinculado",
       "noOrganization": "No vinculada",
       "noDueDate": "Sin fecha límite",
-      "attachments": "Archivos adjuntos"
+      "attachments": "Archivos adjuntos",
+      "level": "Nivel"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Asigne un agente o seleccione un departamento"
@@ -145,7 +146,8 @@
       "removeTag": "Eliminar {{tag}}",
       "transferDepartment": "Transferir departamento",
       "transferSuccess": "Ticket transferido correctamente",
-      "transferError": "Error al transferir el ticket"
+      "transferError": "Error al transferir el ticket",
+      "escalate": "Escalar atención"
     },
     "transfer": {
       "warning": "El agente actual será eliminado y el ticket volverá a la cola del nuevo departamento.",
@@ -217,7 +219,9 @@
       "tag_added": "Etiqueta \"{{tag}}\" agregada",
       "tag_removed": "Etiqueta \"{{tag}}\" removida",
       "comment_added": "Comentario agregado",
-      "resolved": "Ticket resuelto"
+      "resolved": "Ticket resuelto",
+      "level_escalated": "Escalado de {{old}} a {{new}}",
+      "department_transferred": "Departamento transferido: {{old}} → {{new}}"
     },
     "organization": "Organización",
     "sourceConversation": "Originado de la atención {{protocol}}",
@@ -319,6 +323,19 @@
     "realtime": {
       "newTicket": "Nuevo ticket creado",
       "assignedToYou": "Se te ha asignado un ticket"
+    },
+    "level": {
+      "none": "Sin nivel",
+      "n1": "N1",
+      "n2": "N2",
+      "n3": "N3"
+    },
+    "escalate": {
+      "warning": "El ticket se moverá al departamento del nivel destino y volverá a la cola.",
+      "targetLevel": "Nivel destino",
+      "confirm": "Escalar",
+      "success": "Ticket escalado correctamente",
+      "error": "Error al escalar el ticket"
     }
   }
 }

@@ -221,6 +221,7 @@ function Breadcrumb() {
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/templates': t('tenantAdmin.nav.templates'),
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
+    '/admin/support-levels': t('tenantAdmin.nav.supportLevels'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/close-config': t('tenantAdmin.closeConfig.title'),
     '/admin/lgpd': t('nav.lgpd'),

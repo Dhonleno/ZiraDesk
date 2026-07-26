@@ -6667,6 +6667,89 @@
   padding-top: 16px;
 }
 
+/* ── Níveis de atendimento (N1/N2/N3) ── */
+
+.ticket-level-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ticket-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+}
+
+.ticket-level-badge--n1 {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+.ticket-level-badge--n2 {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.ticket-level-badge--n3 {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.ticket-level-badge--none {
+  background: var(--bg-4);
+  color: var(--txt-3);
+  border: 1px solid var(--line);
+  font-family: var(--font);
+  letter-spacing: 0;
+}
+
+.support-level-head {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-3);
+}
+
+.support-level-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.support-level-row:last-child {
+  border-bottom: none;
+}
+
+.support-level-row input,
+.support-level-row select {
+  height: 32px;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 12px;
+  font-family: var(--font);
+  padding: 0 8px;
+  outline: none;
+}
+
 /* ── TransferDepartmentModal ── */
 
 .transfer-dept-modal {

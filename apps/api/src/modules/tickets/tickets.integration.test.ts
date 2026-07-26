@@ -572,6 +572,93 @@ describe('Tickets integration', () => {
     }
   });
 
+  it('POST /api/tickets/:id/escalate move para o departamento do nível destino', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket escalavel'),
+        assigned_to: TEST_USER_ID,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.level).toBe('N2');
+      expect(response.body.data.department_id).toBe(n2.departmentId);
+      expect(response.body.data.assigned_to).toBeNull();
+      expect(response.body.data.status).toBe('queued');
+
+      const timeline = await createTestApp()
+        .get(`/api/tickets/${ticket.id}/timeline`)
+        .set(authHeader());
+      expect(timeline.body.data.some((event: { event_type: string }) => event.event_type === 'level_escalated')).toBe(true);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate sem departamento configurado retorna 422', async () => {
+    await setSlaSettings({ support_levels_enabled: true });
+    try {
+      const ticket = await createTicket({ title: uniqueText('Ticket sem dept N3') });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N3' });
+
+      expect(response.status).toBe(422);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate para nível igual ou inferior retorna 422', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket ja N3'),
+        assigned_to: TEST_USER_ID,
+        level: 'N3',
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(422);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate por agente não designado retorna 403', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    const other = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket de outro agente escalar'),
+        assigned_to: other.agentId,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader({ role: 'agent' }))
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(403);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
   it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
     const { organization, contact } = await createOrganizationAndContact();
     const ticket = await createTicket({

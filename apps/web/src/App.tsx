@@ -54,6 +54,7 @@ import { Lgpd as AdminLgpd } from './pages/admin/Lgpd';
 import { QueueConfig as AdminQueueConfig } from './pages/admin/QueueConfig';
 import { TicketAutoAssign as AdminTicketAutoAssign } from './pages/admin/TicketAutoAssign';
 import { SlaPolicy as AdminSlaPolicy } from './pages/admin/SlaPolicy';
+import { SupportLevels as AdminSupportLevels } from './pages/admin/SupportLevels';
 import { CustomFields as AdminCustomFields } from './pages/admin/CustomFields';
 import { VoiceConfig as AdminVoiceConfig } from './pages/admin/VoiceConfig';
 import { AdminLayout } from './layouts/AdminLayout';
@@ -341,6 +342,7 @@ export function App() {
               <Route path="queue-config" element={<AdminQueueConfig />} />
               <Route path="ticket-auto-assign" element={<AdminTicketAutoAssign />} />
               <Route path="sla-policy" element={<AdminSlaPolicy />} />
+              <Route path="support-levels" element={<AdminSupportLevels />} />
               <Route path="custom-fields" element={<AdminCustomFields />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

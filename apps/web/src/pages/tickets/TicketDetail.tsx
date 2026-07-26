@@ -31,6 +31,7 @@ import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { TransferDepartmentModal } from '../../components/tickets/TransferDepartmentModal';
+import { EscalateTicketModal, availableEscalationLevels } from '../../components/tickets/EscalateTicketModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { canDeleteTicket, isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
@@ -241,6 +242,7 @@ export function TicketDetailPage() {
   const { data: tenantSettings } = useTenantSettings();
   const canDelete = canDeleteTicket(user ?? null, tenantSettings ?? null);
   const [showTransferDept, setShowTransferDept] = useState(false);
+  const [showEscalate, setShowEscalate] = useState(false);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -733,7 +735,13 @@ export function TicketDetailPage() {
     && (user?.role === 'owner'
       || user?.role === 'admin'
       || (ticket.assigned_to === user?.id && ticket.status === 'in_progress'));
-  const hasActionsMenu = canDelete || canTransferDepartment;
+  // Escalar reusa a mesma regra de permissão da transferência e exige níveis
+  // habilitados e um destino acima do atual (N3 não escala mais).
+  const canEscalate =
+    tenantSettings?.support_levels_enabled === true
+    && canTransferDepartment
+    && availableEscalationLevels(ticket.level ?? null).length > 0;
+  const hasActionsMenu = canDelete || canTransferDepartment || canEscalate;
   const checklistCount = checklistItems.length;
   const checklistDone = checklistItems.filter((item) => item.is_done).length;
   const attachmentsCount = attachments.length;
@@ -778,6 +786,18 @@ export function TicketDetailPage() {
     }
     if (event.event_type === 'tag_removed') {
       return t('tickets.timeline.tag_removed', { tag: event.old_value ?? '—' });
+    }
+    if (event.event_type === 'level_escalated') {
+      return t('tickets.timeline.level_escalated', {
+        old: event.old_value ?? t('tickets.level.none'),
+        new: event.new_value ?? '—',
+      });
+    }
+    if (event.event_type === 'department_transferred') {
+      return t('tickets.timeline.department_transferred', {
+        old: event.old_value ?? '—',
+        new: event.new_value ?? '—',
+      });
     }
     return event.event_type;
   };
@@ -953,6 +973,20 @@ export function TicketDetailPage() {
                   right: actionsMenuPosition.right,
                 }}
               >
+                {canEscalate ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowEscalate(true);
+                    }}
+                  >
+                    {t('tickets.actions.escalate')}
+                  </button>
+                ) : null}
+
                 {canTransferDepartment ? (
                   <button
                     type="button"
@@ -1352,6 +1386,23 @@ export function TicketDetailPage() {
               </button>
             </section>
 
+            {tenantSettings?.support_levels_enabled ? (
+              <section className="ticket-sidebar-section">
+                <h2>{t('tickets.fields.level')}</h2>
+                <div className="ticket-level-badge-row">
+                  {ticket.level ? (
+                    <span className={`ticket-level-badge ticket-level-badge--${ticket.level.toLowerCase()}`}>
+                      {ticket.level}
+                    </span>
+                  ) : (
+                    <span className="ticket-level-badge ticket-level-badge--none">
+                      {t('tickets.level.none')}
+                    </span>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
             <section className="ticket-sidebar-section">
               <h2>{t('tickets.detail.sections.contact')}</h2>
               <div className="ticket-sidebar-contact">
@@ -1498,6 +1549,20 @@ export function TicketDetailPage() {
           </aside>
         </div>
       </section>
+
+      {showEscalate ? (
+        <EscalateTicketModal
+          ticket={ticket}
+          settings={tenantSettings ?? null}
+          onClose={() => setShowEscalate(false)}
+          onSuccess={(updated) => {
+            queryClient.setQueryData(['ticket', id], updated);
+            void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+            void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+          }}
+        />
+      ) : null}
 
       {showTransferDept ? (
         <TransferDepartmentModal

@@ -97,6 +97,25 @@ function slaSettings(s: Record<string, unknown>) {
 // Deletar ticket é a exceção: tickets:delete nunca foi concedido ao agente,
 // então o default aqui (false) preserva o bloqueio atual até o tenant optar
 // por liberar.
+// Níveis de atendimento (N1/N2/N3). Lidos por admin e por agente (settings
+// públicas), porque o botão "Escalar" depende de support_levels_enabled.
+function supportLevelSettings(s: Record<string, unknown>) {
+  const dept = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
+  const label = (value: unknown, fallback: string): string => (
+    typeof value === 'string' && value.trim() ? value : fallback
+  );
+
+  return {
+    support_levels_enabled: (s.support_levels_enabled as boolean | undefined) ?? false,
+    support_level_n1_dept:  dept(s.support_level_n1_dept),
+    support_level_n2_dept:  dept(s.support_level_n2_dept),
+    support_level_n3_dept:  dept(s.support_level_n3_dept),
+    support_level_n1_label: label(s.support_level_n1_label, 'N1'),
+    support_level_n2_label: label(s.support_level_n2_label, 'N2'),
+    support_level_n3_label: label(s.support_level_n3_label, 'N3'),
+  };
+}
+
 function agentPermissionSettings(s: Record<string, unknown>) {
   return {
     agent_can_delete_tickets:         (s.agent_can_delete_tickets as boolean | undefined) ?? false,
@@ -117,6 +136,7 @@ export async function getPublicSettings(tenantId: string) {
 
   return {
     ...agentPermissionSettings(s),
+    ...supportLevelSettings(s),
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     sla_auto_enabled: (s.sla_auto_enabled as boolean | undefined) ?? false,
     routing_skill_timeout_ms: resolveRoutingSkillTimeoutMs(s.routing_skill_timeout_ms),
@@ -196,6 +216,7 @@ export async function getSettings(tenantId: string) {
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     ...slaSettings(s),
     ...agentPermissionSettings(s),
+    ...supportLevelSettings(s),
     created_at: tenant.createdAt,
     plan: tenant.plan,
   };
@@ -283,6 +304,13 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ...(data.sla_hours_high !== undefined ? { sla_hours_high: data.sla_hours_high } : {}),
     ...(data.sla_hours_medium !== undefined ? { sla_hours_medium: data.sla_hours_medium } : {}),
     ...(data.sla_hours_low !== undefined ? { sla_hours_low: data.sla_hours_low } : {}),
+    ...(data.support_levels_enabled !== undefined ? { support_levels_enabled: data.support_levels_enabled } : {}),
+    ...(data.support_level_n1_dept !== undefined ? { support_level_n1_dept: data.support_level_n1_dept } : {}),
+    ...(data.support_level_n2_dept !== undefined ? { support_level_n2_dept: data.support_level_n2_dept } : {}),
+    ...(data.support_level_n3_dept !== undefined ? { support_level_n3_dept: data.support_level_n3_dept } : {}),
+    ...(data.support_level_n1_label !== undefined ? { support_level_n1_label: data.support_level_n1_label } : {}),
+    ...(data.support_level_n2_label !== undefined ? { support_level_n2_label: data.support_level_n2_label } : {}),
+    ...(data.support_level_n3_label !== undefined ? { support_level_n3_label: data.support_level_n3_label } : {}),
     ...(data.agent_can_delete_tickets !== undefined
       ? { agent_can_delete_tickets: data.agent_can_delete_tickets }
       : {}),
@@ -354,6 +382,7 @@ export async function updateSettings(tenantId: string, data: UpdateSettingsInput
     ticket_auto_assign: (s.ticket_auto_assign as boolean | undefined) ?? false,
     ...slaSettings(s),
     ...agentPermissionSettings(s),
+    ...supportLevelSettings(s),
   };
 }
 

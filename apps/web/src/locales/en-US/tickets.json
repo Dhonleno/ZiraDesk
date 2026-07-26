@@ -54,7 +54,8 @@
       "noClient": "No contact linked",
       "noOrganization": "Not linked",
       "noDueDate": "No due date",
-      "attachments": "Attachments"
+      "attachments": "Attachments",
+      "level": "Level"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
@@ -145,7 +146,8 @@
       "removeTag": "Remove {{tag}}",
       "transferDepartment": "Transfer department",
       "transferSuccess": "Ticket transferred successfully",
-      "transferError": "Error transferring ticket"
+      "transferError": "Error transferring ticket",
+      "escalate": "Escalate ticket"
     },
     "transfer": {
       "warning": "The current agent will be removed and the ticket will return to the new department's queue.",
@@ -217,7 +219,9 @@
       "tag_added": "Tag \"{{tag}}\" added",
       "tag_removed": "Tag \"{{tag}}\" removed",
       "comment_added": "Comment added",
-      "resolved": "Ticket resolved"
+      "resolved": "Ticket resolved",
+      "level_escalated": "Escalated from {{old}} to {{new}}",
+      "department_transferred": "Department transferred: {{old}} → {{new}}"
     },
     "organization": "Organization",
     "sourceConversation": "Originated from conversation {{protocol}}",
@@ -319,6 +323,19 @@
     "realtime": {
       "newTicket": "New ticket created",
       "assignedToYou": "A ticket was assigned to you"
+    },
+    "level": {
+      "none": "No level",
+      "n1": "N1",
+      "n2": "N2",
+      "n3": "N3"
+    },
+    "escalate": {
+      "warning": "The ticket will move to the target level department and return to the queue.",
+      "targetLevel": "Target level",
+      "confirm": "Escalate",
+      "success": "Ticket escalated successfully",
+      "error": "Error escalating ticket"
     }
   }
 }

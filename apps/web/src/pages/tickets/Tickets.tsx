@@ -49,7 +49,7 @@ type TicketView = 'kanban' | 'list';
 type TFn = TFunction<'tickets'>;
 
 const BOARD_COLUMNS: BoardStatus[] = ['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed'];
-const ADVANCED_FILTER_PARAMS = ['department_id', 'type_id', 'tag', 'source', 'created_from', 'created_to'] as const;
+const ADVANCED_FILTER_PARAMS = ['department_id', 'type_id', 'level', 'tag', 'source', 'created_from', 'created_to'] as const;
 // Espelha o enum de listTicketsQuerySchema. 'instagram' não existe como origem
 // de ticket — só manual, portal e email são gravados hoje.
 const SOURCE_OPTIONS = ['manual', 'portal', 'email', 'whatsapp', 'api'] as const;
@@ -323,12 +323,13 @@ export function TicketsPage() {
   // de debounce, então o searchParam é a única fonte de verdade.
   const departmentId = searchParams.get('department_id') ?? '';
   const typeId       = searchParams.get('type_id') ?? '';
+  const levelFilter  = searchParams.get('level') ?? '';
   const tag          = searchParams.get('tag') ?? '';
   const sourceFilter = searchParams.get('source') ?? '';
   const createdFrom  = searchParams.get('created_from') ?? '';
   const createdTo    = searchParams.get('created_to') ?? '';
 
-  const activeFilterCount = [departmentId, typeId, tag, sourceFilter, createdFrom, createdTo]
+  const activeFilterCount = [departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo]
     .filter(Boolean).length;
 
   // Persistidos na URL: navegar/recarregar mantém view, aba de status e página.
@@ -411,7 +412,7 @@ export function TicketsPage() {
   // novo precisa entrar aqui, senão o React Query serve cache obsoleto.
   const filterKey = [
     debouncedSearch, priority, agentId, category, filterOverdue,
-    departmentId, typeId, tag, sourceFilter, createdFrom, createdTo,
+    departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo,
   ] as const;
 
   const listQueryKey = ['tickets-board', ...filterKey] as const;
@@ -429,6 +430,7 @@ export function TicketsPage() {
     if (filterOverdue) params.overdue = true;
     if (departmentId) params.department_id = departmentId;
     if (typeId) params.type_id = typeId;
+    if (levelFilter) params.level = levelFilter as NonNullable<ListTicketsParams['level']>;
     if (tag) params.tag = tag;
     if (sourceFilter) params.source = sourceFilter as NonNullable<ListTicketsParams['source']>;
     if (createdFrom) params.created_from = createdFrom;
@@ -480,7 +482,7 @@ export function TicketsPage() {
     if (page !== 1) setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, priority, agentId, category, filterOverdue, statusTab,
-      departmentId, typeId, tag, sourceFilter, createdFrom, createdTo]);
+      departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo]);
 
   useEffect(() => {
     if (!highlightStatus || view !== 'kanban' || isPending) return;
@@ -882,6 +884,22 @@ export function TicketsPage() {
                 ))}
               </select>
             </div>
+
+            {tenantSettings?.support_levels_enabled ? (
+              <div className="tickets-filter-group">
+                <label htmlFor="tf-level">{t('tickets.fields.level')}</label>
+                <select
+                  id="tf-level"
+                  value={levelFilter}
+                  onChange={(event) => updateFilterParam('level', event.target.value)}
+                >
+                  <option value="">{t('tickets.filters.all')}</option>
+                  {(['N1', 'N2', 'N3'] as const).map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <div className="tickets-filter-group">
               <label htmlFor="tf-source">{t('tickets.filters.source')}</label>

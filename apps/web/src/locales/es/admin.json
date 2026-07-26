@@ -161,7 +161,8 @@
       "webhooks": "Webhooks",
       "settings": "Configuración",
       "history": "Historial",
-      "performance": "Performance"
+      "performance": "Performance",
+      "supportLevels": "Niveles de Atención"
     },
     "autoAssign": {
       "title": "Distribución Automática",
@@ -1079,6 +1080,16 @@
         "totalTickets": "Total de tickets",
         "totalMessages": "Total de mensajes"
       }
+    },
+    "supportLevels": {
+      "title": "Niveles de Atención",
+      "subtitle": "Configure N1, N2 y N3 con departamentos y etiquetas personalizadas",
+      "enabled": "Habilitar niveles de atención",
+      "enabledHint": "Permite escalar tickets entre N1, N2 y N3",
+      "levelLabel": "Etiqueta del nivel",
+      "department": "Departamento",
+      "noDept": "Sin departamento configurado",
+      "saved": "Niveles de atención guardados"
     }
   },
   "roles": {

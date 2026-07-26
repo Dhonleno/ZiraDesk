@@ -33,6 +33,13 @@ export interface TenantSettings {
   sla_hours_high?: number;
   sla_hours_medium?: number;
   sla_hours_low?: number;
+  support_levels_enabled?: boolean;
+  support_level_n1_dept?: string | null;
+  support_level_n2_dept?: string | null;
+  support_level_n3_dept?: string | null;
+  support_level_n1_label?: string;
+  support_level_n2_label?: string;
+  support_level_n3_label?: string;
   agent_can_delete_tickets?: boolean;
   agent_can_export_tickets?: boolean;
   agent_can_manage_contacts?: boolean;
@@ -60,6 +67,13 @@ export interface PublicTenantSettings {
   sla_auto_enabled: boolean;
   routing_skill_timeout_ms: number;
   business_hours_enabled: boolean;
+  support_levels_enabled: boolean;
+  support_level_n1_dept: string | null;
+  support_level_n2_dept: string | null;
+  support_level_n3_dept: string | null;
+  support_level_n1_label: string;
+  support_level_n2_label: string;
+  support_level_n3_label: string;
 }
 
 export interface MyProfile {
@@ -2676,6 +2690,7 @@ export interface Ticket {
   assigned_to:     string | null;
   department_id?:  string | null;
   department_name?: string | null;
+  level?:          'N1' | 'N2' | 'N3' | null;
   resolved_at:     string | null;
   due_date:        string | null;
   tags:            string[];
@@ -2800,6 +2815,7 @@ export interface ListTicketsParams {
   overdue?:     boolean;
   department_id?: string;
   type_id?:     string;
+  level?:       'N1' | 'N2' | 'N3';
   tag?:         string;
   source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
   contact_id?:  string;
@@ -4291,6 +4307,14 @@ export const ticketsApi = {
     const res = await api.post<{ success: boolean; data: Ticket }>(
       `/tickets/${ticketId}/transfer-department`,
       payload,
+    );
+    return res.data.data;
+  },
+
+  escalate: async (ticketId: string, level: 'N2' | 'N3'): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(
+      `/tickets/${ticketId}/escalate`,
+      { level },
     );
     return res.data.data;
   },
