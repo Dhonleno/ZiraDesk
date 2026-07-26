@@ -263,6 +263,13 @@
       "noDueDate": "No due date",
       "overdue": "Overdue"
     },
+    "tabs": {
+      "comments": "Comments",
+      "history": "History",
+      "checklist": "Checklist",
+      "time": "Time",
+      "attachments": "Attachments"
+    },
     "detail": {
       "backToList": "Back",
       "editTitle": "Edit title",

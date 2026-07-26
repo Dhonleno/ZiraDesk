@@ -43,7 +43,7 @@ const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   closed:      ['open'],
 };
 
-type DetailTab = 'comments' | 'history';
+type DetailTab = 'comments' | 'history' | 'checklist' | 'time' | 'attachments';
 
 function useAppTheme(): 'dark' | 'light' {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (
@@ -305,6 +305,15 @@ export function TicketDetailPage() {
   const { data: attachments = [] } = useQuery({
     queryKey: ['ticket-attachments', id],
     queryFn: () => ticketsApi.listAttachments(id ?? ''),
+    enabled: Boolean(id),
+    staleTime: 15_000,
+  });
+
+  // Mesma queryKey da ChecklistSection: o React Query deduplica, então o badge
+  // da aba compartilha o cache e não dispara requisição extra.
+  const { data: checklistItems = [] } = useQuery({
+    queryKey: ['ticket-checklist', id],
+    queryFn: () => ticketsApi.listChecklist(id ?? ''),
     enabled: Boolean(id),
     staleTime: 15_000,
   });
@@ -714,6 +723,9 @@ export function TicketDetailPage() {
   }
 
   const readonly = isTicketReadonly(ticket, user ?? null);
+  const checklistCount = checklistItems.length;
+  const checklistDone = checklistItems.filter((item) => item.is_done).length;
+  const attachmentsCount = attachments.length;
   const currentTitle = sanitizeTicketTitle(ticket.title) || ticket.title;
   const dueState = dueTone(ticket.due_date ?? null);
   const sla = getSlaInfo(ticket.due_date, ticket.status, now);
@@ -1110,27 +1122,56 @@ export function TicketDetailPage() {
               </div>
             </section>
 
-            <section className="ticket-detail-section-v2">
-              <div className="ticket-tabs-v2">
-                <button
-                  type="button"
-                  className={activeTab === 'comments' ? 'active' : ''}
-                  onClick={() => setActiveTab('comments')}
-                >
-                  {t('tickets.detail.comments')}
-                </button>
-                <button
-                  type="button"
-                  className={activeTab === 'history' ? 'active' : ''}
-                  onClick={() => setActiveTab('history')}
-                >
-                  {t('tickets.detail.history')}
-                </button>
-              </div>
+            <div className="ticket-tabs-v2">
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'comments' ? ' active' : ''}`}
+                onClick={() => setActiveTab('comments')}
+              >
+                {t('tickets.tabs.comments')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'history' ? ' active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                {t('tickets.tabs.history')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'checklist' ? ' active' : ''}`}
+                onClick={() => setActiveTab('checklist')}
+              >
+                {t('tickets.tabs.checklist')}
+                {checklistCount > 0 ? (
+                  <span className="ticket-tab-badge">{checklistDone}/{checklistCount}</span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'time' ? ' active' : ''}`}
+                onClick={() => setActiveTab('time')}
+              >
+                {t('tickets.tabs.time')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'attachments' ? ' active' : ''}`}
+                onClick={() => setActiveTab('attachments')}
+              >
+                {t('tickets.tabs.attachments')}
+                {attachmentsCount > 0 ? (
+                  <span className="ticket-tab-badge">{attachmentsCount}</span>
+                ) : null}
+              </button>
+            </div>
 
+            <div className="ticket-tab-content">
               {activeTab === 'comments' ? (
                 <TicketComments ticketId={ticket.id} disabled={readonly} />
-              ) : (
+              ) : null}
+
+              {activeTab === 'history' ? (
                 <div className="ticket-history-list">
                   {timeline.length === 0 ? (
                     <div className="ticket-empty-inline">{t('tickets.kanban.empty')}</div>
@@ -1149,56 +1190,59 @@ export function TicketDetailPage() {
                     ))
                   )}
                 </div>
-              )}
-            </section>
+              ) : null}
+
+              {activeTab === 'checklist' ? <ChecklistSection ticketId={ticket.id} /> : null}
+
+              {activeTab === 'time' ? <TimeTrackingSection ticketId={ticket.id} /> : null}
+
+              {activeTab === 'attachments' ? (
+                <div className="ticket-attachments-tab">
+                  <section className="ticket-dsec">
+                    <div className="ticket-dsec-head">
+                      <span>{t('tickets.fields.attachments')}</span>
+                      <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
+                        {t('tickets.detail.addAttachment')}
+                      </button>
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        style={{ display: 'none' }}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          uploadMutation.mutate(file);
+                          event.target.value = '';
+                        }}
+                      />
+                    </div>
+                    <div className="ticket-dsec-body">
+                      {attachments.length === 0 ? (
+                        <div className="ticket-empty-state">
+                          <div className="ticket-empty-icon">
+                            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                              <path d="M13.5 6.5 8 12a2 2 0 1 0 2.8 2.8l6-6a4 4 0 1 0-5.6-5.6l-6 6a2.5 2.5 0 0 0 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </div>
+                          <p className="ticket-empty-title">{t('tickets.detail.noAttachments')}</p>
+                        </div>
+                      ) : (
+                        <div className="ticket-attachments-grid">
+                          {attachments.map((attachment) => (
+                            <AttachmentCard
+                              key={attachment.id}
+                              attachment={attachment}
+                              canDelete={attachment.user_id === user?.id}
+                              onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
             </div>
-
-            <div className="ticket-tab-col-side">
-              <ChecklistSection ticketId={ticket.id} />
-              <TimeTrackingSection ticketId={ticket.id} />
-
-              <section className="ticket-dsec">
-                <div className="ticket-dsec-head">
-                  <span>{t('tickets.fields.attachments')}</span>
-                  <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
-                    {t('tickets.detail.addAttachment')}
-                  </button>
-                  <input
-                    ref={attachmentInputRef}
-                    type="file"
-                    style={{ display: 'none' }}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      uploadMutation.mutate(file);
-                      event.target.value = '';
-                    }}
-                  />
-                </div>
-                <div className="ticket-dsec-body">
-                  {attachments.length === 0 ? (
-                    <div className="ticket-empty-state">
-                      <div className="ticket-empty-icon">
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
-                          <path d="M13.5 6.5 8 12a2 2 0 1 0 2.8 2.8l6-6a4 4 0 1 0-5.6-5.6l-6 6a2.5 2.5 0 0 0 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <p className="ticket-empty-title">{t('tickets.detail.noAttachments')}</p>
-                    </div>
-                  ) : (
-                    <div className="ticket-attachments-grid">
-                      {attachments.map((attachment) => (
-                        <AttachmentCard
-                          key={attachment.id}
-                          attachment={attachment}
-                          canDelete={attachment.user_id === user?.id}
-                          onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
             </div>
             </div>
           </main>

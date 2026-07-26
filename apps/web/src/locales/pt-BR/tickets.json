@@ -263,6 +263,13 @@
       "noDueDate": "Sem prazo",
       "overdue": "Vencido"
     },
+    "tabs": {
+      "comments": "Comentários",
+      "history": "Histórico",
+      "checklist": "Checklist",
+      "time": "Tempo",
+      "attachments": "Anexos"
+    },
     "detail": {
       "backToList": "Voltar",
       "editTitle": "Editar título",
