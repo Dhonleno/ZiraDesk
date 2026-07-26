@@ -95,6 +95,9 @@ importers:
       socket.io:
         specifier: ^4.7.5
         version: 4.8.3
+      svix:
+        specifier: ^1.99.1
+        version: 1.99.1
       twilio:
         specifier: ^6.0.0
         version: 6.0.0
@@ -3440,6 +3443,9 @@ packages:
 
   svix@1.90.0:
     resolution: {integrity: sha512-ljkZuyy2+IBEoESkIpn8sLM+sxJHQcPxlZFxU+nVDhltNfUMisMBzWX/UR8SjEnzoI28ZjCzMbmYAPwSTucoMw==}
+
+  svix@1.99.1:
+    resolution: {integrity: sha512-JfpvbAg5iT5NagDAfOq3e6Ci6NbOMbMm6C3DnfDBB60m2JDK+Z2hXPE9XNAmutb53DCdPoih1V70IbklZnX09A==}
 
   tailwindcss@3.4.19:
     resolution: {integrity: sha512-3ofp+LL8E+pK/JuPLPggVAIaEuhvIz4qNcf3nA1Xn2o/7fb7s/TYpHhwGDv1ZU3PkBluUVaF8PyCHcm48cKLWQ==}
@@ -7449,6 +7455,10 @@ snapshots:
     dependencies:
       standardwebhooks: 1.0.0
       uuid: 10.0.0
+
+  svix@1.99.1:
+    dependencies:
+      standardwebhooks: 1.0.0
 
   tailwindcss@3.4.19(tsx@4.21.0):
     dependencies:

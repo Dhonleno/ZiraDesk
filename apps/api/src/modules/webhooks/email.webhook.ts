@@ -1,7 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { Resend } from 'resend';
+import { Webhook } from 'svix';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
 import { createTicket } from '../tickets/tickets.service.js';
 
@@ -180,18 +182,26 @@ function normalizeInboundPayload(payload: unknown): NormalizedInboundEmail | nul
   };
 }
 
-// Sem o segredo configurado o endpoint rejeita tudo. Antes ele liberava
-// qualquer requisição, o que permitia criar ticket em qualquer tenant.
-function hasValidWebhookSecret(headers: Record<string, unknown>): boolean {
-  if (!env.RESEND_WEBHOOK_SECRET) return false;
+function verifyResendWebhook(rawBody: string, headers: Record<string, unknown>): boolean {
+  const secret = env.RESEND_WEBHOOK_SECRET;
+  if (!secret) {
+    if (env.NODE_ENV === 'production') return false;
+    logger.warn('[Email Webhook] RESEND_WEBHOOK_SECRET não configurado');
+    return true;
+  }
 
-  const authorization = String(headers.authorization ?? '');
-  const resendSignature = String(headers['resend-signature'] ?? headers['x-resend-signature'] ?? '');
-
-  return (
-    authorization === `Bearer ${env.RESEND_WEBHOOK_SECRET}`
-    || resendSignature === env.RESEND_WEBHOOK_SECRET
-  );
+  try {
+    const wh = new Webhook(secret);
+    wh.verify(rawBody, {
+      'svix-id': String(headers['svix-id'] ?? ''),
+      'svix-timestamp': String(headers['svix-timestamp'] ?? ''),
+      'svix-signature': String(headers['svix-signature'] ?? ''),
+    });
+    return true;
+  } catch (err) {
+    logger.warn({ err }, '[Email Webhook] Assinatura inválida');
+    return false;
+  }
 }
 
 async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInboundEmail): Promise<void> {
@@ -485,24 +495,34 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
 }
 
 export async function emailWebhookRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/email', async (request, reply) => {
-    reply.code(200).send({ success: true });
-
+  app.post('/email', { config: { rawBody: true } }, async (request, reply) => {
     const headers = request.headers as Record<string, unknown>;
-    if (!hasValidWebhookSecret(headers)) {
-      if (!env.RESEND_WEBHOOK_SECRET) {
-        request.log.error('[Email Webhook] RESEND_WEBHOOK_SECRET não configurado — inbound rejeitado');
-      } else {
-        request.log.warn('[Email Webhook] assinatura inválida');
-      }
-      return;
+    const rawBodyValue = (request as { rawBody?: Buffer | string }).rawBody;
+    const rawBody = Buffer.isBuffer(rawBodyValue)
+      ? rawBodyValue.toString('utf8')
+      : rawBodyValue ?? JSON.stringify(request.body);
+
+    if (!env.RESEND_WEBHOOK_SECRET && env.NODE_ENV === 'production') {
+      request.log.error('[Email Webhook] RESEND_WEBHOOK_SECRET não configurado — rejeitar em produção');
+      return reply.code(500).send({ error: 'Webhook not configured' });
+    }
+
+    if (!verifyResendWebhook(rawBody, headers)) {
+      return reply.code(401).send({ error: 'Invalid signature' });
     }
 
     const inbound = normalizeInboundPayload(request.body);
-    if (!inbound) return;
+    if (!inbound) {
+      return reply.code(200).send({ success: true });
+    }
 
-    void processInboundEmail(app, inbound).catch((error) => {
+    try {
+      await processInboundEmail(app, inbound);
+    } catch (error) {
       request.log.error({ error }, '[Email Webhook] erro ao processar e-mail inbound');
-    });
+      return reply.code(500).send({ success: false, error: { message: 'Erro ao processar e-mail inbound' } });
+    }
+
+    return reply.code(200).send({ success: true });
   });
 }
