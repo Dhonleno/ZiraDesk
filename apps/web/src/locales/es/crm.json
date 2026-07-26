@@ -312,6 +312,8 @@
     "hasNoActiveChannels": "No hay canales activos disponibles",
     "selectContact": "Seleccione un contacto",
     "selectContactHint": "Haga clic en un contacto para ver los detalles",
+    "noTickets": "Sin tickets vinculados",
+    "noTicketsSub": "Los tickets abiertos para este contacto aparecerán aquí",
     "tabs": {
       "data": "Datos",
       "conversations": "Conversaciones",
