@@ -5,7 +5,7 @@ import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { ensureAgentAssignmentsInfrastructure } from '../omnichannel/conversations/auto-assign.service.js';
 import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
-import { buildTenantUrl } from '../../utils/url.js';
+import { buildPortalUrl, buildTenantUrl } from '../../utils/url.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
@@ -1274,7 +1274,7 @@ export async function updateTicket(
           id,
         );
 
-        const csatBaseUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
+        const csatBaseUrl = buildPortalUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
         await sendTicketCsatEmail({
           tenantId,
           tenantSchema: schema,

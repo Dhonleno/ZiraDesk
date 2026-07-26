@@ -89,7 +89,8 @@
     "errors": {
       "acceptForbidden": "Apenas o agente designado pode aceitar este ticket",
       "acceptConflict": "Este ticket não pode ser aceito no estado atual",
-      "notFound": "Ticket não encontrado"
+      "notFound": "Ticket não encontrado",
+      "commentError": "Erro ao adicionar comentário"
     },
     "readonly": {
       "banner": "Aceite o ticket para poder editá-lo",

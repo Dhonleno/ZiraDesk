@@ -488,6 +488,17 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
   const comment = editorHtmlToMarkdown(editorHtml);
   const hasCommentContent = extractPlainTextFromHtml(editorHtml).length > 0;
 
+  // Mesma janela de 2s de reportUpdateError em TicketDetail: o toast store não
+  // deduplica, então N falhas em sequência viravam N toasts empilhados.
+  const lastErrorRef = useRef<number>(0);
+
+  function reportCommentError(message: string) {
+    const now = Date.now();
+    if (now - lastErrorRef.current < 2000) return;
+    lastErrorRef.current = now;
+    toast.error(message);
+  }
+
   const closeMention = () => setMention({ active: false, query: '', anchorRect: null });
 
   const { data: comments = [], isPending } = useQuery({
@@ -607,7 +618,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       setMention({ active: false, query: '', anchorRect: null });
       if (editorRef.current) editorRef.current.innerHTML = '';
     },
-    onError: () => toast.error('Erro ao enviar comentário'),
+    onError: () => reportCommentError(t('tickets.errors.commentError')),
   });
 
   const editMutation = useMutation({
@@ -618,7 +629,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       setEditContent('');
       toast.success('Comentário atualizado');
     },
-    onError: () => toast.error('Erro ao atualizar comentário'),
+    onError: () => reportCommentError('Erro ao atualizar comentário'),
   });
 
   const deleteMutation = useMutation({
@@ -627,7 +638,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
       toast.success('Comentário excluído');
     },
-    onError: () => toast.error('Erro ao excluir comentário'),
+    onError: () => reportCommentError('Erro ao excluir comentário'),
   });
 
   async function handleSubmit() {

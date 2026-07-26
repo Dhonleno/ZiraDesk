@@ -19,7 +19,7 @@ import {
 } from '../../services/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
-import { subscribeToEvent } from '../../services/socket';
+import { getSocket, subscribeToEvent } from '../../services/socket';
 import { useDebounce } from '../../hooks/useDebounce';
 import { PageShell } from '../../components/layout/PageShell';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
@@ -336,6 +336,14 @@ export function TicketDetailPage() {
   useEffect(() => {
     if (!id) return undefined;
 
+    // 'connect' é o evento do Socket que dispara tanto na conexão inicial
+    // quanto em cada reconexão. 'reconnect' vive no Manager (socket.io.on) e
+    // nunca chegaria por subscribeToEvent, que registra em socket.on.
+    // Se o socket já estava conectado ao montar, qualquer 'connect' seguinte é
+    // uma reconexão; senão, o primeiro é a conexão inicial e é ignorado para
+    // não refazer fetch das queries que acabaram de carregar.
+    let sawInitialConnect = getSocket()?.connected ?? false;
+
     const unsubscribers = [
       subscribeToEvent<{ ticket?: Ticket; ticketId?: string }>('ticket:updated', (data) => {
         const updatedId = data.ticket?.id ?? data.ticketId;
@@ -351,6 +359,17 @@ export function TicketDetailPage() {
       subscribeToEvent<{ ticketId?: string }>('ticket:event', (data) => {
         if (data.ticketId !== id) return;
         void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      }),
+      subscribeToEvent('connect', () => {
+        if (!sawInitialConnect) {
+          sawInitialConnect = true;
+          return;
+        }
+
+        // Eventos emitidos durante a queda foram perdidos: refaz o fetch.
+        void queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+        void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+        void queryClient.invalidateQueries({ queryKey: ['ticket-comments', id] });
       }),
     ];
 

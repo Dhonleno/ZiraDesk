@@ -89,7 +89,8 @@
     "errors": {
       "acceptForbidden": "Only the assigned agent can accept this ticket",
       "acceptConflict": "This ticket cannot be accepted in its current state",
-      "notFound": "Ticket not found"
+      "notFound": "Ticket not found",
+      "commentError": "Error adding comment"
     },
     "readonly": {
       "banner": "Accept the ticket to edit it",
