@@ -365,6 +365,19 @@
   padding: 10px;
 }
 
+/* Composer fixo no rodapé enquanto a lista de comentários rola.
+   O container de scroll é .ticket-detail-v2-main; nenhum ancestral entre ele
+   e o composer tem overflow != visible, então o sticky ancora nele. */
+.ticket-comment-composer-wrapper {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-2);
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  z-index: 10;
+}
+
 .comment-type-toggle {
   display: flex;
   gap: 2px;

@@ -881,6 +881,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       </div>
 
       <form
+        className="ticket-comment-composer-wrapper"
         onSubmit={(event) => {
           event.preventDefault();
           void handleSubmit();
