@@ -30,6 +30,7 @@ import { TicketComments } from '../../components/tickets/TicketComments';
 import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { TransferDepartmentModal } from '../../components/tickets/TransferDepartmentModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { canDeleteTicket, isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
@@ -239,6 +240,7 @@ export function TicketDetailPage() {
   const appTheme = useAppTheme();
   const { data: tenantSettings } = useTenantSettings();
   const canDelete = canDeleteTicket(user ?? null, tenantSettings ?? null);
+  const [showTransferDept, setShowTransferDept] = useState(false);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -688,7 +690,7 @@ export function TicketDetailPage() {
   }
 
   function toggleActionsMenu() {
-    if (!canDelete) return;
+    if (!hasActionsMenu) return;
 
     setActionsMenuOpen((isOpen) => {
       const nextOpen = !isOpen;
@@ -723,6 +725,15 @@ export function TicketDetailPage() {
   }
 
   const readonly = isTicketReadonly(ticket, user ?? null);
+  // Owner/admin sempre; agente só no ticket que aceitou. Resolvido/fechado o
+  // backend recusa, então nem oferecemos a ação.
+  const canTransferDepartment =
+    ticket.status !== 'resolved'
+    && ticket.status !== 'closed'
+    && (user?.role === 'owner'
+      || user?.role === 'admin'
+      || (ticket.assigned_to === user?.id && ticket.status === 'in_progress'));
+  const hasActionsMenu = canDelete || canTransferDepartment;
   const checklistCount = checklistItems.length;
   const checklistDone = checklistItems.filter((item) => item.is_done).length;
   const attachmentsCount = attachments.length;
@@ -912,7 +923,7 @@ export function TicketDetailPage() {
               </button>
             ) : null}
 
-            {canDelete ? (
+            {hasActionsMenu ? (
               <div className="ticket-actions-wrap" ref={actionsMenuRef}>
                 <button
                   type="button"
@@ -932,7 +943,7 @@ export function TicketDetailPage() {
               </div>
             ) : null}
 
-            {canDelete && actionsMenuOpen && actionsMenuPosition ? createPortal(
+            {hasActionsMenu && actionsMenuOpen && actionsMenuPosition ? createPortal(
               <div
                 ref={actionsMenuPortalRef}
                 className="ticket-actions-menu"
@@ -942,17 +953,33 @@ export function TicketDetailPage() {
                   right: actionsMenuPosition.right,
                 }}
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="ticket-actions-menu-item danger"
-                  onClick={() => {
-                    setActionsMenuOpen(false);
-                    setShowDeleteConfirm(true);
-                  }}
-                >
-                  {t('tickets.delete')}
-                </button>
+                {canTransferDepartment ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowTransferDept(true);
+                    }}
+                  >
+                    {t('tickets.actions.transferDepartment')}
+                  </button>
+                ) : null}
+
+                {canDelete ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item danger"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowDeleteConfirm(true);
+                    }}
+                  >
+                    {t('tickets.delete')}
+                  </button>
+                ) : null}
               </div>,
               document.body,
             ) : null}
@@ -1471,6 +1498,19 @@ export function TicketDetailPage() {
           </aside>
         </div>
       </section>
+
+      {showTransferDept ? (
+        <TransferDepartmentModal
+          ticket={ticket}
+          onClose={() => setShowTransferDept(false)}
+          onSuccess={(updated) => {
+            queryClient.setQueryData(['ticket', id], updated);
+            void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+            void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+          }}
+        />
+      ) : null}
 
       <ConfirmModal
         open={showDeleteConfirm}

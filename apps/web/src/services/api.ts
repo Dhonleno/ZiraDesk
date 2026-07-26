@@ -4284,6 +4284,17 @@ export const ticketsApi = {
     return res.data.data;
   },
 
+  transferDepartment: async (
+    ticketId: string,
+    payload: { department_id: string; reason?: string },
+  ): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(
+      `/tickets/${ticketId}/transfer-department`,
+      payload,
+    );
+    return res.data.data;
+  },
+
   get: async (id: string): Promise<Ticket> => {
     const res = await api.get<{ success: boolean; data: Ticket }>(`/tickets/${id}`);
     return res.data.data;

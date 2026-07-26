@@ -142,7 +142,18 @@
       "edit": "Edit",
       "more": "More actions",
       "delete": "Delete",
-      "removeTag": "Remove {{tag}}"
+      "removeTag": "Remove {{tag}}",
+      "transferDepartment": "Transfer department",
+      "transferSuccess": "Ticket transferred successfully",
+      "transferError": "Error transferring ticket"
+    },
+    "transfer": {
+      "warning": "The current agent will be removed and the ticket will return to the new department's queue.",
+      "targetDept": "Target department",
+      "selectDept": "Select department",
+      "reason": "Transfer reason",
+      "reasonPlaceholder": "E.g.: Technical issue requires specialized team",
+      "confirm": "Transfer"
     },
     "resolve": {
       "title": "Resolve ticket",

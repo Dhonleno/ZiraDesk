@@ -13,6 +13,7 @@
   "filter": "Filtrar",
   "noResults": "No se encontraron resultados",
   "required": "Campo obligatorio",
+  "optional": "opcional",
   "notDefined": "No definido",
   "help": "Ayudar",
   "dismiss": "Rechazar",

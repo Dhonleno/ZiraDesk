@@ -13,6 +13,7 @@
   "filter": "Filter",
   "noResults": "No results found",
   "required": "Required field",
+  "optional": "optional",
   "notDefined": "Not defined",
   "help": "Help",
   "dismiss": "Dismiss",

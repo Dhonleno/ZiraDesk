@@ -478,6 +478,100 @@ describe('Tickets integration', () => {
     expect([...tags].sort()).toEqual(tags);
   });
 
+  it('POST /api/tickets/:id/transfer-department devolve o ticket à fila do destino', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const origin = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    const targetRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".departments (name) VALUES ($1) RETURNING id`,
+      uniqueText('Depto Destino'),
+    );
+    const targetId = targetRows[0]?.id;
+    if (!targetId) throw new Error('Falha ao criar departamento destino');
+
+    const ticket = await createTicket({
+      title: uniqueText('Ticket transferivel'),
+      department_id: origin.departmentId,
+      assigned_to: TEST_USER_ID,
+    });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader())
+      .send({ department_id: targetId, reason: 'Precisa de equipe especializada' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.department_id).toBe(targetId);
+    expect(response.body.data.assigned_to).toBeNull();
+    expect(response.body.data.status).toBe('queued');
+
+    const timeline = await createTestApp()
+      .get(`/api/tickets/${ticket.id}/timeline`)
+      .set(authHeader());
+
+    expect(timeline.status).toBe(200);
+    const transferEvent = (timeline.body.data as Array<{ event_type: string; metadata: Record<string, unknown> }>)
+      .find((event) => event.event_type === 'department_transferred');
+    expect(transferEvent).toBeDefined();
+    expect(transferEvent?.metadata['reason']).toBe('Precisa de equipe especializada');
+  });
+
+  it('POST /api/tickets/:id/transfer-department por agente não designado retorna 403', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const targetRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".departments (name) VALUES ($1) RETURNING id`,
+      uniqueText('Depto Destino 403'),
+    );
+    const targetId = targetRows[0]?.id;
+    if (!targetId) throw new Error('Falha ao criar departamento destino');
+
+    const other = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    const ticket = await createTicket({
+      title: uniqueText('Ticket de outro agente'),
+      assigned_to: other.agentId,
+    });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ department_id: targetId });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/transfer-department com departamento inexistente retorna 404', async () => {
+    const ticket = await createTicket({ title: uniqueText('Ticket destino invalido') });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader())
+      .send({ department_id: '00000000-0000-0000-0000-000000000000' });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('POST /api/tickets/:id/transfer-department com auto-assign atribui agente do destino', async () => {
+    await setTicketAutoAssign(true);
+    try {
+      const target = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+      const ticket = await createTicket({
+        title: uniqueText('Ticket auto-assign transfer'),
+        assigned_to: TEST_USER_ID,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/transfer-department`)
+        .set(authHeader())
+        .send({ department_id: target.departmentId });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.department_id).toBe(target.departmentId);
+      expect(response.body.data.assigned_to).toBe(target.agentId);
+      expect(response.body.data.status).toBe('open');
+    } finally {
+      await setTicketAutoAssign(false);
+    }
+  });
+
   it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
     const { organization, contact } = await createOrganizationAndContact();
     const ticket = await createTicket({

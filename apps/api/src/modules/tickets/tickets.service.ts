@@ -1710,6 +1710,139 @@ export async function acceptTicket(
   return ticket;
 }
 
+/* ── transferTicketDepartment ────────────────────────────────────────────── */
+// Transferência entre departamentos: solta o responsável atual e devolve o
+// ticket à fila do destino. O UPDATE é direto (não passa por updateTicket),
+// então contorna de propósito ensureValidStatusTransition — in_progress →
+// queued não existe na máquina de estados, mas é o efeito desejado aqui.
+export async function transferTicketDepartment(
+  ticketId: string,
+  newDepartmentId: string,
+  reason: string | null,
+  userId: string,
+  role: string,
+  tenantId: string,
+  schemaName?: string,
+) {
+  const tenantSettings = await loadTenantSettings(tenantId);
+  const autoAssignEnabled = tenantSettings['ticket_auto_assign'] === true;
+
+  const { ticket, events } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const current = await getTicket(ticketId, undefined, db);
+
+    const isAdminOrOwner = role === 'owner' || role === 'admin';
+    if (!isAdminOrOwner && current.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente responsável pode transferir este ticket');
+    }
+
+    if (current.status === 'resolved' || current.status === 'closed') {
+      throw new BusinessRuleError('Ticket resolvido ou fechado não pode ser transferido');
+    }
+
+    if (current.department_id === newDepartmentId) {
+      throw new BusinessRuleError('O ticket já pertence a este departamento');
+    }
+
+    const departmentRows = await db.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+      `SELECT id, name FROM departments WHERE id = $1::uuid AND is_active = true LIMIT 1`,
+      newDepartmentId,
+    );
+    const targetDepartment = departmentRows[0];
+    if (!targetDepartment) throw new NotFoundError('Departamento');
+
+    // Fila do novo departamento: sem responsável, status queued e alerta de SLA
+    // rearmado para o novo time.
+    await db.$executeRawUnsafe(
+      `UPDATE tickets SET
+         department_id       = $1::uuid,
+         assigned_to         = NULL,
+         status              = 'queued',
+         sla_warning_sent_at = NULL,
+         updated_at          = NOW()
+       WHERE id = $2::uuid`,
+      newDepartmentId,
+      ticketId,
+    );
+
+    const events: TicketEventRow[] = [];
+    const transferEvent = await logTicketEvent(
+      ticketId,
+      userId,
+      'department_transferred',
+      current.department_name ?? null,
+      targetDepartment.name,
+      {
+        old_department_id: current.department_id,
+        new_department_id: newDepartmentId,
+        previous_assigned_to: current.assigned_to,
+        reason: reason ?? null,
+      },
+      db,
+    );
+    if (transferEvent) events.push(transferEvent);
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.department_transferred', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      userId,
+      ticketId,
+      JSON.stringify({ department_id: current.department_id, assigned_to: current.assigned_to, status: current.status }),
+      JSON.stringify({ department_id: newDepartmentId, assigned_to: null, status: 'queued', reason: reason ?? null }),
+    );
+
+    // Auto-assign imediato no destino, se o tenant usa round-robin e há agente
+    // online. Sem candidato, o ticket permanece queued até claim manual.
+    if (autoAssignEnabled) {
+      const nextAgent = await pickNextAgentForDepartment(db, newDepartmentId);
+      if (nextAgent) {
+        await db.$executeRawUnsafe(
+          `UPDATE tickets SET assigned_to = $1::uuid, status = 'open', updated_at = NOW()
+           WHERE id = $2::uuid`,
+          nextAgent.id,
+          ticketId,
+        );
+
+        const assignedEvent = await logTicketEvent(
+          ticketId,
+          userId,
+          'assigned',
+          null,
+          nextAgent.name,
+          { new_assigned_to: nextAgent.id, via: 'department_transfer' },
+          db,
+        );
+        if (assignedEvent) events.push(assignedEvent);
+      }
+    }
+
+    const ticket = await getTicket(ticketId, undefined, db);
+    return { ticket, events };
+  });
+
+  for (const event of events) emitTicketEvent(tenantId, ticketId, event);
+
+  try {
+    const io = getSocketServer();
+    io.to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
+    if (ticket.assigned_to && ticket.assigned_to !== userId) {
+      io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+        id: ticketId,
+        type: 'ticket_assigned',
+        title: 'Ticket atribuído',
+        message: `Você recebeu o ticket "${ticket.title}".`,
+        href: `/tickets/${ticketId}`,
+      });
+    }
+  } catch { /* socket não inicializado em testes */ }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+
+  return ticket;
+}
+
 /* ── listComments ────────────────────────────────────────────────────────── */
 export async function listComments(ticketId: string, schemaName?: string) {
   if (schemaName) {
