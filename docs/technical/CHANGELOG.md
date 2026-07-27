@@ -1,5 +1,17 @@
 # Changelog — ZiraDesk
 
+## [0.10.0] — Remoção do módulo legado de roteamento OR-logic (Fase 4b parte 1)
+
+### Removido
+- Módulo legado de roteamento OR-logic (Fase 4b parte 1): `skills.service.ts`, `skills.routes.ts`, `skills.schema.ts`, `legacy-skills.infrastructure.ts`, provisionamento de `agent_bot_skills` para tenants novos, página `Skills.tsx`, `adminApi.skills.*`, interface `Skill` órfã, bloco i18n `tenantAdmin.skills` (pt-BR/en-US/es). Commit `655ca31` — 12 arquivos, 1040 deleções, zero inserções.
+- `POST /api/admin/skills/agents/:userId` e os demais endpoints de `/api/admin/skills` deixam de existir; `/api/admin/skills-v2` é agora o único CRUD de habilidades. A rota `/admin/skills` do frontend já apontava para `SkillsV2` e segue funcionando (chave de nav `tenantAdmin.nav.skills` preservada).
+
+### Documentação
+- `ARQUITETURA_TECNICA.md` §16 atualizado: 3 novos itens de dívida técnica registrados (segundo motor de roteamento sem skills em tickets, `.env.test` com porta Postgres errada, tipos `AgentSkill`/`AgentWithSkills` desatualizados).
+
+### Notas de migração
+- **Nenhuma migration criada.** A tabela `agent_bot_skills` permanece intacta em todos os schemas existentes — apenas deixou de ser criada para tenants novos e não tem mais nenhum caminho de leitura ou escrita no código. Vazia em `tenant_demo`; **não verificada em produção** (pendente de restauração do servidor). O `DROP TABLE` e o eventual backfill dos vínculos legados para `skills`/`agent_skills`/`bot_option_skills` ficam para a parte 2.
+
 ## [0.9.9] — Correção do ACK do webhook de email inbound
 
 ### Corrigido
