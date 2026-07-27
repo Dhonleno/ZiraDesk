@@ -32,6 +32,7 @@ import {
 } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
 import { PageShell } from '../../components/layout/PageShell';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 type DataSource = 'omnichannel' | 'tickets';
 
@@ -918,13 +919,12 @@ export function MetricsPage() {
 
         {period === 'custom' ? (
           <>
-            <input
-              type="date"
+            <DatePicker
               className="filter-select"
-              aria-label={t('metrics.filters.dateFrom')}
+              ariaLabel={t('metrics.filters.dateFrom')}
+              placeholder={t('metrics.filters.dateFrom')}
               value={customFrom}
-              onChange={(event) => {
-                const value = event.target.value;
+              onChange={(value) => {
                 setCustomFrom(value);
                 if (customTo && value > customTo) {
                   setCustomTo('');
@@ -942,13 +942,12 @@ export function MetricsPage() {
                 }
               }}
             />
-            <input
-              type="date"
+            <DatePicker
               className="filter-select"
-              aria-label={t('metrics.filters.dateTo')}
+              ariaLabel={t('metrics.filters.dateTo')}
+              placeholder={t('metrics.filters.dateTo')}
               value={customTo}
-              onChange={(event) => {
-                const value = event.target.value;
+              onChange={(value) => {
                 if (customFrom && value < customFrom) {
                   toast.error(t('metrics.filters.dateToBeforeFromError'));
                   return;

@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { Resend } from 'resend';
+import { Webhook } from 'svix';
 import { prisma } from '../../config/database.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
+import { createTicket } from '../tickets/tickets.service.js';
 
 interface ResendInboundPayload {
   type?: string;
@@ -47,15 +50,57 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
+const DEFAULT_INBOUND_DOMAIN = 'ziradesk.com';
+
+function inboundDomain(): string {
+  return (env.INBOUND_EMAIL_DOMAIN ?? DEFAULT_INBOUND_DOMAIN).trim().toLowerCase();
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Domínio vem de INBOUND_EMAIL_DOMAIN; o default preserva o comportamento
+// anterior para deploys que ainda não definiram a variável.
 function extractTenantFromEmail(address: string): string | null {
   const normalized = address.trim().toLowerCase();
-  const supportMatch = normalized.match(/^suporte@([^.]+)\.ziradesk\.com$/);
+  const domain = escapeRegex(inboundDomain());
+
+  const supportMatch = normalized.match(new RegExp(`^suporte@([^.]+)\\.${domain}$`));
   if (supportMatch?.[1]) return supportMatch[1];
 
-  const plusMatch = normalized.match(/^tickets\+([^@]+)@ziradesk\.com$/);
+  const plusMatch = normalized.match(new RegExp(`^tickets\\+([^@]+)@${domain}$`));
   if (plusMatch?.[1]) return plusMatch[1];
 
   return null;
+}
+
+// Resolve o tenant pelo destinatário: primeiro pelos padrões de slug, depois
+// por um endereço próprio configurado em tenant.settings.inbound_email_address.
+async function resolveTenantByAddress(toAddress: string): Promise<TenantLookup | null> {
+  const normalized = toAddress.trim().toLowerCase();
+  const slug = extractTenantFromEmail(normalized);
+
+  if (slug) {
+    const rows = await prisma.$queryRawUnsafe<TenantLookup[]>(
+      `SELECT id, slug, schema_name, status, settings
+       FROM tenants
+       WHERE slug = $1
+       LIMIT 1`,
+      slug,
+    );
+    if (rows[0]) return rows[0];
+  }
+
+  const configured = await prisma.$queryRawUnsafe<TenantLookup[]>(
+    `SELECT id, slug, schema_name, status, settings
+     FROM tenants
+     WHERE LOWER(settings->>'inbound_email_address') = $1
+     LIMIT 1`,
+    normalized,
+  );
+
+  return configured[0] ?? null;
 }
 
 function extractEmail(rawFrom: string): string {
@@ -137,37 +182,38 @@ function normalizeInboundPayload(payload: unknown): NormalizedInboundEmail | nul
   };
 }
 
-function hasValidWebhookSecret(headers: Record<string, unknown>): boolean {
-  if (!env.RESEND_WEBHOOK_SECRET) return true;
+function verifyResendWebhook(rawBody: string, headers: Record<string, unknown>): boolean {
+  const secret = env.RESEND_WEBHOOK_SECRET;
+  if (!secret) {
+    if (env.NODE_ENV === 'production') return false;
+    logger.warn('[Email Webhook] RESEND_WEBHOOK_SECRET não configurado');
+    return true;
+  }
 
-  const authorization = String(headers.authorization ?? '');
-  const resendSignature = String(headers['resend-signature'] ?? headers['x-resend-signature'] ?? '');
-
-  return (
-    authorization === `Bearer ${env.RESEND_WEBHOOK_SECRET}`
-    || resendSignature === env.RESEND_WEBHOOK_SECRET
-  );
+  try {
+    const wh = new Webhook(secret);
+    wh.verify(rawBody, {
+      'svix-id': String(headers['svix-id'] ?? ''),
+      'svix-timestamp': String(headers['svix-timestamp'] ?? ''),
+      'svix-signature': String(headers['svix-signature'] ?? ''),
+    });
+    return true;
+  } catch (err) {
+    logger.warn({ err }, '[Email Webhook] Assinatura inválida');
+    return false;
+  }
 }
 
 async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInboundEmail): Promise<void> {
   const toAddress = inbound.to[0] ?? '';
-  const tenantSlug = extractTenantFromEmail(toAddress);
-  if (!tenantSlug) {
-    app.log.warn({ toAddress }, '[Email Webhook] tenant slug não encontrado no destinatário');
+  const tenant = await resolveTenantByAddress(toAddress);
+  if (!tenant) {
+    app.log.warn({ toAddress }, '[Email Webhook] tenant não encontrado para o destinatário');
     return;
   }
 
-  const tenantRows = await prisma.$queryRawUnsafe<TenantLookup[]>(
-    `SELECT id, slug, schema_name, status, settings
-     FROM tenants
-     WHERE slug = $1
-     LIMIT 1`,
-    tenantSlug,
-  );
-
-  const tenant = tenantRows[0];
-  if (!tenant || !['active', 'trial'].includes(tenant.status)) {
-    app.log.warn({ tenantSlug }, '[Email Webhook] tenant não encontrado ou inativo');
+  if (!['active', 'trial'].includes(tenant.status)) {
+    app.log.warn({ tenantSlug: tenant.slug }, '[Email Webhook] tenant inativo');
     return;
   }
 
@@ -241,54 +287,87 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   if (!contact) return;
 
   const description = cleanEmailBody(inbound.text || stripHtml(inbound.html));
+  const title = inbound.subject || 'Sem assunto';
 
-  const createdRows = await prisma.$queryRawUnsafe<Array<{
-    id: string;
-    title: string;
-    status: string;
-    source: string;
-  }>>(
-    `INSERT INTO ${schema}.tickets (
-       id,
-       title,
-       description,
-       source,
-       email_message_id,
-       status,
-       priority,
-       contact_id,
-       organization_id,
-       created_at,
-       updated_at
-     ) VALUES (
-       gen_random_uuid(),
-       $1,
-       $2,
-       'email',
-       $3,
-       'open',
-       'medium',
-       $4::uuid,
-       $5::uuid,
-       NOW(),
-       NOW()
-     )
-     RETURNING id, title, status, source`,
-    inbound.subject || 'Sem assunto',
-    description || null,
-    inbound.messageId,
-    contact.id,
-    contact.organization_id,
+  // createTicket exige agente ou departamento. Com inbound_email_department_id
+  // configurado passamos por ele e ganhamos auto-assign, regras de tipo, evento
+  // 'created' e webhook ticket.created; sem isso, mantemos o INSERT direto para
+  // não quebrar o inbound de quem ainda não configurou.
+  // Prioriza o departamento configurado no canal de email (tela de canais);
+  // tenant.settings.inbound_email_department_id segue como fallback.
+  const channelRows = await prisma.$queryRawUnsafe<Array<{ settings: Record<string, unknown> | null }>>(
+    `SELECT settings
+     FROM ${schema}.channels
+     WHERE type = 'email' AND status = 'active'
+     ORDER BY created_at ASC
+     LIMIT 1`,
   );
+  const channelDepartmentId = typeof channelRows[0]?.settings?.['default_department_id'] === 'string'
+    ? (channelRows[0].settings['default_department_id'] as string)
+    : null;
 
-  const ticket = createdRows[0];
+  const inboundDepartmentId = channelDepartmentId
+    ?? (typeof tenant.settings?.['inbound_email_department_id'] === 'string'
+      ? (tenant.settings['inbound_email_department_id'] as string)
+      : null);
+
+  let ticket: { id: string; title: string; status: string; source: string } | undefined;
+
+  if (inboundDepartmentId) {
+    const created = await createTicket(
+      {
+        title: title.slice(0, 255),
+        priority: 'medium',
+        status: 'open',
+        contact_id: contact.id,
+        department_id: inboundDepartmentId,
+        ...(description ? { description } : {}),
+        ...(contact.organization_id ? { organization_id: contact.organization_id } : {}),
+      },
+      null,
+      tenant.id,
+      tenant.schema_name,
+      { source: 'email', emailMessageId: inbound.messageId },
+    );
+    ticket = { id: created.id, title: created.title, status: created.status, source: created.source };
+  } else {
+    app.log.warn(
+      { tenantSlug: tenant.slug },
+      '[Email Webhook] departamento padrão não configurado no canal de email — ticket criado sem roteamento',
+    );
+
+    const createdRows = await prisma.$queryRawUnsafe<Array<{
+      id: string;
+      title: string;
+      status: string;
+      source: string;
+    }>>(
+      `INSERT INTO ${schema}.tickets (
+         id, title, description, source, email_message_id,
+         status, priority, contact_id, organization_id, created_at, updated_at
+       ) VALUES (
+         gen_random_uuid(), $1, $2, 'email', $3,
+         'open', 'medium', $4::uuid, $5::uuid, NOW(), NOW()
+       )
+       RETURNING id, title, status, source`,
+      title,
+      description || null,
+      inbound.messageId,
+      contact.id,
+      contact.organization_id,
+    );
+
+    ticket = createdRows[0];
+    if (!ticket) return;
+
+    await prisma.$queryRawUnsafe(
+      `INSERT INTO ${schema}.ticket_events (ticket_id, event_type, new_value)
+       VALUES ($1::uuid, 'created', 'email')`,
+      ticket.id,
+    );
+  }
+
   if (!ticket) return;
-
-  await prisma.$queryRawUnsafe(
-    `INSERT INTO ${schema}.ticket_events (ticket_id, event_type, new_value)
-     VALUES ($1::uuid, 'created', 'email')`,
-    ticket.id,
-  );
 
   const conversationRows = await prisma.$queryRawUnsafe<Array<{
     id: string;
@@ -385,7 +464,9 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
   if (env.RESEND_API_KEY && sendConfirmation) {
     const resend = new Resend(env.RESEND_API_KEY);
     await resend.emails.send({
-      from: `suporte@${tenant.slug}.ziradesk.com`,
+      // Mesmo domínio que extractTenantFromEmail aceita, para que a resposta do
+      // cliente ao e-mail de confirmação volte para o inbound.
+      from: `suporte@${tenant.slug}.${inboundDomain()}`,
       to: senderEmail,
       subject: `Re: ${inbound.subject || 'Ticket recebido'}`,
       html: `
@@ -414,20 +495,34 @@ async function processInboundEmail(app: FastifyInstance, inbound: NormalizedInbo
 }
 
 export async function emailWebhookRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/email', async (request, reply) => {
-    reply.code(200).send({ success: true });
-
+  app.post('/email', { config: { rawBody: true } }, async (request, reply) => {
     const headers = request.headers as Record<string, unknown>;
-    if (!hasValidWebhookSecret(headers)) {
-      request.log.warn('[Email Webhook] assinatura inválida');
-      return;
+    const rawBodyValue = (request as { rawBody?: Buffer | string }).rawBody;
+    const rawBody = Buffer.isBuffer(rawBodyValue)
+      ? rawBodyValue.toString('utf8')
+      : rawBodyValue ?? JSON.stringify(request.body);
+
+    if (!env.RESEND_WEBHOOK_SECRET && env.NODE_ENV === 'production') {
+      request.log.error('[Email Webhook] RESEND_WEBHOOK_SECRET não configurado — rejeitar em produção');
+      return reply.code(500).send({ error: 'Webhook not configured' });
+    }
+
+    if (!verifyResendWebhook(rawBody, headers)) {
+      return reply.code(401).send({ error: 'Invalid signature' });
     }
 
     const inbound = normalizeInboundPayload(request.body);
-    if (!inbound) return;
+    if (!inbound) {
+      return reply.code(200).send({ success: true });
+    }
 
-    void processInboundEmail(app, inbound).catch((error) => {
+    try {
+      await processInboundEmail(app, inbound);
+    } catch (error) {
       request.log.error({ error }, '[Email Webhook] erro ao processar e-mail inbound');
-    });
+      return reply.code(500).send({ success: false, error: { message: 'Erro ao processar e-mail inbound' } });
+    }
+
+    return reply.code(200).send({ success: true });
   });
 }

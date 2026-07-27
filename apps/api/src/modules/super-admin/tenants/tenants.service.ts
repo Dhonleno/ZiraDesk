@@ -925,6 +925,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       category        VARCHAR(100),
       assigned_to     UUID REFERENCES "${schemaName}".users(id) ON DELETE SET NULL,
       department_id   UUID REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL,
+      level           VARCHAR(10),
       resolved_at     TIMESTAMPTZ,
       resolution_notes TEXT,
       closed_at        TIMESTAMPTZ,

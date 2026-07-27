@@ -41,12 +41,18 @@ import { getPriorityStyle } from '../../utils/ticketPriority';
 import { canExportTickets } from '../../utils/ticketPermissions';
 import { TicketTableRow } from '../../components/tickets/TicketTableRow';
 import { TicketsPagination } from '../../components/tickets/TicketsPagination';
+import { DatePicker } from '../../components/ui/DatePicker';
+import { AgentCombobox } from '../../components/tickets/AgentCombobox';
 
 type BoardStatus = 'queued' | 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed';
 type TicketView = 'kanban' | 'list';
 type TFn = TFunction<'tickets'>;
 
 const BOARD_COLUMNS: BoardStatus[] = ['queued', 'open', 'in_progress', 'waiting', 'resolved', 'closed'];
+const ADVANCED_FILTER_PARAMS = ['department_id', 'type_id', 'level', 'tag', 'source', 'created_from', 'created_to'] as const;
+// Espelha o enum de listTicketsQuerySchema. 'instagram' não existe como origem
+// de ticket — só manual, portal e email são gravados hoje.
+const SOURCE_OPTIONS = ['manual', 'portal', 'email', 'whatsapp', 'api'] as const;
 const CLOSED_COLUMN_MAX_ITEMS = 20;
 const STATUS_ACCENT: Record<BoardStatus, string> = {
   queued: 'var(--amber)',
@@ -199,6 +205,16 @@ function TicketCard({
 
       <div className="tickets-card-title">{sanitizeTicketTitle(ticket.title) || ticket.title}</div>
 
+      {ticket.contact_name ? (
+        <div className="tickets-card-contact">
+          <svg viewBox="0 0 14 14" fill="none" width="11" height="11" aria-hidden>
+            <circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M2 12c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          <span>{ticket.contact_name}</span>
+        </div>
+      ) : null}
+
       {ticket.category ? <div className="tickets-card-category">{ticket.category}</div> : null}
 
       <div className="tickets-card-bottom">
@@ -303,6 +319,19 @@ export function TicketsPage() {
   const initialStatus = parseHighlightStatus(searchParams.get('status'));
   const filterOverdue = searchParams.get('overdue') === 'true';
 
+  // Filtros avançados: só na URL, sem espelho em useState — nenhum deles precisa
+  // de debounce, então o searchParam é a única fonte de verdade.
+  const departmentId = searchParams.get('department_id') ?? '';
+  const typeId       = searchParams.get('type_id') ?? '';
+  const levelFilter  = searchParams.get('level') ?? '';
+  const tag          = searchParams.get('tag') ?? '';
+  const sourceFilter = searchParams.get('source') ?? '';
+  const createdFrom  = searchParams.get('created_from') ?? '';
+  const createdTo    = searchParams.get('created_to') ?? '';
+
+  const activeFilterCount = [departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo]
+    .filter(Boolean).length;
+
   // Persistidos na URL: navegar/recarregar mantém view, aba de status e página.
   const view: TicketView = searchParams.get('view') === 'list' ? 'list' : 'kanban';
   const setView = (next: TicketView) => {
@@ -342,6 +371,15 @@ export function TicketsPage() {
     }, { replace: true });
   };
 
+  const clearAllFilters = () => {
+    setSearchParams((prev) => {
+      const updated = new URLSearchParams(prev);
+      ADVANCED_FILTER_PARAMS.forEach((key) => updated.delete(key));
+      updated.delete('page');
+      return updated;
+    }, { replace: true });
+  };
+
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState<TicketPriority | ''>(priorityParam);
   const [agentId, setAgentId] = useState(assignedToParam === 'me' ? user?.id ?? '' : assignedToParam);
@@ -349,6 +387,7 @@ export function TicketsPage() {
   const [highlightStatus, setHighlightStatus] = useState<BoardStatus | ''>(initialStatus);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   const debouncedSearch = useDebounce(search, 250);
@@ -369,7 +408,14 @@ export function TicketsPage() {
     setHighlightStatus(initialStatus);
   }, [initialStatus]);
 
-  const listQueryKey = ['tickets-board', debouncedSearch, priority, agentId, category, filterOverdue] as const;
+  // Chave compartilhada pelas 3 queries (board, fechados, lista): qualquer filtro
+  // novo precisa entrar aqui, senão o React Query serve cache obsoleto.
+  const filterKey = [
+    debouncedSearch, priority, agentId, category, filterOverdue,
+    departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo,
+  ] as const;
+
+  const listQueryKey = ['tickets-board', ...filterKey] as const;
 
   const buildBoardFilters = (): ListTicketsParams => {
     const params: ListTicketsParams = {
@@ -382,6 +428,13 @@ export function TicketsPage() {
     if (agentId) params.assigned_to = agentId;
     if (category) params.category = category;
     if (filterOverdue) params.overdue = true;
+    if (departmentId) params.department_id = departmentId;
+    if (typeId) params.type_id = typeId;
+    if (levelFilter) params.level = levelFilter as NonNullable<ListTicketsParams['level']>;
+    if (tag) params.tag = tag;
+    if (sourceFilter) params.source = sourceFilter as NonNullable<ListTicketsParams['source']>;
+    if (createdFrom) params.created_from = createdFrom;
+    if (createdTo) params.created_to = createdTo;
 
     return params;
   };
@@ -400,7 +453,7 @@ export function TicketsPage() {
   });
 
   const { data: closedTicketsData } = useQuery({
-    queryKey: ['tickets-board-closed', debouncedSearch, priority, agentId, category, filterOverdue],
+    queryKey: ['tickets-board-closed', ...filterKey],
     queryFn: () => ticketsApi.list({
       ...buildBoardFilters(),
       status: 'closed',
@@ -413,7 +466,7 @@ export function TicketsPage() {
   const listStatus = statusTab !== 'all' && isBoardStatus(statusTab) ? statusTab : undefined;
 
   const { data: listData, isPending: isListPending } = useQuery({
-    queryKey: ['tickets-list', debouncedSearch, priority, agentId, category, filterOverdue, listStatus, page],
+    queryKey: ['tickets-list', ...filterKey, listStatus, page],
     queryFn: () => ticketsApi.list({
       ...buildBoardFilters(),
       ...(listStatus ? { status: listStatus } : {}),
@@ -428,7 +481,8 @@ export function TicketsPage() {
   useEffect(() => {
     if (page !== 1) setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, priority, agentId, category, filterOverdue, statusTab]);
+  }, [debouncedSearch, priority, agentId, category, filterOverdue, statusTab,
+      departmentId, typeId, levelFilter, tag, sourceFilter, createdFrom, createdTo]);
 
   useEffect(() => {
     if (!highlightStatus || view !== 'kanban' || isPending) return;
@@ -446,6 +500,27 @@ export function TicketsPage() {
     queryKey: ['ticket-categories'],
     queryFn: adminApi.ticketCategories.list,
     staleTime: 60_000,
+  });
+
+  const { data: departments } = useQuery({
+    queryKey: ['admin', 'departments'],
+    queryFn: adminApi.departments.list,
+    staleTime: 5 * 60_000,
+    enabled: showFilters,
+  });
+
+  const { data: ticketTypes } = useQuery({
+    queryKey: ['ticket-types'],
+    queryFn: adminApi.ticketTypes.list,
+    staleTime: 5 * 60_000,
+    enabled: showFilters,
+  });
+
+  const { data: availableTags } = useQuery({
+    queryKey: ['tickets', 'tags'],
+    queryFn: ticketsApi.listTags,
+    staleTime: 2 * 60_000,
+    enabled: showFilters,
   });
 
   const statusMutation = useMutation({
@@ -648,21 +723,14 @@ export function TicketsPage() {
           </div>
 
           <div className="tickets-inline-filters">
-            <select
-              className="tickets-inline-select"
+            <AgentCombobox
+              agents={agentsData?.data ?? []}
               value={agentId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setAgentId(value);
-                updateFilterParam('assigned_to', value);
+              onChange={(id) => {
+                setAgentId(id);
+                updateFilterParam('assigned_to', id);
               }}
-              aria-label={t('tickets.filterByAgent')}
-            >
-              <option value="">{t('tickets.filterByAgent')}</option>
-              {(agentsData?.data ?? []).map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name}</option>
-              ))}
-            </select>
+            />
 
             <select
               className="tickets-inline-select"
@@ -710,6 +778,27 @@ export function TicketsPage() {
                 aria-label={t('tickets.searchPlaceholder')}
               />
             </div>
+
+            <button
+              type="button"
+              className={`tickets-filter-btn${activeFilterCount > 0 ? ' active' : ''}`}
+              onClick={() => setShowFilters((value) => !value)}
+              aria-expanded={showFilters}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M2 3h8M3.5 6h5M5 9h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {t('tickets.filters.label')}
+              {activeFilterCount > 0 ? (
+                <span className="tickets-filter-count">{activeFilterCount}</span>
+              ) : null}
+            </button>
+
+            {activeFilterCount > 0 ? (
+              <button type="button" className="tickets-filter-clear" onClick={clearAllFilters}>
+                {t('tickets.filters.clearAll')}
+              </button>
+            ) : null}
           </div>
 
           <div className="tickets-header-actions">
@@ -765,6 +854,98 @@ export function TicketsPage() {
             </div>
           </div>
         </header>
+
+        {showFilters ? (
+          <div className="tickets-filter-panel">
+            <div className="tickets-filter-group">
+              <label htmlFor="tf-department">{t('tickets.filters.department')}</label>
+              <select
+                id="tf-department"
+                value={departmentId}
+                onChange={(event) => updateFilterParam('department_id', event.target.value)}
+              >
+                <option value="">{t('tickets.filters.all')}</option>
+                {(departments ?? []).map((department) => (
+                  <option key={department.id} value={department.id}>{department.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="tickets-filter-group">
+              <label htmlFor="tf-type">{t('tickets.filters.type')}</label>
+              <select
+                id="tf-type"
+                value={typeId}
+                onChange={(event) => updateFilterParam('type_id', event.target.value)}
+              >
+                <option value="">{t('tickets.filters.all')}</option>
+                {(ticketTypes ?? []).map((type) => (
+                  <option key={type.id} value={type.id}>{type.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {tenantSettings?.support_levels_enabled ? (
+              <div className="tickets-filter-group">
+                <label htmlFor="tf-level">{t('tickets.fields.level')}</label>
+                <select
+                  id="tf-level"
+                  value={levelFilter}
+                  onChange={(event) => updateFilterParam('level', event.target.value)}
+                >
+                  <option value="">{t('tickets.filters.all')}</option>
+                  {(['N1', 'N2', 'N3'] as const).map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            <div className="tickets-filter-group">
+              <label htmlFor="tf-source">{t('tickets.filters.source')}</label>
+              <select
+                id="tf-source"
+                value={sourceFilter}
+                onChange={(event) => updateFilterParam('source', event.target.value)}
+              >
+                <option value="">{t('tickets.filters.all')}</option>
+                {SOURCE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{t(`tickets.source.${option}`)}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="tickets-filter-group">
+              <label htmlFor="tf-tag">{t('tickets.filters.tag')}</label>
+              <select
+                id="tf-tag"
+                value={tag}
+                onChange={(event) => updateFilterParam('tag', event.target.value)}
+              >
+                <option value="">{t('tickets.filters.all')}</option>
+                {(availableTags ?? []).map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="tickets-filter-group">
+              <label>{t('tickets.filters.createdFrom')}</label>
+              <DatePicker
+                value={createdFrom.slice(0, 10)}
+                onChange={(date) => updateFilterParam('created_from', date ? `${date}T00:00:00.000Z` : '')}
+              />
+            </div>
+
+            <div className="tickets-filter-group">
+              <label>{t('tickets.filters.createdTo')}</label>
+              <DatePicker
+                value={createdTo.slice(0, 10)}
+                onChange={(date) => updateFilterParam('created_to', date ? `${date}T23:59:59.999Z` : '')}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {isPending ? (
           <div className="tickets-loading">{t('loading', { ns: 'common' })}</div>

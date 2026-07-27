@@ -16,6 +16,7 @@ import {
 import { PageShell } from '../../components/layout/PageShell';
 import { useToast } from '../../stores/toast.store';
 import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
+import { DatePicker } from '../../components/ui/DatePicker';
 import {
   buildCreateTicketPayload,
   getTicketConditionalRequirements,
@@ -639,13 +640,12 @@ export default function CreateTicket() {
             <div className="ct-field">
               <label className="ct-label" htmlFor="ct-due-date">Prazo</label>
               {conditional.dueDateRequired ? <span className="ct-rule-required">Obrigatório para urgente</span> : null}
-              <input
+              <DatePicker
                 id="ct-due-date"
-                type="date"
                 value={form.due_date}
-                onChange={(event) => setForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                onChange={(date) => setForm((prev) => ({ ...prev, due_date: date }))}
                 className="ct-input"
-                min={new Date().toISOString().split('T')[0]}
+                minDate={new Date().toISOString().split('T')[0]!}
               />
             </div>
 

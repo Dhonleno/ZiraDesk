@@ -11,6 +11,8 @@ import { SelectChannelModal } from './SelectChannelModal';
 import { Modal } from '../ui/Modal';
 import { PiiReveal } from '../common/PiiReveal';
 import { maskEmail, maskPhone, maskDocument } from '../../utils/pii-mask';
+import { TicketStatusBadge } from '../tickets/TicketStatusBadge';
+import { getPriorityStyle } from '../../utils/ticketPriority';
 
 type Tab = 'data' | 'conversations' | 'tickets' | 'notes';
 
@@ -136,6 +138,8 @@ function ChannelTypeIcon({ channelType }: { channelType: string }) {
 
 export function ContactDetail({ contactId }: Props) {
   const { t } = useTranslation('crm');
+  // getPriorityStyle monta o label a partir do namespace 'tickets'.
+  const { t: tTickets } = useTranslation('tickets');
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -491,32 +495,61 @@ export function ContactDetail({ contactId }: Props) {
                       <path d="M4 5h12a1.5 1.5 0 0 1 1.5 1.5v1.2a1.2 1.2 0 0 0-1 1.18 1.2 1.2 0 0 0 1 1.18v1.42A1.5 1.5 0 0 1 16 14H4a1.5 1.5 0 0 1-1.5-1.5v-1.42a1.2 1.2 0 0 0 1-1.18 1.2 1.2 0 0 0-1-1.18V6.5A1.5 1.5 0 0 1 4 5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
                     </svg>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('organizations.tickets.empty')}</div>
-                  <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.selectContactHint')}</div>
+                  <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('contacts.noTickets')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('contacts.noTicketsSub')}</div>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {ticketRows.map((ticket) => (
-                  <Link
-                    key={ticket.id}
-                    to={`/tickets/${ticket.id}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', textDecoration: 'none' }}
-                  >
-                    <span style={{ color: 'var(--amber)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                        <path d="M3.5 4.5h9a1.3 1.3 0 0 1 1.3 1.3v1a1 1 0 0 0-.8 1 1 1 0 0 0 .8 1v1.1a1.3 1.3 0 0 1-1.3 1.3h-9a1.3 1.3 0 0 1-1.3-1.3V9a1 1 0 0 0 .8-1 1 1 0 0 0-.8-1v-1a1.3 1.3 0 0 1 1.3-1.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {ticket.title}
+                {ticketRows.map((ticket) => {
+                  const priorityStyle = getPriorityStyle(ticket.priority, tTickets);
+
+                  return (
+                    <Link
+                      key={ticket.id}
+                      to={`/tickets/${ticket.id}`}
+                      title={ticket.title}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', textDecoration: 'none' }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 28,
+                          height: 28,
+                          flexShrink: 0,
+                          borderRadius: 'var(--r)',
+                          background: priorityStyle.bgColor,
+                          color: priorityStyle.color,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path d="M3.5 4.5h9a1.3 1.3 0 0 1 1.3 1.3v1a1 1 0 0 0-.8 1 1 1 0 0 0 .8 1v1.1a1.3 1.3 0 0 1-1.3 1.3h-9a1.3 1.3 0 0 1-1.3-1.3V9a1 1 0 0 0 .8-1 1 1 0 0 0-.8-1v-1a1.3 1.3 0 0 1 1.3-1.3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                            #{String(ticket.ticket_number).padStart(5, '0')}
+                          </span>
+                          <span style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {ticket.title}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: priorityStyle.color, whiteSpace: 'nowrap' }}>
+                            {priorityStyle.label}
+                          </span>
+                          <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>·</span>
+                          <TicketStatusBadge status={ticket.status} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{ticket.priority} · {ticket.status}</div>
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--txt-3)' }}>{formatRelativeDate(ticket.created_at)}</div>
-                  </Link>
-                ))}
+                      <div style={{ fontSize: 10, color: 'var(--txt-3)', flexShrink: 0 }}>{formatRelativeDate(ticket.created_at)}</div>
+                    </Link>
+                  );
+                })}
               </div>
             )
           ) : null}

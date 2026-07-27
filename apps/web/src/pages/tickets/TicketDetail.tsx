@@ -19,7 +19,7 @@ import {
 } from '../../services/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
-import { subscribeToEvent } from '../../services/socket';
+import { getSocket, subscribeToEvent } from '../../services/socket';
 import { useDebounce } from '../../hooks/useDebounce';
 import { PageShell } from '../../components/layout/PageShell';
 import { ContactAvatar } from '../../components/crm/ContactAvatar';
@@ -29,6 +29,9 @@ import TimeTrackingSection from '../../components/tickets/TimeTrackingSection';
 import { TicketComments } from '../../components/tickets/TicketComments';
 import { CustomFieldInput } from '../../components/tickets/CustomFieldInput';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { DatePicker } from '../../components/ui/DatePicker';
+import { TransferDepartmentModal } from '../../components/tickets/TransferDepartmentModal';
+import { EscalateTicketModal, availableEscalationLevels } from '../../components/tickets/EscalateTicketModal';
 import { getSlaBg, getSlaColor, getSlaInfo, type SlaInfo } from '../../utils/sla';
 import { canDeleteTicket, isTicketReadonly } from '../../utils/ticketPermissions';
 import { getPriorityStyle } from '../../utils/ticketPriority';
@@ -42,7 +45,7 @@ const TICKET_STATUS_TRANSITIONS: Record<string, string[]> = {
   closed:      ['open'],
 };
 
-type DetailTab = 'comments' | 'history';
+type DetailTab = 'comments' | 'history' | 'checklist' | 'time' | 'attachments';
 
 function useAppTheme(): 'dark' | 'light' {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (
@@ -238,6 +241,8 @@ export function TicketDetailPage() {
   const appTheme = useAppTheme();
   const { data: tenantSettings } = useTenantSettings();
   const canDelete = canDeleteTicket(user ?? null, tenantSettings ?? null);
+  const [showTransferDept, setShowTransferDept] = useState(false);
+  const [showEscalate, setShowEscalate] = useState(false);
 
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -308,6 +313,15 @@ export function TicketDetailPage() {
     staleTime: 15_000,
   });
 
+  // Mesma queryKey da ChecklistSection: o React Query deduplica, então o badge
+  // da aba compartilha o cache e não dispara requisição extra.
+  const { data: checklistItems = [] } = useQuery({
+    queryKey: ['ticket-checklist', id],
+    queryFn: () => ticketsApi.listChecklist(id ?? ''),
+    enabled: Boolean(id),
+    staleTime: 15_000,
+  });
+
   const { data: agentsData } = useQuery({
     queryKey: ['ticket-detail-agents-v2'],
     queryFn: () => adminApi.listUsers({ per_page: 100, status: 'active' }),
@@ -336,6 +350,14 @@ export function TicketDetailPage() {
   useEffect(() => {
     if (!id) return undefined;
 
+    // 'connect' é o evento do Socket que dispara tanto na conexão inicial
+    // quanto em cada reconexão. 'reconnect' vive no Manager (socket.io.on) e
+    // nunca chegaria por subscribeToEvent, que registra em socket.on.
+    // Se o socket já estava conectado ao montar, qualquer 'connect' seguinte é
+    // uma reconexão; senão, o primeiro é a conexão inicial e é ignorado para
+    // não refazer fetch das queries que acabaram de carregar.
+    let sawInitialConnect = getSocket()?.connected ?? false;
+
     const unsubscribers = [
       subscribeToEvent<{ ticket?: Ticket; ticketId?: string }>('ticket:updated', (data) => {
         const updatedId = data.ticket?.id ?? data.ticketId;
@@ -351,6 +373,17 @@ export function TicketDetailPage() {
       subscribeToEvent<{ ticketId?: string }>('ticket:event', (data) => {
         if (data.ticketId !== id) return;
         void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+      }),
+      subscribeToEvent('connect', () => {
+        if (!sawInitialConnect) {
+          sawInitialConnect = true;
+          return;
+        }
+
+        // Eventos emitidos durante a queda foram perdidos: refaz o fetch.
+        void queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+        void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+        void queryClient.invalidateQueries({ queryKey: ['ticket-comments', id] });
       }),
     ];
 
@@ -659,7 +692,7 @@ export function TicketDetailPage() {
   }
 
   function toggleActionsMenu() {
-    if (!canDelete) return;
+    if (!hasActionsMenu) return;
 
     setActionsMenuOpen((isOpen) => {
       const nextOpen = !isOpen;
@@ -694,6 +727,24 @@ export function TicketDetailPage() {
   }
 
   const readonly = isTicketReadonly(ticket, user ?? null);
+  // Owner/admin sempre; agente só no ticket que aceitou. Resolvido/fechado o
+  // backend recusa, então nem oferecemos a ação.
+  const canTransferDepartment =
+    ticket.status !== 'resolved'
+    && ticket.status !== 'closed'
+    && (user?.role === 'owner'
+      || user?.role === 'admin'
+      || (ticket.assigned_to === user?.id && ticket.status === 'in_progress'));
+  // Escalar reusa a mesma regra de permissão da transferência e exige níveis
+  // habilitados e um destino acima do atual (N3 não escala mais).
+  const canEscalate =
+    tenantSettings?.support_levels_enabled === true
+    && canTransferDepartment
+    && availableEscalationLevels(ticket.level ?? null).length > 0;
+  const hasActionsMenu = canDelete || canTransferDepartment || canEscalate;
+  const checklistCount = checklistItems.length;
+  const checklistDone = checklistItems.filter((item) => item.is_done).length;
+  const attachmentsCount = attachments.length;
   const currentTitle = sanitizeTicketTitle(ticket.title) || ticket.title;
   const dueState = dueTone(ticket.due_date ?? null);
   const sla = getSlaInfo(ticket.due_date, ticket.status, now);
@@ -735,6 +786,18 @@ export function TicketDetailPage() {
     }
     if (event.event_type === 'tag_removed') {
       return t('tickets.timeline.tag_removed', { tag: event.old_value ?? '—' });
+    }
+    if (event.event_type === 'level_escalated') {
+      return t('tickets.timeline.level_escalated', {
+        old: event.old_value ?? t('tickets.level.none'),
+        new: event.new_value ?? '—',
+      });
+    }
+    if (event.event_type === 'department_transferred') {
+      return t('tickets.timeline.department_transferred', {
+        old: event.old_value ?? '—',
+        new: event.new_value ?? '—',
+      });
     }
     return event.event_type;
   };
@@ -880,7 +943,7 @@ export function TicketDetailPage() {
               </button>
             ) : null}
 
-            {canDelete ? (
+            {hasActionsMenu ? (
               <div className="ticket-actions-wrap" ref={actionsMenuRef}>
                 <button
                   type="button"
@@ -900,7 +963,7 @@ export function TicketDetailPage() {
               </div>
             ) : null}
 
-            {canDelete && actionsMenuOpen && actionsMenuPosition ? createPortal(
+            {hasActionsMenu && actionsMenuOpen && actionsMenuPosition ? createPortal(
               <div
                 ref={actionsMenuPortalRef}
                 className="ticket-actions-menu"
@@ -910,17 +973,47 @@ export function TicketDetailPage() {
                   right: actionsMenuPosition.right,
                 }}
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="ticket-actions-menu-item danger"
-                  onClick={() => {
-                    setActionsMenuOpen(false);
-                    setShowDeleteConfirm(true);
-                  }}
-                >
-                  {t('tickets.delete')}
-                </button>
+                {canEscalate ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowEscalate(true);
+                    }}
+                  >
+                    {t('tickets.actions.escalate')}
+                  </button>
+                ) : null}
+
+                {canTransferDepartment ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowTransferDept(true);
+                    }}
+                  >
+                    {t('tickets.actions.transferDepartment')}
+                  </button>
+                ) : null}
+
+                {canDelete ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ticket-actions-menu-item danger"
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      setShowDeleteConfirm(true);
+                    }}
+                  >
+                    {t('tickets.delete')}
+                  </button>
+                ) : null}
               </div>,
               document.body,
             ) : null}
@@ -1090,27 +1183,56 @@ export function TicketDetailPage() {
               </div>
             </section>
 
-            <section className="ticket-detail-section-v2">
-              <div className="ticket-tabs-v2">
-                <button
-                  type="button"
-                  className={activeTab === 'comments' ? 'active' : ''}
-                  onClick={() => setActiveTab('comments')}
-                >
-                  {t('tickets.detail.comments')}
-                </button>
-                <button
-                  type="button"
-                  className={activeTab === 'history' ? 'active' : ''}
-                  onClick={() => setActiveTab('history')}
-                >
-                  {t('tickets.detail.history')}
-                </button>
-              </div>
+            <div className="ticket-tabs-v2">
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'comments' ? ' active' : ''}`}
+                onClick={() => setActiveTab('comments')}
+              >
+                {t('tickets.tabs.comments')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'history' ? ' active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                {t('tickets.tabs.history')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'checklist' ? ' active' : ''}`}
+                onClick={() => setActiveTab('checklist')}
+              >
+                {t('tickets.tabs.checklist')}
+                {checklistCount > 0 ? (
+                  <span className="ticket-tab-badge">{checklistDone}/{checklistCount}</span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'time' ? ' active' : ''}`}
+                onClick={() => setActiveTab('time')}
+              >
+                {t('tickets.tabs.time')}
+              </button>
+              <button
+                type="button"
+                className={`ticket-tab-btn${activeTab === 'attachments' ? ' active' : ''}`}
+                onClick={() => setActiveTab('attachments')}
+              >
+                {t('tickets.tabs.attachments')}
+                {attachmentsCount > 0 ? (
+                  <span className="ticket-tab-badge">{attachmentsCount}</span>
+                ) : null}
+              </button>
+            </div>
 
+            <div className="ticket-tab-content">
               {activeTab === 'comments' ? (
                 <TicketComments ticketId={ticket.id} disabled={readonly} />
-              ) : (
+              ) : null}
+
+              {activeTab === 'history' ? (
                 <div className="ticket-history-list">
                   {timeline.length === 0 ? (
                     <div className="ticket-empty-inline">{t('tickets.kanban.empty')}</div>
@@ -1129,56 +1251,59 @@ export function TicketDetailPage() {
                     ))
                   )}
                 </div>
-              )}
-            </section>
+              ) : null}
+
+              {activeTab === 'checklist' ? <ChecklistSection ticketId={ticket.id} /> : null}
+
+              {activeTab === 'time' ? <TimeTrackingSection ticketId={ticket.id} /> : null}
+
+              {activeTab === 'attachments' ? (
+                <div className="ticket-attachments-tab">
+                  <section className="ticket-dsec">
+                    <div className="ticket-dsec-head">
+                      <span>{t('tickets.fields.attachments')}</span>
+                      <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
+                        {t('tickets.detail.addAttachment')}
+                      </button>
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        style={{ display: 'none' }}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          uploadMutation.mutate(file);
+                          event.target.value = '';
+                        }}
+                      />
+                    </div>
+                    <div className="ticket-dsec-body">
+                      {attachments.length === 0 ? (
+                        <div className="ticket-empty-state">
+                          <div className="ticket-empty-icon">
+                            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                              <path d="M13.5 6.5 8 12a2 2 0 1 0 2.8 2.8l6-6a4 4 0 1 0-5.6-5.6l-6 6a2.5 2.5 0 0 0 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </div>
+                          <p className="ticket-empty-title">{t('tickets.detail.noAttachments')}</p>
+                        </div>
+                      ) : (
+                        <div className="ticket-attachments-grid">
+                          {attachments.map((attachment) => (
+                            <AttachmentCard
+                              key={attachment.id}
+                              attachment={attachment}
+                              canDelete={attachment.user_id === user?.id}
+                              onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
             </div>
-
-            <div className="ticket-tab-col-side">
-              <ChecklistSection ticketId={ticket.id} />
-              <TimeTrackingSection ticketId={ticket.id} />
-
-              <section className="ticket-dsec">
-                <div className="ticket-dsec-head">
-                  <span>{t('tickets.fields.attachments')}</span>
-                  <button type="button" className="btn-ghost" onClick={() => attachmentInputRef.current?.click()}>
-                    {t('tickets.detail.addAttachment')}
-                  </button>
-                  <input
-                    ref={attachmentInputRef}
-                    type="file"
-                    style={{ display: 'none' }}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      uploadMutation.mutate(file);
-                      event.target.value = '';
-                    }}
-                  />
-                </div>
-                <div className="ticket-dsec-body">
-                  {attachments.length === 0 ? (
-                    <div className="ticket-empty-state">
-                      <div className="ticket-empty-icon">
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
-                          <path d="M13.5 6.5 8 12a2 2 0 1 0 2.8 2.8l6-6a4 4 0 1 0-5.6-5.6l-6 6a2.5 2.5 0 0 0 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <p className="ticket-empty-title">{t('tickets.detail.noAttachments')}</p>
-                    </div>
-                  ) : (
-                    <div className="ticket-attachments-grid">
-                      {attachments.map((attachment) => (
-                        <AttachmentCard
-                          key={attachment.id}
-                          attachment={attachment}
-                          canDelete={attachment.user_id === user?.id}
-                          onDelete={() => removeAttachmentMutation.mutate(attachment.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
             </div>
             </div>
           </main>
@@ -1261,6 +1386,23 @@ export function TicketDetailPage() {
               </button>
             </section>
 
+            {tenantSettings?.support_levels_enabled ? (
+              <section className="ticket-sidebar-section">
+                <h2>{t('tickets.fields.level')}</h2>
+                <div className="ticket-level-badge-row">
+                  {ticket.level ? (
+                    <span className={`ticket-level-badge ticket-level-badge--${ticket.level.toLowerCase()}`}>
+                      {ticket.level}
+                    </span>
+                  ) : (
+                    <span className="ticket-level-badge ticket-level-badge--none">
+                      {t('tickets.level.none')}
+                    </span>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
             <section className="ticket-sidebar-section">
               <h2>{t('tickets.detail.sections.contact')}</h2>
               <div className="ticket-sidebar-contact">
@@ -1286,15 +1428,13 @@ export function TicketDetailPage() {
 
             <section className={`ticket-sidebar-section ${dueState}`}>
               <h2>{t('tickets.detail.sections.dueDate')}</h2>
-              <input
+              <DatePicker
                 className="ticket-due-date-input"
-                type="date"
                 value={sidebarDueDate}
                 disabled={readonly}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSidebarDueDate(value);
-                  queuePatch({ due_date: value ? `${value}T00:00:00.000Z` : '' });
+                onChange={(date) => {
+                  setSidebarDueDate(date);
+                  queuePatch({ due_date: date ? `${date}T00:00:00.000Z` : '' });
                 }}
               />
 
@@ -1409,6 +1549,33 @@ export function TicketDetailPage() {
           </aside>
         </div>
       </section>
+
+      {showEscalate ? (
+        <EscalateTicketModal
+          ticket={ticket}
+          settings={tenantSettings ?? null}
+          onClose={() => setShowEscalate(false)}
+          onSuccess={(updated) => {
+            queryClient.setQueryData(['ticket', id], updated);
+            void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+            void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+          }}
+        />
+      ) : null}
+
+      {showTransferDept ? (
+        <TransferDepartmentModal
+          ticket={ticket}
+          onClose={() => setShowTransferDept(false)}
+          onSuccess={(updated) => {
+            queryClient.setQueryData(['ticket', id], updated);
+            void queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            void queryClient.invalidateQueries({ queryKey: ['tickets-board'] });
+            void queryClient.invalidateQueries({ queryKey: ['ticket-timeline', id] });
+          }}
+        />
+      ) : null}
 
       <ConfirmModal
         open={showDeleteConfirm}

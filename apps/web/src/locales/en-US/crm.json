@@ -144,6 +144,8 @@
         "outro": "Other"
       }
     },
+    "noConversations": "No conversations yet",
+    "noConversationsSub": "Conversations from this organization will appear here",
     "conversations": {
       "empty": "No conversations found",
       "channel": "Channel",
@@ -312,6 +314,8 @@
     "hasNoActiveChannels": "No active channel available",
     "selectContact": "Select a contact",
     "selectContactHint": "Click a contact to view details",
+    "noTickets": "No tickets linked",
+    "noTicketsSub": "Tickets opened for this contact will appear here",
     "tabs": {
       "data": "Data",
       "conversations": "Conversations",

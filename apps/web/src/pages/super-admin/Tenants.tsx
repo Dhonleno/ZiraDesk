@@ -13,6 +13,7 @@ import { CreateTenantModal } from '../../components/super-admin/CreateTenantModa
 import { useDebounce } from '../../hooks/useDebounce';
 import { useToast } from '../../stores/toast.store';
 import { useAuthStore, type AuthUser } from '../../stores/auth.store';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 type TenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
 
@@ -607,12 +608,11 @@ export function Tenants() {
               <label className="sa-modal-label" htmlFor="trial-ends-at">
                 {t('superAdmin.tenants.trialEndsAt')}
               </label>
-              <input
+              <DatePicker
                 id="trial-ends-at"
-                type="date"
                 className="sa-select"
                 value={trialEndsAt}
-                onChange={(event) => setTrialEndsAt(event.target.value)}
+                onChange={setTrialEndsAt}
               />
             </>
           )}

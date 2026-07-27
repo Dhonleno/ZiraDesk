@@ -144,6 +144,8 @@
         "outro": "Otro"
       }
     },
+    "noConversations": "Sin conversaciones registradas",
+    "noConversationsSub": "Las conversaciones de esta organización aparecerán aquí",
     "conversations": {
       "empty": "No se encontraron conversaciones",
       "channel": "Canal",
@@ -312,6 +314,8 @@
     "hasNoActiveChannels": "No hay canales activos disponibles",
     "selectContact": "Seleccione un contacto",
     "selectContactHint": "Haga clic en un contacto para ver los detalles",
+    "noTickets": "Sin tickets vinculados",
+    "noTicketsSub": "Los tickets abiertos para este contacto aparecerán aquí",
     "tabs": {
       "data": "Datos",
       "conversations": "Conversaciones",

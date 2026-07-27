@@ -408,6 +408,7 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
   protocol: string | null;
   subject: string | null;
   department_name: string | null;
+  contact_name: string | null;
   last_message: string | null;
   last_message_at: Date | null;
   created_at: Date;
@@ -424,6 +425,7 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
     protocol: string | null;
     subject: string | null;
     department_name: string | null;
+    contact_name: string | null;
     last_message: string | null;
     last_message_at: Date | null;
     created_at: Date;
@@ -435,11 +437,13 @@ export async function getOrganizationConversations(id: string, schemaName?: stri
        cv.protocol_number AS protocol,
        cv.subject,
        d.name AS department_name,
+       ct.name AS contact_name,
        cv.last_message,
        cv.last_message_at,
        cv.created_at
      FROM conversations cv
      LEFT JOIN departments d ON d.id = cv.department_id
+     LEFT JOIN contacts ct ON ct.id = cv.contact_id
      WHERE cv.organization_id = $1::uuid
      ORDER BY cv.created_at DESC
      LIMIT 20`,

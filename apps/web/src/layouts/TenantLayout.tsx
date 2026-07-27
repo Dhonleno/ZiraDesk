@@ -20,6 +20,7 @@ import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
 import { notifySound, shouldShowDesktopNotification } from '../utils/notify';
+import { playNewConversationSound } from '../hooks/useChatSounds';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
 import { PermissionGate } from '../components/ui/PermissionGate';
 
@@ -220,6 +221,7 @@ function Breadcrumb() {
     '/admin/quick-replies': t('tenantAdmin.nav.quickReplies'),
     '/admin/templates': t('tenantAdmin.nav.templates'),
     '/admin/ticket-types': t('tenantAdmin.nav.ticketTypes'),
+    '/admin/support-levels': t('tenantAdmin.nav.supportLevels'),
     '/admin/conversation-tags': t('tenantAdmin.nav.conversationTags'),
     '/admin/close-config': t('tenantAdmin.closeConfig.title'),
     '/admin/lgpd': t('nav.lgpd'),
@@ -633,6 +635,9 @@ export function TenantLayout() {
 
   useEffect(() => {
     if (!['owner', 'admin', 'supervisor'].includes(user?.role ?? '')) return;
+    // Dentro de /omnichannel quem toca é a ConversationList, que assina o mesmo
+    // evento; sem este guard o gestor ouviria o som duas vezes.
+    if (pathname.startsWith('/omnichannel')) return;
 
     const unsubCreated = subscribeToEvent<{
       assigned_to?: string | null;
@@ -654,14 +659,14 @@ export function TenantLayout() {
         ?? null;
 
       if (!assignedTo) {
-        notifySound('message');
+        playNewConversationSound();
       }
     });
 
     return () => {
       unsubCreated();
     };
-  }, [user?.role]);
+  }, [pathname, user?.role]);
 
   useEffect(() => {
     if (!user?.id || pathname.startsWith('/omnichannel')) return;

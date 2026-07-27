@@ -225,6 +225,18 @@
     "live_chat": "Chat"
   },
   "chat": {
+    "sounds": {
+      "title": "Sonidos de notificación",
+      "newConversation": "Nueva conversación",
+      "newMessage": "Nuevo mensaje",
+      "volume": "Volumen",
+      "preview": "Probar",
+      "none": "Sin sonido",
+      "ding": "Ding (discreto)",
+      "chime": "Chime (profesional)",
+      "pop": "Pop (suave)",
+      "pulse": "Pulse (urgente)"
+    },
     "composeAriaLabel": "Escribe tu mensaje",
     "inputPlaceholder": "Escribe tu mensaje...",
     "resolvedPlaceholder": "Esta conversación ha sido resuelta",

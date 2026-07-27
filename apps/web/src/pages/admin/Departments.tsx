@@ -247,61 +247,68 @@ function AddAgentModal({
       title={t('tenantAdmin.departments.addAgentTitle')}
       maxWidth="sm"
     >
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={t('tenantAdmin.departments.searchAgent')}
-        style={{ ...inputStyle, marginBottom: 10 }}
-      />
-      <div style={{ maxHeight: 320, overflowY: 'auto', display: 'grid', gap: 6 }}>
-        {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-10 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
-          ))
-        ) : filtered.length === 0 ? (
-          <p style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('tenantAdmin.departments.noUsersFound')}</p>
-        ) : filtered.map((user) => (
-          <label
-            key={user.id}
+      <div className="add-agent-modal">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('tenantAdmin.departments.searchAgent')}
+          style={{ ...inputStyle, marginBottom: 10 }}
+        />
+        <div style={{ maxHeight: 320, overflowY: 'auto', display: 'grid', gap: 6 }}>
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 animate-pulse rounded-lg" style={{ background: 'var(--bg-3)' }} />
+            ))
+          ) : filtered.length === 0 ? (
+            <p style={{ color: 'var(--txt-3)', fontSize: 13 }}>{t('tenantAdmin.departments.noUsersFound')}</p>
+          ) : filtered.map((user) => (
+            <label
+              key={user.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 10px',
+                border: `1px solid ${selectedIds.has(user.id) ? 'var(--teal)' : 'var(--line)'}`,
+                borderRadius: 'var(--r)',
+                background: selectedIds.has(user.id) ? 'var(--teal-dim)' : 'var(--bg-3)',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.has(user.id)}
+                onChange={() => toggle(user.id)}
+              />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{user.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{user.role}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button type="button" onClick={onClose} style={btnSecondaryStyle}>
+            {t('tenantAdmin.departments.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={() => addMutation.mutate()}
+            disabled={selectedIds.size === 0 || addMutation.isPending}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '8px 10px',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--r)',
-              background: selectedIds.has(user.id) ? 'var(--teal-dim)' : 'var(--bg-3)',
-              cursor: 'pointer',
+              ...btnPrimaryStyle,
+              opacity: selectedIds.size === 0 || addMutation.isPending ? 0.5 : 1,
+              cursor: selectedIds.size === 0 || addMutation.isPending ? 'not-allowed' : 'pointer',
             }}
           >
-            <input
-              type="checkbox"
-              checked={selectedIds.has(user.id)}
-              onChange={() => toggle(user.id)}
-              style={{ width: 14, height: 14 }}
-            />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{user.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{user.role}</div>
-            </div>
-          </label>
-        ))}
-      </div>
-      <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-        <button type="button" onClick={onClose} style={btnSecondaryStyle}>
-          {t('tenantAdmin.departments.cancel')}
-        </button>
-        <button
-          type="button"
-          onClick={() => addMutation.mutate()}
-          disabled={selectedIds.size === 0 || addMutation.isPending}
-          style={{ ...btnPrimaryStyle, opacity: selectedIds.size === 0 || addMutation.isPending ? 0.6 : 1 }}
-        >
-          {addMutation.isPending
-            ? t('tenantAdmin.departments.saving')
-            : t('tenantAdmin.departments.addAgentConfirm', { count: selectedIds.size })}
-        </button>
+            {addMutation.isPending
+              ? t('tenantAdmin.departments.saving')
+              : selectedIds.size > 0
+                ? t('tenantAdmin.departments.addAgentConfirm', { count: selectedIds.size })
+                : t('tenantAdmin.departments.addAgent')}
+          </button>
+        </div>
       </div>
     </Modal>
   );

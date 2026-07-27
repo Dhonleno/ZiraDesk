@@ -33,6 +33,13 @@ export interface TenantSettings {
   sla_hours_high?: number;
   sla_hours_medium?: number;
   sla_hours_low?: number;
+  support_levels_enabled?: boolean;
+  support_level_n1_dept?: string | null;
+  support_level_n2_dept?: string | null;
+  support_level_n3_dept?: string | null;
+  support_level_n1_label?: string;
+  support_level_n2_label?: string;
+  support_level_n3_label?: string;
   agent_can_delete_tickets?: boolean;
   agent_can_export_tickets?: boolean;
   agent_can_manage_contacts?: boolean;
@@ -60,6 +67,13 @@ export interface PublicTenantSettings {
   sla_auto_enabled: boolean;
   routing_skill_timeout_ms: number;
   business_hours_enabled: boolean;
+  support_levels_enabled: boolean;
+  support_level_n1_dept: string | null;
+  support_level_n2_dept: string | null;
+  support_level_n3_dept: string | null;
+  support_level_n1_label: string;
+  support_level_n2_label: string;
+  support_level_n3_label: string;
 }
 
 export interface MyProfile {
@@ -998,6 +1012,7 @@ export interface CrmOrganizationConversation {
   protocol: string | null;
   subject: string | null;
   department_name: string | null;
+  contact_name: string | null;
   last_message: string | null;
   last_message_at: string | null;
   created_at: string;
@@ -1626,6 +1641,13 @@ export const adminApi = {
 
   getSettings: async (): Promise<TenantSettings> => {
     const res = await api.get<{ success: boolean; data: TenantSettings }>('/admin/settings');
+    return res.data.data;
+  },
+
+  getEmailInboundAddress: async (): Promise<{ address: string; alias: string }> => {
+    const res = await api.get<{ success: boolean; data: { address: string; alias: string } }>(
+      '/admin/channels/email/inbound-address',
+    );
     return res.data.data;
   },
 
@@ -2675,6 +2697,7 @@ export interface Ticket {
   assigned_to:     string | null;
   department_id?:  string | null;
   department_name?: string | null;
+  level?:          'N1' | 'N2' | 'N3' | null;
   resolved_at:     string | null;
   due_date:        string | null;
   tags:            string[];
@@ -2797,12 +2820,16 @@ export interface ListTicketsParams {
   priority?:    TicketPriority;
   assigned_to?: string;
   overdue?:     boolean;
+  department_id?: string;
+  type_id?:     string;
+  level?:       'N1' | 'N2' | 'N3';
+  tag?:         string;
   source?:      'manual' | 'portal' | 'email' | 'whatsapp' | 'api';
   contact_id?:  string;
   organization_id?: string;
   category?:    string;
-  date_from?:   string;
-  date_to?:     string;
+  created_from?: string;
+  created_to?:   string;
   sort_by?:     'created_at' | 'updated_at' | 'priority' | 'due_date';
   sort_order?:  'asc' | 'desc';
 }
@@ -4285,6 +4312,30 @@ export const ticketsApi = {
 
   getStats: async (): Promise<TicketStats> => {
     const res = await api.get<{ success: boolean; data: TicketStats }>('/tickets/stats');
+    return res.data.data;
+  },
+
+  listTags: async (): Promise<string[]> => {
+    const res = await api.get<{ success: boolean; data: string[] }>('/tickets/tags');
+    return res.data.data;
+  },
+
+  transferDepartment: async (
+    ticketId: string,
+    payload: { department_id: string; reason?: string },
+  ): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(
+      `/tickets/${ticketId}/transfer-department`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  escalate: async (ticketId: string, level: 'N2' | 'N3'): Promise<Ticket> => {
+    const res = await api.post<{ success: boolean; data: Ticket }>(
+      `/tickets/${ticketId}/escalate`,
+      { level },
+    );
     return res.data.data;
   },
 

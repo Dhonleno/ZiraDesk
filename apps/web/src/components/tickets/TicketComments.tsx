@@ -488,6 +488,17 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
   const comment = editorHtmlToMarkdown(editorHtml);
   const hasCommentContent = extractPlainTextFromHtml(editorHtml).length > 0;
 
+  // Mesma janela de 2s de reportUpdateError em TicketDetail: o toast store não
+  // deduplica, então N falhas em sequência viravam N toasts empilhados.
+  const lastErrorRef = useRef<number>(0);
+
+  function reportCommentError(message: string) {
+    const now = Date.now();
+    if (now - lastErrorRef.current < 2000) return;
+    lastErrorRef.current = now;
+    toast.error(message);
+  }
+
   const closeMention = () => setMention({ active: false, query: '', anchorRect: null });
 
   const { data: comments = [], isPending } = useQuery({
@@ -607,7 +618,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       setMention({ active: false, query: '', anchorRect: null });
       if (editorRef.current) editorRef.current.innerHTML = '';
     },
-    onError: () => toast.error('Erro ao enviar comentário'),
+    onError: () => reportCommentError(t('tickets.errors.commentError')),
   });
 
   const editMutation = useMutation({
@@ -618,7 +629,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       setEditContent('');
       toast.success('Comentário atualizado');
     },
-    onError: () => toast.error('Erro ao atualizar comentário'),
+    onError: () => reportCommentError('Erro ao atualizar comentário'),
   });
 
   const deleteMutation = useMutation({
@@ -627,7 +638,7 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
       void queryClient.invalidateQueries({ queryKey: ['ticket-comments', ticketId] });
       toast.success('Comentário excluído');
     },
-    onError: () => toast.error('Erro ao excluir comentário'),
+    onError: () => reportCommentError('Erro ao excluir comentário'),
   });
 
   async function handleSubmit() {
@@ -721,155 +732,8 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <h4
-        style={{
-          margin: '0 0 12px',
-          fontSize: 12,
-          fontWeight: 600,
-          color: 'var(--txt-2)',
-          textTransform: 'uppercase',
-          letterSpacing: 0.5,
-        }}
-      >
-        {t('tickets.comments.listTitle', { defaultValue: 'Comentários e notas' })}
-      </h4>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
-        {isPending ? (
-          <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center' }}>Carregando...</p>
-        ) : null}
-
-        {!isPending && comments.length === 0 ? (
-          <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center', fontStyle: 'italic' }}>
-            {t('tickets.comments.noComments')}
-          </p>
-        ) : null}
-
-        {comments.map((comment) => (
-          <div key={comment.id} className={`ticket-comment ${comment.is_internal ? 'internal' : 'public'}`}>
-            <Avatar name={comment.author_name ?? 'U'} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
-                  {comment.author_name ?? 'Usuário'}
-                </span>
-                <span className={`comment-visibility-badge ${comment.is_internal ? 'internal' : 'public'}`}>
-                  {comment.is_internal ? 'Interno' : 'Público'}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
-                  {formatRelative(comment.created_at)}
-                </span>
-
-                <div className="row-actions">
-                  {comment.user_id === user?.id ? (
-                    <button
-                      type="button"
-                      className="tb-icon-btn"
-                      onClick={() => {
-                        setEditingId(comment.id);
-                        setEditContent(comment.content);
-                      }}
-                      title="Editar comentário"
-                      aria-label="Editar comentário"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                        <path d="M8.5 1.5L10.5 3.5 3.5 10.5H1.5V8.5L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  ) : null}
-
-                  {comment.user_id === user?.id || canDeleteAsAdmin ? (
-                    <button
-                      type="button"
-                      className="tb-icon-btn danger"
-                      onClick={() => deleteMutation.mutate(comment.id)}
-                      disabled={deleteMutation.isPending}
-                      title={t('tickets.comments.delete')}
-                      aria-label={t('tickets.comments.delete')}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                        <path d="M2 3.5h8M4.5 3.5V2h3v1.5M9.5 3.5L9 10H3L2.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              {editingId === comment.id ? (
-                <div className="comment-edit-wrapper">
-                  <textarea
-                    autoFocus
-                    value={editContent}
-                    onChange={(event) => setEditContent(event.target.value)}
-                    className="comment-edit-textarea"
-                    rows={3}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        setEditingId(null);
-                        setEditContent('');
-                      }
-                    }}
-                  />
-                  <div className="comment-edit-actions">
-                    <button
-                      type="button"
-                      className="zd-btn"
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditContent('');
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      className="zd-btn zd-btn-primary"
-                      disabled={editMutation.isPending || !editContent.trim()}
-                      onClick={() => editMutation.mutate({ id: comment.id, nextContent: editContent.trim() })}
-                    >
-                      Salvar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div
-                    className="comment-body"
-                    dangerouslySetInnerHTML={{ __html: renderCommentHtml(comment.content) }}
-                  />
-
-                  {comment.attachments?.length ? (
-                    <div className="comment-attachments">
-                      {comment.attachments.map((attachment) => {
-                        const mimeType = attachment.mime_type ?? 'application/octet-stream';
-                        return (
-                          <a
-                            key={attachment.id}
-                            href={attachment.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="comment-attachment-chip"
-                            download
-                          >
-                            <AttachmentIcon mimeType={mimeType} />
-                            <span className="att-filename" title={attachment.filename}>
-                              {attachment.filename.length > 24 ? `${attachment.filename.slice(0, 21)}...` : attachment.filename}
-                            </span>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-
-        <div ref={bottomRef} />
-      </div>
-
       <form
+        className="ticket-comment-composer-wrapper"
         onSubmit={(event) => {
           event.preventDefault();
           void handleSubmit();
@@ -1087,6 +951,141 @@ export function TicketComments({ ticketId, disabled = false }: Props) {
           </div>
         </div>
       </form>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
+        {isPending ? (
+          <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center' }}>Carregando...</p>
+        ) : null}
+
+        {!isPending && comments.length === 0 ? (
+          <p style={{ color: 'var(--txt-3)', fontSize: 13, textAlign: 'center', fontStyle: 'italic' }}>
+            {t('tickets.comments.noComments')}
+          </p>
+        ) : null}
+
+        {comments.map((comment) => (
+          <div key={comment.id} className={`ticket-comment ${comment.is_internal ? 'internal' : 'public'}`}>
+            <Avatar name={comment.author_name ?? 'U'} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
+                  {comment.author_name ?? 'Usuário'}
+                </span>
+                <span className={`comment-visibility-badge ${comment.is_internal ? 'internal' : 'public'}`}>
+                  {comment.is_internal ? 'Interno' : 'Público'}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                  {formatRelative(comment.created_at)}
+                </span>
+
+                <div className="row-actions">
+                  {comment.user_id === user?.id ? (
+                    <button
+                      type="button"
+                      className="tb-icon-btn"
+                      onClick={() => {
+                        setEditingId(comment.id);
+                        setEditContent(comment.content);
+                      }}
+                      title="Editar comentário"
+                      aria-label="Editar comentário"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <path d="M8.5 1.5L10.5 3.5 3.5 10.5H1.5V8.5L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : null}
+
+                  {comment.user_id === user?.id || canDeleteAsAdmin ? (
+                    <button
+                      type="button"
+                      className="tb-icon-btn danger"
+                      onClick={() => deleteMutation.mutate(comment.id)}
+                      disabled={deleteMutation.isPending}
+                      title={t('tickets.comments.delete')}
+                      aria-label={t('tickets.comments.delete')}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                        <path d="M2 3.5h8M4.5 3.5V2h3v1.5M9.5 3.5L9 10H3L2.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {editingId === comment.id ? (
+                <div className="comment-edit-wrapper">
+                  <textarea
+                    autoFocus
+                    value={editContent}
+                    onChange={(event) => setEditContent(event.target.value)}
+                    className="comment-edit-textarea"
+                    rows={3}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        setEditingId(null);
+                        setEditContent('');
+                      }
+                    }}
+                  />
+                  <div className="comment-edit-actions">
+                    <button
+                      type="button"
+                      className="zd-btn"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditContent('');
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="zd-btn zd-btn-primary"
+                      disabled={editMutation.isPending || !editContent.trim()}
+                      onClick={() => editMutation.mutate({ id: comment.id, nextContent: editContent.trim() })}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div
+                    className="comment-body"
+                    dangerouslySetInnerHTML={{ __html: renderCommentHtml(comment.content) }}
+                  />
+
+                  {comment.attachments?.length ? (
+                    <div className="comment-attachments">
+                      {comment.attachments.map((attachment) => {
+                        const mimeType = attachment.mime_type ?? 'application/octet-stream';
+                        return (
+                          <a
+                            key={attachment.id}
+                            href={attachment.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="comment-attachment-chip"
+                            download
+                          >
+                            <AttachmentIcon mimeType={mimeType} />
+                            <span className="att-filename" title={attachment.filename}>
+                              {attachment.filename.length > 24 ? `${attachment.filename.slice(0, 21)}...` : attachment.filename}
+                            </span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

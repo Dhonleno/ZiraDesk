@@ -13,6 +13,7 @@ const ticketFieldsSchema = z.object({
   type_id:         z.string().uuid().nullable().optional(),
   assigned_to:     z.string().uuid().nullable().optional(),
   department_id:   z.string().uuid().nullable().optional(),
+  level:           z.enum(['N1', 'N2', 'N3']).nullable().optional(),
   due_date:        z.string().datetime({ offset: true }).optional(),
   tags:            z.array(z.string()).optional(),
   custom_fields:   z.record(z.string(), z.unknown()).optional(),
@@ -48,10 +49,16 @@ export const listTicketsQuerySchema = z.object({
   assigned_to: z.string().uuid().optional(),
   overdue:     z.coerce.boolean().optional(),
   department_id: z.string().uuid().optional(),
+  type_id:     z.string().uuid().optional(),
+  level:       z.enum(['N1', 'N2', 'N3']).optional(),
+  // tags é text[] no banco — o filtro casa um valor exato com = ANY(t.tags).
+  tag:         z.string().min(1).max(50).optional(),
   source:      z.enum(['manual', 'portal', 'email', 'whatsapp', 'api']).optional(),
   contact_id:      z.string().uuid().optional(),
   organization_id: z.string().uuid().optional(),
   category:    z.string().optional(),
+  created_from: z.string().datetime({ offset: true }).optional(),
+  created_to:   z.string().datetime({ offset: true }).optional(),
   sort_by:     z.enum(['created_at', 'updated_at', 'priority', 'due_date']).default('created_at'),
   sort_order:  z.enum(['asc', 'desc']).default('desc'),
 });
@@ -84,6 +91,15 @@ export const assignTicketSchema = z.object({
   user_id: z.string().uuid(),
 });
 
+export const transferDepartmentSchema = z.object({
+  department_id: z.string().uuid(),
+  reason: z.string().trim().max(500).optional(),
+});
+
+export const escalateTicketSchema = z.object({
+  level: z.enum(['N2', 'N3']),
+});
+
 export const createChecklistItemSchema = z.object({
   title: z.string().trim().min(1).max(200),
 });
@@ -108,6 +124,8 @@ export type ExportTicketsQuery = z.infer<typeof exportTicketsQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 export type AssignTicketInput  = z.infer<typeof assignTicketSchema>;
+export type TransferDepartmentInput = z.infer<typeof transferDepartmentSchema>;
+export type EscalateTicketInput = z.infer<typeof escalateTicketSchema>;
 export type CreateChecklistItemInput = z.infer<typeof createChecklistItemSchema>;
 export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
 export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;

@@ -373,6 +373,292 @@ describe('Tickets integration', () => {
     expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([overdueTicket.id]);
   });
 
+  it('GET /api/tickets filtra por department_id', async () => {
+    const { departmentId } = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    const inDepartment = await createTicket({
+      title: uniqueText('Ticket com depto'),
+      department_id: departmentId,
+    });
+    await createTicket({ title: uniqueText('Ticket sem depto') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ department_id: departmentId })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([inDepartment.id]);
+  });
+
+  it('GET /api/tickets filtra por tag exata no array text[]', async () => {
+    const tagged = await createTicket({
+      title: uniqueText('Ticket com tag'),
+      tags: ['bug', 'regressao'],
+    });
+    await createTicket({ title: uniqueText('Ticket outra tag'), tags: ['melhoria'] });
+    await createTicket({ title: uniqueText('Ticket sem tag') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ tag: 'bug' })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([tagged.id]);
+
+    // Não deve casar por prefixo: 'bu' não é a tag 'bug'.
+    const partial = await createTestApp()
+      .get('/api/tickets')
+      .query({ tag: 'bu' })
+      .set(authHeader());
+
+    expect(partial.status).toBe(200);
+    expect(partial.body.meta.total).toBe(0);
+  });
+
+  it('GET /api/tickets filtra por type_id', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const typeRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".ticket_types (name)
+       VALUES ($1)
+       RETURNING id`,
+      uniqueText('Tipo Filtro'),
+    );
+    const typeId = typeRows[0]?.id;
+    if (!typeId) throw new Error('Falha ao criar tipo de teste');
+
+    const typed = await createTicket({ title: uniqueText('Ticket tipado'), type_id: typeId });
+    await createTicket({ title: uniqueText('Ticket sem tipo') });
+
+    const response = await createTestApp()
+      .get('/api/tickets')
+      .query({ type_id: typeId })
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((ticket: { id: string }) => ticket.id)).toEqual([typed.id]);
+  });
+
+  it('GET /api/tickets filtra por created_from e created_to', async () => {
+    const created = await createTicket({ title: uniqueText('Ticket periodo') });
+
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const inRange = await createTestApp()
+      .get('/api/tickets')
+      .query({ created_from: past, created_to: future })
+      .set(authHeader());
+
+    expect(inRange.status).toBe(200);
+    expect(inRange.body.data.map((ticket: { id: string }) => ticket.id)).toContain(created.id);
+
+    const outOfRange = await createTestApp()
+      .get('/api/tickets')
+      .query({ created_from: future })
+      .set(authHeader());
+
+    expect(outOfRange.status).toBe(200);
+    expect(outOfRange.body.meta.total).toBe(0);
+  });
+
+  it('GET /api/tickets/tags retorna tags únicas ordenadas', async () => {
+    await createTicket({ title: uniqueText('Ticket tags A'), tags: ['zeta', 'alfa'] });
+    await createTicket({ title: uniqueText('Ticket tags B'), tags: ['alfa'] });
+
+    const response = await createTestApp()
+      .get('/api/tickets/tags')
+      .set(authHeader());
+
+    expect(response.status).toBe(200);
+    const tags = response.body.data as string[];
+    expect(tags).toContain('alfa');
+    expect(tags).toContain('zeta');
+    expect(tags.filter((tag) => tag === 'alfa')).toHaveLength(1);
+    expect([...tags].sort()).toEqual(tags);
+  });
+
+  it('POST /api/tickets/:id/transfer-department devolve o ticket à fila do destino', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const origin = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    const targetRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".departments (name) VALUES ($1) RETURNING id`,
+      uniqueText('Depto Destino'),
+    );
+    const targetId = targetRows[0]?.id;
+    if (!targetId) throw new Error('Falha ao criar departamento destino');
+
+    const ticket = await createTicket({
+      title: uniqueText('Ticket transferivel'),
+      department_id: origin.departmentId,
+      assigned_to: TEST_USER_ID,
+    });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader())
+      .send({ department_id: targetId, reason: 'Precisa de equipe especializada' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.department_id).toBe(targetId);
+    expect(response.body.data.assigned_to).toBeNull();
+    expect(response.body.data.status).toBe('queued');
+
+    const timeline = await createTestApp()
+      .get(`/api/tickets/${ticket.id}/timeline`)
+      .set(authHeader());
+
+    expect(timeline.status).toBe(200);
+    const transferEvent = (timeline.body.data as Array<{ event_type: string; metadata: Record<string, unknown> }>)
+      .find((event) => event.event_type === 'department_transferred');
+    expect(transferEvent).toBeDefined();
+    expect(transferEvent?.metadata['reason']).toBe('Precisa de equipe especializada');
+  });
+
+  it('POST /api/tickets/:id/transfer-department por agente não designado retorna 403', async () => {
+    const { schemaName } = requireSuiteTenant();
+    const targetRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO "${schemaName}".departments (name) VALUES ($1) RETURNING id`,
+      uniqueText('Depto Destino 403'),
+    );
+    const targetId = targetRows[0]?.id;
+    if (!targetId) throw new Error('Falha ao criar departamento destino');
+
+    const other = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    const ticket = await createTicket({
+      title: uniqueText('Ticket de outro agente'),
+      assigned_to: other.agentId,
+    });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader({ role: 'agent' }))
+      .send({ department_id: targetId });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('POST /api/tickets/:id/transfer-department com departamento inexistente retorna 404', async () => {
+    const ticket = await createTicket({ title: uniqueText('Ticket destino invalido') });
+
+    const response = await createTestApp()
+      .post(`/api/tickets/${ticket.id}/transfer-department`)
+      .set(authHeader())
+      .send({ department_id: '00000000-0000-0000-0000-000000000000' });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('POST /api/tickets/:id/transfer-department com auto-assign atribui agente do destino', async () => {
+    await setTicketAutoAssign(true);
+    try {
+      const target = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+      const ticket = await createTicket({
+        title: uniqueText('Ticket auto-assign transfer'),
+        assigned_to: TEST_USER_ID,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/transfer-department`)
+        .set(authHeader())
+        .send({ department_id: target.departmentId });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.department_id).toBe(target.departmentId);
+      expect(response.body.data.assigned_to).toBe(target.agentId);
+      expect(response.body.data.status).toBe('open');
+    } finally {
+      await setTicketAutoAssign(false);
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate move para o departamento do nível destino', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket escalavel'),
+        assigned_to: TEST_USER_ID,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.level).toBe('N2');
+      expect(response.body.data.department_id).toBe(n2.departmentId);
+      expect(response.body.data.assigned_to).toBeNull();
+      expect(response.body.data.status).toBe('queued');
+
+      const timeline = await createTestApp()
+        .get(`/api/tickets/${ticket.id}/timeline`)
+        .set(authHeader());
+      expect(timeline.body.data.some((event: { event_type: string }) => event.event_type === 'level_escalated')).toBe(true);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate sem departamento configurado retorna 422', async () => {
+    await setSlaSettings({ support_levels_enabled: true });
+    try {
+      const ticket = await createTicket({ title: uniqueText('Ticket sem dept N3') });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N3' });
+
+      expect(response.status).toBe(422);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate para nível igual ou inferior retorna 422', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket ja N3'),
+        assigned_to: TEST_USER_ID,
+        level: 'N3',
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader())
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(422);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
+  it('POST /api/tickets/:id/escalate por agente não designado retorna 403', async () => {
+    const n2 = await createDepartmentWithAgent({ status: 'offline', isAvailable: false });
+    const other = await createDepartmentWithAgent({ status: 'online', isAvailable: true });
+    await setSlaSettings({ support_levels_enabled: true, support_level_n2_dept: n2.departmentId });
+    try {
+      const ticket = await createTicket({
+        title: uniqueText('Ticket de outro agente escalar'),
+        assigned_to: other.agentId,
+      });
+
+      const response = await createTestApp()
+        .post(`/api/tickets/${ticket.id}/escalate`)
+        .set(authHeader({ role: 'agent' }))
+        .send({ level: 'N2' });
+
+      expect(response.status).toBe(403);
+    } finally {
+      await setSlaSettings({});
+    }
+  });
+
   it('GET /api/tickets busca por número, contato, organização e inclui resolvidos', async () => {
     const { organization, contact } = await createOrganizationAndContact();
     const ticket = await createTicket({

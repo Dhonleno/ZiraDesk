@@ -20,3 +20,8 @@ export function notifySound(type: NotificationSoundType): void {
 export function shouldShowDesktopNotification(): boolean {
   return getProfilePrefs().desktopEnabled;
 }
+
+/** Interruptor geral de som do perfil, compartilhado com os sons de chat. */
+export function isNotificationSoundEnabled(): boolean {
+  return getProfilePrefs().soundEnabled;
+}

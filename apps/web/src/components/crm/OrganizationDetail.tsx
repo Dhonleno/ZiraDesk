@@ -568,7 +568,15 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
               {convsLoading ? (
                 <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>{t('organizations.loading')}</div>
               ) : conversations.length === 0 ? (
-                <div style={{ padding: '32px 0', textAlign: 'center', fontSize: 12, color: 'var(--txt-3)' }}>{t('organizations.conversations.empty')}</div>
+                <div className="zd-empty-state">
+                  <div className="zd-empty-icon" aria-hidden>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H6l-4 3V5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--txt-2)', fontWeight: 500 }}>{t('organizations.noConversations')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--txt-3)' }}>{t('organizations.noConversationsSub')}</div>
+                </div>
               ) : (
                 conversations.map((conv) => {
                   const normalizedChannelType = normalizeChannelType(conv.channel_type);
@@ -576,33 +584,53 @@ export function OrganizationDetail({ org, onUpdated }: Props) {
                   const statusStyle = CONVERSATION_STATUS_COLORS[conv.status] ?? DEFAULT_CONVERSATION_STATUS_STYLE;
                   const title = getConversationTitle(conv);
                   const dateBase = conv.last_message_at ?? conv.created_at;
+                  const preview = conv.last_message?.trim()
+                    || (normalizedChannelType ? channelLabels[normalizedChannelType] : null)
+                    || t('organizations.conversations.noPreview');
+                  const openConversation = () => navigate(`/omnichannel/conversations?conversation=${conv.id}`);
+
                   return (
                     <div
                       key={conv.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
-                      onClick={() => setPreviewConversationId(conv.id)}
+                      className="org-conv-item"
+                      role="button"
+                      tabIndex={0}
+                      onClick={openConversation}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openConversation();
+                        }
+                      }}
                     >
-                      <div style={{ width: 32, height: 32, borderRadius: 'var(--r)', background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: badge?.color ?? 'var(--txt-3)', flexShrink: 0 }}>
+                      <div className="org-conv-channel-icon" style={{ color: badge?.color ?? 'var(--txt-3)' }}>
                         <ConversationChannelIcon channelType={conv.channel_type} />
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
-                          {title}
-                        </div>
+                      <div className="org-conv-body">
+                        <div className="org-conv-protocol">{title}</div>
                         {conv.department_name ? (
-                          <span style={{ display: 'block', fontSize: 11, color: 'var(--teal)', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--teal)', fontWeight: 500, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {conv.department_name}
                           </span>
                         ) : null}
-                        <div style={{ fontSize: 11, color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {conv.last_message?.trim() || (normalizedChannelType ? channelLabels[normalizedChannelType] : null) || t('organizations.conversations.noPreview')}
+                        <div className="org-conv-meta">
+                          {conv.contact_name ? (
+                            <>
+                              <span className="org-conv-contact">{conv.contact_name}</span>
+                              <span className="org-conv-sep">·</span>
+                            </>
+                          ) : null}
+                          <span className="org-conv-preview">{preview}</span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                        <div style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--r-pill)', background: statusStyle.bg, color: statusStyle.fg, border: `1px solid ${statusStyle.border}` }}>
+                        <span
+                          className="org-conv-status-badge"
+                          style={{ background: statusStyle.bg, color: statusStyle.fg, border: `1px solid ${statusStyle.border}` }}
+                        >
                           {conversationStatusLabels[conv.status] ?? conv.status}
-                        </div>
-                        <span style={{ fontSize: 10, color: 'var(--txt-3)', fontFamily: 'var(--mono)' }}>
+                        </span>
+                        <span className="org-conv-date">
                           {relativeDateLabel(dateBase, i18n.language, t)}
                         </span>
                       </div>

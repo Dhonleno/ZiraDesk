@@ -161,7 +161,8 @@
       "webhooks": "Webhooks",
       "settings": "Configurações",
       "history": "Histórico",
-      "performance": "Performance"
+      "performance": "Performance",
+      "supportLevels": "Níveis de Atendimento"
     },
     "autoAssign": {
       "title": "Distribuição Automática",
@@ -656,6 +657,16 @@
         "deleted": "Canal removido",
         "testSuccess": "Canal conectado com sucesso",
         "testFail": "Falha na conexão — verifique as credenciais"
+      },
+      "email": {
+        "inboundTitle": "Receber emails como tickets",
+        "inboundDesc": "Configure um redirecionamento no seu email para criar tickets automaticamente.",
+        "step1": "Acesse as configurações do seu email (ex: suporte@suaempresa.com)",
+        "step2": "Ative o redirecionamento automático para o endereço abaixo",
+        "step3": "Pronto! Emails recebidos serão convertidos em tickets",
+        "defaultDept": "Departamento padrão",
+        "defaultDeptHint": "Tickets criados por email serão direcionados para este departamento",
+        "noDept": "Sem departamento (fila geral)"
       }
     },
     "quickReplies": {
@@ -1073,6 +1084,16 @@
       "disabledNotice": "O Agente de IA está desativado.",
       "disabledHint": "Configure e ative para começar a responder automaticamente. A base de conhecimento pode ser preparada antes de ativar.",
       "getApiKey": "Obter chave em platform.openai.com →"
+    },
+    "supportLevels": {
+      "title": "Níveis de Atendimento",
+      "subtitle": "Configure N1, N2 e N3 com departamentos e rótulos personalizados",
+      "enabled": "Habilitar níveis de atendimento",
+      "enabledHint": "Permite escalar tickets entre N1, N2 e N3",
+      "levelLabel": "Rótulo do nível",
+      "department": "Departamento",
+      "noDept": "Sem departamento configurado",
+      "saved": "Níveis de atendimento salvos"
     }
   },
   "roles": {
@@ -1165,6 +1186,7 @@
     "queueConfig": "Notificações de Fila",
     "ticketAutoAssign": "Auto-atribuição de Tickets",
     "slaPolicy": "Política de SLA",
+    "supportLevels": "Níveis de Atendimento",
     "customFields": "Campos customizados",
     "settings": "Configurações",
     "lgpd": "LGPD",

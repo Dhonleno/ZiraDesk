@@ -300,6 +300,15 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        label: 'nav.supportLevels',
+        path: '/admin/support-levels',
+        icon: (
+          <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M2.5 12.5h3v-4h-3v4ZM6.5 12.5h3v-7h-3v7ZM10.5 12.5h3v-10h-3v10Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          </svg>
+        ),
+      },
+      {
         label: 'nav.customFields',
         path: '/admin/custom-fields',
         icon: (

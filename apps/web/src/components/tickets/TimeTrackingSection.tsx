@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ticketsApi, type TicketTimeEntry } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { DatePicker } from '../ui/DatePicker';
 
 interface TimeTrackingSectionProps {
   ticketId: string;
@@ -124,11 +125,10 @@ export default function TimeTrackingSection({ ticketId }: TimeTrackingSectionPro
             </div>
             <div className="time-input-group">
               <label htmlFor="time-worked-at">{t('tickets.timeTracking.date')}</label>
-              <input
+              <DatePicker
                 id="time-worked-at"
-                type="date"
                 value={form.worked_at}
-                onChange={(e) => setForm((prev) => ({ ...prev, worked_at: e.target.value }))}
+                onChange={(date) => setForm((prev) => ({ ...prev, worked_at: date }))}
               />
             </div>
           </div>

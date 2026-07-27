@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AxiosError } from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -21,6 +22,7 @@ interface FormState {
   appId: string;
   appSecret: string;
   accessToken: string;
+  defaultDepartmentId: string;
 }
 
 function asString(value: unknown): string {
@@ -28,6 +30,7 @@ function asString(value: unknown): string {
 }
 
 export function EditChannelModal({ open, channelId, onClose }: Props) {
+  const { t } = useTranslation('admin');
   const toast = useToast();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>({
@@ -38,6 +41,7 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
     appId: '',
     appSecret: '',
     accessToken: '',
+    defaultDepartmentId: '',
   });
 
   const { data: channel, isLoading } = useQuery({
@@ -46,9 +50,26 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
     enabled: open && Boolean(channelId),
   });
 
+  const isEmailChannel = channel?.type === 'email';
+
+  const { data: inboundData } = useQuery({
+    queryKey: ['admin', 'email-inbound-address'],
+    queryFn: adminApi.getEmailInboundAddress,
+    enabled: open && isEmailChannel,
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin', 'departments'],
+    queryFn: adminApi.departments.list,
+    enabled: open && isEmailChannel,
+    staleTime: 5 * 60_000,
+  });
+
   useEffect(() => {
     if (!channel) return;
     const credentials = (channel.credentials ?? {}) as Record<string, unknown>;
+    const settings = (channel.settings ?? {}) as Record<string, unknown>;
     setForm({
       name: channel.name,
       status: channel.status === 'inactive' ? 'inactive' : 'active',
@@ -57,6 +78,7 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
       appId: asString(credentials.appId),
       appSecret: '',
       accessToken: '',
+      defaultDepartmentId: asString(settings.default_department_id),
     });
   }, [channel]);
 
@@ -88,10 +110,20 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
         }
       }
 
+      // settings é mesclado no backend (channels.service), então enviar só a
+      // chave do departamento não apaga o restante.
+      const settings = channel.type === 'email'
+        ? {
+            inbound_email_address: inboundData?.address ?? '',
+            default_department_id: form.defaultDepartmentId || null,
+          }
+        : undefined;
+
       await adminApi.updateChannel(channelId, {
         name: form.name.trim(),
         status: form.status,
         ...(credentials ? { credentials } : {}),
+        ...(settings ? { settings } : {}),
       });
     },
     onSuccess: async () => {
@@ -190,6 +222,61 @@ export function EditChannelModal({ open, channelId, onClose }: Props) {
                 <p className="text-xs" style={{ color: 'var(--teal)' }}>
                   O webhook de entrada será validado e configurado automaticamente ao salvar.
                 </p>
+              </div>
+            </>
+          )}
+
+          {isEmailChannel && (
+            <>
+              <div className="channel-config-section">
+                <h4 className="channel-config-section-title">
+                  {t('tenantAdmin.channels.email.inboundTitle')}
+                </h4>
+                <p className="channel-config-section-desc">
+                  {t('tenantAdmin.channels.email.inboundDesc')}
+                </p>
+
+                <div className="inbound-address-row">
+                  <code className="inbound-address-code">
+                    {inboundData?.address ?? '…'}
+                  </code>
+                  <button
+                    type="button"
+                    className="inbound-copy-btn"
+                    disabled={!inboundData?.address}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(inboundData?.address ?? '');
+                      toast.success(t('copied', { ns: 'common' }));
+                    }}
+                  >
+                    {t('copy', { ns: 'common' })}
+                  </button>
+                </div>
+
+                <ol className="inbound-steps">
+                  <li>{t('tenantAdmin.channels.email.step1')}</li>
+                  <li>{t('tenantAdmin.channels.email.step2')}</li>
+                  <li>{t('tenantAdmin.channels.email.step3')}</li>
+                </ol>
+              </div>
+
+              <div className="channel-config-field">
+                <label htmlFor="channel-default-dept">
+                  {t('tenantAdmin.channels.email.defaultDept')}
+                </label>
+                <p className="channel-config-hint">
+                  {t('tenantAdmin.channels.email.defaultDeptHint')}
+                </p>
+                <select
+                  id="channel-default-dept"
+                  value={form.defaultDepartmentId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, defaultDepartmentId: event.target.value }))}
+                >
+                  <option value="">{t('tenantAdmin.channels.email.noDept')}</option>
+                  {departments.filter((department) => department.isActive).map((department) => (
+                    <option key={department.id} value={department.id}>{department.name}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}

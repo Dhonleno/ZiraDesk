@@ -365,6 +365,13 @@
   padding: 10px;
 }
 
+/* Composer acima da lista: o separador fica abaixo dele. */
+.ticket-comment-composer-wrapper {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
 .comment-type-toggle {
   display: flex;
   gap: 2px;
@@ -5077,27 +5084,41 @@
   height: 30px;
 }
 
-/* Grid de 2 colunas do corpo das abas (1.4fr / 1fr) */
+/* Coluna única: checklist, tempo e anexos migraram para abas. */
 .ticket-tab-body {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 24px;
-  align-items: start;
-}
-
-.ticket-tab-col-main,
-.ticket-tab-col-side {
-  display: grid;
-  align-content: start;
-  min-width: 0;
+  display: block;
+  padding: 0;
 }
 
 .ticket-tab-col-main {
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
 }
 
-.ticket-tab-col-side {
-  gap: 12px;
+.ticket-tab-content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 0 0;
+}
+
+.ticket-attachments-tab {
+  padding: 0;
+}
+
+.ticket-attachments-tab .ticket-dsec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-3);
 }
 
 /* Padrão de seção canônico (.dsec) */
@@ -5187,15 +5208,10 @@
   margin: 0;
 }
 
-.ticket-detail-section-v2,
 .ticket-sidebar-section {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--bg-2);
-}
-
-.ticket-detail-section-v2 {
-  padding: 14px;
 }
 
 .ticket-detail-section-head {
@@ -5533,7 +5549,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg-2);
+  background: var(--bg);
   padding-top: 4px;
 }
 
@@ -5552,6 +5568,33 @@
 .ticket-tabs-v2 button.active {
   color: var(--teal);
   border-bottom-color: var(--teal);
+}
+
+/* Badge de contagem nas abas */
+.ticket-tab-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ticket-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--bg-4);
+  color: var(--txt-3);
+  border-radius: 99px;
+  font-family: var(--mono);
+}
+
+.ticket-tab-btn.active .ticket-tab-badge {
+  background: var(--teal-dim);
+  color: var(--teal);
 }
 
 .ticket-history-list {
@@ -6622,4 +6665,830 @@
   gap: 8px;
   border-top: 1px solid var(--line);
   padding-top: 16px;
+}
+
+/* ── Configuração de inbound no canal de email ── */
+
+.channel-config-section {
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.channel-config-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt);
+  margin: 0 0 4px;
+}
+
+.channel-config-section-desc {
+  font-size: 12px;
+  color: var(--txt-3);
+  margin: 0 0 10px;
+}
+
+.inbound-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin-bottom: 10px;
+}
+
+.inbound-address-code {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--teal);
+  word-break: break-all;
+}
+
+.inbound-copy-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--font);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .1s;
+}
+
+.inbound-copy-btn:hover:not(:disabled) {
+  background: var(--bg-4);
+  color: var(--txt);
+}
+
+.inbound-copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbound-steps {
+  padding-left: 16px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--txt-2);
+  line-height: 1.8;
+}
+
+.channel-config-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.channel-config-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-2);
+}
+
+.channel-config-hint {
+  font-size: 11px;
+  color: var(--txt-3);
+  margin: 2px 0 6px;
+}
+
+.channel-config-field select {
+  height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--font);
+  padding: 0 8px;
+  outline: none;
+}
+
+/* ── Níveis de atendimento (N1/N2/N3) ── */
+
+.ticket-level-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ticket-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+}
+
+.ticket-level-badge--n1 {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+.ticket-level-badge--n2 {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.ticket-level-badge--n3 {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.ticket-level-badge--none {
+  background: var(--bg-4);
+  color: var(--txt-3);
+  border: 1px solid var(--line);
+  font-family: var(--font);
+  letter-spacing: 0;
+}
+
+.support-level-head {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--txt-3);
+}
+
+.support-level-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.support-level-row:last-child {
+  border-bottom: none;
+}
+
+.support-level-row input,
+.support-level-row select {
+  height: 32px;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 12px;
+  font-family: var(--font);
+  padding: 0 8px;
+  outline: none;
+}
+
+/* ── TransferDepartmentModal ── */
+
+.transfer-dept-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.transfer-dept-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+  border-radius: var(--r);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--txt-2);
+}
+
+.transfer-dept-warning svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--amber);
+}
+
+.transfer-dept-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transfer-dept-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt-2);
+}
+
+.transfer-dept-field select,
+.transfer-dept-field textarea {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--font);
+  padding: 8px 10px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.transfer-dept-field textarea {
+  resize: vertical;
+}
+
+.transfer-dept-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── AgentCombobox ── */
+
+.agent-combobox {
+  position: relative;
+  min-width: 160px;
+}
+
+.agent-combobox-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 10px;
+  height: 32px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  color: var(--txt-2);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color .15s;
+}
+
+.agent-combobox-trigger:hover {
+  border-color: var(--line);
+}
+
+.agent-combobox-trigger.open,
+.agent-combobox-trigger:focus-visible {
+  border-color: var(--teal);
+  outline: none;
+}
+
+.agent-combobox-input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--txt);
+  outline: none;
+  font-family: var(--font);
+  min-width: 0;
+}
+
+.agent-combobox-input::placeholder {
+  color: var(--txt-3);
+}
+
+.agent-combobox-value {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-combobox-value.placeholder {
+  color: var(--txt-3);
+}
+
+.agent-combobox-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--txt-3);
+  flex-shrink: 0;
+}
+
+/* z-index acima do Modal (1000/1001), mesma faixa do DatePicker. */
+.agent-combobox-dropdown {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  z-index: 1300;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.agent-combobox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: none;
+  border: none;
+  border-radius: var(--r);
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt);
+  cursor: pointer;
+  text-align: left;
+  transition: background .1s, color .1s;
+}
+
+.agent-combobox-option:hover {
+  background: var(--bg-3);
+}
+
+.agent-combobox-option.selected {
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+.agent-combobox-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-4);
+  color: var(--txt-2);
+  font-size: 9px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-combobox-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--txt-3);
+  text-align: center;
+}
+
+/* Contato no card do kanban */
+.tickets-card-contact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--txt-3);
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.tickets-card-contact svg {
+  flex-shrink: 0;
+}
+
+.tickets-card-contact span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Filtros avançados do kanban de tickets ── */
+
+.tickets-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 30px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.tickets-filter-btn:hover {
+  background: var(--bg-4);
+}
+
+.tickets-filter-btn.active {
+  background: var(--teal-dim);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.tickets-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--teal);
+  color: #fff;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+
+.tickets-filter-clear {
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r);
+  white-space: nowrap;
+  transition: color .15s;
+}
+
+.tickets-filter-clear:hover {
+  color: var(--red);
+}
+
+.tickets-filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.tickets-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.tickets-filter-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--txt-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tickets-filter-group select,
+.tickets-filter-group .datepicker-trigger {
+  height: 32px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  color: var(--txt);
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+/* ── Aba Conversas do OrganizationDetail ── */
+
+.org-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background .1s;
+}
+
+.org-conv-item:hover {
+  background: var(--bg-3);
+}
+
+.org-conv-item:last-child {
+  border-bottom: none;
+}
+
+.org-conv-item:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
+.org-conv-channel-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.org-conv-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.org-conv-protocol {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--txt);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-conv-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.org-conv-contact {
+  font-size: 11px;
+  color: var(--txt-2);
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.org-conv-sep {
+  font-size: 11px;
+  color: var(--txt-3);
+  flex-shrink: 0;
+}
+
+.org-conv-preview {
+  font-size: 11px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.org-conv-status-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.org-conv-date {
+  font-size: 10px;
+  color: var(--txt-3);
+  white-space: nowrap;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+/* ── DatePicker ── */
+
+.datepicker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0 10px;
+  height: 32px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  font-size: 12px;
+  color: var(--txt);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font);
+  box-sizing: border-box;
+  transition: border-color .15s;
+}
+
+.datepicker-trigger:hover:not(:disabled) {
+  border-color: var(--line);
+}
+
+.datepicker-trigger:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.datepicker-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.datepicker-trigger[data-empty='true'] {
+  color: var(--txt-3);
+}
+
+.datepicker-trigger svg {
+  flex-shrink: 0;
+  color: var(--txt-3);
+}
+
+/* z-index acima do Modal (1000/1001) para funcionar dentro de modais. */
+.datepicker-popover {
+  z-index: 1300;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  min-width: 260px;
+  box-sizing: border-box;
+}
+
+.datepicker-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.datepicker-shortcut {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--txt-2);
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+
+.datepicker-shortcut:hover {
+  background: var(--teal-dim);
+  color: var(--teal);
+  border-color: var(--teal);
+}
+
+.datepicker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--txt);
+}
+
+.datepicker-header button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--txt-2);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--r);
+  transition: background .1s;
+}
+
+.datepicker-header button:hover {
+  background: var(--bg-3);
+  color: var(--txt);
+}
+
+.datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 4px 8px 8px;
+}
+
+.datepicker-day-header {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt-3);
+  text-align: center;
+  padding: 4px 0;
+  text-transform: uppercase;
+}
+
+.datepicker-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--txt-2);
+  background: none;
+  border: none;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+
+.datepicker-day:hover:not(:disabled):not(.empty) {
+  background: var(--bg-3);
+  color: var(--txt);
+}
+
+.datepicker-day.today {
+  color: var(--teal);
+  font-weight: 500;
+}
+
+.datepicker-day.selected {
+  background: var(--teal);
+  color: #fff;
+  font-weight: 500;
+}
+
+.datepicker-day:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.datepicker-day.empty {
+  pointer-events: none;
+}
+
+.datepicker-footer {
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.datepicker-clear {
+  font-size: 11px;
+  font-family: var(--font);
+  color: var(--txt-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r);
+  transition: background .1s, color .1s;
+}
+
+.datepicker-clear:hover {
+  color: var(--red);
+  background: var(--red-dim);
+}
+
+/* ── Modal "Adicionar agente ao departamento" ── */
+
+.add-agent-modal input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--bg-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s;
+  position: relative;
+  margin: 0;
+}
+
+.add-agent-modal input[type="checkbox"]:checked {
+  background: var(--teal);
+  border-color: var(--teal);
+}
+
+.add-agent-modal input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.add-agent-modal input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }

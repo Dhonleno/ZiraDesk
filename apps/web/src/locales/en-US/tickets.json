@@ -5,7 +5,7 @@
     "noResults": "No tickets found",
     "noSelection": "Select a ticket to view details",
     "status": {
-      "queued": "Queued",
+      "queued": "Awaiting assignment",
       "open": "Open",
       "in_progress": "In Progress",
       "waiting": "Waiting",
@@ -54,7 +54,8 @@
       "noClient": "No contact linked",
       "noOrganization": "Not linked",
       "noDueDate": "No due date",
-      "attachments": "Attachments"
+      "attachments": "Attachments",
+      "level": "Level"
     },
     "validation": {
       "assignedOrDepartmentRequired": "Assign an agent or select a department"
@@ -89,7 +90,8 @@
     "errors": {
       "acceptForbidden": "Only the assigned agent can accept this ticket",
       "acceptConflict": "This ticket cannot be accepted in its current state",
-      "notFound": "Ticket not found"
+      "notFound": "Ticket not found",
+      "commentError": "Error adding comment"
     },
     "readonly": {
       "banner": "Accept the ticket to edit it",
@@ -141,7 +143,19 @@
       "edit": "Edit",
       "more": "More actions",
       "delete": "Delete",
-      "removeTag": "Remove {{tag}}"
+      "removeTag": "Remove {{tag}}",
+      "transferDepartment": "Transfer department",
+      "transferSuccess": "Ticket transferred successfully",
+      "transferError": "Error transferring ticket",
+      "escalate": "Escalate ticket"
+    },
+    "transfer": {
+      "warning": "The current agent will be removed and the ticket will return to the new department's queue.",
+      "targetDept": "Target department",
+      "selectDept": "Select department",
+      "reason": "Transfer reason",
+      "reasonPlaceholder": "E.g.: Technical issue requires specialized team",
+      "confirm": "Transfer"
     },
     "resolve": {
       "title": "Resolve ticket",
@@ -205,7 +219,9 @@
       "tag_added": "Tag \"{{tag}}\" added",
       "tag_removed": "Tag \"{{tag}}\" removed",
       "comment_added": "Comment added",
-      "resolved": "Ticket resolved"
+      "resolved": "Ticket resolved",
+      "level_escalated": "Escalated from {{old}} to {{new}}",
+      "department_transferred": "Department transferred: {{old}} → {{new}}"
     },
     "organization": "Organization",
     "sourceConversation": "Originated from conversation {{protocol}}",
@@ -215,6 +231,20 @@
       "email": "E-mail",
       "whatsapp": "WhatsApp",
       "api": "API"
+    },
+    "filters": {
+      "searchAgent": "Search agent...",
+      "allAgents": "All agents",
+      "noAgentsFound": "No agents found",
+      "label": "Filters",
+      "clearAll": "Clear filters",
+      "all": "All",
+      "department": "Department",
+      "type": "Type",
+      "source": "Source",
+      "tag": "Tag",
+      "createdFrom": "Created from",
+      "createdTo": "Created to"
     },
     "filterBySource": "All sources",
     "newFromEmail": "New ticket by email",
@@ -249,7 +279,7 @@
       "expiresLessThanHour": "Due in less than 1h"
     },
     "kanban": {
-      "queued": "Queued",
+      "queued": "Awaiting assignment",
       "open": "Open",
       "inProgress": "In progress",
       "waiting": "Waiting",
@@ -261,6 +291,13 @@
     "card": {
       "noDueDate": "No due date",
       "overdue": "Overdue"
+    },
+    "tabs": {
+      "comments": "Comments",
+      "history": "History",
+      "checklist": "Checklist",
+      "time": "Time",
+      "attachments": "Attachments"
     },
     "detail": {
       "backToList": "Back",
@@ -286,6 +323,19 @@
     "realtime": {
       "newTicket": "New ticket created",
       "assignedToYou": "A ticket was assigned to you"
+    },
+    "level": {
+      "none": "No level",
+      "n1": "N1",
+      "n2": "N2",
+      "n3": "N3"
+    },
+    "escalate": {
+      "warning": "The ticket will move to the target level department and return to the queue.",
+      "targetLevel": "Target level",
+      "confirm": "Escalate",
+      "success": "Ticket escalated successfully",
+      "error": "Error escalating ticket"
     }
   }
 }

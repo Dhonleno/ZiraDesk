@@ -1,5 +1,15 @@
 # Changelog — ZiraDesk
 
+## [0.9.9] — Correção do ACK do webhook de email inbound
+
+### Corrigido
+- API Webhooks: `POST /api/webhooks/email` valida assinatura antes de responder e aguarda o processamento do inbound antes do `200`, evitando ACK antecipado sem criação de ticket.
+- Admin Canais: ao salvar um canal de e-mail, o endereço inbound gerado passa a ser enviado pela UI e persistido em `tenant.settings.inbound_email_address`, permitindo que o webhook resolva o tenant sem ajuste manual no banco.
+
+### Segurança / Infraestrutura
+- Email inbound: `RESEND_WEBHOOK_SECRET` ausente agora bloqueia em produção com `500`; fora de produção registra warning e permite o fluxo para desenvolvimento local.
+- Email inbound: validação de assinatura passa a usar Svix (`svix-id`, `svix-timestamp`, `svix-signature`) com raw body da requisição, conforme o padrão do Resend.
+
 ## [0.9.8] — Settings públicos para agentes
 
 ### Adicionado

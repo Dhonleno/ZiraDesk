@@ -27,6 +27,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   APP_URL: z.string().url('APP_URL deve ser uma URL válida'),
+  // Base do portal do cliente. Quando ausente, é derivada do slug do tenant
+  // (suporte.{slug}.ziradesk.com em produção; APP_URL fora dela).
+  PORTAL_URL: optionalUrl('PORTAL_URL'),
   ENCRYPTION_KEY: z.string().length(32, 'ENCRYPTION_KEY deve ter exatamente 32 caracteres'),
   WHATSAPP_PHONE_NUMBER_ID: z.string(),
   WHATSAPP_WABA_ID: z.string(),
@@ -45,6 +48,9 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
+  // Domínio dos endereços de inbound. Sem esta variável o webhook continua
+  // usando ziradesk.com, mas um deploy em outro domínio não rotearia nada.
+  INBOUND_EMAIL_DOMAIN: optionalTrimmedString(),
   // Storage
   STORAGE_PROVIDER: z.enum(['local', 'r2']).default('local'),
   R2_ACCOUNT_ID: z.string().optional(),

@@ -36,6 +36,15 @@ export const updateSettingsSchema = z.object({
   sla_hours_high:   z.number().int().min(1).max(8760).optional(),
   sla_hours_medium: z.number().int().min(1).max(8760).optional(),
   sla_hours_low:    z.number().int().min(1).max(8760).optional(),
+  // Níveis de atendimento (N1/N2/N3). Departamento nullable: o admin pode
+  // habilitar os níveis e configurar os departamentos depois.
+  support_levels_enabled: z.boolean().optional(),
+  support_level_n1_dept:  z.string().uuid().nullable().optional(),
+  support_level_n2_dept:  z.string().uuid().nullable().optional(),
+  support_level_n3_dept:  z.string().uuid().nullable().optional(),
+  support_level_n1_label: z.string().trim().max(20).optional(),
+  support_level_n2_label: z.string().trim().max(20).optional(),
+  support_level_n3_label: z.string().trim().max(20).optional(),
   agent_can_delete_tickets:         z.boolean().optional(),
   agent_can_export_tickets:         z.boolean().optional(),
   agent_can_manage_contacts:        z.boolean().optional(),

@@ -15,12 +15,15 @@ import {
   createCommentSchema,
   updateCommentSchema,
   assignTicketSchema,
+  transferDepartmentSchema,
+  escalateTicketSchema,
   createChecklistItemSchema,
   updateChecklistItemSchema,
   createTimeEntrySchema,
 } from './tickets.schema.js';
 import {
   listTickets,
+  listTicketTags,
   exportTickets,
   getTicket,
   createTicket,
@@ -29,6 +32,8 @@ import {
   assignTicket,
   claimTicketFromQueue,
   acceptTicket,
+  transferTicketDepartment,
+  escalateTicket,
   listComments,
   addComment,
   updateComment,
@@ -162,6 +167,13 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/stats', { preHandler: ticketsViewGuard }, async (_request, reply) => {
     const stats = await getStats();
     return reply.send({ success: true, data: stats });
+  });
+
+  // GET /api/tickets/tags — antes de /:id, como /stats
+  app.get('/tags', { preHandler: ticketsViewGuard }, async (request, reply) => {
+    const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+    const tags = await listTicketTags(schemaName);
+    return reply.send({ success: true, data: tags });
   });
 
   // GET /api/tickets/export?format=csv
@@ -638,6 +650,69 @@ export async function ticketsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(409).send({ success: false, error: { message: err.message } });
       if (err instanceof ForbiddenError)
         return reply.code(403).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/tickets/:id/transfer-department
+  app.post<{ Params: { id: string } }>('/:id/transfer-department', { preHandler: ticketsEditGuard }, async (request, reply) => {
+    const parsed = transferDepartmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const ticket = await transferTicketDepartment(
+        request.params.id,
+        parsed.data.department_id,
+        parsed.data.reason ?? null,
+        request.user.id,
+        request.user.role,
+        request.user.tenantId!,
+        schemaName,
+      );
+      return reply.send({ success: true, data: ticket });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      if (err instanceof BusinessRuleError)
+        return reply.code(422).send({ success: false, error: { message: err.message } });
+      throw err;
+    }
+  });
+
+  // POST /api/tickets/:id/escalate
+  app.post<{ Params: { id: string } }>('/:id/escalate', { preHandler: ticketsEditGuard }, async (request, reply) => {
+    const parsed = escalateTicketSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { message: 'Dados inválidos', details: parsed.error.flatten() },
+      });
+    }
+    try {
+      const schemaName = 'schemaName' in request.user ? request.user.schemaName : undefined;
+      const ticket = await escalateTicket(
+        request.params.id,
+        parsed.data.level,
+        request.user.id,
+        request.user.role,
+        request.user.tenantId!,
+        schemaName,
+      );
+      return reply.send({ success: true, data: ticket });
+    } catch (err) {
+      if (err instanceof NotFoundError)
+        return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ForbiddenError)
+        return reply.code(403).send({ success: false, error: { message: err.message } });
+      if (err instanceof BusinessRuleError)
+        return reply.code(422).send({ success: false, error: { message: err.message } });
       throw err;
     }
   });

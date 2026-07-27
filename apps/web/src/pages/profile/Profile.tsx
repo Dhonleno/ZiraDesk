@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { profileApi, type MyProfile } from '../../services/api';
 import { PageShell } from '../../components/layout/PageShell';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { playNotificationSound, type SoundVariant } from '../../utils/notificationSound';
+import { useChatSounds } from '../../hooks/useChatSounds';
+import { SOUND_OPTIONS, type SoundOption } from '../../utils/chatSounds';
 import './Profile.css';
 
 type ProfileTabKey = 'profile' | 'password' | 'notifications';
@@ -268,6 +271,63 @@ function PasswordTab({ isSaving, onSave }: PasswordTabProps) {
   );
 }
 
+function ChatSoundSettings() {
+  const { t } = useTranslation('omnichannel');
+  const { config, saveConfig, preview } = useChatSounds();
+
+  const renderRow = (
+    key: 'newConversation' | 'newMessage',
+  ) => (
+    <div className="sound-setting-row">
+      <label htmlFor={`sound-${key}`}>{t(`chat.sounds.${key}`)}</label>
+      <div className="sound-select-row">
+        <select
+          id={`sound-${key}`}
+          value={config[key]}
+          onChange={(e) => saveConfig({ [key]: e.target.value as SoundOption })}
+        >
+          {SOUND_OPTIONS.map((option) => (
+            <option key={option} value={option}>{t(`chat.sounds.${option}`)}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="sound-preview-btn"
+          onClick={() => preview(config[key])}
+          disabled={config[key] === 'none'}
+        >
+          ▶ {t('chat.sounds.preview')}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <section className="settings-section">
+      <h3>{t('chat.sounds.title')}</h3>
+
+      {renderRow('newConversation')}
+      {renderRow('newMessage')}
+
+      <div className="sound-setting-row">
+        <label htmlFor="sound-volume">
+          {t('chat.sounds.volume')} — {Math.round(config.volume * 100)}%
+        </label>
+        <input
+          id="sound-volume"
+          type="range"
+          min={0}
+          max={1}
+          step={0.1}
+          value={config.volume}
+          onChange={(e) => saveConfig({ volume: parseFloat(e.target.value) })}
+          className="sound-volume-slider"
+        />
+      </div>
+    </section>
+  );
+}
+
 interface NotificationsTabProps {
   profile: MyProfile;
   isSaving: boolean;
@@ -364,6 +424,8 @@ function NotificationsTab({ profile, isSaving, onSave }: NotificationsTabProps) 
           />
         </div>
       </div>
+
+      <ChatSoundSettings />
 
       <div className="tab-footer">
         <button

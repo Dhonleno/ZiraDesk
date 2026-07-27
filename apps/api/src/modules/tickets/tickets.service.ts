@@ -5,7 +5,7 @@ import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
 import { ensureAgentAssignmentsInfrastructure } from '../omnichannel/conversations/auto-assign.service.js';
 import { PRESENCE_TIMEOUT_MS } from '../omnichannel/presence.constants.js';
 import { syncCommentToRedmine, syncTicketToRedmine } from '../integrations/redmine/redmine.service.js';
-import { buildTenantUrl } from '../../utils/url.js';
+import { buildPortalUrl, buildTenantUrl } from '../../utils/url.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { getStorage, StorageObjectNotFoundError } from '../../lib/storage/index.js';
@@ -90,6 +90,7 @@ interface TicketRow {
   category:         string | null;
   assigned_to:      string | null;
   department_id:    string | null;
+  level:            string | null;
   resolved_at:      Date | null;
   resolution_notes: string | null;
   closed_at:        Date | null;
@@ -448,6 +449,20 @@ async function ensureTicketInfrastructure(db: RawExecutor = prisma): Promise<voi
     WHERE department_id IS NOT NULL
   `);
 
+  // Nível de atendimento (N1/N2/N3). NULL = tenant não usa níveis, ou ticket
+  // anterior à ativação. Nome distinto de agent_skills.level, que é
+  // proficiência do agente (basic/intermediate/advanced).
+  await db.$executeRawUnsafe(`
+    ALTER TABLE tickets
+    ADD COLUMN IF NOT EXISTS level VARCHAR(10)
+  `);
+
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS idx_tickets_level
+    ON tickets(level)
+    WHERE level IS NOT NULL
+  `);
+
   await db.$executeRawUnsafe(`
     ALTER TABLE tickets
     ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
@@ -570,7 +585,9 @@ export async function ensureTicketInfrastructureForSchema(schemaName: string): P
 
 async function logTicketEvent(
   ticketId: string,
-  userId: string,
+  // null para eventos do sistema (webhook de inbound); ticket_events.user_id
+  // é nullable e referencia users(id).
+  userId: string | null,
   eventType: string,
   oldValue?: string | null,
   newValue?: string | null,
@@ -657,7 +674,7 @@ const BASE_SELECT = `
     t.id, t.ticket_number, t.contact_id, t.organization_id, t.conversation_id, t.source_conversation_id, t.type_id, t.source, t.email_message_id, t.title, t.description,
     t.status, t.waiting_reason, t.sla_paused_at, t.sla_paused_duration_seconds, t.escalated, t.escalated_at,
     t.csat_score, t.csat_comment, t.csat_sent_at, t.csat_responded_at, t.csat_expires_at,
-    t.priority, t.category, t.assigned_to, t.department_id, t.resolved_at, t.resolution_notes, t.closed_at,
+    t.priority, t.category, t.assigned_to, t.department_id, t.level, t.resolved_at, t.resolution_notes, t.closed_at,
     t.due_date, t.tags, t.custom_fields, t.created_at, t.updated_at,
     u.name        AS assignee_name,
     u.avatar_url  AS assignee_avatar,
@@ -700,7 +717,7 @@ const TICKET_SEARCH_CONDITION = `(
 export async function listTickets(query: ListTicketsQuery, schemaName?: string) {
   return withOptionalSchema(schemaName, async (db) => {
     await ensureTicketInfrastructure(db);
-    const { page, per_page, search, status, priority, assigned_to, overdue, department_id, source, contact_id, organization_id, category, sort_by, sort_order } = query;
+    const { page, per_page, search, status, priority, assigned_to, overdue, department_id, type_id, level, tag, source, contact_id, organization_id, category, created_from, created_to, sort_by, sort_order } = query;
     const offset = (page - 1) * per_page;
 
     const searchParam       = search          ?? null;
@@ -713,6 +730,11 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
     const categoryParam     = category        ?? null;
     const departmentParam   = department_id   ?? null;
     const overdueParam      = overdue         ?? false;
+    const typeParam         = type_id         ?? null;
+    const tagParam          = tag             ?? null;
+    const createdFromParam  = created_from    ?? null;
+    const createdToParam    = created_to      ?? null;
+    const levelParam        = level           ?? null;
 
     const sortCol = SORT_COLUMNS[sort_by] ?? 't.created_at';
     const sortDir = sort_order === 'asc' ? 'ASC' : 'DESC';
@@ -730,14 +752,19 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
         AND ($10::boolean IS FALSE OR (
           t.due_date IS NOT NULL
           AND (t.due_date + (t.sla_paused_duration_seconds || ' seconds')::interval) < NOW()
-        ))`;
+        ))
+        AND ($11::uuid IS NULL OR t.type_id       = $11::uuid)
+        AND ($12::text IS NULL OR $12::text = ANY(t.tags))
+        AND ($13::timestamptz IS NULL OR t.created_at >= $13::timestamptz)
+        AND ($14::timestamptz IS NULL OR t.created_at <= $14::timestamptz)
+        AND ($15::text IS NULL OR t.level = $15::text)`;
 
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `${BASE_SELECT}${where}
        ORDER BY ${sortCol} ${sortDir}
-       LIMIT $11 OFFSET $12`,
+       LIMIT $16 OFFSET $17`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
-      overdueParam, per_page, offset,
+      overdueParam, typeParam, tagParam, createdFromParam, createdToParam, levelParam, per_page, offset,
     );
 
     const countRows = await db.$queryRawUnsafe<[{ count: bigint }]>(
@@ -747,7 +774,7 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
        LEFT JOIN organizations o  ON o.id  = t.organization_id
        ${where}`,
       searchParam, statusParam, priorityParam, assignedParam, sourceParam, contactParam, organizationParam, categoryParam, departmentParam,
-      overdueParam,
+      overdueParam, typeParam, tagParam, createdFromParam, createdToParam, levelParam,
     );
 
     const total = Number(countRows[0]?.count ?? 0);
@@ -755,6 +782,24 @@ export async function listTickets(query: ListTicketsQuery, schemaName?: string) 
       data: rows,
       meta: { total, page, per_page, total_pages: Math.ceil(total / per_page) },
     };
+  });
+}
+
+/* ── listTicketTags ──────────────────────────────────────────────────────── */
+// tags é TEXT[] (não jsonb): unnest, não jsonb_array_elements_text.
+export async function listTicketTags(schemaName?: string): Promise<string[]> {
+  return withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+
+    const rows = await db.$queryRawUnsafe<Array<{ tag: string }>>(
+      `SELECT DISTINCT unnest(tags) AS tag
+       FROM tickets
+       WHERE cardinality(tags) > 0
+       ORDER BY tag ASC
+       LIMIT 100`,
+    );
+
+    return rows.map((row) => row.tag);
   });
 }
 
@@ -856,7 +901,17 @@ export async function getTicket(id: string, schemaName?: string, db?: RawExecuto
 }
 
 /* ── createTicket ────────────────────────────────────────────────────────── */
-export async function createTicket(data: CreateTicketInput, createdBy: string, tenantId: string, schemaName?: string) {
+// `options` não faz parte do createTicketSchema de propósito: origem e
+// email_message_id são definidos por quem cria (webhook de email, portal), não
+// pelo cliente da API. createdBy aceita null para criações do sistema —
+// audit_logs.user_id e ticket_events.user_id são nullable.
+export async function createTicket(
+  data: CreateTicketInput,
+  createdBy: string | null,
+  tenantId: string,
+  schemaName?: string,
+  options?: { source?: string; emailMessageId?: string | null },
+) {
   const tenantRecord = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { settings: true },
@@ -922,14 +977,14 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
     const rows = await db.$queryRawUnsafe<TicketRow[]>(
       `INSERT INTO tickets
          (contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, title, description, status, priority, category,
-          assigned_to, department_id, due_date, tags, custom_fields)
+          assigned_to, department_id, due_date, tags, custom_fields, level, email_message_id)
        VALUES
-         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 'manual', $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[], $15::jsonb)
+         ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $17, $6, $7, $8, $9, $10, $11::uuid, $12::uuid, $13::timestamptz, $14::text[], $15::jsonb, $16, $18)
        RETURNING
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, level, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
@@ -948,6 +1003,9 @@ export async function createTicket(data: CreateTicketInput, createdBy: string, t
       data.due_date        ?? null,
       tagsLiteral,
       JSON.stringify(data.custom_fields ?? {}),
+      data.level           ?? null,
+      options?.source      ?? 'manual',
+      options?.emailMessageId ?? null,
     );
 
     const ticket = rows[0]!;
@@ -1064,6 +1122,8 @@ export async function updateTicket(
     const departmentIdValue = hasDepartmentId ? (data.department_id ?? null) : null;
     const hasCustomFields = Object.prototype.hasOwnProperty.call(data, 'custom_fields');
     const customFieldsValue = hasCustomFields ? JSON.stringify(data.custom_fields ?? {}) : null;
+    const hasLevel = Object.prototype.hasOwnProperty.call(data, 'level');
+    const levelValue = hasLevel ? (data.level ?? null) : null;
     let waitingReason: string | null | undefined;
     if (data.status === 'waiting') {
       waitingReason = data.waiting_reason ?? null;
@@ -1111,6 +1171,7 @@ export async function updateTicket(
          waiting_reason  = CASE WHEN $13::boolean THEN $14::text ELSE waiting_reason END,
          department_id   = CASE WHEN $16::boolean THEN $17::uuid ELSE department_id END,
          custom_fields   = CASE WHEN $18::boolean THEN $19::jsonb ELSE custom_fields END,
+         level           = CASE WHEN $20::boolean THEN $21::text ELSE level END,
          sla_paused_at    = ${slaPausedAtSql},
          sla_paused_duration_seconds = ${slaPausedDurationSql},
          resolved_at     = ${resolvedAt === 'NOW()' ? 'NOW()' : resolvedAt === 'NULL' ? 'NULL' : 'resolved_at'},
@@ -1121,7 +1182,7 @@ export async function updateTicket(
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, level, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
@@ -1144,6 +1205,8 @@ export async function updateTicket(
       departmentIdValue,
       hasCustomFields,
       customFieldsValue,
+      hasLevel,
+      levelValue,
     );
 
     if (!rows[0]) throw new NotFoundError('Ticket');
@@ -1274,7 +1337,7 @@ export async function updateTicket(
           id,
         );
 
-        const csatBaseUrl = buildTenantUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
+        const csatBaseUrl = buildPortalUrl(tenantInfo.tenantSlug, `/portal/tickets/${id}`);
         await sendTicketCsatEmail({
           tenantId,
           tenantSchema: schema,
@@ -1403,7 +1466,7 @@ export async function assignTicket(id: string, userId: string, assignedBy: strin
        id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
        status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
        csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-       assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+       assigned_to, department_id, level, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
        NULL AS assignee_name, NULL AS assignee_avatar,
        NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
        NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
@@ -1514,7 +1577,7 @@ export async function claimTicketFromQueue(
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, level, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
@@ -1638,7 +1701,7 @@ export async function acceptTicket(
          id, ticket_number, contact_id, organization_id, conversation_id, source_conversation_id, type_id, source, email_message_id, title, description,
          status, waiting_reason, sla_paused_at, sla_paused_duration_seconds, escalated, escalated_at,
          csat_score, csat_comment, csat_sent_at, csat_responded_at, csat_expires_at, priority, category,
-         assigned_to, department_id, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
+         assigned_to, department_id, level, resolved_at, resolution_notes, closed_at, due_date, tags, custom_fields, created_at, updated_at,
          NULL AS assignee_name, NULL AS assignee_avatar,
          NULL AS contact_name, NULL AS contact_email, NULL AS contact_phone, NULL AS contact_document, NULL AS organization_name,
          NULL AS type_name, NULL AS type_icon, NULL AS type_color, NULL AS department_name`,
@@ -1682,6 +1745,201 @@ export async function acceptTicket(
   });
 
   return ticket;
+}
+
+/* ── transferTicketDepartment ────────────────────────────────────────────── */
+// Transferência entre departamentos: solta o responsável atual e devolve o
+// ticket à fila do destino. O UPDATE é direto (não passa por updateTicket),
+// então contorna de propósito ensureValidStatusTransition — in_progress →
+// queued não existe na máquina de estados, mas é o efeito desejado aqui.
+export async function transferTicketDepartment(
+  ticketId: string,
+  newDepartmentId: string,
+  reason: string | null,
+  userId: string,
+  role: string,
+  tenantId: string,
+  schemaName?: string,
+  // Usado por escalateTicket: grava o nível na mesma transação e troca o tipo
+  // do evento, para a timeline distinguir transferência de escalação.
+  options?: { newLevel?: 'N1' | 'N2' | 'N3'; eventType?: string },
+) {
+  const tenantSettings = await loadTenantSettings(tenantId);
+  const autoAssignEnabled = tenantSettings['ticket_auto_assign'] === true;
+  const newLevel = options?.newLevel ?? null;
+  const eventType = options?.eventType ?? 'department_transferred';
+
+  const { ticket, events } = await withOptionalSchema(schemaName, async (db) => {
+    await ensureTicketInfrastructure(db);
+    const current = await getTicket(ticketId, undefined, db);
+
+    const isAdminOrOwner = role === 'owner' || role === 'admin';
+    if (!isAdminOrOwner && current.assigned_to !== userId) {
+      throw new ForbiddenError('Apenas o agente responsável pode transferir este ticket');
+    }
+
+    if (current.status === 'resolved' || current.status === 'closed') {
+      throw new BusinessRuleError('Ticket resolvido ou fechado não pode ser transferido');
+    }
+
+    // Numa escalação o departamento pode repetir (dois níveis podem apontar
+    // para o mesmo time); aí o que muda é o nível.
+    if (current.department_id === newDepartmentId && !newLevel) {
+      throw new BusinessRuleError('O ticket já pertence a este departamento');
+    }
+
+    const departmentRows = await db.$queryRawUnsafe<Array<{ id: string; name: string }>>(
+      `SELECT id, name FROM departments WHERE id = $1::uuid AND is_active = true LIMIT 1`,
+      newDepartmentId,
+    );
+    const targetDepartment = departmentRows[0];
+    if (!targetDepartment) throw new NotFoundError('Departamento');
+
+    // Fila do novo departamento: sem responsável, status queued e alerta de SLA
+    // rearmado para o novo time.
+    await db.$executeRawUnsafe(
+      `UPDATE tickets SET
+         department_id       = $1::uuid,
+         assigned_to         = NULL,
+         status              = 'queued',
+         sla_warning_sent_at = NULL,
+         level               = COALESCE($3::text, level),
+         updated_at          = NOW()
+       WHERE id = $2::uuid`,
+      newDepartmentId,
+      ticketId,
+      newLevel,
+    );
+
+    const events: TicketEventRow[] = [];
+    const transferEvent = await logTicketEvent(
+      ticketId,
+      userId,
+      eventType,
+      newLevel ? (current.level ?? null) : (current.department_name ?? null),
+      newLevel ?? targetDepartment.name,
+      {
+        old_department_id: current.department_id,
+        new_department_id: newDepartmentId,
+        new_department_name: targetDepartment.name,
+        previous_assigned_to: current.assigned_to,
+        ...(newLevel ? { old_level: current.level, new_level: newLevel } : {}),
+        reason: reason ?? null,
+      },
+      db,
+    );
+    if (transferEvent) events.push(transferEvent);
+
+    await db.$executeRawUnsafe(
+      `INSERT INTO audit_logs (user_id, action, entity, entity_id, old_data, new_data)
+       VALUES ($1::uuid, 'ticket.department_transferred', 'ticket', $2::uuid, $3::jsonb, $4::jsonb)`,
+      userId,
+      ticketId,
+      JSON.stringify({ department_id: current.department_id, assigned_to: current.assigned_to, status: current.status }),
+      JSON.stringify({ department_id: newDepartmentId, assigned_to: null, status: 'queued', reason: reason ?? null }),
+    );
+
+    // Auto-assign imediato no destino, se o tenant usa round-robin e há agente
+    // online. Sem candidato, o ticket permanece queued até claim manual.
+    if (autoAssignEnabled) {
+      const nextAgent = await pickNextAgentForDepartment(db, newDepartmentId);
+      if (nextAgent) {
+        await db.$executeRawUnsafe(
+          `UPDATE tickets SET assigned_to = $1::uuid, status = 'open', updated_at = NOW()
+           WHERE id = $2::uuid`,
+          nextAgent.id,
+          ticketId,
+        );
+
+        const assignedEvent = await logTicketEvent(
+          ticketId,
+          userId,
+          'assigned',
+          null,
+          nextAgent.name,
+          { new_assigned_to: nextAgent.id, via: 'department_transfer' },
+          db,
+        );
+        if (assignedEvent) events.push(assignedEvent);
+      }
+    }
+
+    const ticket = await getTicket(ticketId, undefined, db);
+    return { ticket, events };
+  });
+
+  for (const event of events) emitTicketEvent(tenantId, ticketId, event);
+
+  try {
+    const io = getSocketServer();
+    io.to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
+    if (ticket.assigned_to && ticket.assigned_to !== userId) {
+      io.to(`agent:${ticket.assigned_to}`).emit('notification:new', {
+        id: ticketId,
+        type: 'ticket_assigned',
+        title: 'Ticket atribuído',
+        message: `Você recebeu o ticket "${ticket.title}".`,
+        href: `/tickets/${ticketId}`,
+      });
+    }
+  } catch { /* socket não inicializado em testes */ }
+
+  void dispatchWebhook(tenantId, 'ticket.updated', {
+    ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
+  });
+
+  return ticket;
+}
+
+/* ── escalateTicket ──────────────────────────────────────────────────────── */
+// Escalação de nível (N1→N2→N3). Resolve o departamento destino a partir de
+// tenant.settings e delega para transferTicketDepartment, que grava nível,
+// evento, audit e auto-assign na mesma transação.
+const LEVEL_DEPARTMENT_SETTING: Record<'N1' | 'N2' | 'N3', string> = {
+  N1: 'support_level_n1_dept',
+  N2: 'support_level_n2_dept',
+  N3: 'support_level_n3_dept',
+};
+
+const LEVEL_ORDER: Array<'N1' | 'N2' | 'N3'> = ['N1', 'N2', 'N3'];
+
+export async function escalateTicket(
+  ticketId: string,
+  targetLevel: 'N2' | 'N3',
+  userId: string,
+  role: string,
+  tenantId: string,
+  schemaName?: string,
+) {
+  const tenantSettings = await loadTenantSettings(tenantId);
+
+  if (tenantSettings['support_levels_enabled'] !== true) {
+    throw new BusinessRuleError('Níveis de atendimento não estão habilitados');
+  }
+
+  const targetDepartmentId = tenantSettings[LEVEL_DEPARTMENT_SETTING[targetLevel]];
+  if (typeof targetDepartmentId !== 'string' || !targetDepartmentId) {
+    throw new BusinessRuleError(`Departamento para ${targetLevel} não configurado`);
+  }
+
+  // Nível atual só é lido para validar a direção; a transação em
+  // transferTicketDepartment relê o ticket e é a fonte de verdade da escrita.
+  const current = await getTicket(ticketId, schemaName);
+  const currentLevel = (current.level ?? 'N1') as 'N1' | 'N2' | 'N3';
+  if (LEVEL_ORDER.indexOf(targetLevel) <= LEVEL_ORDER.indexOf(currentLevel)) {
+    throw new BusinessRuleError(`Ticket já está em ${currentLevel} ou nível superior`);
+  }
+
+  return transferTicketDepartment(
+    ticketId,
+    targetDepartmentId,
+    `Escalado para ${targetLevel}`,
+    userId,
+    role,
+    tenantId,
+    schemaName,
+    { newLevel: targetLevel, eventType: 'level_escalated' },
+  );
 }
 
 /* ── listComments ────────────────────────────────────────────────────────── */

@@ -161,7 +161,8 @@
       "webhooks": "Webhooks",
       "settings": "Configuración",
       "history": "Historial",
-      "performance": "Performance"
+      "performance": "Performance",
+      "supportLevels": "Niveles de Atención"
     },
     "autoAssign": {
       "title": "Distribución Automática",
@@ -656,6 +657,16 @@
         "deleted": "Canal eliminado",
         "testSuccess": "Canal conectado con éxito",
         "testFail": "Error de conexión — verifica las credenciales"
+      },
+      "email": {
+        "inboundTitle": "Recibir emails como tickets",
+        "inboundDesc": "Configure el reenvío en su email para crear tickets automáticamente.",
+        "step1": "Acceda a la configuración de su email (ej: soporte@empresa.com)",
+        "step2": "Active el reenvío automático a la dirección de abajo",
+        "step3": "¡Listo! Los emails recibidos se convertirán en tickets",
+        "defaultDept": "Departamento por defecto",
+        "defaultDeptHint": "Los tickets creados por email serán dirigidos a este departamento",
+        "noDept": "Sin departamento (cola general)"
       }
     },
     "quickReplies": {
@@ -1079,6 +1090,16 @@
         "totalTickets": "Total de tickets",
         "totalMessages": "Total de mensajes"
       }
+    },
+    "supportLevels": {
+      "title": "Niveles de Atención",
+      "subtitle": "Configure N1, N2 y N3 con departamentos y etiquetas personalizadas",
+      "enabled": "Habilitar niveles de atención",
+      "enabledHint": "Permite escalar tickets entre N1, N2 y N3",
+      "levelLabel": "Etiqueta del nivel",
+      "department": "Departamento",
+      "noDept": "Sin departamento configurado",
+      "saved": "Niveles de atención guardados"
     }
   },
   "roles": {
@@ -1171,6 +1192,7 @@
     "queueConfig": "Notificaciones de Cola",
     "ticketAutoAssign": "Auto-asignación de Tickets",
     "slaPolicy": "Política de SLA",
+    "supportLevels": "Niveles de Atención",
     "customFields": "Campos personalizados",
     "settings": "Configuración",
     "lgpd": "LGPD",
