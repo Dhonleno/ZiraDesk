@@ -410,32 +410,6 @@
     "botMenu": {
       "emptyOptions": "Add options to start the bot flow."
     },
-    "skills": {
-      "title": "Skills",
-      "subtitle": "Define which bot options each agent can handle",
-      "noBotOptions": "No bot options registered",
-      "noBotOptionsHint": "Configure the bot first to define skills",
-      "goToBot": "Configure Bot",
-      "agentNoSkills": "No skills defined",
-      "assign": "Assign skills",
-      "assignTitle": "Skills — {{name}}",
-      "assignHint": "Select which bot options this agent can handle",
-      "levels": {
-        "junior": "Junior",
-        "intermediate": "Intermediate",
-        "senior": "Senior"
-      },
-      "agentsCount": "{{count}} agent(s)",
-      "saved": "Skill saved successfully",
-      "deleted": "Skill removed successfully",
-      "agents": "Agents",
-      "searchAgent": "Search agent...",
-      "noAgentsFound": "No agents found",
-      "noAgents": "No active agents",
-      "close": "Close",
-      "save": "Save",
-      "saving": "Saving..."
-    },
     "skillsV2": {
       "title": "Skills",
       "subtitle": "Manage independent skills for agents and bot options",

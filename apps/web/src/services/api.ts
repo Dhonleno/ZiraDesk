@@ -505,18 +505,6 @@ export interface ConversationCloseConfigPreview {
   outcomes: Array<{ id: string; label: string }>;
 }
 
-export interface Skill {
-  id: string;
-  number: number;
-  label: string;
-  tag: string | null;
-  has_submenu: boolean;
-  parent_option_id: string | null;
-  sort_order: number;
-  agents_count: number;
-  children?: Skill[];
-}
-
 export interface AgentSkill {
   bot_option_id: string;
   id: string;
@@ -2271,41 +2259,6 @@ export const adminApi = {
       const res = await api.patch<{ success: boolean; data: ConversationCloseConfigItem[] }>(
         '/admin/close-config/outcomes/reorder',
         { ids },
-      );
-      return res.data.data;
-    },
-  },
-
-  skills: {
-    list: async (): Promise<Skill[]> => {
-      const res = await api.get<{ success: boolean; data: Skill[] }>('/admin/skills');
-      return res.data.data;
-    },
-
-    listAgents: async (): Promise<AgentWithSkills[]> => {
-      const res = await api.get<{ success: boolean; data: AgentWithSkills[] }>('/admin/skills/agents');
-      return res.data.data;
-    },
-
-    getAgentSkills: async (userId: string): Promise<AgentSkill[]> => {
-      const res = await api.get<{ success: boolean; data: AgentSkill[] }>(`/admin/skills/agents/${userId}`);
-      return res.data.data;
-    },
-
-    assignSkill: async (
-      userId: string,
-      payload: { bot_option_id: string },
-    ) => {
-      const res = await api.post<{ success: boolean; data: { user_id: string; bot_option_id: string } }>(
-        `/admin/skills/agents/${userId}`,
-        payload,
-      );
-      return res.data.data;
-    },
-
-    removeSkill: async (userId: string, botOptionId: string): Promise<{ removed: boolean }> => {
-      const res = await api.delete<{ success: boolean; data: { removed: boolean } }>(
-        `/admin/skills/agents/${userId}/${botOptionId}`,
       );
       return res.data.data;
     },

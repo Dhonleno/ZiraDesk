@@ -410,32 +410,6 @@
     "botMenu": {
       "emptyOptions": "Adicione opções para iniciar o fluxo do bot."
     },
-    "skills": {
-      "title": "Habilidades",
-      "subtitle": "Defina quais opções do bot cada agente pode atender",
-      "noBotOptions": "Nenhuma opção de bot cadastrada",
-      "noBotOptionsHint": "Configure o bot primeiro para definir as habilidades",
-      "goToBot": "Configurar Bot",
-      "agentNoSkills": "Sem habilidades definidas",
-      "assign": "Atribuir habilidades",
-      "assignTitle": "Habilidades — {{name}}",
-      "assignHint": "Selecione quais opções do bot este agente pode atender",
-      "levels": {
-        "junior": "Junior",
-        "intermediate": "Intermediário",
-        "senior": "Sênior"
-      },
-      "agentsCount": "{{count}} agente(s)",
-      "saved": "Skill salva com sucesso",
-      "deleted": "Skill removida com sucesso",
-      "agents": "Agentes",
-      "searchAgent": "Buscar agente...",
-      "noAgentsFound": "Nenhum agente encontrado",
-      "noAgents": "Nenhum agente ativo",
-      "close": "Fechar",
-      "save": "Salvar",
-      "saving": "Salvando..."
-    },
     "skillsV2": {
       "title": "Habilidades",
       "subtitle": "Gerencie habilidades independentes para agentes e opções do bot",

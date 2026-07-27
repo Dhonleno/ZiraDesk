@@ -370,31 +370,6 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${schemaName}".agent_bot_skills (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
-      bot_option_id UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
-      level VARCHAR(20) DEFAULT 'intermediate',
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "idx_agent_bot_skills_user"
-    ON "${schemaName}".agent_bot_skills(user_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "idx_agent_bot_skills_option"
-    ON "${schemaName}".agent_bot_skills(bot_option_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS "uidx_agent_bot_skills_user_option"
-    ON "${schemaName}".agent_bot_skills(user_id, bot_option_id)
-  `);
-
-  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "${schemaName}".skills (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name        VARCHAR(100) NOT NULL,

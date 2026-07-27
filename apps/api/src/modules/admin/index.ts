@@ -9,7 +9,6 @@ import { businessHoursRoutes } from './business-hours/business-hours.routes.js';
 import { botRoutes } from './bot/bot.routes.js';
 import { adminAutoAssignRoutes } from './auto-assign/index.js';
 import { adminPauseReasonsRoutes } from './pause-reasons/index.js';
-import { adminSkillsRoutes } from './skills/index.js';
 import { adminSkillsV2Routes } from './skills-v2/index.js';
 import { conversationTagsAdminRoutes } from './conversation-tags/conversation-tags.routes.js';
 import { contactTagsRoutes } from './contact-tags/contact-tags.routes.js';
@@ -36,7 +35,6 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(businessHoursRoutes, { prefix: '/business-hours' });
   await app.register(botRoutes, { prefix: '/bot' });
   await app.register(adminAutoAssignRoutes);
-  await app.register(adminSkillsRoutes);
   await app.register(adminSkillsV2Routes);
   await app.register(adminPauseReasonsRoutes);
   await app.register(adminTicketTypesRoutes);
