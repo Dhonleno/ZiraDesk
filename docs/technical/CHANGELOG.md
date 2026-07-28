@@ -1,5 +1,22 @@
 # Changelog — ZiraDesk
 
+## [0.10.3] — Classificação de sistema nos encerramentos automáticos (Passo 3/6)
+
+### Alterado
+- Omnichannel: os 9 caminhos que encerram conversa automaticamente passaram a gravar `close_type_id = 'sys_auto'` e o `close_outcome_id` do respectivo caminho, deixando de sumir das métricas como fechamento sem classificação. Mapeamento: inatividade → `sys_inactivity`; expiração de espera (job e webhook) → `sys_no_reply`; falha de entrega outbound → `sys_delivery_fail`; encerramento pela supervisão no monitor → `sys_supervisor`; expiração de 24h na fila → `sys_queue_24h`; palavra-chave do cliente → `sys_by_client`; caminhos de CSAT (webhook expirado, webhook finalizado e sweeper) → `sys_auto_generic`.
+- `closure_reason` (JSONB) passou a ser montado por `buildSystemClosureReason`, no mesmo formato que `closeConversation` grava para o agente (`reason`, `notes`, `closeTypeId`, `closeTypeLabel`, `closeOutcomeId`, `closeOutcomeLabel`, `resolvedAt`, `agentId`), preservando os campos de diagnóstico próprios de cada caminho (`provider`, `messageId`, `errorMessage` e o merge de `metadata.waiting_expired`).
+- Fila 24h: o `closure_reason` passou a usar a chave `reason` em vez de `type`, alinhando com os demais caminhos — inventários por `closure_reason->>'reason'` deixam de perder esses registros silenciosamente.
+- `closed_by_user_id` permanece `NULL` nos fechamentos de sistema: a coluna é FK para `users`, e um usuário fantasma vazaria para `byAgent`, listas de agentes e a aba "Encerrados". A autoria de sistema é identificada por `close_type_id = 'sys_auto'`. Exceção: o encerramento pela supervisão no monitor grava o `userId` real, por ser ação humana com desfecho de sistema.
+
+### Corrigido
+- Normalização de `closed_at`/`resolved_at`: o encerramento por inatividade não gravava `closed_at`, e a expiração de 24h na fila e o encerramento por palavra-chave não gravavam `resolved_at`. Todos os caminhos passam a gravar os dois.
+- Caminhos que agem sobre conversa já encerrada (palavra-chave e os três de CSAT) passaram a usar `COALESCE` em `close_type_id`, `close_outcome_id` e `closure_reason`: como o CSAT é disparado depois do encerramento, gravar direto sobrescreveria a classificação feita pelo agente.
+- Fila 24h: adicionado `AND status = 'open'` ao `UPDATE`, fechando a janela TOCTOU entre o `SELECT` que lista as conversas expiradas e o `UPDATE` linha a linha.
+
+### Notas de migração
+- **Nenhuma migration.** A mudança é só de escrita: conversas encerradas antes deste release seguem sem `close_type_id`/`close_outcome_id`. Um backfill retroativo por `closure_reason->>'reason'` seria possível para os 5 caminhos que já gravavam JSONB, mas não foi feito — e os 4 caminhos que não gravavam nada não têm como ser reclassificados.
+- `metrics.service.ts` **não foi tocado**. O alinhamento de predicado entre `byType` (que exige `status = 'closed'`) e `byOutcome` (que não exige) é o passo 5. Até lá, conversas reabertas contam de formas diferentes nos dois gráficos — agora de forma visível, porque os fechamentos automáticos passaram a ter id.
+
 ## [0.10.2] — Registros de sistema para encerramento de conversas (Passo 2/6)
 
 ### Adicionado
