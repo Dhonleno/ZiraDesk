@@ -15,6 +15,9 @@
 ### Testes
 - Adicionado `close-config.integration.test.ts` com 5 casos cobrindo reorder admin-only, rejeição de IDs `sys_*` em tipos/desfechos e exposição de `isSystem` em `GET /types` e `GET /outcomes`.
 
+### Notas de migração / Produção
+- A correção de closure-reason em 6 passos está concluída em código. As pendências de produção ficam aguardando a restauração da Hetzner: executar/confirmar `pnpm --filter @ziradesk/api migrate:close-config-system` nos schemas reais e verificar `agent_bot_skills`/`tenant_multsoft` antes de qualquer limpeza ou migration destrutiva.
+
 ## [0.10.4] — Mensagem pós-CSAT deixa de cair em conversa encerrada (Passo 4/6)
 
 ### Corrigido
