@@ -32,8 +32,21 @@ export const updateCloseOutcomeSchema = z.object({
   message: 'Informe ao menos um campo',
 });
 
+const cuidSchema = z.string().cuid();
+
+/**
+ * Aceita o formato dos IDs gerados para registros do admin (cuid) e o dos
+ * registros de sistema (prefixo `sys_`). Aceitar o formato nao autoriza a
+ * acao: reordenar registro de sistema segue barrado com 409 no service
+ * (assertNotSystemRecord).
+ */
+const closeConfigReorderIdSchema = z.string().refine(
+  (id) => id.startsWith('sys_') || cuidSchema.safeParse(id).success,
+  { message: 'ID inválido' },
+);
+
 export const reorderCloseConfigSchema = z.object({
-  ids: z.array(z.string().cuid()).min(1),
+  ids: z.array(closeConfigReorderIdSchema).min(1),
 }).refine((data) => new Set(data.ids).size === data.ids.length, {
   message: 'IDs duplicados não são permitidos',
 });

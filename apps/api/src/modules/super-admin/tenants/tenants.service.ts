@@ -485,6 +485,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       label      VARCHAR(120) NOT NULL UNIQUE,
       is_default BOOLEAN      NOT NULL DEFAULT false,
       is_active  BOOLEAN      NOT NULL DEFAULT true,
+      is_system  BOOLEAN      NOT NULL DEFAULT false,
       sort_order INTEGER      NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
@@ -496,6 +497,7 @@ async function createTenantTables(schemaName: string): Promise<void> {
       label      VARCHAR(160) NOT NULL UNIQUE,
       is_default BOOLEAN      NOT NULL DEFAULT false,
       is_active  BOOLEAN      NOT NULL DEFAULT true,
+      is_system  BOOLEAN      NOT NULL DEFAULT false,
       sort_order INTEGER      NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )

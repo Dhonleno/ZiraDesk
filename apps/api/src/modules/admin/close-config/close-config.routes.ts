@@ -81,6 +81,9 @@ export async function closeConfigRoutes(app: FastifyInstance): Promise<void> {
       if (error instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: error.message } });
       }
+      if (error instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: error.message } });
+      }
       throw error;
     }
   });
@@ -178,6 +181,9 @@ export async function closeConfigRoutes(app: FastifyInstance): Promise<void> {
     } catch (error) {
       if (error instanceof NotFoundError) {
         return reply.code(404).send({ success: false, error: { message: error.message } });
+      }
+      if (error instanceof ConflictError) {
+        return reply.code(409).send({ success: false, error: { message: error.message } });
       }
       throw error;
     }

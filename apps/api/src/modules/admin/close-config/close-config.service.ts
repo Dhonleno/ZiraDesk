@@ -14,6 +14,7 @@ export interface CloseConfigItem {
   label: string;
   isDefault: boolean;
   isActive: boolean;
+  isSystem: boolean;
   order: number;
   createdAt: Date;
 }
@@ -47,6 +48,7 @@ type CloseConfigRow = {
   label: string;
   is_default: boolean;
   is_active: boolean;
+  is_system: boolean;
   sort_order: number;
   created_at: Date;
 };
@@ -77,6 +79,7 @@ function mapCloseConfigRow(row: CloseConfigRow): CloseConfigItem {
     label: row.label,
     isDefault: row.is_default,
     isActive: row.is_active,
+    isSystem: row.is_system,
     order: row.sort_order,
     createdAt: row.created_at,
   };
@@ -129,7 +132,7 @@ async function fetchCloseConfigRows(
   const whereClause = onlyActive ? 'WHERE is_active = true' : '';
 
   return tx.$queryRawUnsafe<CloseConfigRow[]>(
-    `SELECT id, label, is_default, is_active, sort_order, created_at
+    `SELECT id, label, is_default, is_active, is_system, sort_order, created_at
      FROM ${tableName}
      ${whereClause}
      ORDER BY sort_order ASC, label ASC`,
@@ -140,14 +143,41 @@ async function fetchCloseConfigSelectRows(
   tx: Prisma.TransactionClient,
   tableName: 'conversation_close_types' | 'conversation_close_outcomes',
 ): Promise<CloseConfigSelectItem[]> {
+  // Registros de sistema são gravados pelos fluxos automáticos e nunca devem
+  // aparecer como opção no modal de encerramento do agente.
   const rows = await tx.$queryRawUnsafe<CloseConfigSelectRow[]>(
     `SELECT id, label
      FROM ${tableName}
      WHERE is_active = true
+       AND is_system = false
      ORDER BY sort_order ASC, label ASC`,
   );
 
   return rows.map((row) => ({ id: row.id, label: row.label }));
+}
+
+async function assertNotSystemRecord(
+  tx: Prisma.TransactionClient,
+  tableName: 'conversation_close_types' | 'conversation_close_outcomes',
+  ids: ReadonlyArray<string>,
+): Promise<void> {
+  if (ids.length === 0) return;
+
+  const rows = await tx.$queryRawUnsafe<Array<{ label: string }>>(
+    `SELECT label
+     FROM ${tableName}
+     WHERE id = ANY($1::text[])
+       AND is_system = true
+     ORDER BY sort_order ASC
+     LIMIT 1`,
+    ids,
+  );
+
+  if (rows[0]) {
+    throw new ConflictError(
+      `Nao e possivel alterar "${rows[0].label}": registro de sistema`,
+    );
+  }
 }
 
 async function countRowsById(
@@ -205,6 +235,16 @@ export async function ensureCloseConfigInfrastructure(schemaName: string): Promi
       sort_order INTEGER      NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
+  `);
+
+    await tx.$executeRawUnsafe(`
+    ALTER TABLE conversation_close_types
+    ADD COLUMN IF NOT EXISTS is_system BOOLEAN NOT NULL DEFAULT false
+  `);
+
+    await tx.$executeRawUnsafe(`
+    ALTER TABLE conversation_close_outcomes
+    ADD COLUMN IF NOT EXISTS is_system BOOLEAN NOT NULL DEFAULT false
   `);
 
     await tx.$executeRawUnsafe(`
@@ -312,7 +352,7 @@ export async function createCloseType(
       const rows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
         `INSERT INTO conversation_close_types (id, label, is_default, is_active, sort_order)
          VALUES ('c' || substring(md5(random()::text || clock_timestamp()::text) from 1 for 24), $1, false, $2, $3)
-         RETURNING id, label, is_default, is_active, sort_order, created_at`,
+         RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
         data.label.trim(),
         data.isActive ?? true,
         data.order ?? 0,
@@ -343,7 +383,7 @@ export async function createCloseOutcome(
       const rows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
         `INSERT INTO conversation_close_outcomes (id, label, is_default, is_active, sort_order)
          VALUES ('c' || substring(md5(random()::text || clock_timestamp()::text) from 1 for 24), $1, false, $2, $3)
-         RETURNING id, label, is_default, is_active, sort_order, created_at`,
+         RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
         data.label.trim(),
         data.isActive ?? true,
         data.order ?? 0,
@@ -372,13 +412,15 @@ export async function updateCloseType(
 
   try {
     return await runWithTenantSchema(resolvedSchemaName, async (tx) => {
+      await assertNotSystemRecord(tx, 'conversation_close_types', [id]);
+
       const rows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
         `UPDATE conversation_close_types
          SET label = COALESCE($2, label),
              is_active = COALESCE($3, is_active),
              sort_order = COALESCE($4, sort_order)
          WHERE id = $1
-         RETURNING id, label, is_default, is_active, sort_order, created_at`,
+         RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
         id,
         data.label?.trim() ?? null,
         data.isActive ?? null,
@@ -408,13 +450,15 @@ export async function updateCloseOutcome(
 
   try {
     return await runWithTenantSchema(resolvedSchemaName, async (tx) => {
+      await assertNotSystemRecord(tx, 'conversation_close_outcomes', [id]);
+
       const rows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
         `UPDATE conversation_close_outcomes
          SET label = COALESCE($2, label),
              is_active = COALESCE($3, is_active),
              sort_order = COALESCE($4, sort_order)
          WHERE id = $1
-         RETURNING id, label, is_default, is_active, sort_order, created_at`,
+         RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
         id,
         data.label?.trim() ?? null,
         data.isActive ?? null,
@@ -439,7 +483,7 @@ export async function deleteCloseType(tenantId: string, id: string, schemaName?:
 
   return runWithTenantSchema(resolvedSchemaName, async (tx) => {
     const existingRows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
-      `SELECT id, label, is_default, is_active, sort_order, created_at
+      `SELECT id, label, is_default, is_active, is_system, sort_order, created_at
        FROM conversation_close_types
        WHERE id = $1
        LIMIT 1`,
@@ -447,6 +491,12 @@ export async function deleteCloseType(tenantId: string, id: string, schemaName?:
     );
 
     if (!existingRows[0]) throw new NotFoundError('Tipo de encerramento nao encontrado');
+
+    if (existingRows[0].is_system) {
+      throw new ConflictError(
+        `Nao e possivel excluir "${existingRows[0].label}": registro de sistema`,
+      );
+    }
 
     const usageCount = await countConversationUsage(tx, 'close_type_id', id);
     if (usageCount > 0) {
@@ -457,7 +507,7 @@ export async function deleteCloseType(tenantId: string, id: string, schemaName?:
       `UPDATE conversation_close_types
        SET is_active = false
        WHERE id = $1
-       RETURNING id, label, is_default, is_active, sort_order, created_at`,
+       RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
       id,
     );
 
@@ -473,7 +523,7 @@ export async function deleteCloseOutcome(tenantId: string, id: string, schemaNam
 
   return runWithTenantSchema(resolvedSchemaName, async (tx) => {
     const existingRows = await tx.$queryRawUnsafe<CloseConfigRow[]>(
-      `SELECT id, label, is_default, is_active, sort_order, created_at
+      `SELECT id, label, is_default, is_active, is_system, sort_order, created_at
        FROM conversation_close_outcomes
        WHERE id = $1
        LIMIT 1`,
@@ -481,6 +531,12 @@ export async function deleteCloseOutcome(tenantId: string, id: string, schemaNam
     );
 
     if (!existingRows[0]) throw new NotFoundError('Desfecho nao encontrado');
+
+    if (existingRows[0].is_system) {
+      throw new ConflictError(
+        `Nao e possivel excluir "${existingRows[0].label}": registro de sistema`,
+      );
+    }
 
     const usageCount = await countConversationUsage(tx, 'close_outcome_id', id);
     if (usageCount > 0) {
@@ -491,7 +547,7 @@ export async function deleteCloseOutcome(tenantId: string, id: string, schemaNam
       `UPDATE conversation_close_outcomes
        SET is_active = false
        WHERE id = $1
-       RETURNING id, label, is_default, is_active, sort_order, created_at`,
+       RETURNING id, label, is_default, is_active, is_system, sort_order, created_at`,
       id,
     );
 
@@ -514,6 +570,8 @@ export async function reorderCloseTypes(
     if (totalFound !== payload.ids.length) {
       throw new NotFoundError('Um ou mais tipos de encerramento nao foram encontrados');
     }
+
+    await assertNotSystemRecord(tx, 'conversation_close_types', payload.ids);
 
     for (const [index, id] of payload.ids.entries()) {
       await tx.$executeRawUnsafe(
@@ -543,6 +601,8 @@ export async function reorderCloseOutcomes(
     if (totalFound !== payload.ids.length) {
       throw new NotFoundError('Um ou mais desfechos nao foram encontrados');
     }
+
+    await assertNotSystemRecord(tx, 'conversation_close_outcomes', payload.ids);
 
     for (const [index, id] of payload.ids.entries()) {
       await tx.$executeRawUnsafe(
