@@ -163,6 +163,178 @@ async function countByExternalId(schemaName: string, externalId: string): Promis
   return Number(rows[0]?.count ?? 0n);
 }
 
+interface ConversationState {
+  id: string;
+  status: string;
+  csat_stage: string | null;
+  csat_score: number | null;
+  protocol_number: string | null;
+  assigned_to: string | null;
+}
+
+async function listConversationsByContact(
+  schemaName: string,
+  contactId: string,
+): Promise<ConversationState[]> {
+  return prisma.$queryRawUnsafe<ConversationState[]>(
+    `SELECT id::text, status::text, csat_stage, csat_score, protocol_number, assigned_to::text
+     FROM "${schemaName}".conversations
+     WHERE contact_id = $1::uuid
+     ORDER BY created_at ASC`,
+    contactId,
+  );
+}
+
+interface CsatScenario {
+  phoneNumberId: string;
+  waId: string;
+  contactId: string;
+  conversationId: string;
+  protocolNumber: string;
+}
+
+/**
+ * Conversa encerrada com a janela de CSAT ainda registrada — o estado em que o
+ * webhook precisava decidir entre reaproveitar a conversa velha ou abrir uma nova.
+ */
+async function setupClosedCsatConversation(
+  schemaName: string,
+  options: {
+    csatExpired: boolean;
+    assignAgent?: boolean;
+    botStage?: string | null;
+    csatStage?: 'sent' | 'waiting_comment';
+  },
+): Promise<CsatScenario> {
+  const phoneNumberId = `1555888${Math.floor(Math.random() * 100000)}`;
+  const waId = `5511966${Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')}`;
+  const storedPhone = `+${waId}`;
+  const protocolNumber = `P${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 10000)}`;
+
+  const channelId = await insertChannel(schemaName, 'whatsapp', {
+    phoneNumberId,
+    phone_number_id: phoneNumberId,
+    accessToken: 'EAAD_TEST_TOKEN',
+    access_token: 'EAAD_TEST_TOKEN',
+    verifyToken: 'VERIFY_TOKEN',
+    wabaId: '1234567890',
+  });
+
+  const contactRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".contacts (name, phone, whatsapp)
+     VALUES ('Contato CSAT', $1, $1)
+     RETURNING id`,
+    storedPhone,
+  );
+  const contactId = contactRows[0]!.id;
+
+  let assignedTo: string | null = null;
+  if (options.assignAgent) {
+    const userRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id::text FROM "${schemaName}".users ORDER BY created_at ASC LIMIT 1`,
+    );
+    assignedTo = userRows[0]?.id ?? null;
+    if (!assignedTo) throw new Error('Tenant de teste sem usuário para atribuir');
+  }
+
+  const conversationRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `INSERT INTO "${schemaName}".conversations
+       (contact_id, channel_id, channel_type, conversation_type, status, protocol_number,
+        assigned_to, assigned_at, closed_at, resolved_at,
+        csat_stage, csat_sent_at, csat_expires_at, metadata)
+     VALUES ($1::uuid, $2::uuid, 'whatsapp', 'inbound', 'closed', $3,
+             $4::uuid, CASE WHEN $4::uuid IS NULL THEN NULL ELSE NOW() END, NOW(), NOW(),
+             $5, NOW(), $6::timestamptz, $7::jsonb)
+     RETURNING id`,
+    contactId,
+    channelId,
+    protocolNumber,
+    assignedTo,
+    options.csatStage ?? 'sent',
+    options.csatExpired
+      ? new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      : new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    JSON.stringify(options.botStage ? { bot_stage: options.botStage } : {}),
+  );
+
+  return {
+    phoneNumberId,
+    waId,
+    contactId,
+    conversationId: conversationRows[0]!.id,
+    protocolNumber,
+  };
+}
+
+function buildTextWebhookPayload(params: {
+  phoneNumberId: string;
+  waId: string;
+  externalId: string;
+  body: string;
+}): Record<string, unknown> {
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '+1 555 078 3881',
+                phone_number_id: params.phoneNumberId,
+              },
+              contacts: [
+                {
+                  profile: { name: 'Contato CSAT' },
+                  wa_id: params.waId,
+                },
+              ],
+              messages: [
+                {
+                  from: params.waId,
+                  id: params.externalId,
+                  timestamp: '1697040130',
+                  text: { body: params.body },
+                  type: 'text',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+async function postWhatsAppWebhook(payload: Record<string, unknown>): Promise<number> {
+  const rawBody = JSON.stringify(payload);
+  const response = await createTestApp()
+    .post('/api/webhooks/whatsapp')
+    .set('Content-Type', 'application/json')
+    .set('x-hub-signature-256', createMetaSignature(rawBody))
+    .send(payload);
+  return response.status;
+}
+
+async function waitForMessageConversationId(
+  schemaName: string,
+  externalId: string,
+): Promise<string> {
+  return waitFor(async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ conversation_id: string }>>(
+      `SELECT conversation_id::text
+       FROM "${schemaName}".messages
+       WHERE external_id = $1
+       LIMIT 1`,
+      externalId,
+    );
+    return rows[0]?.conversation_id ?? null;
+  });
+}
+
 describe('Omnichannel webhooks integration', () => {
   afterEach(async () => {
     while (channelRefs.length > 0) {
@@ -683,6 +855,167 @@ describe('Omnichannel webhooks integration', () => {
     const count = await countByExternalId(schemaName, externalId);
     expect(count).toBe(1);
   });
+
+  it('CSAT expirado com agente atribuído abre conversa nova e mantém a velha encerrada', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const scenario = await setupClosedCsatConversation(schemaName, {
+      csatExpired: true,
+      assignAgent: true,
+    });
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    expect(await postWhatsAppWebhook(buildTextWebhookPayload({
+      phoneNumberId: scenario.phoneNumberId,
+      waId: scenario.waId,
+      externalId,
+      body: 'Oi, voltei com outra dúvida',
+    }))).toBe(200);
+
+    const messageConversationId = await waitForMessageConversationId(schemaName, externalId);
+    const conversations = await listConversationsByContact(schemaName, scenario.contactId);
+    expect(conversations).toHaveLength(2);
+
+    const [oldConversation, newConversation] = conversations as [ConversationState, ConversationState];
+    expect(oldConversation.id).toBe(scenario.conversationId);
+    expect(oldConversation.status).toBe('closed');
+    expect(oldConversation.csat_stage).toBe('done');
+
+    expect(newConversation.status).toBe('open');
+    expect(newConversation.protocol_number).toBeTruthy();
+    expect(newConversation.protocol_number).not.toBe(scenario.protocolNumber);
+    expect(messageConversationId).toBe(newConversation.id);
+  }, 30_000);
+
+  it('CSAT expirado sem agente e sem bot_stage abre conversa nova sem reabrir a velha', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const scenario = await setupClosedCsatConversation(schemaName, {
+      csatExpired: true,
+      assignAgent: false,
+      botStage: null,
+    });
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    expect(await postWhatsAppWebhook(buildTextWebhookPayload({
+      phoneNumberId: scenario.phoneNumberId,
+      waId: scenario.waId,
+      externalId,
+      body: 'Preciso de ajuda de novo',
+    }))).toBe(200);
+
+    const messageConversationId = await waitForMessageConversationId(schemaName, externalId);
+    const conversations = await listConversationsByContact(schemaName, scenario.contactId);
+    expect(conversations).toHaveLength(2);
+
+    const [oldConversation, newConversation] = conversations as [ConversationState, ConversationState];
+    expect(oldConversation.id).toBe(scenario.conversationId);
+    // O bug corrigido reabria esta conversa em vez de criar uma nova.
+    expect(oldConversation.status).toBe('closed');
+    expect(oldConversation.csat_stage).toBe('done');
+
+    expect(newConversation.status).toBe('open');
+    expect(newConversation.protocol_number).not.toBe(scenario.protocolNumber);
+    expect(messageConversationId).toBe(newConversation.id);
+  }, 30_000);
+
+  it('CSAT expirado com bot_stage=done abre conversa nova (mensagem não some)', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const scenario = await setupClosedCsatConversation(schemaName, {
+      csatExpired: true,
+      assignAgent: false,
+      botStage: 'done',
+    });
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    expect(await postWhatsAppWebhook(buildTextWebhookPayload({
+      phoneNumberId: scenario.phoneNumberId,
+      waId: scenario.waId,
+      externalId,
+      body: 'Bom dia, tenho outra questão',
+    }))).toBe(200);
+
+    const messageConversationId = await waitForMessageConversationId(schemaName, externalId);
+    const conversations = await listConversationsByContact(schemaName, scenario.contactId);
+    expect(conversations).toHaveLength(2);
+
+    const [oldConversation, newConversation] = conversations as [ConversationState, ConversationState];
+    expect(oldConversation.id).toBe(scenario.conversationId);
+    expect(oldConversation.status).toBe('closed');
+    expect(oldConversation.csat_stage).toBe('done');
+
+    expect(newConversation.status).toBe('open');
+    expect(newConversation.protocol_number).not.toBe(scenario.protocolNumber);
+    // Antes da correção a mensagem era gravada na conversa fechada e não aparecia
+    // em nenhuma fila nem para nenhum agente.
+    expect(messageConversationId).toBe(newConversation.id);
+  }, 30_000);
+
+  it('CSAT dentro do prazo continua na conversa velha e não cria conversa nova', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const scenario = await setupClosedCsatConversation(schemaName, {
+      csatExpired: false,
+      assignAgent: false,
+    });
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    expect(await postWhatsAppWebhook(buildTextWebhookPayload({
+      phoneNumberId: scenario.phoneNumberId,
+      waId: scenario.waId,
+      externalId,
+      body: '5',
+    }))).toBe(200);
+
+    const messageConversationId = await waitForMessageConversationId(schemaName, externalId);
+    expect(messageConversationId).toBe(scenario.conversationId);
+
+    const conversations = await listConversationsByContact(schemaName, scenario.contactId);
+    expect(conversations).toHaveLength(1);
+    // Janela ainda aberta: a finalização de CSAT expirado NÃO pode ter rodado.
+    expect(conversations[0]!.csat_stage).toBe('sent');
+    expect(conversations[0]!.protocol_number).toBe(scenario.protocolNumber);
+  }, 30_000);
+
+  it('Palavra-chave de encerramento na janela de CSAT expirado encerra a velha sem criar nova', async () => {
+    const { schemaName } = requireGlobalTenant();
+    await ensure24x7(schemaName);
+
+    const scenario = await setupClosedCsatConversation(schemaName, {
+      csatExpired: true,
+      assignAgent: false,
+    });
+    const externalId = `wamid.${randomUUID().replace(/-/g, '')}`;
+
+    expect(await postWhatsAppWebhook(buildTextWebhookPayload({
+      phoneNumberId: scenario.phoneNumberId,
+      waId: scenario.waId,
+      externalId,
+      body: '#sair',
+    }))).toBe(200);
+
+    await waitFor(async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id::text
+         FROM "${schemaName}".messages
+         WHERE conversation_id = $1::uuid
+           AND sender_type = 'system'
+         LIMIT 1`,
+        scenario.conversationId,
+      );
+      return rows[0]?.id ?? null;
+    });
+
+    const conversations = await listConversationsByContact(schemaName, scenario.contactId);
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0]!.id).toBe(scenario.conversationId);
+    expect(conversations[0]!.status).toBe('closed');
+  }, 30_000);
 
   it('POST /api/webhooks/instagram com payload válido cria mensagem', async () => {
     const { schemaName } = requireGlobalTenant();

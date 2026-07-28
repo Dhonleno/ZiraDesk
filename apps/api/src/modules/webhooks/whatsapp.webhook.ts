@@ -501,6 +501,43 @@ async function syncActiveConversationCounters(
   }
 }
 
+/**
+ * Encerra a janela de CSAT de uma conversa cujo prazo venceu, mantendo-a fechada.
+ * Mesmo SET do sweeper horário (jobs/cleanup-csat.job.ts) — aqui só cobre o
+ * intervalo entre a expiração e a próxima varredura. COALESCE preserva a
+ * classificação de quem encerrou antes do CSAT ser enviado.
+ */
+async function finalizeExpiredCsat(
+  tx: Pick<typeof prisma, '$executeRawUnsafe'>,
+  conversationId: string,
+): Promise<void> {
+  const csatExpiredAt = new Date();
+  await tx.$executeRawUnsafe(
+    `UPDATE conversations
+     SET csat_stage = 'done',
+         csat_expires_at = NULL,
+         status = 'closed',
+         closed_at = COALESCE(closed_at, $2),
+         resolved_at = COALESCE(resolved_at, $2),
+         close_type_id = COALESCE(close_type_id, $3),
+         close_outcome_id = COALESCE(close_outcome_id, $4),
+         closure_reason = COALESCE(closure_reason, $5::jsonb)
+     WHERE id = $1::uuid`,
+    conversationId,
+    csatExpiredAt,
+    SYSTEM_CLOSE_TYPE_ID,
+    SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+    JSON.stringify(
+      buildSystemClosureReason({
+        reason: 'csat_expired',
+        notes: 'CSAT expirado sem resposta do cliente',
+        outcomeId: SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+        resolvedAt: csatExpiredAt,
+      }),
+    ),
+  );
+}
+
 const CHANNEL_CACHE_TTL_S = 60;
 
 async function findChannelByPhoneNumberId(
@@ -1284,6 +1321,50 @@ async function processIncomingMessage(
       channelId,
     );
 
+    const existing = convRows[0] ?? null;
+
+    // Dedupe antes de resolver a conversa: uma reentrega da Meta não pode criar
+    // conversa órfã nem encerrar a janela de CSAT de novo. A busca é global por
+    // external_id — não depende de qual conversa receberia a mensagem.
+    if (incomingExternalId) {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`,
+        incomingExternalId,
+      );
+      const duplicateMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id
+         FROM messages
+         WHERE external_id = $1
+         LIMIT 1`,
+        incomingExternalId,
+      );
+      if (duplicateMessageRows[0]) {
+        logger.info(
+          { conversationId: existing?.id ?? null, messageId: incomingExternalId },
+          '[WhatsApp] Duplicate inbound message ignored',
+        );
+        return null;
+      }
+    }
+
+    const isCloseKeyword = content.trim().toLowerCase() === CLOSE_KEYWORD;
+
+    // CSAT vencido: a conversa continua encerrada e a mensagem abre um protocolo
+    // novo — mesmo desfecho que o sweeper horário já produz quando passa antes do
+    // cliente escrever. O #sair segue encerrando a conversa velha, sem abrir uma
+    // conversa só para fechá-la em seguida.
+    let reusableConversation = existing;
+    if (
+      existing
+      && (existing.csat_stage === 'sent' || existing.csat_stage === 'waiting_comment')
+      && existing.csat_expires_at
+      && new Date() > new Date(existing.csat_expires_at)
+      && !isCloseKeyword
+    ) {
+      await finalizeExpiredCsat(tx, existing.id);
+      reusableConversation = null;
+    }
+
     let conversationId: string;
     let isNewConversation = false;
     let protocolNumber: string | null = null;
@@ -1294,8 +1375,8 @@ async function processIncomingMessage(
     let botMenuOptions: InteractiveMenuOption[] = [];
     let botMenuIncludeBack = false;
     let botSavedMessage: { id: string; content: string; created_at: Date; sender_type: string } | null = null;
-    if (convRows[0]) {
-      conversationId = convRows[0].id;
+    if (reusableConversation) {
+      conversationId = reusableConversation.id;
     } else {
       protocolNumber = await callGenerateProtocol(tx, schemaName);
       const newConv = await tx.$queryRawUnsafe<ConversationRow[]>(
@@ -1328,29 +1409,7 @@ async function processIncomingMessage(
       conversationId,
     );
 
-    if (incomingExternalId) {
-      await tx.$executeRawUnsafe(
-        `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`,
-        incomingExternalId,
-      );
-      const duplicateMessageRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-        `SELECT id
-         FROM messages
-         WHERE external_id = $1
-         LIMIT 1`,
-        incomingExternalId,
-      );
-      if (duplicateMessageRows[0]) {
-        logger.info(
-          { conversationId, messageId: incomingExternalId },
-          '[WhatsApp] Duplicate inbound message ignored',
-        );
-        return null;
-      }
-    }
-
-    const normalizedIncomingContent = content.trim().toLowerCase();
-    if (normalizedIncomingContent === CLOSE_KEYWORD) {
+    if (isCloseKeyword) {
       // COALESCE: a conversa pode já estar encerrada e só na janela de CSAT
       // (ver SELECT de resolução acima) — não sobrescrever a classificação
       // que o agente gravou ao encerrar.
@@ -1388,10 +1447,9 @@ async function processIncomingMessage(
       };
     }
 
-    const currentConversation = convRows[0] ?? null;
+    const currentConversation = reusableConversation;
     const currentCsatStage = currentConversation?.csat_stage ?? null;
     const currentCsatScore = currentConversation?.csat_score ?? null;
-    const currentCsatExpiresAt = currentConversation?.csat_expires_at ?? null;
     const isWaitingReturnFlow = currentConversation?.status === 'waiting';
 
     let mentionMetadata: Record<string, unknown> | null = null;
@@ -1440,44 +1498,9 @@ async function processIncomingMessage(
       ...(templateButtonPayload !== null ? { template_button_payload: templateButtonPayload } : {}),
     };
 
-    const isCsatPending = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
-    let shouldHandleCsat = isCsatPending;
-
-    if (isCsatPending) {
-      const csatExpired = currentCsatExpiresAt
-        && new Date() > new Date(currentCsatExpiresAt);
-
-      if (csatExpired) {
-        // A conversa já estava encerrada quando o CSAT foi enviado: só
-        // preenche a classificação se ainda estiver vazia.
-        const csatExpiredAt = new Date();
-        await tx.$executeRawUnsafe(
-          `UPDATE conversations
-           SET csat_stage = 'done',
-               csat_expires_at = NULL,
-               status = 'closed',
-               closed_at = COALESCE(closed_at, $2),
-               resolved_at = COALESCE(resolved_at, $2),
-               close_type_id = COALESCE(close_type_id, $3),
-               close_outcome_id = COALESCE(close_outcome_id, $4),
-               closure_reason = COALESCE(closure_reason, $5::jsonb)
-           WHERE id = $1::uuid`,
-          conversationId,
-          csatExpiredAt,
-          SYSTEM_CLOSE_TYPE_ID,
-          SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
-          JSON.stringify(
-            buildSystemClosureReason({
-              reason: 'csat_expired',
-              notes: 'CSAT expirado sem resposta do cliente',
-              outcomeId: SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
-              resolvedAt: csatExpiredAt,
-            }),
-          ),
-        );
-        shouldHandleCsat = false;
-      }
-    }
+    // A janela vencida já foi encerrada na resolução da conversa acima, e nesse
+    // caso currentConversation é null — aqui só chega CSAT dentro do prazo.
+    const shouldHandleCsat = currentCsatStage === 'sent' || currentCsatStage === 'waiting_comment';
 
     if (shouldHandleCsat) {
       const msgRows = await tx.$queryRawUnsafe<
