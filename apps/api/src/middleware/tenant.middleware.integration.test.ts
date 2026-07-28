@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../config/database.js';
 import { authMiddleware } from './auth.js';
 import { tenantMiddleware } from './tenant.js';
-import { tenantSchemaFromJwt } from './tenantSchemaFromJwt.js';
+import { registerTenantPrismaContextHooks, tenantSchemaFromJwt } from './tenantSchemaFromJwt.js';
 import { provisionTenantSchema } from '../modules/super-admin/tenants/tenants.service.js';
 import { createTestJWT } from '../test/setup.js';
 
@@ -89,6 +89,7 @@ async function cleanupTempTenants(): Promise<void> {
 
 function buildApp() {
   const app = Fastify({ logger: false });
+  registerTenantPrismaContextHooks(app);
 
   app.get('/tenant-only', { preHandler: [tenantMiddleware] }, async (request) => ({
     tenantId: request.tenant.id,
@@ -99,6 +100,18 @@ function buildApp() {
   app.get('/tenant-secure', { preHandler: [tenantMiddleware, authMiddleware, tenantSchemaFromJwt] }, async () => ({
     ok: true,
   }));
+
+  app.get('/tenant-schema-check', { preHandler: [tenantMiddleware, authMiddleware, tenantSchemaFromJwt] }, async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ current_schema: string }>>('SELECT current_schema()');
+    return { schemaName: rows[0]?.current_schema };
+  });
+
+  app.get('/tenant-nested-transaction-check', { preHandler: [tenantMiddleware, authMiddleware, tenantSchemaFromJwt] }, async () => {
+    const rows = await prisma.$transaction((tx) =>
+      tx.$queryRawUnsafe<Array<{ current_schema: string }>>('SELECT current_schema()'),
+    );
+    return { schemaName: rows[0]?.current_schema };
+  });
 
   return app;
 }
@@ -172,5 +185,95 @@ describe('Tenant middleware integration', () => {
     await app.close();
 
     expect(response.statusCode).toBe(403);
+  });
+
+  it('aplica search_path local ao schema do tenant durante a request autenticada', async () => {
+    const app = buildApp();
+    const slug = requiredGlobal('slug');
+    const schemaName = requiredGlobal('schema');
+    const token = createTestJWT({
+      tenantId: requiredGlobal('tenantId'),
+      schemaName,
+      role: 'owner',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/tenant-schema-check',
+      headers: {
+        host: `${slug}.ziradesk.local`,
+        authorization: `Bearer ${token}`,
+      },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ schemaName });
+  });
+
+  it('preserva schema do tenant em transações aninhadas via proxy do Prisma', async () => {
+    const app = buildApp();
+    const slug = requiredGlobal('slug');
+    const schemaName = requiredGlobal('schema');
+    const token = createTestJWT({
+      tenantId: requiredGlobal('tenantId'),
+      schemaName,
+      role: 'owner',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/tenant-nested-transaction-check',
+      headers: {
+        host: `${slug}.ziradesk.local`,
+        authorization: `Bearer ${token}`,
+      },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ schemaName });
+  });
+
+  it('mantém schemas isolados em requests concorrentes de tenants diferentes', async () => {
+    const tenantB = await createTenant('active');
+    const app = buildApp();
+    const tenantA = {
+      id: requiredGlobal('tenantId'),
+      slug: requiredGlobal('slug'),
+      schemaName: requiredGlobal('schema'),
+    };
+    const tokenA = createTestJWT({
+      tenantId: tenantA.id,
+      schemaName: tenantA.schemaName,
+      role: 'owner',
+    });
+    const tokenB = createTestJWT({
+      tenantId: tenantB.id,
+      schemaName: tenantB.schemaName,
+      role: 'owner',
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, (_, index) => {
+        const tenant = index % 2 === 0 ? tenantA : tenantB;
+        const token = index % 2 === 0 ? tokenA : tokenB;
+        return app.inject({
+          method: 'GET',
+          url: '/tenant-schema-check',
+          headers: {
+            host: `${tenant.slug}.ziradesk.local`,
+            authorization: `Bearer ${token}`,
+          },
+        });
+      }),
+    );
+    await app.close();
+
+    responses.forEach((response, index) => {
+      const expectedSchema = index % 2 === 0 ? tenantA.schemaName : tenantB.schemaName;
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ schemaName: expectedSchema });
+    });
   });
 });

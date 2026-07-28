@@ -1,4 +1,4 @@
-import { prisma } from '../../config/database.js';
+import { prisma, runWithRootPrismaContext } from '../../config/database.js';
 import { logger } from '../../config/logger.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
@@ -60,6 +60,14 @@ export class ConflictError extends Error {
     super(message);
     this.name = 'ConflictError';
   }
+}
+
+function runDetachedTicketTask(task: () => Promise<void>, onError?: (err: unknown) => void): void {
+  void runWithRootPrismaContext(task).catch(onError ?? (() => undefined));
+}
+
+function dispatchTicketWebhook(tenantId: string, event: string, data: Record<string, unknown>): void {
+  runDetachedTicketTask(() => dispatchWebhook(tenantId, event, data));
 }
 
 /* ── Row interfaces ──────────────────────────────────────────────────────── */
@@ -1035,10 +1043,10 @@ export async function createTicket(
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:created', { ticket });
   } catch { /* socket não inicializado em testes */ }
 
-  void dispatchWebhook(tenantId, 'ticket.created', {
+  dispatchTicketWebhook(tenantId, 'ticket.created', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
-  void (async () => {
+  runDetachedTicketTask(async () => {
     const tenantInfo = await resolveTenantInfo(tenantId);
     const fullTicket = await getTicket(ticket.id, tenantInfo.schemaName);
     if (!fullTicket.contact_email) return;
@@ -1055,12 +1063,12 @@ export async function createTicket(
       ticketPriority: fullTicket.priority,
       ticketUrl,
     });
-  })().catch(() => {});
-  void (async () => {
+  });
+  runDetachedTicketTask(async () => {
     const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
     if (!resolvedSchemaName) return;
     await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'created');
-  })().catch(() => {});
+  });
 
   return ticket;
 }
@@ -1294,11 +1302,11 @@ export async function updateTicket(
   if (old.status !== 'resolved' && ticket.status === 'resolved') {
     const resolvedEvent = await withOptionalSchema(schemaName, async (db) => logTicketEvent(id, updatedBy, 'resolved', null, null, undefined, db));
     if (resolvedEvent) emitTicketEvent(tenantId, id, resolvedEvent);
-    void dispatchWebhook(tenantId, 'ticket.resolved', {
+    dispatchTicketWebhook(tenantId, 'ticket.resolved', {
       ticket: { id: ticket.id, title: ticket.title, resolvedAt: ticket.resolved_at },
     });
     if (data.resolution_notes) {
-      void (async () => {
+      runDetachedTicketTask(async () => {
         const tenantInfo = await resolveTenantInfo(tenantId);
         const fullTicket = await getTicket(id, tenantInfo.schemaName);
         if (!fullTicket.contact_email) return;
@@ -1316,9 +1324,9 @@ export async function updateTicket(
           ticketUrl,
           resolutionNotes: data.resolution_notes!,
         });
-      })().catch(() => {});
+      });
     }
-    void (async () => {
+    runDetachedTicketTask(async () => {
       try {
         const tenantInfo = await resolveTenantInfo(tenantId);
         const schema = schemaName ?? tenantInfo.schemaName;
@@ -1351,25 +1359,25 @@ export async function updateTicket(
       } catch (err) {
         logger.error({ err }, '[TicketCsat] Failed to send CSAT email');
       }
-    })();
-    void (async () => {
+    });
+    runDetachedTicketTask(async () => {
       const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
       if (!resolvedSchemaName) return;
       await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'resolved');
-    })().catch(() => {});
+    });
   }
 
   if (old.status !== 'closed' && ticket.status === 'closed') {
     const closedEvent = await withOptionalSchema(schemaName, async (db) => logTicketEvent(id, updatedBy, 'closed', null, null, undefined, db));
     if (closedEvent) emitTicketEvent(tenantId, id, closedEvent);
-    void dispatchWebhook(tenantId, 'ticket.closed', {
+    dispatchTicketWebhook(tenantId, 'ticket.closed', {
       ticket: { id: ticket.id, title: ticket.title },
     });
-    void (async () => {
+    runDetachedTicketTask(async () => {
       const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
       if (!resolvedSchemaName) return;
       await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'closed');
-    })().catch(() => {});
+    });
   }
 
   if ((old.status === 'resolved' || old.status === 'closed') && ticket.status === 'open') {
@@ -1397,14 +1405,14 @@ export async function updateTicket(
     }
   }
 
-  void dispatchWebhook(tenantId, 'ticket.updated', {
+  dispatchTicketWebhook(tenantId, 'ticket.updated', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
-  void (async () => {
+  runDetachedTicketTask(async () => {
     const resolvedSchemaName = schemaName ?? await resolveTenantSchemaName(tenantId);
     if (!resolvedSchemaName) return;
     await syncTicketToRedmine(tenantId, resolvedSchemaName, ticket.id, 'updated');
-  })().catch(() => {});
+  });
 
   try {
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
@@ -1628,7 +1636,7 @@ export async function claimTicketFromQueue(
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
   } catch { /* socket não inicializado em testes */ }
 
-  void dispatchWebhook(tenantId, 'ticket.updated', {
+  dispatchTicketWebhook(tenantId, 'ticket.updated', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
 
@@ -1740,7 +1748,7 @@ export async function acceptTicket(
     getSocketServer().to(`tenant:${tenantId}`).emit('ticket:updated', { ticket });
   } catch { /* socket não inicializado em testes */ }
 
-  void dispatchWebhook(tenantId, 'ticket.updated', {
+  dispatchTicketWebhook(tenantId, 'ticket.updated', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
 
@@ -1884,7 +1892,7 @@ export async function transferTicketDepartment(
     }
   } catch { /* socket não inicializado em testes */ }
 
-  void dispatchWebhook(tenantId, 'ticket.updated', {
+  dispatchTicketWebhook(tenantId, 'ticket.updated', {
     ticket: { id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority, assignedTo: ticket.assigned_to },
   });
 
@@ -2149,7 +2157,7 @@ export async function addComment(
   }
 
   if (!data.is_internal) {
-    void (async () => {
+    runDetachedTicketTask(async () => {
       const tenantInfo = await resolveTenantInfo(tenantId);
       const fullTicket = await getTicket(ticketId, tenantInfo.schemaName);
       if (!fullTicket.contact_email) return;
@@ -2167,22 +2175,24 @@ export async function addComment(
         ticketUrl,
         commentText: stripMentions(data.content),
       });
-    })().catch(() => {});
+    });
   }
 
-  void (async () => {
+  runDetachedTicketTask(async () => {
     const schemaName = await resolveTenantSchemaName(tenantId);
     if (!schemaName) return;
-    const userRows = await prisma.$queryRawUnsafe<Array<{ name: string | null }>>(
-      `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
-      userId,
+    const userRows = await withTenantSchema(schemaName, (db) =>
+      db.$queryRawUnsafe<Array<{ name: string | null }>>(
+        `SELECT name FROM users WHERE id = $1::uuid LIMIT 1`,
+        userId,
+      ),
     );
     await syncCommentToRedmine(tenantId, schemaName, ticketId, {
       content: stripMentions(comment.content),
       authorName: userRows[0]?.name ?? 'Agente',
       isInternal: comment.is_internal,
     });
-  })().catch(() => {});
+  });
 
   return comment;
 }

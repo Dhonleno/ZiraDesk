@@ -30,6 +30,7 @@ import { legalModuleRoutes } from '../modules/legal/index.js';
 import { redmineWebhookRoutes } from '../modules/integrations/redmine/redmine.routes.js';
 import { provisionTenantSchema } from '../modules/super-admin/tenants/tenants.service.js';
 import { languageMiddleware } from '../middleware/language.js';
+import { registerTenantPrismaContextHooks } from '../middleware/tenantSchemaFromJwt.js';
 import { createSocketServer } from '../socket/index.js';
 
 interface TestTenant {
@@ -275,6 +276,7 @@ export async function createIsolatedTestServer(): Promise<FastifyInstance> {
   });
 
   app.addHook('onRequest', languageMiddleware);
+  registerTenantPrismaContextHooks(app);
 
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });

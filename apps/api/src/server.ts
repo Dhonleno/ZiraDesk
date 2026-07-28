@@ -40,6 +40,7 @@ import { portalModuleRoutes } from './modules/portal/index.js';
 import { legalModuleRoutes } from './modules/legal/index.js';
 import { redmineWebhookRoutes } from './modules/integrations/redmine/redmine.routes.js';
 import { languageMiddleware } from './middleware/language.js';
+import { registerTenantPrismaContextHooks } from './middleware/tenantSchemaFromJwt.js';
 import { createSocketServer } from './socket/index.js';
 import { ensureAgentAssignmentsInfrastructure } from './modules/omnichannel/conversations/auto-assign.service.js';
 import { logger } from './config/logger.js';
@@ -130,6 +131,7 @@ async function bootstrap(): Promise<void> {
 
   // Detecta idioma em todas as requisições via Accept-Language
   app.addHook('onRequest', languageMiddleware);
+  registerTenantPrismaContextHooks(app);
 
   // Webhooks sem auth JWT e sem tenant middleware — registrar primeiro
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
