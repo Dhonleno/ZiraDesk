@@ -1884,6 +1884,29 @@
   font-family: var(--mono);
 }
 
+/* Botão de menção: aparece só no hover da linha da mensagem.
+   opacity/pointer-events vivem aqui (e não no style inline do React) porque
+   estilo inline tem precedência sobre classe e anularia o :hover. */
+.chat-mention-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.chat-message-row:hover .chat-mention-btn,
+.chat-mention-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Sem hover (touch), o botão nunca apareceria: fica discreto e sempre ativo. */
+@media (hover: none) {
+  .chat-mention-btn {
+    opacity: 0.4;
+    pointer-events: auto;
+  }
+}
+
 .omni-tabs-scroll {
   scrollbar-gutter: stable;
 }

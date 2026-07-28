@@ -1719,6 +1719,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
 
     return (
       <div
+        className="chat-message-row"
         style={{
           display: 'flex',
           gap: 8,
@@ -1802,6 +1803,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
           )}
           <div
             style={{
+              // Contexto de posicionamento do botão de menção (absoluto, fora
+              // do fluxo — não altera a altura da linha nem a virtualização).
+              position: 'relative',
               padding: isAudioMessage ? '4px 6px' : '9px 13px',
               minWidth: isAudioMessage ? 240 : undefined,
               borderRadius: 12,
@@ -1900,6 +1904,39 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                 Template: {resolvedTemplateName}
               </div>
             )}
+
+            {/* Menção é por mensagem, não por bloco: fica ao lado do balão, do
+                lado oposto ao avatar, e só aparece no hover da linha (CSS). */}
+            {canMentionThisMessage && (
+              <button
+                type="button"
+                className="chat-mention-btn"
+                onClick={() => handleMentionMessage(msg, senderLabel)}
+                title={t('chat.mentionMessage')}
+                aria-label={t('chat.mentionMessage')}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  ...(isCompanySide ? { left: -26 } : { right: -26 }),
+                  width: 20,
+                  height: 20,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid var(--line)',
+                  background: 'var(--bg-3)',
+                  color: 'var(--txt-3)',
+                  borderRadius: '50%',
+                  fontSize: 11,
+                  lineHeight: 1,
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                ↩
+              </button>
+            )}
           </div>
           <div
             style={{
@@ -1936,31 +1973,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             )}
           </div>
         </div>
-
-        {/* Menção é por mensagem, não por bloco: fica ao lado do balão para
-            aparecer igual nas mensagens agrupadas, que não têm cabeçalho. */}
-        {canMentionThisMessage && (
-          <button
-            type="button"
-            onClick={() => handleMentionMessage(msg, senderLabel)}
-            title={t('chat.mentionMessage')}
-            aria-label={t('chat.mentionMessage')}
-            style={{
-              border: '1px solid var(--line)',
-              background: 'var(--bg-4)',
-              color: 'var(--txt-3)',
-              borderRadius: 999,
-              padding: '1px 6px',
-              fontSize: 10,
-              cursor: 'pointer',
-              lineHeight: 1.5,
-              flexShrink: 0,
-              marginBottom: 2,
-            }}
-          >
-            ↩
-          </button>
-        )}
       </div>
     );
   }, [
