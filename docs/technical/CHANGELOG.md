@@ -1,5 +1,26 @@
 # Changelog — ZiraDesk
 
+## [0.10.4] — Mensagem pós-CSAT deixa de cair em conversa encerrada (Passo 4/6)
+
+### Corrigido
+- Webhook WhatsApp: mensagem de cliente em conversa encerrada cujo CSAT havia expirado — mas antes do sweeper horário passar — deixou de ser sepultada na conversa fechada ou de reabri-la com o protocolo antigo. Agora a janela de CSAT da conversa velha é finalizada (ela permanece `closed`) e a mensagem abre conversa nova com protocolo próprio. Três sub-casos convergiram: (a) com agente atribuído, a mensagem entrava na conversa fechada sem nenhuma notificação; (b) sem agente e com bot, a conversa velha era reaberta sob o protocolo antigo; (c) sem agente e com `bot_stage='done'` — o estado comum de conversa já atendida — a mensagem sumia sem resposta ao cliente e sem agente atribuído para vê-la.
+- A correção não inventa semântica: é exatamente o desfecho que o sistema já produz 1h depois, quando `cleanup-csat.job.ts` fecha a janela e o inbound seguinte deixa de casar com o `SELECT` de resolução (`status IN ('open','waiting') OR csat_stage IN ('sent','waiting_comment')`) e cai no caminho de criação. O bug era a inconsistência restrita à janela de corrida.
+- Deduplicação por `external_id` movida para antes da resolução de conversa: uma reentrega da Meta durante a janela não cria mais conversa órfã vazia. Fecha também um latente pré-existente no caminho normal de criação, onde o `return null` do dedup **commitava** a conversa recém-criada.
+
+### Alterado
+- A decisão de reutilizar ou não a conversa existente foi hoistada para antes da bifurcação de resolução: `reusableConversation = null` força o `else` que já existia (`callGenerateProtocol` + `INSERT`), então os três sub-casos reusam o downstream de conversa nova (mensagem de protocolo, `conversation:created`, bot, auto-assign) sem nenhum ramo novo e sem duplicar código.
+- `finalizeExpiredCsat(tx, conversationId)` extraída do `UPDATE` que era inline no webhook — mesmo SET, sem mudança de comportamento; a extração só permite executá-lo antes da bifurcação, ligado à conversa velha.
+- Bloco `if (isCsatPending) { if (csatExpired) {...} }` removido: com `currentConversation = null` nesse cenário, `hasAssignedAgent`, `currentBotStage`, `isAIAgentActive`, `isWaitingReturnFlow` e `isWaitingForHumanQueue` já caem nos defaults de conversa nova. Saldo líquido do arquivo: +88/−65 linhas.
+- Escritas intencionais em conversa encerrada preservadas: palavra-chave `#sair` (encerra a conversa velha, sem abrir uma só para fechá-la em seguida) e resposta de CSAT **dentro** do prazo (pertence à conversa avaliada). Ambas cobertas por teste de regressão.
+
+### Testes
+- 5 testes de integração novos em `omnichannel.webhooks.integration.test.ts`, que não tinha nenhuma cobertura de CSAT nem de reabertura de conversa. Os 3 casos de bug foram verificados vermelhos com o fonte revertido via `git stash` (testes mantidos); os 2 de regressão passam nos dois lados, que é o papel deles.
+- Suíte da API: **340 testes, 0 falhas** (baseline anterior 335). Nenhum teste existente precisou mudar.
+
+### Notas de migração
+- **Nenhuma migration.** Conversas que já receberam mensagem na janela com o comportamento antigo não são corrigidas retroativamente: as do sub-caso (b) seguem reabertas sob o protocolo antigo, e as de (a)/(c) seguem com a mensagem do cliente dentro da conversa encerrada. Um backfill exigiria separar essas mensagens em conversas novas com protocolo retroativo — não feito, e provavelmente não desejável.
+- `cleanup-csat.job.ts` **não foi tocado**. O webhook e o sweeper agora produzem o mesmo desfecho por caminhos independentes; o `UPDATE` de finalização é idêntico nos dois e idempotente.
+
 ## [0.10.3] — Classificação de sistema nos encerramentos automáticos (Passo 3/6)
 
 ### Alterado
