@@ -1,5 +1,23 @@
 # Changelog — ZiraDesk
 
+## [0.10.2] — Registros de sistema para encerramento de conversas (Passo 2/6)
+
+### Adicionado
+- Close-config: coluna `is_system` em `conversation_close_types` e `conversation_close_outcomes`, criada pelo DDL de `ensureCloseConfigInfrastructure` (mantido separado do DML de seed) e no `CREATE TABLE` de provisionamento de tenant novo.
+- Close-config: 1 tipo e 7 desfechos de sistema com IDs fixos e prefixo `sys_` — `sys_auto` (tipo) e `sys_no_reply`, `sys_inactivity`, `sys_delivery_fail`, `sys_supervisor`, `sys_queue_24h`, `sys_by_client`, `sys_auto_generic` (desfechos). Constantes `SYSTEM_CLOSE_TYPES`/`SYSTEM_CLOSE_OUTCOMES` exportadas de `closeConfig.seed.ts` como fonte única compartilhada entre o seed e a migration.
+- Script `apps/api/src/scripts/migrate-close-config-system.ts` (`pnpm migrate:close-config-system`), idempotente via `ON CONFLICT DO NOTHING`, com aviso explícito quando algum `sys_*` não é criado por colisão de label com registro do admin.
+
+### Alterado
+- Close-config admin: registros com `is_system = true` passam a ser imutáveis — `update`, `delete` e `reorder` retornam `409 ConflictError`. As rotas de reorder passaram a mapear `ConflictError` para 409 (antes só tratavam 404, o que transformaria o guard em 500).
+- Close-config admin: DTO passa a expor `isSystem`, preparando o badge visual de "sistema" na tela de administração.
+- Modal de encerramento do agente: `listActiveCloseConfig` filtra `is_system`, então os registros automáticos não aparecem como opção selecionável manualmente.
+- Schema de reorder: aceita ID em formato cuid **ou** com prefixo `sys_`, sem afrouxar a validação de cuid (que continua usando `z.string().cuid()` como autoridade). Aceitar o formato não autoriza a ação — o guard de negócio segue barrando com 409.
+
+### Notas de migração
+- Rodar `pnpm --filter @ziradesk/api migrate:close-config-system` (aceita `--schema=<tenant>` para um schema específico). Verificado idempotente em `tenant_demo`: a segunda execução insere 0 registros e não falha.
+- **Nenhum job, webhook ou métrica foi alterado neste passo** — é apenas a fundação de dados. Os caminhos de encerramento automático seguem gravando só `closure_reason` (JSONB) e continuam fora de `byType`/`byOutcome` até o passo 3.
+- Regressão conhecida: o reorder da tela `/admin/close-config` falha com 409 enquanto o frontend enviar os IDs de sistema no payload (`CloseConfig.tsx` monta `next.map((item) => item.id)` com a lista inteira). Será fechado no passo de frontend, filtrando por `isSystem`.
+
 ## [0.10.1] — Isolamento transacional por tenant e estabilização de webhooks
 
 ### Alterado
