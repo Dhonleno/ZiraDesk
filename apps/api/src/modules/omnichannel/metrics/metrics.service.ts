@@ -47,17 +47,28 @@ async function withTenantSchema<T>(
   });
 }
 
+/**
+ * Coluna que define em qual período a conversa entra.
+ *
+ * `created_at` é o eixo das métricas de **abertura** (volume, fila, roteamento) e
+ * segue sendo o default — trocá-lo mudaria o significado de 12 dos 15 usos.
+ * `closed_at`/`resolved_at` são o eixo das métricas cujo fato gerador é o
+ * **encerramento**: elas medem o que fechou no período, não o que abriu.
+ */
+type MetricsDateColumn = 'created_at' | 'closed_at' | 'resolved_at';
+
 function addCommonFilters(
   where: string[],
   params: unknown[],
   filters: MetricsFilters,
   alias?: string,
+  dateColumn: MetricsDateColumn = 'created_at',
 ): void {
   const prefix = alias ? `${alias}.` : '';
   params.push(filters.dateFrom);
-  where.push(`${prefix}created_at >= $${params.length}::timestamptz`);
+  where.push(`${prefix}${dateColumn} >= $${params.length}::timestamptz`);
   params.push(filters.dateToExclusive);
-  where.push(`${prefix}created_at < $${params.length}::timestamptz`);
+  where.push(`${prefix}${dateColumn} < $${params.length}::timestamptz`);
 
   if (filters.agentId) {
     params.push(filters.agentId);
@@ -110,6 +121,13 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
       ...params,
     );
 
+    // TMA mede duração de atendimento encerrado: o período recorta por
+    // resolved_at (encerradas NO período), não por created_at (abertas no período).
+    const tmaWhere: string[] = [`status = 'closed'`, 'resolved_at IS NOT NULL'];
+    const tmaParams: unknown[] = [];
+    addCommonFilters(tmaWhere, tmaParams, filters, undefined, 'resolved_at');
+    const tmaWhereSql = `WHERE ${tmaWhere.join(' AND ')}`;
+
     const tmaRows = await tx.$queryRawUnsafe<Array<{ avg_minutes: number | null }>>(
       `SELECT
          ROUND(AVG(EXTRACT(EPOCH FROM (
@@ -122,10 +140,8 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
            )
          )) / 60))::integer AS avg_minutes
        FROM conversations
-       ${whereSql}
-       ${whereSql ? 'AND' : 'WHERE'} status = 'closed'
-       AND resolved_at IS NOT NULL`,
-      ...params,
+       ${tmaWhereSql}`,
+      ...tmaParams,
     );
 
     const firstResponseWhere: string[] = [];
@@ -187,9 +203,12 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
 
     const total = totalRows[0];
     const csat = csatRows[0];
+    // Recorte por closed_at: conta o que fechou no período. `status = 'closed'`
+    // continua sendo a autoridade sobre "está encerrada" — closed_at NÃO é limpo
+    // na reabertura (conversations.service.ts), então sozinho ele não bastaria.
     const byTypeWhere: string[] = ['c.close_type_id IS NOT NULL', `c.status = 'closed'`];
     const byTypeParams: unknown[] = [];
-    addCommonFilters(byTypeWhere, byTypeParams, filters, 'c');
+    addCommonFilters(byTypeWhere, byTypeParams, filters, 'c', 'closed_at');
     const byTypeWhereSql = byTypeWhere.length ? `WHERE ${byTypeWhere.join(' AND ')}` : '';
 
     const byTypeRows = await tx.$queryRawUnsafe<Array<{
@@ -210,9 +229,11 @@ export async function getOverview(filters: MetricsFilters, schemaName: string, d
       ...byTypeParams,
     );
 
-    const byOutcomeWhere: string[] = ['c.close_outcome_id IS NOT NULL'];
+    // Mesmo predicado e mesmo eixo do byType: os dois painéis medem a mesma
+    // população, só que agrupada por dimensão diferente.
+    const byOutcomeWhere: string[] = ['c.close_outcome_id IS NOT NULL', `c.status = 'closed'`];
     const byOutcomeParams: unknown[] = [];
-    addCommonFilters(byOutcomeWhere, byOutcomeParams, filters, 'c');
+    addCommonFilters(byOutcomeWhere, byOutcomeParams, filters, 'c', 'closed_at');
     const byOutcomeWhereSql = byOutcomeWhere.length ? `WHERE ${byOutcomeWhere.join(' AND ')}` : '';
 
     const byOutcomeRows = await tx.$queryRawUnsafe<Array<{
