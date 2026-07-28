@@ -165,30 +165,28 @@ async function resolveWhatsAppAppSecrets(body: unknown): Promise<string[]> {
 export async function verifyMetaSignature(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<void> {
+): Promise<FastifyReply | void> {
   const signatureHeader = request.headers['x-hub-signature-256'];
   const signature = typeof signatureHeader === 'string' ? signatureHeader : undefined;
 
   if (!signature) {
-    void reply.status(401).send({
+    return reply.status(401).send({
       success: false,
       error: { code: 'MISSING_SIGNATURE', message: 'Missing x-hub-signature-256 header' },
     });
-    return;
   }
 
   const rawBody = (request as FastifyRequestWithRawBody).rawBody;
   if (!rawBody) {
-    void reply.status(400).send({
+    return reply.status(400).send({
       success: false,
       error: { code: 'MISSING_BODY', message: 'Raw body unavailable' },
     });
-    return;
   }
 
   if (!hasValidSignature(rawBody, signature, env.META_APP_SECRET)) {
     request.log.warn('Invalid Meta webhook signature');
-    void reply.status(401).send({
+    return reply.status(401).send({
       success: false,
       error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' },
     });
@@ -198,20 +196,19 @@ export async function verifyMetaSignature(
 export async function verifyWhatsAppMetaSignature(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<void> {
+): Promise<FastifyReply | void> {
   const signatureHeader = request.headers['x-hub-signature-256'];
   const signature = typeof signatureHeader === 'string' ? signatureHeader : undefined;
   const rawBody = (request as FastifyRequestWithRawBody).rawBody;
 
   if (!signature || !rawBody) {
-    void reply.status(signature ? 400 : 401).send({
+    return reply.status(signature ? 400 : 401).send({
       success: false,
       error: {
         code: signature ? 'MISSING_BODY' : 'MISSING_SIGNATURE',
         message: signature ? 'Raw body unavailable' : 'Missing x-hub-signature-256 header',
       },
     });
-    return;
   }
 
   const appSecrets = await resolveWhatsAppAppSecrets(request.body);
@@ -220,7 +217,7 @@ export async function verifyWhatsAppMetaSignature(
   }
   if (!appSecrets.some((appSecret) => hasValidSignature(rawBody, signature, appSecret))) {
     request.log.warn('Invalid WhatsApp webhook signature');
-    void reply.status(401).send({
+    return reply.status(401).send({
       success: false,
       error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' },
     });

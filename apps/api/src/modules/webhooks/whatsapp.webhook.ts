@@ -2929,64 +2929,70 @@ export async function whatsappWebhookRoutes(app: FastifyInstance): Promise<void>
     config: { rawBody: true },
     preHandler: [verifyWhatsAppMetaSignature],
   }, async (request, reply) => {
-    // Meta requires a fast 200 response
-    void reply.status(200).send({ success: true });
-
     const payload = request.body as MetaWebhookPayload;
 
-    if (payload.object !== 'whatsapp_business_account') return;
+    // Meta requires a fast 200 response; processing continues out of band.
+    setImmediate(() => {
+      void (async () => {
+        if (payload.object !== 'whatsapp_business_account') return;
 
-    for (const entry of payload.entry) {
-      for (const change of entry.changes) {
-        if (change.field === 'message_template_status_update') {
-          try {
-            await processTemplateStatusUpdate(entry.id, change.value);
-          } catch (err) {
-            request.log.error({ err }, '[WhatsApp] Failed to process template status update');
-          }
-          continue;
-        }
+        for (const entry of payload.entry) {
+          for (const change of entry.changes) {
+            if (change.field === 'message_template_status_update') {
+              try {
+                await processTemplateStatusUpdate(entry.id, change.value);
+              } catch (err) {
+                request.log.error({ err }, '[WhatsApp] Failed to process template status update');
+              }
+              continue;
+            }
 
-        if (change.field !== 'messages') continue;
+            if (change.field !== 'messages') continue;
 
-        const value = change.value;
+            const value = change.value;
 
-        if (value.statuses?.length) {
-          for (const status of value.statuses) {
-            try {
-              await processStatusUpdate(app, status);
-            } catch (err) {
-              request.log.error({ err }, '[WhatsApp] Failed to process status update');
+            if (value.statuses?.length) {
+              for (const status of value.statuses) {
+                try {
+                  await processStatusUpdate(app, status);
+                } catch (err) {
+                  request.log.error({ err }, '[WhatsApp] Failed to process status update');
+                }
+              }
+              continue;
+            }
+
+            if (!value.messages?.length) continue;
+
+            for (const message of value.messages) {
+              const contact = value.contacts?.[0];
+              const senderName = contact?.profile.name ?? message.from;
+              const senderPhone = message.from;
+              const phoneNumberId = value.metadata?.phone_number_id;
+              if (!phoneNumberId) {
+                request.log.warn('[WhatsApp] Incoming message without phone_number_id');
+                continue;
+              }
+
+              try {
+                await processIncomingMessage(app, {
+                  phoneNumberId,
+                  senderPhone,
+                  senderName,
+                  message,
+                  wabaId: entry.id,
+                });
+              } catch (err) {
+                request.log.error({ err }, '[WhatsApp] Failed to process incoming message');
+              }
             }
           }
-          continue;
         }
+      })().catch((err) => {
+        request.log.error({ err }, '[WhatsApp] Failed to process webhook payload');
+      });
+    });
 
-        if (!value.messages?.length) continue;
-
-        for (const message of value.messages) {
-          const contact = value.contacts?.[0];
-          const senderName = contact?.profile.name ?? message.from;
-          const senderPhone = message.from;
-          const phoneNumberId = value.metadata?.phone_number_id;
-          if (!phoneNumberId) {
-            request.log.warn('[WhatsApp] Incoming message without phone_number_id');
-            continue;
-          }
-
-          try {
-            await processIncomingMessage(app, {
-              phoneNumberId,
-              senderPhone,
-              senderName,
-              message,
-              wabaId: entry.id,
-            });
-          } catch (err) {
-            request.log.error({ err }, '[WhatsApp] Failed to process incoming message');
-          }
-        }
-      }
-    }
+    return reply.status(200).send({ success: true });
   });
 }

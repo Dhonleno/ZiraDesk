@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Prisma } from '@prisma/client';
+import { Webhook } from 'svix';
 import { afterEach, describe, expect, it } from 'vitest';
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/database.js';
@@ -38,6 +39,18 @@ function uniqueToken(prefix: string): string {
 
 function createMetaSignature(rawBody: string, appSecret = META_APP_SECRET_TEST): string {
   return `sha256=${createHmac('sha256', appSecret).update(rawBody).digest('hex')}`;
+}
+
+function createResendHeaders(payload: unknown, secret = env.RESEND_WEBHOOK_SECRET): Record<string, string> {
+  if (!secret) throw new Error('RESEND_WEBHOOK_SECRET ausente nos testes');
+  const webhook = new Webhook(secret);
+  const id = `msg_${randomUUID()}`;
+  const timestamp = new Date();
+  return {
+    'svix-id': id,
+    'svix-timestamp': String(Math.floor(timestamp.getTime() / 1000)),
+    'svix-signature': webhook.sign(id, timestamp, JSON.stringify(payload)),
+  };
 }
 
 async function waitFor<T>(fn: () => Promise<T | null>, timeoutMs = 15_000, intervalMs = 150): Promise<T> {
@@ -758,7 +771,7 @@ describe('Omnichannel webhooks integration', () => {
     const response = await createTestApp()
       .post('/api/webhooks/email')
       .set('Content-Type', 'application/json')
-      .set('Authorization', `Bearer ${env.RESEND_WEBHOOK_SECRET}`)
+      .set(createResendHeaders(payload))
       .send(payload);
 
     expect(response.status).toBe(200);
@@ -781,24 +794,24 @@ describe('Omnichannel webhooks integration', () => {
     const { slug, schemaName } = requireGlobalTenant();
     const messageId = `<unauthorized-${randomUUID()}@resend.dev>`;
 
+    const invalidPayload = {
+      type: 'email.received',
+      data: {
+        from: `intruso-${randomUUID()}@example.com`,
+        to: [`suporte@${slug}.ziradesk.com`],
+        message_id: messageId,
+        subject: 'Tentativa sem segredo',
+        text: 'corpo',
+      },
+    };
+
     const response = await createTestApp()
       .post('/api/webhooks/email')
       .set('Content-Type', 'application/json')
-      .set('Authorization', 'Bearer segredo-errado')
-      .send({
-        type: 'email.received',
-        data: {
-          from: `intruso-${randomUUID()}@example.com`,
-          to: [`suporte@${slug}.ziradesk.com`],
-          message_id: messageId,
-          subject: 'Tentativa sem segredo',
-          text: 'corpo',
-        },
-      });
+      .set(createResendHeaders(invalidPayload, 'whsec_c2VncmVkb19lcnJhZG8='))
+      .send(invalidPayload);
 
-    // A rota sempre responde 200 (Resend não deve reenfileirar); o que importa
-    // é que nada foi gravado.
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     await delay(400);
 
     const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
@@ -826,20 +839,22 @@ describe('Omnichannel webhooks integration', () => {
     });
 
     try {
+      const payload = {
+        type: 'email.received',
+        data: {
+          from: `roteado-${randomUUID()}@example.com`,
+          to: [`suporte@${slug}.ziradesk.com`],
+          message_id: messageId,
+          subject: 'Ticket roteado por departamento',
+          text: 'Preciso de ajuda.',
+        },
+      };
+
       const response = await createTestApp()
         .post('/api/webhooks/email')
         .set('Content-Type', 'application/json')
-        .set('Authorization', `Bearer ${env.RESEND_WEBHOOK_SECRET}`)
-        .send({
-          type: 'email.received',
-          data: {
-            from: `roteado-${randomUUID()}@example.com`,
-            to: [`suporte@${slug}.ziradesk.com`],
-            message_id: messageId,
-            subject: 'Ticket roteado por departamento',
-            text: 'Preciso de ajuda.',
-          },
-        });
+        .set(createResendHeaders(payload))
+        .send(payload);
 
       expect(response.status).toBe(200);
 
@@ -897,7 +912,7 @@ describe('Omnichannel webhooks integration', () => {
     const response = await createTestApp()
       .post('/api/webhooks/email')
       .set('Content-Type', 'application/json')
-      .set('Authorization', `Bearer ${env.RESEND_WEBHOOK_SECRET}`)
+      .set(createResendHeaders(payload))
       .send(payload);
 
     expect(response.status).toBe(200);
