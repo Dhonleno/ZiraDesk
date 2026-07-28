@@ -47,6 +47,12 @@ function getContext(): AudioContext | null {
   return sharedCtx;
 }
 
+export function unlockChatAudio(): void {
+  const ctx = getContext();
+  if (!ctx || ctx.state !== 'suspended') return;
+  void ctx.resume().catch(() => {});
+}
+
 export function playSound(type: SoundOption, volume = DEFAULT_SOUND_CONFIG.volume): void {
   if (type === 'none') return;
 

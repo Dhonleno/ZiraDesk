@@ -1,5 +1,16 @@
 # Changelog — ZiraDesk
 
+## [0.10.6] — Som global de notificações de atendimento
+
+### Alterado
+- Frontend Omnichannel: o som de nova mensagem e novo atendimento passou para listeners globais em `TenantLayout`, independentes da montagem da página de conversas e sem bloquear reprodução quando a aba está em background.
+- Eventos Socket.io `conversation:assigned` e `conversation:created` passaram a carregar `assignedTo` e `actorUserId`, permitindo tocar som apenas quando o atendimento vira do usuário por ação de outro agente ou do sistema.
+- O atendimento aberto na tela passa a ser registrado em estado global para suprimir o som da conversa ativa sem depender da URL.
+- Adicionado unlock do Web Audio no primeiro gesto do usuário após o shell autenticado montar, reduzindo falhas silenciosas por política de autoplay.
+
+### Removido
+- `ConversationList` deixou de disparar sons locais de mensagem, conversa criada e atribuição, evitando duplicidade dentro de `/omnichannel`.
+
 ## [0.10.5] — Remoção de reabertura de conversas e UX final do close-config (Passo 6/6)
 
 ### Alterado

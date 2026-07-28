@@ -10,6 +10,7 @@ import { ActiveOutboundModal } from '../../components/omnichannel/ActiveOutbound
 import { PageShell } from '../../components/layout/PageShell';
 import { subscribeToEvent } from '../../services/socket';
 import { notificationsApi } from '../../services/api';
+import { useNotificationStore } from '../../stores/notification.store';
 
 export function ConversationsPage() {
   const { t } = useTranslation('omnichannel');
@@ -41,6 +42,13 @@ export function ConversationsPage() {
     if (!selectedId) return;
     markConversationNotificationsRead(selectedId);
   }, [markConversationNotificationsRead, selectedId]);
+
+  useEffect(() => {
+    useNotificationStore.getState().setActiveConversation(selectedId);
+    return () => {
+      useNotificationStore.getState().setActiveConversation(null);
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);

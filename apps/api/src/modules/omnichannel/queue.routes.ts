@@ -51,6 +51,8 @@ export async function omnichannelQueueRoutes(app: FastifyInstance): Promise<void
       const io = getSocketServer();
       io.to(`agent:${request.user.id}`).emit('conversation:assigned', {
         conversationId: request.params.id,
+        assignedTo: request.user.id,
+        actorUserId: request.user.id,
       });
       io.to(`agent:${request.user.id}`).emit('notification:new', {
         type: 'conversation.assigned',

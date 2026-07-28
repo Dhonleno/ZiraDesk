@@ -11,18 +11,21 @@ export interface MessageNotification {
 
 interface NotificationState {
   messageNotifications: MessageNotification[];
+  activeConversationId: string | null;
   addMessage: (payload: {
     conversationId: string;
     contactName: string;
     message: string;
     timestamp: string;
   }) => void;
+  setActiveConversation: (conversationId: string | null) => void;
   markConversationRead: (conversationId: string) => void;
   markAllRead: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   messageNotifications: [],
+  activeConversationId: null,
 
   addMessage: ({ conversationId, contactName, message, timestamp }) =>
     set((state) => {
@@ -55,6 +58,8 @@ export const useNotificationStore = create<NotificationState>((set) => ({
         ],
       };
     }),
+
+  setActiveConversation: (conversationId) => set({ activeConversationId: conversationId }),
 
   markConversationRead: (conversationId) =>
     set((state) => ({

@@ -628,6 +628,8 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
     io.to(`tenant:${tenantId}`).emit('conversation:created', {
       conversationId: conversation.id,
       contactName,
+      assignedTo: socketConversation?.assignedTo ?? null,
+      actorUserId: userId,
       conversation: socketConversation ?? undefined,
     });
 

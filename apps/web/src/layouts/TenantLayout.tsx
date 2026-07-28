@@ -19,8 +19,9 @@ import { usePermission } from '../hooks/usePermission';
 import { useToast } from '../stores/toast.store';
 import { useNotificationStore } from '../stores/notification.store';
 import { isConversationBotControlled } from '../utils/conversationNotifications';
-import { notifySound, shouldShowDesktopNotification } from '../utils/notify';
-import { playNewConversationSound } from '../hooks/useChatSounds';
+import { isNotificationSoundEnabled, notifySound, shouldShowDesktopNotification } from '../utils/notify';
+import { playNewConversationSound, playNewMessageSound } from '../hooks/useChatSounds';
+import { unlockChatAudio } from '../utils/chatSounds';
 import { useAuthStore, type AuthUser } from '../stores/auth.store';
 import { PermissionGate } from '../components/ui/PermissionGate';
 
@@ -380,6 +381,7 @@ export function TenantLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const unreadConversationNotifications = useNotificationStore((state) => state.messageNotifications.length);
+  const activeConversationId = useNotificationStore((state) => state.activeConversationId);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -548,6 +550,16 @@ export function TenantLayout() {
   }, [token, user?.tenantId, canToggleAvailability, hasLoadedStatus]);
 
   useEffect(() => {
+    const unlock = () => unlockChatAudio();
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user?.id) return;
 
     const unsubHelpRequested = subscribeToEvent<{
@@ -634,42 +646,7 @@ export function TenantLayout() {
   }, [queryClient, t, toast]);
 
   useEffect(() => {
-    if (!['owner', 'admin', 'supervisor'].includes(user?.role ?? '')) return;
-    // Dentro de /omnichannel quem toca é a ConversationList, que assina o mesmo
-    // evento; sem este guard o gestor ouviria o som duas vezes.
-    if (pathname.startsWith('/omnichannel')) return;
-
-    const unsubCreated = subscribeToEvent<{
-      assigned_to?: string | null;
-      assignedTo?: string | null;
-      assignedAgentId?: string | null;
-      conversation?: {
-        assigned_to?: string | null;
-        assignedTo?: string | null;
-        assignedAgentId?: string | null;
-      };
-    }>('conversation:created', (data) => {
-      const assignedTo =
-        data.assigned_to
-        ?? data.assignedTo
-        ?? data.assignedAgentId
-        ?? data.conversation?.assigned_to
-        ?? data.conversation?.assignedTo
-        ?? data.conversation?.assignedAgentId
-        ?? null;
-
-      if (!assignedTo) {
-        playNewConversationSound();
-      }
-    });
-
-    return () => {
-      unsubCreated();
-    };
-  }, [pathname, user?.role]);
-
-  useEffect(() => {
-    if (!user?.id || pathname.startsWith('/omnichannel')) return;
+    if (!user?.id) return;
 
     interface SocketContactPayload {
       name?: string | null;
@@ -699,6 +676,25 @@ export function TenantLayout() {
       conversation?: SocketConversationPayload;
       contact?: SocketContactPayload;
       contactName?: string | null;
+    }
+
+    interface ConversationCreatedEventPayload {
+      conversationId?: string;
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      actorUserId?: string | null;
+      conversation?: SocketConversationPayload & { id?: string };
+    }
+
+    interface ConversationAssignedEventPayload {
+      conversationId?: string;
+      assigned_to?: string | null;
+      assignedTo?: string | null;
+      assignedAgentId?: string | null;
+      agentId?: string | null;
+      actorUserId?: string | null;
+      conversation?: SocketConversationPayload & { id?: string };
     }
 
     interface ConversationUpdatedEventPayload {
@@ -731,6 +727,11 @@ export function TenantLayout() {
       const conversationId = data.conversationId;
       if (!conversationId) return;
 
+      const isActiveConversation = conversationId === activeConversationId;
+      if (!isActiveConversation) {
+        playNewMessageSound();
+      }
+
       const contactName =
         data.contact?.name
         ?? data.contactName
@@ -740,12 +741,14 @@ export function TenantLayout() {
 
       const messageText = data.message?.content?.trim() || t('notifications.newMessage', { ns: 'omnichannel' });
 
-      useNotificationStore.getState().addMessage({
-        conversationId,
-        contactName,
-        message: messageText,
-        timestamp: new Date().toISOString(),
-      });
+      if (!isActiveConversation && !pathname.startsWith('/omnichannel')) {
+        useNotificationStore.getState().addMessage({
+          conversationId,
+          contactName,
+          message: messageText,
+          timestamp: new Date().toISOString(),
+        });
+      }
     };
 
     const handleConversationUpdated = (data: ConversationUpdatedEventPayload) => {
@@ -767,9 +770,52 @@ export function TenantLayout() {
       }
     };
 
-    const handleAssigned = (_data: { conversationId?: string }) => {
+    const handleCreated = (data: ConversationCreatedEventPayload) => {
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+
+      const conversationId = data.conversationId ?? data.conversation?.id;
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+
+      if (conversationId && assignedTo === user.id && conversationId !== activeConversationId) {
+        const actorUserId = data.actorUserId ?? null;
+        if (actorUserId !== user.id && isNotificationSoundEnabled()) {
+          playNewConversationSound();
+        }
+      }
+    };
+
+    const handleAssigned = (data: ConversationAssignedEventPayload) => {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversation-counts'] });
+
+      const conversationId = data.conversationId ?? data.conversation?.id;
+      const assignedTo =
+        data.assigned_to
+        ?? data.assignedTo
+        ?? data.assignedAgentId
+        ?? data.agentId
+        ?? data.conversation?.assigned_to
+        ?? data.conversation?.assignedTo
+        ?? data.conversation?.assignedAgentId
+        ?? null;
+      const actorUserId = data.actorUserId ?? null;
+      const isNewToMe =
+        Boolean(conversationId)
+        && assignedTo === user.id
+        && actorUserId !== user.id
+        && conversationId !== activeConversationId;
+
+      if (isNewToMe && isNotificationSoundEnabled()) {
+        playNewConversationSound();
+      }
 
       const hidden = typeof document !== 'undefined' && document.hidden === true;
       if (hidden) {
@@ -780,23 +826,23 @@ export function TenantLayout() {
             '/icon-192.png',
           );
         }
-      } else {
-        notifySound('assignment');
       }
     };
 
     const unsubA = subscribeToEvent<ConversationMessageEventPayload>('conversation:new_message', handleIncomingMessage);
     const unsubB = subscribeToEvent<ConversationMessageEventPayload>('conversation:message', handleIncomingMessage);
+    const unsubCreated = subscribeToEvent<ConversationCreatedEventPayload>('conversation:created', handleCreated);
     const unsubUpdated = subscribeToEvent<ConversationUpdatedEventPayload>('conversation:updated', handleConversationUpdated);
-    const unsubAssigned = subscribeToEvent<{ conversationId?: string }>('conversation:assigned', handleAssigned);
+    const unsubAssigned = subscribeToEvent<ConversationAssignedEventPayload>('conversation:assigned', handleAssigned);
 
     return () => {
       unsubA();
       unsubB();
+      unsubCreated();
       unsubUpdated();
       unsubAssigned();
     };
-  }, [pathname, queryClient, showNotification, t, user?.id, user?.role]);
+  }, [activeConversationId, pathname, queryClient, showNotification, t, user?.id]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

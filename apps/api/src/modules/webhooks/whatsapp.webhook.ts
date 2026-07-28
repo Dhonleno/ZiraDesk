@@ -1719,6 +1719,7 @@ async function processIncomingMessage(
     const currentQueueEnteredAt = currentConversation?.queue_entered_at ?? null;
     let hasAssignedAgent = Boolean(currentAssignedTo);
     let activeOutboundReplyAgentId: string | null = null;
+    let activeOutboundReplyActorUserId: string | null = null;
     const isAIAgentActive = currentConversation?.ai_agent_active === true && !Boolean(currentAssignedTo);
     const isLegacyQueueWithoutBotStage = !isNewConversation
       && !hasAssignedAgent
@@ -1812,6 +1813,7 @@ async function processIncomingMessage(
       }
 
       activeOutboundReplyAgentId = selectedAgent?.user_id ?? validatedPreferredId ?? null;
+      activeOutboundReplyActorUserId = preferredAgentId;
       await syncActiveConversationCounters(tx, [currentAssignedTo, selectedAgent?.user_id ?? null]);
     }
 
@@ -1992,6 +1994,7 @@ async function processIncomingMessage(
       conversationStatus: currentConversation?.status ?? null,
       isWaitingReturnFlow,
       activeOutboundReplyAgentId,
+      activeOutboundReplyActorUserId,
     };
   });
   if (!result) return;
@@ -2061,6 +2064,8 @@ async function processIncomingMessage(
     });
     io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('conversation:assigned', {
       conversationId: result.conversationId,
+      assignedTo: result.activeOutboundReplyAgentId,
+      actorUserId: result.activeOutboundReplyActorUserId,
     });
     io.to(`agent:${result.activeOutboundReplyAgentId}`).emit('notification:new', {
       type: 'conversation.assigned',
@@ -2082,6 +2087,8 @@ async function processIncomingMessage(
       contactName: result.contactName,
       organizationId: result.organizationId,
       outsideBusinessHours: result.outsideBusinessHours,
+      assignedTo: conversation?.assignedTo ?? null,
+      actorUserId: null,
       conversation: conversation ?? undefined,
     });
   }

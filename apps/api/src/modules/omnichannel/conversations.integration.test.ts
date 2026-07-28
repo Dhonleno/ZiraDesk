@@ -217,6 +217,9 @@ describe('Novo atendimento integration', () => {
 
     expect(response.statusCode).toBe(201);
     expect(emit).toHaveBeenCalledWith('conversation:created', expect.objectContaining({
+      conversationId: body.data.id,
+      assignedTo: AGENT_ID,
+      actorUserId: AGENT_ID,
       conversation: expect.objectContaining({ id: body.data.id }),
     }));
     await app.close();

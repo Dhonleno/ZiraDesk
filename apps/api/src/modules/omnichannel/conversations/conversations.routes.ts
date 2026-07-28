@@ -314,7 +314,12 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       const tenantUser = request.user as AuthUser;
 
       const io = getSocketServer();
-      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', { conversation: result.conversation });
+      io.to(`tenant:${tenantUser.tenantId}`).emit('conversation:created', {
+        conversationId: result.conversation.id,
+        assignedTo: result.conversation.assigned_to ?? null,
+        actorUserId: request.user.id,
+        conversation: result.conversation,
+      });
 
       for (const dispatch of result.protocolDispatches) {
         if (!dispatch.channelCredentials || !dispatch.contactPhone) continue;
@@ -629,6 +634,8 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         const io = getSocketServer();
         io.to(`agent:${parsed.data.user_id}`).emit('conversation:assigned', {
           conversationId,
+          assignedTo: parsed.data.user_id,
+          actorUserId: request.user.id,
         });
         io.to(`agent:${parsed.data.user_id}`).emit('notification:new', {
           id: conversationId,
@@ -742,6 +749,8 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
         io.to(`agent:${result.targetUserId}`).emit('conversation:assigned', {
           conversationId,
           agentId: result.targetUserId,
+          assignedTo: result.targetUserId,
+          actorUserId: request.user.id,
         });
         io.to(`agent:${result.targetUserId}`).emit('notification:new', {
           type: 'conversation.assigned',
@@ -906,6 +915,8 @@ export async function conversationsRoutes(app: FastifyInstance): Promise<void> {
       if (parsed.data.assignedTo && parsed.data.assignedTo !== previousAssignedTo) {
         io.to(`agent:${parsed.data.assignedTo}`).emit('conversation:assigned', {
           conversationId: request.params.id,
+          assignedTo: parsed.data.assignedTo,
+          actorUserId: request.user.id,
         });
         io.to(`agent:${parsed.data.assignedTo}`).emit('notification:new', {
           type: 'conversation.assigned',

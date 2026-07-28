@@ -12,8 +12,7 @@ import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
 import { avatarClass } from '../../utils/avatar';
 import { isConversationBotControlled } from '../../utils/conversationNotifications';
-import { notifySound, shouldShowDesktopNotification } from '../../utils/notify';
-import { playNewConversationSound, playNewMessageSound } from '../../hooks/useChatSounds';
+import { shouldShowDesktopNotification } from '../../utils/notify';
 
 interface ConversationItem {
   id: string;
@@ -431,14 +430,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       const isAssignedToCurrentUser = Boolean(currentUserId) && assignedAgentId === currentUserId;
       const shouldNotifyByAssignee = isAssignedToCurrentUser;
 
-      // Regra final de som:
-      // - mensagem do cliente
-      // - conversa atribuída a mim OU em fila
-      // - aba em foco (document.hidden === false)
-      if (isClientMessage && shouldNotifyByAssignee && !isBrowserTabHidden()) {
-        playNewMessageSound();
-      }
-
       // Notificação de browser para mensagem nova na conversa do agente com aba fora de foco.
       if (isClientMessage && shouldNotifyByAssignee && isBrowserTabHidden()) {
         if (typeof Notification === 'undefined') return;
@@ -507,9 +498,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
         ?? null;
       if (assignedTo) return;
 
-      if (!isBrowserTabHidden()) {
-        playNewConversationSound();
-      }
     };
 
     const handleAssigned = (data: { conversationId?: string }) => {
@@ -523,28 +511,6 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
       const alreadyViewing = conversationId && conversationId === selectedId;
       if (alreadyViewing) return;
 
-      if (isBrowserTabHidden()) {
-        if (typeof Notification === 'undefined') return;
-        if (Notification.permission !== 'granted') {
-          if (Notification.permission === 'denied') {
-            notifyPermissionDeniedOnce();
-          }
-          return;
-        }
-        const cachedConversation = getConversationFromCache(conversationId);
-        const contactName =
-          cachedConversation?.contact_name
-          ?? t('notifications.newMessage');
-        if (shouldShowDesktopNotification()) {
-          showNotification(
-            t('notifications.assigned'),
-            `${contactName} ${t('notifications.assignedBody')}`,
-            '/icon-192.png',
-          );
-        }
-      } else {
-        notifySound('assignment');
-      }
     };
 
     const handleUpdated = (data: {

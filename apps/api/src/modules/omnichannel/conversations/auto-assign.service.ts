@@ -741,6 +741,8 @@ function emitAssignmentEvents(
 
   io.to(`agent:${agentId}`).emit('conversation:assigned', {
     conversationId,
+    assignedTo: agentId,
+    actorUserId: null,
     message: 'Nova conversa atribuida automaticamente',
   });
 
