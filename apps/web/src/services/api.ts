@@ -496,6 +496,8 @@ export interface ConversationCloseConfigItem {
   label: string;
   isDefault: boolean;
   isActive: boolean;
+  /** Registro `sys_*` gravado pelos fechamentos automáticos: imutável na API (409). */
+  isSystem: boolean;
   order: number;
   createdAt: string;
 }
@@ -3694,22 +3696,6 @@ export const omnichannelApi = {
     return res.data;
   },
 
-  updateConversation: async (
-    conversationId: string,
-    payload: {
-      status?: 'open' | 'waiting' | 'closed';
-      assignedTo?: string | null;
-      csat_score?: number;
-      csat_comment?: string;
-    },
-  ): Promise<OmnichannelConversation> => {
-    const res = await api.patch<{ success: boolean; data: OmnichannelConversation }>(
-      `/omnichannel/conversations/${conversationId}`,
-      payload,
-    );
-    return res.data.data;
-  },
-
   closeConversation: async (
     conversationId: string,
     data: { reason: string; notes?: string; closeTypeId?: string; closeOutcomeId?: string },
@@ -3719,10 +3705,6 @@ export const omnichannelApi = {
       data,
     );
     return res.data.data;
-  },
-
-  reopen: async (conversationId: string): Promise<OmnichannelConversation> => {
-    return omnichannelApi.updateConversation(conversationId, { status: 'open' });
   },
 
   assign: async (conversationId: string, userId: string): Promise<OmnichannelConversation> => {

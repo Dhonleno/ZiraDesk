@@ -1120,17 +1120,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     onError: () => toast.error(t('closeModal.errorToast')),
   });
 
-  const reopenMutation = useMutation({
-    mutationFn: () => omnichannelApi.reopen(conversationId),
-    onSuccess: () => {
-      setIsConversationClosed(false);
-      void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      void qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
-    onError: () => toast.error(t('resolve.reopenError')),
-  });
-
-
   const endHelpMutation = useMutation({
     mutationFn: () => omnichannelApi.endHelp(conversationId),
     onSuccess: () => {
@@ -3133,7 +3122,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
                   gap: 8,
                   background: 'var(--bg-3)',
                   border: '1px solid var(--line-2)',
@@ -3149,23 +3137,6 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                     ? t('chat.closedByClient')
                     : t('chat.closedByAgent')}
                 </span>
-                <button
-                  onClick={() => reopenMutation.mutate()}
-                  disabled={reopenMutation.isPending}
-                  style={{
-                    background: 'var(--bg-2)',
-                    border: '1px solid rgba(0,201,167,.25)',
-                    color: 'var(--teal)',
-                    borderRadius: 'var(--r)',
-                    padding: '4px 10px',
-                    fontSize: 12,
-                    fontStyle: 'normal',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {t('resolve.reopen')}
-                </button>
               </div>
             ) : null}
 

@@ -69,6 +69,10 @@ function SortableRow({
   onEdit,
   onDelete,
 }: SortableRowProps) {
+  // Registros de sistema são imutáveis na API (409 em update/delete/reorder):
+  // aparecem na lista para dar contexto aos relatórios, mas sem ação nenhuma.
+  const isSystem = item.isSystem;
+
   const {
     attributes,
     listeners,
@@ -76,7 +80,7 @@ function SortableRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({ id: item.id, disabled: isSystem });
 
   const rowStyle: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -92,7 +96,7 @@ function SortableRow({
   };
 
   const switchActive = item.isActive;
-  const deleteDisabled = isDeleting || isBlocked;
+  const deleteDisabled = isDeleting || isBlocked || isSystem;
 
   return (
     <div ref={setNodeRef} style={rowStyle} className="close-config-row">
@@ -101,6 +105,7 @@ function SortableRow({
         className="drag-handle-btn"
         aria-label={t('tenantAdmin.closeConfig.dragHandle')}
         title={t('tenantAdmin.closeConfig.dragHandle')}
+        disabled={isSystem}
         {...attributes}
         {...listeners}
       >
@@ -133,13 +138,19 @@ function SortableRow({
             {t('tenantAdmin.closeConfig.defaultBadge')}
           </span>
         ) : null}
+
+        {isSystem ? (
+          <span className="system-badge">
+            {t('tenantAdmin.closeConfig.systemBadge')}
+          </span>
+        ) : null}
       </div>
 
       <div className="row-actions">
         <button
           type="button"
           onClick={() => onToggle(item)}
-          disabled={isUpdating || !canManage}
+          disabled={isUpdating || !canManage || isSystem}
           className="toggle-btn"
           role="switch"
           aria-checked={switchActive}
@@ -177,7 +188,7 @@ function SortableRow({
           type="button"
           onClick={() => onEdit(item, kind)}
           className="icon-action-btn"
-          disabled={!canManage}
+          disabled={!canManage || isSystem}
           title={t('tenantAdmin.common.edit')}
           aria-label={t('tenantAdmin.common.edit')}
         >
@@ -610,7 +621,9 @@ export function CloseConfig() {
         const newIndex = prev.findIndex((item) => item.id === over.id);
         if (oldIndex < 0 || newIndex < 0) return prev;
         const next = arrayMove(prev, oldIndex, newIndex);
-        reorderTypesMutation.mutate(next.map((item) => item.id));
+        // Registros de sistema não podem ir no payload: a API rejeita o lote
+        // inteiro com 409 se qualquer id for sys_* (assertNotSystemRecord).
+        reorderTypesMutation.mutate(next.filter((item) => !item.isSystem).map((item) => item.id));
         return next;
       });
       return;
@@ -621,7 +634,7 @@ export function CloseConfig() {
       const newIndex = prev.findIndex((item) => item.id === over.id);
       if (oldIndex < 0 || newIndex < 0) return prev;
       const next = arrayMove(prev, oldIndex, newIndex);
-      reorderOutcomesMutation.mutate(next.map((item) => item.id));
+      reorderOutcomesMutation.mutate(next.filter((item) => !item.isSystem).map((item) => item.id));
       return next;
     });
   };
@@ -823,6 +836,17 @@ export function CloseConfig() {
               color: var(--txt-2);
             }
 
+            .drag-handle-btn:disabled {
+              cursor: not-allowed;
+              opacity: .35;
+            }
+
+            .drag-handle-btn:disabled:hover {
+              background: transparent;
+              border-color: transparent;
+              color: inherit;
+            }
+
             .default-badge {
               display: inline-flex;
               align-items: center;
@@ -832,6 +856,21 @@ export function CloseConfig() {
               border: 1px solid rgba(0,201,167,.3);
               background: var(--teal-dim);
               color: var(--teal);
+              font-size: 10px;
+              letter-spacing: .05em;
+              text-transform: uppercase;
+              font-weight: 600;
+            }
+
+            .system-badge {
+              display: inline-flex;
+              align-items: center;
+              height: 19px;
+              padding: 0 8px;
+              border-radius: 999px;
+              border: 1px solid var(--line-2);
+              background: var(--bg-4);
+              color: var(--txt-3);
               font-size: 10px;
               letter-spacing: .05em;
               text-transform: uppercase;

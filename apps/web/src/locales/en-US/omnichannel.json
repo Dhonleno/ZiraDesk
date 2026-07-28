@@ -330,8 +330,6 @@
     "cancel": "Cancel",
     "resolved": "Conversation resolved",
     "resolvedBanner": "This conversation has been resolved",
-    "reopen": "Reopen conversation",
-    "reopenError": "Error reopening conversation",
     "ratings": {
       "1": "Very bad",
       "2": "Bad",

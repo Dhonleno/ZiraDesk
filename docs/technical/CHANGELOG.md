@@ -1,5 +1,20 @@
 # Changelog — ZiraDesk
 
+## [0.10.5] — Remoção de reabertura de conversas e UX final do close-config (Passo 6/6)
+
+### Alterado
+- Omnichannel: o banner de conversa encerrada passou a ser apenas informativo; a ação de reabrir conversa foi removida para manter a regra de que protocolos encerrados não reabrem.
+- Admin close-config: registros de sistema agora aparecem com badge "Sistema", não podem ser arrastados e têm alternância, edição e exclusão desabilitadas na UI; payloads de reorder filtram `isSystem` por defesa em profundidade.
+
+### Removido
+- Frontend Omnichannel: removidos `reopenMutation`, alias `omnichannelApi.reopen`, helper órfão `omnichannelApi.updateConversation` e chaves `resolve.reopen`/`resolve.reopenError` dos 3 locales.
+
+### Corrigido
+- Close-config: frontend passou a tipar `ConversationCloseConfigItem.isSystem`, alinhando o contrato que a API já expunha desde o Passo 2.
+
+### Testes
+- Adicionado `close-config.integration.test.ts` com 5 casos cobrindo reorder admin-only, rejeição de IDs `sys_*` em tipos/desfechos e exposição de `isSystem` em `GET /types` e `GET /outcomes`.
+
 ## [0.10.4] — Mensagem pós-CSAT deixa de cair em conversa encerrada (Passo 4/6)
 
 ### Corrigido

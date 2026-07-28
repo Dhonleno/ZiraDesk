@@ -908,6 +908,7 @@
       "label": "Label",
       "labelPlaceholder": "Nome do item",
       "defaultBadge": "Padrão",
+      "systemBadge": "Sistema",
       "active": "Ativo",
       "inactive": "Inativo",
       "dragHandle": "Arrastar para reordenar",

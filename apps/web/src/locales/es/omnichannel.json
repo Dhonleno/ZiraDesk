@@ -330,8 +330,6 @@
     "cancel": "Cancelar",
     "resolved": "Atención resuelta",
     "resolvedBanner": "Esta atención fue resuelta",
-    "reopen": "Reabrir atención",
-    "reopenError": "Error al reabrir la atención",
     "ratings": {
       "1": "Muy mala",
       "2": "Mala",

@@ -908,6 +908,7 @@
       "label": "Etiqueta",
       "labelPlaceholder": "Nombre del ítem",
       "defaultBadge": "Predeterminado",
+      "systemBadge": "Sistema",
       "active": "Activo",
       "inactive": "Inactivo",
       "dragHandle": "Arrastrar para reordenar",
