@@ -3,6 +3,11 @@ import { prisma } from '../config/database.js';
 import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 import { getSocketServer } from '../socket/index.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../database/seeds/closeConfig.seed.js';
 
 interface WaitingExpiryJobData {}
 
@@ -48,17 +53,23 @@ async function closeExpiredWaitingConversations(): Promise<void> {
                closure_reason = $1::jsonb,
                closed_at = $2,
                resolved_at = $2,
+               close_type_id = $3,
+               close_outcome_id = $4,
                waiting_expires_at = NULL
            WHERE status = 'waiting'
              AND waiting_expires_at < NOW()
            RETURNING id`,
-          JSON.stringify({
-            reason: 'expired',
-            notes: 'Sem resposta do cliente',
-            resolvedAt: closedAt,
-            agentId: null,
-          }),
+          JSON.stringify(
+            buildSystemClosureReason({
+              reason: 'expired',
+              notes: 'Sem resposta do cliente',
+              outcomeId: SYSTEM_OUTCOME_IDS.NO_REPLY,
+              resolvedAt: closedAt,
+            }),
+          ),
           closedAt,
+          SYSTEM_CLOSE_TYPE_ID,
+          SYSTEM_OUTCOME_IDS.NO_REPLY,
         );
       });
 

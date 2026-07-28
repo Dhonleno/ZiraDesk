@@ -394,7 +394,7 @@ describe('handle24hWindowExpiration', () => {
     const reason = typeof conv?.closure_reason === 'string'
       ? JSON.parse(conv.closure_reason)
       : conv?.closure_reason;
-    expect((reason as Record<string, unknown>)?.type).toBe('expired_24h');
+    expect((reason as Record<string, unknown>)?.reason).toBe('expired_24h');
   });
 
   it('does NOT close conversation with action=keep_open', async () => {

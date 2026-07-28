@@ -32,6 +32,65 @@ export const SYSTEM_CLOSE_OUTCOMES: ReadonlyArray<CloseConfigSystemSeedInput> = 
   { id: 'sys_auto_generic', label: 'Encerramento automático', order: 996 },
 ];
 
+/** Único tipo de sistema: todo fechamento automático cai neste balde. */
+export const SYSTEM_CLOSE_TYPE_ID = 'sys_auto';
+
+/** Lookup nomeado dos desfechos de sistema, um por caminho de fechamento automático. */
+export const SYSTEM_OUTCOME_IDS = {
+  NO_REPLY: 'sys_no_reply',
+  INACTIVITY: 'sys_inactivity',
+  DELIVERY_FAIL: 'sys_delivery_fail',
+  SUPERVISOR: 'sys_supervisor',
+  QUEUE_24H: 'sys_queue_24h',
+  BY_CLIENT: 'sys_by_client',
+  AUTO_GENERIC: 'sys_auto_generic',
+} as const;
+
+export type SystemOutcomeId = (typeof SYSTEM_OUTCOME_IDS)[keyof typeof SYSTEM_OUTCOME_IDS];
+
+const SYSTEM_LABEL_BY_ID = new Map<string, string>(
+  [...SYSTEM_CLOSE_TYPES, ...SYSTEM_CLOSE_OUTCOMES].map((item) => [item.id, item.label]),
+);
+
+export interface SystemClosureReason {
+  reason: string;
+  notes: string | null;
+  closeTypeId: string;
+  closeTypeLabel: string | null;
+  closeOutcomeId: SystemOutcomeId;
+  closeOutcomeLabel: string | null;
+  resolvedAt: Date;
+  agentId: string | null;
+  [key: string]: unknown;
+}
+
+/**
+ * Monta o `closure_reason` dos fechamentos automáticos no mesmo formato que
+ * `closeConversation` grava para o agente, para que os dois sejam legíveis pela
+ * mesma consulta. Os labels vêm das constantes de seed, então acompanham
+ * qualquer renomeação sem duplicar string.
+ */
+export function buildSystemClosureReason(params: {
+  reason: string;
+  outcomeId: SystemOutcomeId;
+  resolvedAt: Date;
+  notes?: string | null;
+  agentId?: string | null;
+  extra?: Record<string, unknown>;
+}): SystemClosureReason {
+  return {
+    reason: params.reason,
+    notes: params.notes ?? null,
+    closeTypeId: SYSTEM_CLOSE_TYPE_ID,
+    closeTypeLabel: SYSTEM_LABEL_BY_ID.get(SYSTEM_CLOSE_TYPE_ID) ?? null,
+    closeOutcomeId: params.outcomeId,
+    closeOutcomeLabel: SYSTEM_LABEL_BY_ID.get(params.outcomeId) ?? null,
+    resolvedAt: params.resolvedAt,
+    agentId: params.agentId ?? null,
+    ...(params.extra ?? {}),
+  };
+}
+
 const DEFAULT_CLOSE_TYPES: ReadonlyArray<CloseConfigSeedInput> = [
   { label: 'Dúvida', order: 0 },
   { label: 'Solicitação de serviço', order: 1 },

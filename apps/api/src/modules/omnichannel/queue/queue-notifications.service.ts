@@ -4,6 +4,11 @@ import { decryptCredentials } from '../../../utils/crypto.js';
 import { logger } from '../../../config/logger.js';
 import { quoteIdent } from '../conversations/protocols.js';
 import { ensureQueueNotificationsInfrastructure } from './queue-notifications.infrastructure.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../../../database/seeds/closeConfig.seed.js';
 
 interface QueueSettings {
   queue_notifications_enabled: boolean;
@@ -315,15 +320,30 @@ export async function handle24hWindowExpiration(
           settings.expire_24h_message,
         );
 
+        const expiredClosedAt = new Date();
         await prisma.$executeRawUnsafe(
           `UPDATE ${quoteIdent(schemaName)}.conversations
            SET status = 'closed',
                closure_reason = $2::jsonb,
                queue_entered_at = NULL,
-               closed_at = NOW()
-           WHERE id = $1::uuid`,
+               closed_at = $3,
+               resolved_at = $3,
+               close_type_id = $4,
+               close_outcome_id = $5
+           WHERE id = $1::uuid
+             AND status = 'open'`,
           row.id,
-          JSON.stringify({ type: 'expired_24h' }),
+          JSON.stringify(
+            buildSystemClosureReason({
+              reason: 'expired_24h',
+              notes: 'Expirado na fila após 24h',
+              outcomeId: SYSTEM_OUTCOME_IDS.QUEUE_24H,
+              resolvedAt: expiredClosedAt,
+            }),
+          ),
+          expiredClosedAt,
+          SYSTEM_CLOSE_TYPE_ID,
+          SYSTEM_OUTCOME_IDS.QUEUE_24H,
         );
 
         await auditQueueNotification(schemaName, row.id, 'conversation.queue.expired_24h', {

@@ -7,6 +7,11 @@ import { decryptCredentials } from '../utils/crypto.js';
 import { sendWhatsAppTextMessage } from '../modules/omnichannel/conversations/csat.service.js';
 import { getSocketServer } from '../socket/index.js';
 import { syncAgentAvailability } from '../modules/omnichannel/conversations/auto-assign.service.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../database/seeds/closeConfig.seed.js';
 
 type InactivityType = 'warning' | 'close';
 
@@ -241,21 +246,30 @@ async function processInactivity(jobData: InactivityJobData): Promise<void> {
     },
   });
 
+  const inactivityClosedAt = new Date();
   await prisma.$executeRawUnsafe(
     `UPDATE ${quoteIdent(schemaName)}.conversations
      SET status = 'closed',
-         resolved_at = NOW(),
+         closed_at = $3,
+         resolved_at = $3,
          closure_reason = $2::jsonb,
+         close_type_id = $4,
+         close_outcome_id = $5,
          waiting_expires_at = NULL
      WHERE id = $1::uuid
        AND status IN ('open', 'waiting')`,
     conversationId,
-    JSON.stringify({
-      reason: 'inactivity',
-      notes: 'Encerrado por inatividade',
-      resolvedAt: new Date(),
-      agentId: null,
-    }),
+    JSON.stringify(
+      buildSystemClosureReason({
+        reason: 'inactivity',
+        notes: 'Encerrado por inatividade',
+        outcomeId: SYSTEM_OUTCOME_IDS.INACTIVITY,
+        resolvedAt: inactivityClosedAt,
+      }),
+    ),
+    inactivityClosedAt,
+    SYSTEM_CLOSE_TYPE_ID,
+    SYSTEM_OUTCOME_IDS.INACTIVITY,
   );
 
   await syncAgentAvailability(prisma, schemaName, [conversation.assigned_to], tenantId);

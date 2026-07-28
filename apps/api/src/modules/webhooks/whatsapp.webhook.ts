@@ -29,6 +29,11 @@ import { loadConversationSocketPayload } from '../omnichannel/conversations/sock
 import { autoAssignConversation } from '../omnichannel/conversations/auto-assign.service.js';
 import { ensureConversationCsatInfrastructure } from '../omnichannel/conversations/csat.infrastructure.js';
 import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../../database/seeds/closeConfig.seed.js';
+import {
   buildCsatCommentRequestMessage,
   buildCsatInvalidScoreMessage,
   buildCsatThankYouMessage,
@@ -1222,10 +1227,15 @@ async function processIncomingMessage(
       channelId,
     );
 
+    const waitingExpiredAt = new Date();
     await tx.$executeRawUnsafe(
       `UPDATE conversations
        SET status = 'closed',
-           closed_at = NOW(),
+           closed_at = $4,
+           resolved_at = $4,
+           close_type_id = $5,
+           close_outcome_id = $6,
+           closure_reason = $7::jsonb,
            metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
        WHERE contact_id = $1::uuid
          AND channel_id = $2::uuid
@@ -1236,8 +1246,19 @@ async function processIncomingMessage(
       channelId,
       JSON.stringify({
         waiting_expired: true,
-        waiting_expired_at: new Date().toISOString(),
+        waiting_expired_at: waitingExpiredAt.toISOString(),
       }),
+      waitingExpiredAt,
+      SYSTEM_CLOSE_TYPE_ID,
+      SYSTEM_OUTCOME_IDS.NO_REPLY,
+      JSON.stringify(
+        buildSystemClosureReason({
+          reason: 'expired',
+          notes: 'Sem resposta do cliente',
+          outcomeId: SYSTEM_OUTCOME_IDS.NO_REPLY,
+          resolvedAt: waitingExpiredAt,
+        }),
+      ),
     );
 
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
@@ -1330,12 +1351,31 @@ async function processIncomingMessage(
 
     const normalizedIncomingContent = content.trim().toLowerCase();
     if (normalizedIncomingContent === CLOSE_KEYWORD) {
+      // COALESCE: a conversa pode já estar encerrada e só na janela de CSAT
+      // (ver SELECT de resolução acima) — não sobrescrever a classificação
+      // que o agente gravou ao encerrar.
+      const keywordClosedAt = new Date();
       await tx.$executeRawUnsafe(
         `UPDATE conversations
          SET status = 'closed',
-             resolved_at = NOW()
+             closed_at = COALESCE(closed_at, $2),
+             resolved_at = COALESCE(resolved_at, $2),
+             close_type_id = COALESCE(close_type_id, $3),
+             close_outcome_id = COALESCE(close_outcome_id, $4),
+             closure_reason = COALESCE(closure_reason, $5::jsonb)
          WHERE id = $1::uuid`,
         conversationId,
+        keywordClosedAt,
+        SYSTEM_CLOSE_TYPE_ID,
+        SYSTEM_OUTCOME_IDS.BY_CLIENT,
+        JSON.stringify(
+          buildSystemClosureReason({
+            reason: 'closed_by_client',
+            notes: 'Encerrado pelo cliente via palavra-chave',
+            outcomeId: SYSTEM_OUTCOME_IDS.BY_CLIENT,
+            resolvedAt: keywordClosedAt,
+          }),
+        ),
       );
 
       await sendConversationWhatsAppText(channelCredentials, formattedPhone, CLOSE_MESSAGE);
@@ -1408,15 +1448,32 @@ async function processIncomingMessage(
         && new Date() > new Date(currentCsatExpiresAt);
 
       if (csatExpired) {
+        // A conversa já estava encerrada quando o CSAT foi enviado: só
+        // preenche a classificação se ainda estiver vazia.
+        const csatExpiredAt = new Date();
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET csat_stage = 'done',
                csat_expires_at = NULL,
                status = 'closed',
-               closed_at = COALESCE(closed_at, NOW()),
-               resolved_at = COALESCE(resolved_at, NOW())
+               closed_at = COALESCE(closed_at, $2),
+               resolved_at = COALESCE(resolved_at, $2),
+               close_type_id = COALESCE(close_type_id, $3),
+               close_outcome_id = COALESCE(close_outcome_id, $4),
+               closure_reason = COALESCE(closure_reason, $5::jsonb)
            WHERE id = $1::uuid`,
           conversationId,
+          csatExpiredAt,
+          SYSTEM_CLOSE_TYPE_ID,
+          SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+          JSON.stringify(
+            buildSystemClosureReason({
+              reason: 'csat_expired',
+              notes: 'CSAT expirado sem resposta do cliente',
+              outcomeId: SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+              resolvedAt: csatExpiredAt,
+            }),
+          ),
         );
         shouldHandleCsat = false;
       }
@@ -1558,17 +1615,33 @@ async function processIncomingMessage(
       }
 
       if (shouldFinalizeCsat) {
+        // Idem: a classificação do agente que encerrou tem precedência.
+        const csatFinalizedAt = new Date();
         await tx.$executeRawUnsafe(
           `UPDATE conversations
            SET csat_comment = $1,
                csat_stage = 'done',
                csat_expires_at = NULL,
                status = 'closed',
-               closed_at = COALESCE(closed_at, NOW()),
-               resolved_at = COALESCE(resolved_at, NOW())
+               closed_at = COALESCE(closed_at, $3),
+               resolved_at = COALESCE(resolved_at, $3),
+               close_type_id = COALESCE(close_type_id, $4),
+               close_outcome_id = COALESCE(close_outcome_id, $5),
+               closure_reason = COALESCE(closure_reason, $6::jsonb)
            WHERE id = $2::uuid`,
           nextComment,
           conversationId,
+          csatFinalizedAt,
+          SYSTEM_CLOSE_TYPE_ID,
+          SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+          JSON.stringify(
+            buildSystemClosureReason({
+              reason: 'csat_completed',
+              notes: 'Encerrado após conclusão do CSAT',
+              outcomeId: SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+              resolvedAt: csatFinalizedAt,
+            }),
+          ),
         );
       }
 

@@ -1,6 +1,11 @@
 import { prisma } from '../../config/database.js';
 import { getSocketServer } from '../../socket/index.js';
 import { dispatchWebhook } from '../../services/webhook-dispatcher.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../../database/seeds/closeConfig.seed.js';
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -24,20 +29,27 @@ export async function closeFailedInitialOutbound({
   tenantId,
 }: CloseFailedOutboundInput): Promise<boolean> {
   const schema = quoteIdent(schemaName);
-  const closureReason = {
+  const closedAt = new Date();
+  const closureReason = buildSystemClosureReason({
     reason: 'outbound_delivery_failed',
-    provider,
-    messageId,
-    errorMessage: reason.slice(0, 500),
-    closedAutomatically: true,
-  };
+    outcomeId: SYSTEM_OUTCOME_IDS.DELIVERY_FAIL,
+    resolvedAt: closedAt,
+    extra: {
+      provider,
+      messageId,
+      errorMessage: reason.slice(0, 500),
+      closedAutomatically: true,
+    },
+  });
 
   const closedRows = await prisma.$queryRawUnsafe<Array<{ id: string; closed_at: Date | null }>>(
     `UPDATE ${schema}.conversations c
      SET status = 'closed',
          closure_reason = $2::jsonb,
-         closed_at = NOW(),
-         resolved_at = NOW(),
+         closed_at = $4,
+         resolved_at = $4,
+         close_type_id = $5,
+         close_outcome_id = $6,
          waiting_expires_at = NULL,
          queue_entered_at = NULL
      WHERE c.id = $1::uuid
@@ -65,6 +77,9 @@ export async function closeFailedInitialOutbound({
     conversationId,
     JSON.stringify(closureReason),
     messageId,
+    closedAt,
+    SYSTEM_CLOSE_TYPE_ID,
+    SYSTEM_OUTCOME_IDS.DELIVERY_FAIL,
   );
 
   const closedConversation = closedRows[0];

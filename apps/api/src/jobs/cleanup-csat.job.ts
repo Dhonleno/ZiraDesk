@@ -2,6 +2,11 @@ import { Queue, Worker } from 'bullmq';
 import { prisma } from '../config/database.js';
 import { bullmqConnection } from '../config/redis.js';
 import { logger } from '../config/logger.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../database/seeds/closeConfig.seed.js';
 
 interface CsatCleanupJobData {}
 
@@ -30,14 +35,21 @@ async function cleanupExpiredCsat(): Promise<void> {
     const safeSchemaName = tenant.schema_name.replace(/"/g, '""');
     const updatedCount = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${safeSchemaName}", public`);
+      // Lote: todas as linhas compartilham o mesmo desfecho, então o JSONB é
+      // constante. COALESCE preserva a classificação de quem encerrou antes do
+      // CSAT ser enviado — o sweeper só preenche o que estiver vazio.
+      const sweptAt = new Date();
       const rows = await tx.$queryRawUnsafe<Array<{ updated: bigint }>>(
         `WITH expired AS (
            UPDATE conversations
            SET csat_stage = 'done',
                csat_expires_at = NULL,
                status = 'closed',
-               closed_at = COALESCE(closed_at, NOW()),
-               resolved_at = COALESCE(resolved_at, NOW())
+               closed_at = COALESCE(closed_at, $1),
+               resolved_at = COALESCE(resolved_at, $1),
+               close_type_id = COALESCE(close_type_id, $2),
+               close_outcome_id = COALESCE(close_outcome_id, $3),
+               closure_reason = COALESCE(closure_reason, $4::jsonb)
            WHERE csat_stage IN ('sent', 'waiting_comment')
              AND csat_expires_at IS NOT NULL
              AND csat_expires_at < NOW()
@@ -45,6 +57,17 @@ async function cleanupExpiredCsat(): Promise<void> {
          )
          SELECT COUNT(*)::bigint AS updated
          FROM expired`,
+        sweptAt,
+        SYSTEM_CLOSE_TYPE_ID,
+        SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+        JSON.stringify(
+          buildSystemClosureReason({
+            reason: 'csat_expired',
+            notes: 'CSAT expirado sem resposta do cliente',
+            outcomeId: SYSTEM_OUTCOME_IDS.AUTO_GENERIC,
+            resolvedAt: sweptAt,
+          }),
+        ),
       );
       return Number(rows[0]?.updated ?? 0n);
     });

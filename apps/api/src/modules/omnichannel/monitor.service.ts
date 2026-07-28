@@ -4,6 +4,11 @@ import {
 } from './conversations/auto-assign.service.js';
 import { ensureSkillsInfrastructure } from '../admin/skills/skills.infrastructure.js';
 import { ensureConversationProtocolInfrastructure, quoteIdent } from './conversations/protocols.js';
+import {
+  SYSTEM_CLOSE_TYPE_ID,
+  SYSTEM_OUTCOME_IDS,
+  buildSystemClosureReason,
+} from '../../database/seeds/closeConfig.seed.js';
 
 interface MonitorAgent {
   id: string;
@@ -422,12 +427,13 @@ export async function closeMonitorBotConversation(
   await ensureBotConversationState(schemaName, conversationId, 'close');
   const safeSchema = quoteIdent(schemaName);
   const closedAt = new Date();
-  const closureReason = {
+  const closureReason = buildSystemClosureReason({
     reason: 'bot_stuck',
     notes: 'Encerrado pelo supervisor',
+    outcomeId: SYSTEM_OUTCOME_IDS.SUPERVISOR,
     resolvedAt: closedAt,
     agentId: userId,
-  };
+  });
   const systemMessage = message?.trim() || 'Atendimento encerrado pelo supervisor.';
 
   await prisma.$transaction(async (tx) => {
@@ -437,6 +443,9 @@ export async function closeMonitorBotConversation(
            closure_reason = $2::jsonb,
            closed_at = $3,
            resolved_at = $3,
+           close_type_id = $5,
+           close_outcome_id = $6,
+           closed_by_user_id = $4::uuid,
            waiting_expires_at = NULL,
            queue_entered_at = NULL,
            metadata = COALESCE(c.metadata, '{}'::jsonb) || jsonb_build_object(
@@ -450,6 +459,8 @@ export async function closeMonitorBotConversation(
       JSON.stringify(closureReason),
       closedAt,
       userId,
+      SYSTEM_CLOSE_TYPE_ID,
+      SYSTEM_OUTCOME_IDS.SUPERVISOR,
     );
 
     if (!updated[0]) throw new MonitorBotInvalidStateError('Conversa não está no bot');
