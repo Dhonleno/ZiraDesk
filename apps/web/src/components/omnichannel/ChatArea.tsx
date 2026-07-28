@@ -31,7 +31,7 @@ type Message = OmnichannelMessage;
 type Conversation = OmnichannelConversation;
 type MessageListEntry =
   | { kind: 'date'; key: string; date: string }
-  | { kind: 'message'; key: string; message: Message };
+  | { kind: 'message'; key: string; message: Message; showHeader: boolean };
 type MentionData = NonNullable<NonNullable<Message['metadata']>['mention']>;
 type CallRecordingMetadata = {
   recording_url: string;
@@ -151,6 +151,28 @@ function getConversationStage(conversation: Conversation | undefined): string | 
 
 function formatTime(dateStr: string, locale: string) {
   return new Date(dateStr).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Intervalo a partir do qual o mesmo remetente reabre um bloco (padrão Slack). */
+const MESSAGE_GROUP_GAP_MS = 5 * 60_000;
+
+/**
+ * Identidade de remetente para efeito de agrupamento.
+ *
+ * Precisa mudar sempre que o rótulo renderizado mudaria — senão duas mensagens
+ * com rótulos diferentes colapsariam sob um cabeçalho só, atribuindo a fala ao
+ * remetente errado. Daí Bot e IA serem chaves distintas (ambos são
+ * `sender_type = 'bot'`, separados só por `metadata.source`) e o agente carregar
+ * id e nome (o rótulo cai para o nome quando o id vem nulo).
+ */
+function resolveSenderGroupKey(msg: Message): string {
+  if (msg.sender_type === 'bot') {
+    return msg.metadata?.source === 'ai_agent' ? 'ai' : 'bot';
+  }
+  if (msg.sender_type === 'agent') {
+    return `agent:${msg.sender_id ?? ''}|${msg.sender_name ?? ''}`;
+  }
+  return `${msg.sender_type}:${msg.sender_id ?? ''}`;
 }
 
 function formatDate(dateStr: string, todayLabel: string, yesterdayLabel: string, locale: string) {
@@ -1548,6 +1570,8 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     const locale = i18n.language;
     const list: MessageListEntry[] = [];
     let previousDateLabel: string | null = null;
+    let previousSenderKey: string | null = null;
+    let previousMessageTime: number | null = null;
     for (const msg of messages) {
       const dateLabel = formatDate(msg.created_at, todayLabel, yesterdayLabel, locale);
       if (previousDateLabel !== dateLabel) {
@@ -1557,8 +1581,30 @@ export function ChatArea({ conversationId, onClosed }: Props) {
           date: dateLabel,
         });
         previousDateLabel = dateLabel;
+        // Quebra de dia reabre o bloco: o cabeçalho volta na primeira do dia.
+        previousSenderKey = null;
+        previousMessageTime = null;
       }
-      list.push({ kind: 'message', key: msg.id, message: msg });
+
+      // Mensagens de sistema têm layout próprio (divisória) e não participam do
+      // agrupamento — mas interrompem o bloco, então a próxima real vem com cabeçalho.
+      if (msg.sender_type === 'system') {
+        list.push({ kind: 'message', key: msg.id, message: msg, showHeader: true });
+        previousSenderKey = null;
+        previousMessageTime = null;
+        continue;
+      }
+
+      const senderKey = resolveSenderGroupKey(msg);
+      const messageTime = new Date(msg.created_at).getTime();
+      const gapTooLong = previousMessageTime !== null
+        && Number.isFinite(messageTime)
+        && messageTime - previousMessageTime > MESSAGE_GROUP_GAP_MS;
+      const showHeader = senderKey !== previousSenderKey || gapTooLong;
+
+      list.push({ kind: 'message', key: msg.id, message: msg, showHeader });
+      previousSenderKey = senderKey;
+      previousMessageTime = Number.isFinite(messageTime) ? messageTime : null;
     }
     return list;
   }, [messages, t, i18n.language]);
@@ -1571,7 +1617,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
     overscan: 5,
   });
 
-  const renderMessageRow = useCallback((msg: Message) => {
+  const renderMessageRow = useCallback((msg: Message, showHeader: boolean) => {
     const isAgent = msg.sender_type === 'agent';
     const isBot = msg.sender_type === 'bot';
     const isAIMessage = isBot && msg.metadata?.source === 'ai_agent';
@@ -1606,11 +1652,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
       ?? conv?.assigned_name
       ?? currentUserName
       ?? t('chat.noAgent');
-    const contactDisplayName = displayName;
-    const organizationDisplayName = conv?.organization_name?.trim();
-    const clientLabel = organizationDisplayName
-      ? `${contactDisplayName} - ${organizationDisplayName}`
-      : contactDisplayName;
+    // A organização não entra no fio: ela já aparece no cabeçalho da conversa e
+    // no painel lateral, e repeti-la a cada bloco só alonga o rótulo.
+    const clientLabel = displayName;
     const senderLabel = isSystem
       ? t('chat.systemLabel')
       : isAIMessage
@@ -1680,6 +1724,8 @@ export function ChatArea({ conversationId, onClosed }: Props) {
           gap: 8,
           alignItems: 'flex-end',
           marginBottom: 4,
+          // Respiro maior antes de um bloco novo, menor dentro do mesmo bloco.
+          marginTop: showHeader ? 10 : 0,
           justifyContent: 'flex-start',
           flexDirection: isCompanySide ? 'row-reverse' : 'row',
         }}
@@ -1687,6 +1733,9 @@ export function ChatArea({ conversationId, onClosed }: Props) {
         <div
           className={(!isAIMessage && !isBot) ? avatarClass(isAgent ? (conv?.assigned_name ?? 'A') : (avatarName ?? displayName)) : undefined}
           style={{
+            // Só o primeiro do bloco mostra avatar; os demais mantêm a coluna
+            // reservada para os balões não desalinharem.
+            visibility: showHeader ? 'visible' : 'hidden',
             width: 28,
             height: 28,
             borderRadius: '50%',
@@ -1732,7 +1781,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
         </div>
 
         <div style={{ maxWidth: '65%', display: 'flex', flexDirection: 'column', alignItems: isCompanySide ? 'flex-end' : 'flex-start' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          {showHeader && (
             <span
               style={{
                 fontSize: 11,
@@ -1740,6 +1789,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                 letterSpacing: '0.02em',
                 color: senderLabelColor,
                 alignSelf: isCompanySide ? 'flex-end' : 'flex-start',
+                marginBottom: 2,
                 maxWidth: '100%',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -1749,27 +1799,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             >
               {senderLabel}
             </span>
-            {canMentionThisMessage && (
-              <button
-                type="button"
-                onClick={() => handleMentionMessage(msg, senderLabel)}
-                title={t('chat.mentionMessage')}
-                aria-label={t('chat.mentionMessage')}
-                style={{
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg-4)',
-                  color: 'var(--txt-3)',
-                  borderRadius: 999,
-                  padding: '1px 6px',
-                  fontSize: 10,
-                  cursor: 'pointer',
-                  lineHeight: 1.5,
-                }}
-              >
-                ↩
-              </button>
-            )}
-          </div>
+          )}
           <div
             style={{
               padding: isAudioMessage ? '4px 6px' : '9px 13px',
@@ -1906,13 +1936,37 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             )}
           </div>
         </div>
+
+        {/* Menção é por mensagem, não por bloco: fica ao lado do balão para
+            aparecer igual nas mensagens agrupadas, que não têm cabeçalho. */}
+        {canMentionThisMessage && (
+          <button
+            type="button"
+            onClick={() => handleMentionMessage(msg, senderLabel)}
+            title={t('chat.mentionMessage')}
+            aria-label={t('chat.mentionMessage')}
+            style={{
+              border: '1px solid var(--line)',
+              background: 'var(--bg-4)',
+              color: 'var(--txt-3)',
+              borderRadius: 999,
+              padding: '1px 6px',
+              fontSize: 10,
+              cursor: 'pointer',
+              lineHeight: 1.5,
+              flexShrink: 0,
+              marginBottom: 2,
+            }}
+          >
+            ↩
+          </button>
+        )}
       </div>
     );
   }, [
     avatarName,
     canSendMessage,
     conv?.assigned_name,
-    conv?.organization_name,
     conversationId,
     currentUserName,
     displayName,
@@ -1931,7 +1985,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
         </div>
       );
     }
-    return renderMessageRow(entry.message);
+    return renderMessageRow(entry.message, entry.showHeader);
   }, [renderMessageRow]);
 
   return (
@@ -2313,7 +2367,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
                 >
                   {entry.kind === 'message' ? (
                     <div data-entry-type="message" data-message-id={entry.message.id}>
-                      {renderMessageRow(entry.message)}
+                      {renderMessageRow(entry.message, entry.showHeader)}
                     </div>
                   ) : (
                     <div data-entry-type="date">
