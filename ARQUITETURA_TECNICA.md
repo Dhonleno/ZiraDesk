@@ -412,9 +412,9 @@ Middleware extrai "empresa"
     ↓
 Busca tenant no schema public
     ↓
-Define search_path = tenant_empresa
+Abre transação request-scoped e executa SET LOCAL search_path = tenant_empresa, public
     ↓
-Todas as queries operam no schema correto
+Queries tenant-scoped usam o client Prisma do contexto da request; modelos globais seguem no schema public
 ```
 
 ### Middleware de tenant (pseudocódigo)
@@ -427,8 +427,10 @@ async function tenantMiddleware(request, reply) {
   if (!tenant) return reply.status(404).send({ error: 'Tenant not found' })
   if (tenant.status !== 'active') return reply.status(402).send({ error: 'Subscription inactive' })
 
-  // Define o schema para essa requisição
-  await db.$executeRaw`SET search_path TO "tenant_${slug}"`
+  // Vincula a request a uma transação com SET LOCAL, evitando vazamento pelo pool.
+  const tx = await openRequestTransaction()
+  await tx.$executeRaw`SET LOCAL search_path TO "tenant_${slug}", public`
+  enterPrismaContext(tx)
   request.tenant = tenant
 }
 ```
@@ -1378,8 +1380,9 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 
 ## 16. DÍVIDA TÉCNICA CONHECIDA
 
-- **[CRÍTICO] `SET search_path` sem `LOCAL` em `apps/api/src/middleware/tenantSchemaFromJwt.ts`** — o middleware seta o schema do tenant via `prisma.$executeRawUnsafe('SET search_path TO "..."')` fora de transação, no client `prisma` compartilhado (pool de conexões). Sob concorrência, a conexão física que recebeu esse `SET` pode ser devolvida ao pool e reaproveitada por uma requisição de **outro tenant** antes de um novo `SET` correto — risco real de vazamento de dados cross-tenant. Mitigação aplicada nesta sessão: validação regex do `schemaName` antes de interpolar (fecha o vetor de injeção, mantém o mesmo padrão de whitelist usado em ~20 outros arquivos do codebase). **A race condition do pool não foi corrigida** — o fix correto exige uma de duas abordagens estruturais: (a) fixar uma conexão dedicada por request (ex.: via `$transaction` cobrindo todo o ciclo de vida da request, o que não é trivial com o modelo de hooks do Fastify) ou (b) eliminar todo uso do client `prisma` singleton em queries tenant-scoped, migrando os ~100 arquivos que hoje dependem do `search_path` ambiente para o padrão `withTenantSchema`/`tableRef` já usado em ~35 módulos (tickets, conversations, metrics, csat, crm, departments, skills, etc.). Qualquer uma das duas é um refactor multi-arquivo que exige sua própria sessão de implementação + testes de carga — não cabe em "zero alteração de comportamento". **Escopo: sprint dedicada antes de operar múltiplos tenants concorrentes em produção com volume relevante.**
+- ~~**[CRÍTICO] `SET search_path` sem `LOCAL` em `apps/api/src/middleware/tenantSchemaFromJwt.ts`**~~ — **✅ Resolvido**: requests autenticadas de tenant agora entram em uma transação Prisma request-scoped aberta a partir de `rootPrisma`, executam `SET LOCAL search_path TO "<schema>", public` e usam um proxy Prisma com `AsyncLocalStorage` para direcionar queries tenant-scoped ao transaction client. O fechamento ocorre nos hooks `onSend`/`onError`/`onResponse`; modelos globais (`tenant`, `plan`, `usageSnapshot`, `subscription`, `superAdmin`) seguem sempre pelo Prisma raiz. Coberto por testes de schema ativo, transação aninhada via proxy e concorrência entre tenants diferentes.
 - Race conditions transitórias na suite de testes (origem provável: Socket.io ou pool Postgres) — investigar antes de produção. Instância observada: `tickets.integration.test.ts > POST /api/tickets/:id/accept` falha em ~2 de 3 execuções no mesmo commit, sem alteração de código entre runs (ver sessão de correção de porta em `.env.test`, commit `07cee74`).
+- **[BAIXO] Tarefas best-effort ainda não têm fila/drain centralizado em testes** — e-mails, webhooks, CSAT e integrações externas são disparados como tarefas destacadas em alguns fluxos. A sessão atual isolou os disparos de tickets do transaction client fechado, mas a suíte ainda pode registrar warnings de tarefas que terminam após teardown de schemas temporários (`schema ... does not exist`) ou chamadas externas mockadas com credenciais inválidas. Recomenda-se centralizar esse padrão em uma fila/job runner testável com `drain` explícito no teardown.
 - Templates: rota `POST /sync` não tem teste E2E (mock de fetch entre processos limitado) — função interna `syncTemplatesFromMeta` tem cobertura
 - Vitest emite `close timed out after 10000ms` no encerramento — não afeta resultados, Socket.io não fecha limpo no teardown
 - ~~Tipo `Ticket` duplicado entre `apps/web/src/services/api.ts` e `packages/shared/src/types/ticket.ts`~~ — **✅ Resolvido** (commit `4988e1f`: tipo duplicado removido, zero imports confirmados).
@@ -1390,7 +1393,7 @@ O job `lgpd-retention.job.ts` processa duas classes de dados a cada ciclo:
 - Bundle do frontend sem lazy-loading por rota: `apps/web/vite.config.ts` faz code-splitting só dos vendors (`manualChunks`); o chunk da aplicação (rotas/páginas/componentes próprios) fica em um único arquivo de ~3.4MB (950KB gzip), acima do `chunkSizeWarningLimit: 600`. Faltaria `React.lazy()`/`import()` dinâmico por rota em `App.tsx`. Não bloqueia funcionalidade, afeta TTI do carregamento inicial.
 - CI (`.github/workflows/ci.yml`) só roda testes/type-check de `@ziradesk/api` — mudanças em `apps/web` não são validadas automaticamente antes do deploy (nem `pnpm --filter @ziradesk/web type-check`, nem testes de frontend rodam como gate de CI).
 - **[MÉDIO] Segundo motor de roteamento sem skills** — `pickNextAgentForDepartment` em `tickets.service.ts:288` (usado em `:950` e `:1845`) faz round-robin só por departamento, sem nenhuma consciência de skills. A migração para AND logic (Fase 2) cobriu só o roteamento de conversas/omnichannel; tickets seguem com o motor antigo. Decidir se tickets devem migrar para o mesmo motor de skills ou se é intencional manter dois modelos de roteamento distintos.
-- **[BAIXO] `.env.test` aponta para porta Postgres errada** — `apps/api/.env.test` usa `localhost:5432`; o Docker Compose do projeto expõe `5433`. Isso faz o `global-setup` de testes falhar em `prisma migrate deploy` com zero testes coletados, a menos que `DATABASE_URL` seja sobrescrita manualmente na execução. Corrigir o valor padrão do arquivo (ou documentar a variável de ambiente correta no README de setup local).
+- ~~**[BAIXO] `.env.test` aponta para porta Postgres errada**~~ — **✅ Resolvido**: arquivo de teste versionado já aponta para `localhost:5433`; nesta sessão também foi atualizado para usar `RESEND_WEBHOOK_SECRET` em formato Svix (`whsec_...`), permitindo validar os webhooks de e-mail com assinatura real.
 - **[BAIXO] Tipos `AgentSkill`/`AgentWithSkills` desatualizados em `services/api.ts`** — descrevem o formato legado (`bot_option_id`, `label`, `tag`) usado por `MonitorData.agents`, mas `monitor.service.ts:103-154` já retorna o payload v2 (join em `agent_skills`/`skills`). O tipo do frontend não reflete o payload real da API. Candidato à Fase 4b parte 2.
 
 ---

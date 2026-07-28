@@ -1,5 +1,24 @@
 # Changelog — ZiraDesk
 
+## [0.10.1] — Isolamento transacional por tenant e estabilização de webhooks
+
+### Alterado
+- API multitenant: `tenantSchemaFromJwt` deixou de usar `SET search_path` solto no pool e passou a vincular requests autenticadas de tenant a uma transação Prisma request-scoped com `SET LOCAL search_path`.
+- Prisma: o client exportado passou a ser um proxy com contexto via `AsyncLocalStorage`; modelos globais (`tenant`, `plan`, `usageSnapshot`, `subscription`, `superAdmin`) seguem sempre pelo Prisma raiz.
+- Tickets: tarefas best-effort de e-mail, webhooks e Redmine agora rodam em contexto Prisma raiz quando destacadas da resposta HTTP.
+
+### Corrigido
+- Webhooks Meta: preHandlers de assinatura agora retornam a resposta enviada em falhas de HMAC, evitando continuação da rota e erro `Cannot write headers after they are sent`.
+- Webhook WhatsApp: o processamento pós-ACK foi explicitamente destacado com `setImmediate`, preservando resposta rápida sem dupla finalização de reply.
+- Testes de e-mail inbound: fixtures passaram a usar segredo Svix válido e headers `svix-*` assinados, alinhados ao padrão atual do Resend.
+
+### Segurança / Infraestrutura
+- Fechada a dívida crítica de race condition de `search_path` entre tenants sob pool de conexões concorrente.
+- Adicionados testes de integração para schema ativo, transação aninhada via proxy Prisma e isolamento concorrente entre tenants.
+
+### Documentação
+- `ARQUITETURA_TECNICA.md` atualizado para refletir o novo isolamento transacional e o estado real da dívida técnica.
+
 ## [0.10.0] — Remoção do módulo legado de roteamento OR-logic (Fase 4b parte 1)
 
 ### Removido
