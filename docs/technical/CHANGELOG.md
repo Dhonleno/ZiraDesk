@@ -1,5 +1,21 @@
 # Changelog — ZiraDesk
 
+## [0.10.7] — Shape multitenant LGPD parcialmente unificado
+
+### Corrigido
+- Provisionamento de tenant novo (`createTenantTables`) passou a criar as 16 colunas do Grupo A que já existiam via retrofits lazy: colunas LGPD de `users` e `contacts`, `conversations.department_id`, `tickets.sla_warning_sent_at`, `ticket_attachments.contact_id` e `bot_options.department_id`.
+- As colunas foram posicionadas no fim de cada `CREATE TABLE`, espelhando a ordem física que `ALTER TABLE ... ADD COLUMN` produz em tenants retrofitados. Tipos/defaults iguais não bastavam: queries com `SELECT *` ainda mudavam o result type se a ordem ordinal divergia, mantendo o risco de `0A000 cached plan must not change result type`.
+- O erro intermitente `0A000` em execuções paralelas da suíte foi rastreado para colisão de plano cacheado causada por drift de shape entre schemas, não por PgBouncer, Socket.io ou race genérica do pool. Esta correção fechou a divergência do Grupo A em `contacts`/`users`, a instância que o export LGPD de contato expunha com mais frequência, e reduziu a frequência observada do erro.
+- A classe `0A000` **não está fechada**: investigação posterior reproduziu 2 ocorrências em 19 execuções paralelas, e prova controlada com `SELECT * FROM conversations/tickets LIMIT 0` entre `tenant_demo` e `test_1785238505693` confirmou drift físico residual em schemas limpos. Instâncias abertas incluem colunas lazy fora das 16, como `conversations.outbound_expires_at`, `conversations.routing_started_at`, `conversations.routing_used_skill_id` e ordem histórica divergente em `tickets`.
+
+### Segurança / Infraestrutura
+- Adicionado `migrate:lgpd-shape` (`apps/api/src/scripts/migrate-lgpd-and-shape-columns.ts`) para aplicar as 12 colunas LGPD e `ticket_attachments.contact_id` em tenants existentes de forma idempotente.
+- Registrado `migrate:departments` no `package.json` da API para expor o script já existente que cobre `conversations.department_id` e `bot_options.department_id`.
+- `AGENTS.md` passou a registrar a regra de que todo `ADD COLUMN IF NOT EXISTS` lazy precisa ter par no `createTenantTables`.
+
+### Testes
+- `pnpm --filter @ziradesk/api type-check` e suíte sequencial (`355/0`) passaram na validação original. A rodada de 10 execuções paralelas sem `0A000` foi insuficiente para declarar fechamento: uma investigação ampliada reproduziu `0A000` 2/19. Estado correto: instância `contacts`/`users` mitigada; classe `0A000` permanece aberta para tabelas tenant-scoped com `SELECT *`/`RETURNING *` e `ADD COLUMN` lazy, com dimensionamento e correção estrutural pendentes.
+
 ## [0.10.6] — Som global de notificações de atendimento
 
 ### Alterado
