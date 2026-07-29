@@ -38,29 +38,50 @@ async function cleanupStalePresence(): Promise<void> {
     }
   })();
 
+  let skipped = 0;
+
   for (const tenant of tenants) {
-    await ensureAgentAssignmentsInfrastructure(prisma, tenant.schema_name);
+    // Um tenant meio-provisionado não pode abortar a varredura — sem isso, os
+    // agentes dos tenants seguintes ficariam "online" indefinidamente.
+    try {
+      await ensureAgentAssignmentsInfrastructure(prisma, tenant.schema_name);
 
-    const staleAgents = await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
-      return tx.$queryRawUnsafe<OfflineAgentRow[]>(
-        `UPDATE agent_assignments
-         SET status = 'offline',
-             is_available = false,
-             online_since = NULL
-         WHERE status = 'online'
-           AND (
-             last_seen_at IS NULL
-             OR last_seen_at < NOW() - (${PRESENCE_TIMEOUT_MS / 1_000} * INTERVAL '1 second')
-           )
-         RETURNING user_id::text AS user_id`,
+      const staleAgents = await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+        return tx.$queryRawUnsafe<OfflineAgentRow[]>(
+          `UPDATE agent_assignments
+           SET status = 'offline',
+               is_available = false,
+               online_since = NULL
+           WHERE status = 'online'
+             AND (
+               last_seen_at IS NULL
+               OR last_seen_at < NOW() - (${PRESENCE_TIMEOUT_MS / 1_000} * INTERVAL '1 second')
+             )
+           RETURNING user_id::text AS user_id`,
+        );
+      });
+
+      if (!io) continue;
+      for (const stale of staleAgents) {
+        io.to(`tenant:${tenant.id}`).emit('agent:offline', { userId: stale.user_id });
+      }
+    } catch (err) {
+      skipped += 1;
+      logger.error(
+        {
+          tenantId: tenant.id,
+          schemaName: tenant.schema_name,
+          dbErrorCode: (err as { meta?: { code?: string } })?.meta?.code,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        '[Presence Cleanup] Skipping tenant — failed to clean stale presence',
       );
-    });
-
-    if (!io) continue;
-    for (const stale of staleAgents) {
-      io.to(`tenant:${tenant.id}`).emit('agent:offline', { userId: stale.user_id });
     }
+  }
+
+  if (skipped > 0) {
+    logger.warn({ skipped, total: tenants.length }, '[Presence Cleanup] Sweep completed with skipped tenants');
   }
 }
 

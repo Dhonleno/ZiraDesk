@@ -68,25 +68,62 @@ function rateLimitMax(requestUrl: string) {
   return 200;
 }
 
+// Roda no bootstrap, antes do app.listen: nenhuma falha aqui pode abortar o boot.
+// Um tenant meio-provisionado (schema ausente ou incompleto) é pulado, nunca propagado.
 async function resetAgentPresenceOnBoot(): Promise<void> {
-  const tenants = await prisma.$queryRawUnsafe<Array<{ schema_name: string }>>(
-    `SELECT schema_name
-     FROM tenants
-     WHERE status IN ('active', 'trial')`,
-  );
+  let tenants: Array<{ id: string; schema_name: string }>;
+
+  try {
+    tenants = await prisma.$queryRawUnsafe<Array<{ id: string; schema_name: string }>>(
+      `SELECT id, schema_name
+       FROM tenants
+       WHERE status IN ('active', 'trial')`,
+    );
+  } catch (err) {
+    logger.error(
+      {
+        dbErrorCode: (err as { meta?: { code?: string } })?.meta?.code,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      '[Presence] Failed to list tenants — skipping presence reset on boot',
+    );
+    return;
+  }
+
+  let skipped = 0;
 
   for (const tenant of tenants) {
-    await ensureAgentAssignmentsInfrastructure(prisma, tenant.schema_name);
+    try {
+      await ensureAgentAssignmentsInfrastructure(prisma, tenant.schema_name);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
-      await tx.$executeRawUnsafe(
-        `UPDATE agent_assignments
-         SET status = 'offline',
-             is_available = false,
-             online_since = NULL`,
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${tenant.schema_name}", public`);
+        await tx.$executeRawUnsafe(
+          `UPDATE agent_assignments
+           SET status = 'offline',
+               is_available = false,
+               online_since = NULL`,
+        );
+      });
+    } catch (err) {
+      skipped += 1;
+      logger.error(
+        {
+          tenantId: tenant.id,
+          schemaName: tenant.schema_name,
+          dbErrorCode: (err as { meta?: { code?: string } })?.meta?.code,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        '[Presence] Skipping tenant — failed to reset agent presence on boot',
       );
-    });
+    }
+  }
+
+  if (skipped > 0) {
+    logger.warn(
+      { skipped, total: tenants.length },
+      '[Presence] Boot presence reset completed with skipped tenants',
+    );
   }
 }
 
@@ -200,7 +237,14 @@ async function bootstrap(): Promise<void> {
     });
   });
 
-  await resetAgentPresenceOnBoot();
+  // A função já é resiliente por tenant; este catch é a garantia final de que
+  // nada escapa para o bootstrap e impede o app.listen abaixo.
+  await resetAgentPresenceOnBoot().catch((err: unknown) => {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[Presence] Presence reset failed — continuing boot',
+    );
+  });
   app.log.info('[Presence] Agent presence reset to offline on boot');
 
   // Inicia o servidor HTTP e anexa Socket.io
