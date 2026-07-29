@@ -18,6 +18,8 @@
     "migrate:indexes": "tsx --env-file=.env src/scripts/migrate-conversations-indexes.ts",
     "migrate:ticket-fields": "tsx --env-file=.env src/scripts/migrate-ticket-resolution-fields.ts",
     "migrate:sla-warning": "tsx --env-file=.env src/scripts/migrate-sla-warning.ts",
+    "migrate:departments": "tsx --env-file=.env src/scripts/migrate-departments.ts",
+    "migrate:lgpd-shape": "tsx --env-file=.env src/scripts/migrate-lgpd-and-shape-columns.ts",
     "migrate:close-config-system": "tsx --env-file=.env src/scripts/migrate-close-config-system.ts",
     "contacts:migrate-tags": "tsx --env-file=.env src/scripts/migrate-contact-tags.ts",
     "contacts:normalize-phones": "tsx --env-file=.env src/scripts/normalize-contact-phones.ts",

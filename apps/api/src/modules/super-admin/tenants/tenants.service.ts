@@ -90,6 +90,8 @@ export async function ensureTenantVoiceConfigInfrastructure(): Promise<void> {
 
 async function createTenantTables(schemaName: string): Promise<void> {
   // Cada execução é separada para rastreabilidade de erros
+  // Keep columns added by ensureUsersLgpdInfrastructure mirrored here so new tenants
+  // and lazily retrofitted tenants have the same prepared-statement shape.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".users (
       id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -109,7 +111,13 @@ async function createTenantTables(schemaName: string): Promise<void> {
       notification_sound_variant VARCHAR(20) NOT NULL DEFAULT 'default',
       settings    JSONB         NOT NULL DEFAULT '{}',
       created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+      lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      lgpd_consent_at TIMESTAMPTZ,
+      lgpd_consent_source VARCHAR(100),
+      lgpd_last_export_at TIMESTAMPTZ,
+      lgpd_anonymized_at TIMESTAMPTZ,
+      lgpd_anonymization_reason TEXT
     )
   `);
 
@@ -199,6 +207,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
     )
   `);
 
+  // Keep columns added by ensureCrmInfrastructure mirrored here so new tenants
+  // and lazily retrofitted tenants have the same prepared-statement shape.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".contacts (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -220,7 +230,13 @@ async function createTenantTables(schemaName: string): Promise<void> {
       custom_fields   JSONB        NOT NULL DEFAULT '{}',
       notes           TEXT,
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      lgpd_consent_at TIMESTAMPTZ,
+      lgpd_consent_source VARCHAR(100),
+      lgpd_last_export_at TIMESTAMPTZ,
+      lgpd_anonymized_at TIMESTAMPTZ,
+      lgpd_anonymization_reason TEXT
     )
   `);
 
@@ -340,6 +356,19 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE "${schemaName}".departments (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      is_active   BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Keep columns added by migrate-departments mirrored here so new tenants and
+  // lazily retrofitted tenants have the same prepared-statement shape.
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".bot_options (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       bot_menu_id UUID REFERENCES "${schemaName}".bot_menus(id) ON DELETE CASCADE,
@@ -351,7 +380,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       submenu_greeting TEXT,
       parent_option_id UUID REFERENCES "${schemaName}".bot_options(id) ON DELETE CASCADE,
       sort_order  INTEGER DEFAULT 0,
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      department_id UUID REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
     )
   `);
 
@@ -429,17 +459,6 @@ async function createTenantTables(schemaName: string): Promise<void> {
   `);
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE "${schemaName}".departments (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name        VARCHAR(100) NOT NULL,
-      description TEXT,
-      is_active   BOOLEAN NOT NULL DEFAULT true,
-      created_at  TIMESTAMPTZ DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".agent_departments (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id       UUID NOT NULL REFERENCES "${schemaName}".users(id) ON DELETE CASCADE,
@@ -507,6 +526,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
     CREATE TYPE "${schemaName}".conversation_status AS ENUM ('open', 'waiting', 'closed')
   `);
 
+  // Keep columns added by migrate-departments mirrored here so new tenants and
+  // lazily retrofitted tenants have the same prepared-statement shape.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".conversations (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -539,7 +560,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       csat_stage      VARCHAR(20),
       csat_expires_at TIMESTAMPTZ,
       metadata        JSONB        NOT NULL DEFAULT '{}',
-      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      department_id    UUID REFERENCES "${schemaName}".departments(id) ON DELETE SET NULL
     )
   `);
 
@@ -874,6 +896,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
     )
   `);
 
+  // Keep columns added by ensureTicketInfrastructure mirrored here so new tenants
+  // and lazily retrofitted tenants have the same prepared-statement shape.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".tickets (
       id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -910,7 +934,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       tags            TEXT[]       NOT NULL DEFAULT '{}',
       custom_fields   JSONB        NOT NULL DEFAULT '{}',
       created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      sla_warning_sent_at        TIMESTAMPTZ
     )
   `);
 
@@ -1008,6 +1033,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
     )
   `);
 
+  // Keep columns added by ensurePortalInfrastructure mirrored here so new tenants
+  // and lazily retrofitted tenants have the same prepared-statement shape.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE "${schemaName}".ticket_attachments (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1018,7 +1045,8 @@ async function createTenantTables(schemaName: string): Promise<void> {
       file_url    VARCHAR(500) NOT NULL,
       file_size   INTEGER,
       mime_type   VARCHAR(100),
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      contact_id  UUID REFERENCES "${schemaName}".contacts(id) ON DELETE SET NULL
     )
   `);
 

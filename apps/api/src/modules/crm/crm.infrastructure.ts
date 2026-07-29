@@ -70,17 +70,17 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
         portal_password_hash VARCHAR(255),
         portal_last_login TIMESTAMPTZ,
         portal_invited_at TIMESTAMPTZ,
+        tags            TEXT[]       NOT NULL DEFAULT '{}',
+        custom_fields   JSONB        NOT NULL DEFAULT '{}',
+        notes           TEXT,
+        created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
         lgpd_consent_status VARCHAR(20) NOT NULL DEFAULT 'pending',
         lgpd_consent_at TIMESTAMPTZ,
         lgpd_consent_source VARCHAR(100),
         lgpd_last_export_at TIMESTAMPTZ,
         lgpd_anonymized_at TIMESTAMPTZ,
-        lgpd_anonymization_reason TEXT,
-        tags            TEXT[]       NOT NULL DEFAULT '{}',
-        custom_fields   JSONB        NOT NULL DEFAULT '{}',
-        notes           TEXT,
-        created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-        updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        lgpd_anonymization_reason TEXT
       )
     `);
 

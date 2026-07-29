@@ -64,3 +64,10 @@ arquitetura/modelo de dados, ou tocar em segurança/infraestrutura de produção
    encontrados, mesmo que não corrigidos nesta sessão (documentar > fingir que não existe).
 4. Nunca declarar um bloqueador/dívida como "resolvido" se a correção for parcial ou mitigação —
    registrar o estado real (ex.: "mitigado parcialmente", "fechado o vetor X, gap Y permanece").
+
+## 5) Regra de deriva de schema multitenant
+
+Todo `ADD COLUMN IF NOT EXISTS` lazy em `ensure*Infrastructure` deve ter coluna equivalente no
+`createTenantTables` de `apps/api/src/modules/super-admin/tenants/tenants.service.ts`, com o mesmo
+tipo, default e nullability. O lazy pode permanecer como rede idempotente, mas tenant novo e tenant
+retrofitado não podem divergir de shape.
