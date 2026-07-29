@@ -67,7 +67,7 @@ export function TicketAutoAssign() {
 
         {isLoading ? (
           <div style={{ fontSize: 13, color: 'var(--txt-3)' }}>
-            {t('tenantAdmin.common.errorLoad')}
+            {t('tenantAdmin.common.loading')}
           </div>
         ) : (
           <>
@@ -88,8 +88,9 @@ export function TicketAutoAssign() {
                   checked={current.ticket_auto_assign}
                   onChange={(e) => handleChange(e.target.checked)}
                 />
+                {/* Sem onClick aqui: o <label> já encaminha o clique ao input.
+                    Ter os dois handlers cancela o toggle (um inverte, o outro desfaz). */}
                 <span
-                  onClick={() => handleChange(!current.ticket_auto_assign)}
                   style={{
                     position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
                     backgroundColor: current.ticket_auto_assign ? 'var(--teal)' : 'var(--line-2)',

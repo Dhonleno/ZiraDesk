@@ -60,8 +60,9 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boo
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
+      {/* Sem onClick aqui: o <label> já encaminha o clique ao input.
+          Ter os dois handlers cancela o toggle (um inverte, o outro desfaz). */}
       <span
-        onClick={() => onChange(!checked)}
         style={{
           position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: checked ? 'var(--teal)' : 'var(--line-2)',

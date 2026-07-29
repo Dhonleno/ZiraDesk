@@ -128,8 +128,9 @@ export function QueueConfig() {
                   checked={current.queue_notifications_enabled}
                   onChange={(e) => handleChange('queue_notifications_enabled', e.target.checked)}
                 />
+                {/* Sem onClick aqui: o <label> já encaminha o clique ao input.
+                    Ter os dois handlers cancela o toggle (um inverte, o outro desfaz). */}
                 <span
-                  onClick={() => handleChange('queue_notifications_enabled', !current.queue_notifications_enabled)}
                   style={{
                     position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
                     backgroundColor: current.queue_notifications_enabled ? 'var(--teal)' : 'var(--line-2)',
