@@ -385,8 +385,11 @@ export async function cleanupSchema(schemaNameArg?: string): Promise<void> {
     throw new Error(`Schema de segurança bloqueado para cleanup: ${safeSchemaName}`);
   }
 
-  await prisma.tenant.deleteMany({ where: { schemaName: safeSchemaName } });
+  // Linha primeiro, schema depois: se o DROP falhar, sobra schema órfão
+  // (inofensivo) em vez de linha órfã, que os jobs varrem e tropeçam.
+  const { count } = await prisma.tenant.deleteMany({ where: { schemaName: safeSchemaName } });
   await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${safeSchemaName}" CASCADE`);
+  console.log(`[test-cleanup] removido: schema "${safeSchemaName}" + ${count} linha(s) em public.tenants`);
 }
 
 export async function shutdownIntegrationSuite(): Promise<void> {
@@ -398,7 +401,18 @@ export async function shutdownIntegrationSuite(): Promise<void> {
 
   if (state) {
     await state.app.close().catch(() => undefined);
-    await cleanupSchema(state.tenant.schemaName).catch(() => undefined);
+    // Não engolir em silêncio: uma falha aqui deixa um tenant fantasma
+    // ('active', varrido pelos jobs) e antes disso não aparecia em lugar nenhum.
+    // Também não relançamos — o teardown ainda precisa desconectar Prisma/Redis.
+    try {
+      await cleanupSchema(state.tenant.schemaName);
+    } catch (err) {
+      console.error(
+        `[test-cleanup] FALHOU ao remover o tenant de teste "${state.tenant.schemaName}" — `
+        + 'ele ficou como fantasma em public.tenants e precisa de limpeza manual. Causa: '
+        + (err instanceof Error ? err.message : String(err)),
+      );
+    }
   }
 
   await prisma.$disconnect().catch(() => undefined);
