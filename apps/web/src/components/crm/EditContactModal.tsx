@@ -12,6 +12,7 @@ import { ContactTagSelector } from './ContactTagSelector';
 import type { ContactTag, CrmContact } from '../../services/api';
 import { contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { useOrganizationSearch } from '../../hooks/useOrganizationSearch';
 import { isValidOptionalPhone } from '../../lib/phone';
 
 const buildSchema = (invalidPhoneMessage: string) => z.object({
@@ -24,6 +25,9 @@ const buildSchema = (invalidPhoneMessage: string) => z.object({
   is_primary: z.boolean(),
   tag_ids:    z.array(z.string().uuid()),
   notes:      z.string().optional(),
+  /** '' = avulso. O update aceita organization_id null explícito, então limpar
+   *  o select desvincula sem precisar do endpoint dedicado. */
+  organization_id: z.string().optional(),
 });
 
 type FormValues = z.infer<ReturnType<typeof buildSchema>>;
@@ -47,6 +51,11 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
   });
 
   const tagIds = watch('tag_ids');
+  const orgId = watch('organization_id');
+  const { organizations, isLoading: orgsLoading } = useOrganizationSearch({
+    enabled: Boolean(contact),
+    perPage: 100,
+  });
   const phoneValue = watch('phone') ?? '';
   const contactTagsQuery = useQuery({
     queryKey: ['contact-tags'],
@@ -81,6 +90,7 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
       is_primary: contact.is_primary,
       tag_ids:    [],
       notes:      contact.notes ?? '',
+      organization_id: contact.organization_id ?? '',
     });
   }, [contact, reset]);
 
@@ -103,15 +113,21 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
       is_primary: values.is_primary,
       tag_ids:    values.tag_ids,
       notes:      values.notes || null,
+      // null explícito desvincula; o backend distingue "não enviado" de null.
+      organization_id: values.organization_id || null,
     }),
-    onSuccess: () => {
+    onSuccess: (_saved, values) => {
       void queryClient.invalidateQueries({ queryKey: ['crm-contacts'] });
       if (contact?.id) {
         void queryClient.invalidateQueries({ queryKey: ['crm-contact', contact.id] });
         void queryClient.invalidateQueries({ queryKey: ['contact-tags-assigned', contact.id] });
       }
+      // Invalida a org antiga E a nova: trocar de org muda as duas listas.
       if (contact?.organization_id) {
         void queryClient.invalidateQueries({ queryKey: ['org-contacts', contact.organization_id] });
+      }
+      if (values.organization_id && values.organization_id !== contact?.organization_id) {
+        void queryClient.invalidateQueries({ queryKey: ['org-contacts', values.organization_id] });
       }
       toast.success(t('contacts.messages.updated'));
       onSuccess?.();
@@ -165,7 +181,29 @@ export function EditContactModal({ contact, onClose, onSuccess }: Props) {
             onChange={(nextTagIds) => setValue('tag_ids', nextTagIds, { shouldDirty: true })}
           />
 
-          {contact?.organization_id && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }} htmlFor="organization_id_edit">
+              {t('contacts.fields.organization')}
+            </label>
+            <select
+              id="organization_id_edit"
+              /* Mesmas classes/estilo do <Input> para casar com os campos vizinhos. */
+              className="h-10 w-full rounded-lg px-3 text-sm transition-colors outline-none"
+              style={{ background: 'var(--bg-3)', border: '1px solid var(--line-2)', color: 'var(--txt)', fontFamily: 'var(--font)' }}
+              disabled={mutation.isPending || orgsLoading}
+              value={orgId ?? ''}
+              onChange={(e) => setValue('organization_id', e.target.value, { shouldDirty: true })}
+            >
+              <option value="">{t('contacts.fields.organizationNone')}</option>
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* is_primary segue o select, não o vínculo salvo: desvincular no form
+              deve esconder o campo antes mesmo de salvar. */}
+          {orgId && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input type="checkbox" id="is_primary_edit" {...register('is_primary')} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--teal)' }} />
               <label htmlFor="is_primary_edit" style={{ fontSize: 13, color: 'var(--txt-2)', cursor: 'pointer' }}>{t('contacts.fields.isPrimary')}</label>

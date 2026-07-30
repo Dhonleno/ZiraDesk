@@ -273,7 +273,8 @@
       "isPrimary": "Contacto principal",
       "tags": "Etiquetas",
       "notes": "Notas",
-      "tagsHint": "Escribe y presiona Enter para agregar"
+      "tagsHint": "Escribe y presiona Enter para agregar",
+      "organizationNone": "Ninguna (contacto independiente)"
     },
     "tagsSection": {
       "title": "Etiquetas del contacto",

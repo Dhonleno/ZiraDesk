@@ -11,6 +11,7 @@ import { PhoneInput } from '../ui/PhoneInput';
 import { ContactTagSelector } from './ContactTagSelector';
 import { contactsApi } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { useOrganizationSearch } from '../../hooks/useOrganizationSearch';
 import { isValidOptionalPhone } from '../../lib/phone';
 
 const buildSchema = (invalidPhoneMessage: string) => z.object({
@@ -85,6 +86,11 @@ export function CreateContactModal({ open, onClose, defaultOrganizationId }: Pro
   }
 
   const orgId = watch('organization_id');
+  // Só busca quando o select é exibido (sem defaultOrganizationId).
+  const { organizations, isLoading: orgsLoading } = useOrganizationSearch({
+    enabled: open && !defaultOrganizationId,
+    perPage: 100,
+  });
 
   return (
     <Modal open={open} onClose={handleClose} title={t('contacts.modal.newTitle')} maxWidth="md">
@@ -128,6 +134,30 @@ export function CreateContactModal({ open, onClose, defaultOrganizationId }: Pro
             disabled={mutation.isPending}
             onChange={(nextTagIds) => setValue('tag_ids', nextTagIds, { shouldDirty: true })}
           />
+
+          {/* Organização — oculta quando o modal é aberto de dentro de uma org:
+              o contexto já define o vínculo (defaultOrganizationId). */}
+          {!defaultOrganizationId && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium" style={{ color: 'var(--txt-2)' }} htmlFor="organization_id">
+                {t('contacts.fields.organization')}
+              </label>
+              <select
+                id="organization_id"
+                /* Mesmas classes/estilo do <Input> para casar com os campos vizinhos. */
+                className="h-10 w-full rounded-lg px-3 text-sm transition-colors outline-none"
+                style={{ background: 'var(--bg-3)', border: '1px solid var(--line-2)', color: 'var(--txt)', fontFamily: 'var(--font)' }}
+                disabled={mutation.isPending || orgsLoading}
+                value={orgId ?? ''}
+                onChange={(e) => setValue('organization_id', e.target.value, { shouldDirty: true })}
+              >
+                <option value="">{t('contacts.fields.organizationNone')}</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* is_primary toggle — only when org is set */}
           {(orgId || defaultOrganizationId) && (

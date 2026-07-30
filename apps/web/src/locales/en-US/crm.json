@@ -273,7 +273,8 @@
       "isPrimary": "Primary contact",
       "tags": "Tags",
       "notes": "Notes",
-      "tagsHint": "Type and press Enter to add"
+      "tagsHint": "Type and press Enter to add",
+      "organizationNone": "None (standalone contact)"
     },
     "tagsSection": {
       "title": "Contact tags",

@@ -273,7 +273,8 @@
       "isPrimary": "Contato principal",
       "tags": "Tags",
       "notes": "Notas",
-      "tagsHint": "Digite e pressione Enter para adicionar"
+      "tagsHint": "Digite e pressione Enter para adicionar",
+      "organizationNone": "Nenhuma (contato avulso)"
     },
     "tagsSection": {
       "title": "Tags do contato",

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '../ui/Modal';
-import { contactsApi, organizationsApi } from '../../services/api';
+import { contactsApi } from '../../services/api';
+import { useOrganizationSearch } from '../../hooks/useOrganizationSearch';
 import { useAuthStore } from '../../stores/auth.store';
 import { useToast } from '../../stores/toast.store';
 import { ContactAvatar } from './ContactAvatar';
@@ -26,17 +27,10 @@ export function LinkOrganizationModal({ open, onClose, contactId, contactName }:
   const search = useDebounce(searchRaw, 300);
   const hasValidSession = isAuthenticated && Boolean(token);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['crm-organizations-search', search],
-    queryFn: () => {
-      const params: Parameters<typeof organizationsApi.list>[0] = { per_page: 10 };
-      if (search) params.search = search;
-      return organizationsApi.list(params);
-    },
+  const { organizations, isLoading } = useOrganizationSearch({
+    search,
     enabled: open && hasValidSession,
   });
-
-  const organizations = data?.data ?? [];
 
   const mutation = useMutation({
     mutationFn: () => contactsApi.linkOrganization(contactId, selectedOrgId!),
