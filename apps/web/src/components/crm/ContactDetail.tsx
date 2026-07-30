@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isUuid } from '../../utils/uuid';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -18,6 +19,9 @@ type Tab = 'data' | 'conversations' | 'tickets' | 'notes';
 
 interface Props {
   contactId: string;
+  /** Chamado quando o id não resolve (deletado, link velho, uuid de outra
+   *  entidade). Quem monta limpa o param órfão da URL. */
+  onNotFound?: () => void;
 }
 
 function normalizeEmail(value: unknown): string | null {
@@ -136,7 +140,7 @@ function ChannelTypeIcon({ channelType }: { channelType: string }) {
   );
 }
 
-export function ContactDetail({ contactId }: Props) {
+export function ContactDetail({ contactId, onNotFound }: Props) {
   const { t } = useTranslation('crm');
   // getPriorityStyle monta o label a partir do namespace 'tickets'.
   const { t: tTickets } = useTranslation('tickets');
@@ -152,11 +156,17 @@ export function ContactDetail({ contactId }: Props) {
   const [notesDirty, setNotesDirty] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
 
-  const { data: contact, isLoading } = useQuery({
+  // enabled só com UUID: id malformado não deve bater na API só para levar 404.
+  const { data: contact, isLoading, isError } = useQuery({
     queryKey: ['crm-contact', contactId],
     queryFn: () => contactsApi.get(contactId),
-    enabled: Boolean(contactId),
+    enabled: isUuid(contactId),
   });
+
+  const notFound = !isUuid(contactId) || isError;
+  useEffect(() => {
+    if (notFound) onNotFound?.();
+  }, [notFound, onNotFound]);
 
   const { data: channels = [] } = useQuery({
     queryKey: ['crm-active-channels'],
@@ -266,6 +276,21 @@ export function ContactDetail({ contactId }: Props) {
   const ticketRows = ticketsData?.data ?? [];
   const contactEmail = contact ? resolveContactEmail(contact) : null;
   const maskedPortalEmail = maskEmail(accessInfo?.email ?? null);
+
+  // Antes: 404 caía no mesmo ramo de loading e ficava em skeleton eterno.
+  if (notFound) {
+    return (
+      <div className="zd-empty-state" style={{ padding: '40px 20px' }}>
+        <div className="zd-empty-icon" aria-hidden>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <strong>{t('contacts.notFound')}</strong>
+        <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('contacts.notFoundSub')}</span>
+      </div>
+    );
+  }
 
   if (isLoading || !contact) {
     return (

@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, organizationsApi } from '../../services/api';
 import type { CrmOrganization } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
+import { isUuid } from '../../utils/uuid';
 import { OrganizationCard } from '../../components/crm/OrganizationCard';
 import { OrganizationDetail } from '../../components/crm/OrganizationDetail';
 import { CreateOrganizationModal } from '../../components/crm/CreateOrganizationModal';
@@ -64,7 +65,10 @@ export function OrganizationsPage() {
   const [sortBy, setSortBy] = useState<SortBy>(parseSortBy(searchParams.get('sort_by')));
   const [sortOrder, setSortOrder] = useState<SortOrder>(parseSortOrder(searchParams.get('sort_order')));
   const [page, setPage] = useState<number>(parsePage(searchParams.get('page')));
-  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('id') ?? routeId ?? null);
+  // Query param com namespace: as duas abas do CRM vivem na mesma URL, e um `?id=`
+  // compartilhado fazia a aba Contatos ler o uuid de uma organização (e vice-versa),
+  // disparando "Contato não encontrado" já no load. `?id=` legado é ignorado.
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('org') ?? routeId ?? null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -91,7 +95,7 @@ export function OrganizationsPage() {
   }, []);
 
   useEffect(() => {
-    const id = searchParams.get('id') ?? routeId ?? null;
+    const id = searchParams.get('org') ?? routeId ?? null;
     const q = searchParams.get('q') ?? '';
     const nextSegment = searchParams.get('segment') ?? '';
     const nextTag = searchParams.get('tag') ?? '';
@@ -134,7 +138,7 @@ export function OrganizationsPage() {
     const nextPage = next.page ?? page;
     const params: Record<string, string> = {};
 
-    if (nextId) params.id = nextId;
+    if (nextId) params.org = nextId;
     if (nextQ.trim()) params.q = nextQ.trim();
     if (nextStatus !== 'all') params.status = nextStatus;
     if (nextSegment.trim()) params.segment = nextSegment.trim();
@@ -168,11 +172,26 @@ export function OrganizationsPage() {
     staleTime: 60_000,
   });
 
-  const { data: selectedOrg, isLoading: detailLoading } = useQuery({
+  // enabled só com UUID: id malformado não deve bater na API só para levar 404.
+  const { data: selectedOrg, isLoading: detailLoading, isError: detailError } = useQuery({
     queryKey: ['crm-organization', selectedId],
     queryFn: () => organizationsApi.get(selectedId!),
-    enabled: !!selectedId,
+    enabled: isUuid(selectedId),
   });
+
+  // Id órfão (registro deletado, link velho, ou uuid de outra entidade): mostra
+  // "não encontrado" no painel e tira o param da URL, para não re-quebrar no
+  // próximo reload. O latch sobrevive à limpeza do param, que zera o selectedId.
+  const [notFoundId, setNotFoundId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedId || (isUuid(selectedId) && !detailError)) return;
+    setNotFoundId(selectedId);
+    if (searchParams.get('org')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('org');
+      setSearchParams(next, { replace: true });
+    }
+  }, [selectedId, detailError, searchParams, setSearchParams]);
 
   const organizations = listData?.data ?? [];
   const meta = listData?.meta;
@@ -740,7 +759,17 @@ export function OrganizationsPage() {
 
       {/* ── Right panel: detail ── */}
       <div style={{ overflow: 'hidden', background: 'var(--bg-2)' }}>
-        {!selectedId ? (
+        {notFoundId && !selectedId ? (
+          <div className="zd-empty-state" style={{ padding: '40px 20px' }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <strong>{t('organizations.notFound')}</strong>
+            <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('organizations.notFoundSub')}</span>
+          </div>
+        ) : !selectedId ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14, color: 'var(--txt-3)', padding: '40px 20px', textAlign: 'center' }}>
             <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--bg-3)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>

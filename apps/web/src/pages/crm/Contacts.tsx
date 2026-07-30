@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -45,9 +45,13 @@ export function ContactsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [filterBulkDeleteOpen, setFilterBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  // Query param com namespace: as duas abas do CRM vivem na mesma URL, e um `?id=`
+  // compartilhado fazia esta aba ler o uuid de uma organização (e vice-versa),
+  // disparando "Contato não encontrado" já no load. `?id=` legado é ignorado.
   const [selectedId, setSelectedId] = useState<string | null>(
-    searchParams.get('id') ?? routeId ?? null,
+    searchParams.get('contact') ?? routeId ?? null,
   );
+  const [notFoundId, setNotFoundId] = useState<string | null>(null);
 
   const search = useDebounce(searchRaw, 300);
 
@@ -107,7 +111,7 @@ export function ContactsPage() {
     : selectedIds.size;
 
   useEffect(() => {
-    const id = searchParams.get('id') ?? routeId ?? null;
+    const id = searchParams.get('contact') ?? routeId ?? null;
     setSelectedId(id);
     setSearchRaw((prev) => {
       const nextSearch = searchParams.get('q') ?? '';
@@ -116,18 +120,33 @@ export function ContactsPage() {
   }, [routeId, searchParams]);
 
   useEffect(() => {
-    if (!selectedId && contacts.length > 0) {
+    // !notFoundId: não auto-selecionar por cima do aviso de id órfão, senão ele
+    // pisca e some antes de o usuário ler.
+    if (!selectedId && !notFoundId && contacts.length > 0) {
       const next = contacts[0]!.id;
       setSelectedId(next);
-      const params: Record<string, string> = { id: next };
+      const params: Record<string, string> = { contact: next };
       if (searchRaw.trim()) params.q = searchRaw.trim();
       setSearchParams(params, { replace: true });
     }
-  }, [contacts, selectedId, setSearchParams, searchRaw]);
+  }, [contacts, selectedId, notFoundId, setSearchParams, searchRaw]);
+
+  // Id órfão: tira o param da URL para não re-quebrar no próximo reload. Limpar o
+  // param dispara o efeito de sync acima, que zera o selectedId e desmonta o
+  // ContactDetail — por isso o latch, que mantém o "não encontrado" visível.
+  const handleContactNotFound = useCallback(() => {
+    setNotFoundId(selectedId);
+    setSearchParams((prev) => {
+      if (!prev.get('contact')) return prev;
+      const next = new URLSearchParams(prev);
+      next.delete('contact');
+      return next;
+    }, { replace: true });
+  }, [selectedId, setSearchParams]);
 
   function handleSelectContact(id: string) {
     setSelectedId(id);
-    const params: Record<string, string> = { id };
+    const params: Record<string, string> = { contact: id };
     if (searchRaw.trim()) params.q = searchRaw.trim();
     setSearchParams(params, { replace: true });
   }
@@ -135,7 +154,7 @@ export function ContactsPage() {
   function handleSearchChange(value: string) {
     setSearchRaw(value);
     const params: Record<string, string> = {};
-    if (selectedId) params.id = selectedId;
+    if (selectedId) params.contact = selectedId;
     if (value.trim()) params.q = value.trim();
     setSearchParams(params, { replace: true });
   }
@@ -159,7 +178,7 @@ export function ContactsPage() {
         const remaining = contacts.filter((item) => item.id !== deletedId);
         if (remaining[0]) {
           setSelectedId(remaining[0].id);
-          const params: Record<string, string> = { id: remaining[0].id };
+          const params: Record<string, string> = { contact: remaining[0].id };
           if (searchRaw.trim()) params.q = searchRaw.trim();
           setSearchParams(params, { replace: true });
         } else {
@@ -472,7 +491,17 @@ export function ContactsPage() {
 
       <div style={{ background: 'var(--bg-2)', overflow: 'hidden' }}>
         {selectedId ? (
-          <ContactDetail contactId={selectedId} />
+          <ContactDetail contactId={selectedId} onNotFound={handleContactNotFound} />
+        ) : notFoundId ? (
+          <div className="zd-empty-state" style={{ padding: '40px 20px' }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <strong>{t('contacts.notFound')}</strong>
+            <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('contacts.notFoundSub')}</span>
+          </div>
         ) : (
           <div className="zd-empty-state" style={{ color: 'var(--txt-3)' }}>
             <div className="zd-empty-icon" aria-hidden>

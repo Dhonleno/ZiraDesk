@@ -208,7 +208,9 @@
       "empty": "No contacts found",
       "confirm": "Link",
       "success": "Contact linked successfully"
-    }
+    },
+    "notFound": "Organization not found",
+    "notFoundSub": "It may have been deleted, or the link is out of date."
   },
   "unlinkContact": "Unlink contact",
   "unlinkContactConfirm": "Are you sure you want to unlink {{name}} from this organization?",
@@ -351,7 +353,9 @@
       "loading": "Searching...",
       "submit": "Link",
       "submitting": "Linking..."
-    }
+    },
+    "notFound": "Contact not found",
+    "notFoundSub": "It may have been deleted, or the link is out of date."
   },
   "import": {
     "button": "Import",

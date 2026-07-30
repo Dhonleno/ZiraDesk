@@ -208,7 +208,9 @@
       "empty": "No se encontraron contactos",
       "confirm": "Vincular",
       "success": "Contacto vinculado con éxito"
-    }
+    },
+    "notFound": "Organización no encontrada",
+    "notFoundSub": "Puede haber sido eliminada, o el enlace está desactualizado."
   },
   "unlinkContact": "Desvincular contacto",
   "unlinkContactConfirm": "¿Seguro que deseas desvincular a {{name}} de esta organización?",
@@ -351,7 +353,9 @@
       "loading": "Buscando...",
       "submit": "Vincular",
       "submitting": "Vinculando..."
-    }
+    },
+    "notFound": "Contacto no encontrado",
+    "notFoundSub": "Puede haber sido eliminado, o el enlace está desactualizado."
   },
   "import": {
     "button": "Importar",
