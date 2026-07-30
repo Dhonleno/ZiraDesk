@@ -42,7 +42,7 @@ export function AttendanceRules() {
   const defaultInactivityClose = t('settings.defaultInactivityClose');
   const defaultBotAssignedMessage = t('settings.defaultBotAssignedMessage');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isSuccess, refetch } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
   });
@@ -164,6 +164,22 @@ export function AttendanceRules() {
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-10 animate-pulse rounded-lg bg-bg-3" />
               ))}
+            </div>
+          ) : isError ? (
+            /* Nunca renderizar o form quando o GET falhou: o reset(data) não roda,
+               então o form ficaria com os defaultValues do RHF — que salvos por cima
+               apagariam a config real (mensagens de inatividade, CSAT, tetos). */
+            <div className="zd-empty-state" style={{ minHeight: 240, padding: 24 }}>
+              <div className="zd-empty-icon" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <strong>{t('tenantAdmin.common.errorLoad')}</strong>
+              <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tenantAdmin.common.errorLoadHint')}</span>
+              <button type="button" className="tb-btn" onClick={() => void refetch()}>
+                {t('tenantAdmin.common.retry')}
+              </button>
             </div>
           ) : (
             <form
@@ -493,7 +509,8 @@ export function AttendanceRules() {
                   background: 'var(--bg-2)',
                 }}
               >
-                <Button type="submit" disabled={mutation.isPending}>
+                {/* !isSuccess: nunca gravar a partir de um estado que não veio de um GET ok */}
+                <Button type="submit" disabled={mutation.isPending || !isSuccess}>
                   {mutation.isPending ? t('tenantAdmin.common.saving') : t('tenantAdmin.settings.saveSettings')}
                 </Button>
               </div>

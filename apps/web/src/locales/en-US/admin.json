@@ -20,6 +20,8 @@
       "noResults": "No results found",
       "errorSave": "Error saving",
       "errorLoad": "Error loading data",
+      "errorLoadHint": "The current settings could not be read. Try again before saving.",
+      "retry": "Try again",
       "close": "Close",
       "previous": "Previous",
       "next": "Next",

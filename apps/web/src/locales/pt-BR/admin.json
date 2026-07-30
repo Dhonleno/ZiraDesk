@@ -20,6 +20,8 @@
       "noResults": "Nenhum resultado encontrado",
       "errorSave": "Erro ao salvar",
       "errorLoad": "Erro ao carregar dados",
+      "errorLoadHint": "Não foi possível ler as configurações atuais. Tente novamente antes de salvar.",
+      "retry": "Tentar novamente",
       "close": "Fechar",
       "previous": "Anterior",
       "next": "Próximo",

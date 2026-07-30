@@ -34,7 +34,9 @@ export function SupportLevels() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  // Só a query de settings governa o guard: a de departamentos abaixo alimenta o
+  // select e falhar nela não corrompe o que seria salvo.
+  const { data, isLoading, isError, isSuccess, refetch } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: adminApi.getSettings,
   });
@@ -85,7 +87,22 @@ export function SupportLevels() {
         </div>
 
         {isLoading ? (
-          <div style={{ fontSize: 13, color: 'var(--txt-3)' }}>{t('tenantAdmin.common.errorLoad')}</div>
+          <div style={{ fontSize: 13, color: 'var(--txt-3)' }}>{t('tenantAdmin.common.loading')}</div>
+        ) : isError ? (
+          /* Nunca renderizar o form quando o GET falhou: o default seria exibido
+             como se fosse a config atual, e salvar gravaria ele por cima da real. */
+          <div className="zd-empty-state" style={{ minHeight: 240 }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <strong>{t('tenantAdmin.common.errorLoad')}</strong>
+            <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tenantAdmin.common.errorLoadHint')}</span>
+            <button type="button" className="tb-btn" onClick={() => void refetch()}>
+              {t('tenantAdmin.common.retry')}
+            </button>
+          </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--line)', marginBottom: 24 }}>
@@ -162,7 +179,8 @@ export function SupportLevels() {
             <button
               type="button"
               className="zd-btn zd-btn-primary"
-              disabled={mutation.isPending}
+              /* !isSuccess: nunca gravar a partir de um estado que não veio de um GET ok */
+              disabled={mutation.isPending || !isSuccess}
               onClick={() => mutation.mutate(current)}
             >
               {mutation.isPending ? t('tenantAdmin.common.saving') : t('save', { ns: 'common' })}

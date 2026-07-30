@@ -27,7 +27,7 @@ export function QueueConfig() {
     expire_24h_message: t('tenantAdmin.queueConfig.defaultExpireMessage'),
   };
 
-  const { data, isLoading } = useQuery<QueueConfigData>({
+  const { data, isLoading, isError, isSuccess, refetch } = useQuery<QueueConfigData>({
     queryKey: ['queue-config'],
     queryFn: () => adminApi.getQueueConfig(),
   });
@@ -107,7 +107,22 @@ export function QueueConfig() {
 
         {isLoading ? (
           <div style={{ fontSize: 13, color: 'var(--txt-3)' }}>
-            {t('tenantAdmin.common.errorLoad')}
+            {t('tenantAdmin.common.loading')}
+          </div>
+        ) : isError ? (
+          /* Nunca renderizar o form quando o GET falhou: o default seria exibido
+             como se fosse a config atual, e salvar gravaria ele por cima da real. */
+          <div className="zd-empty-state" style={{ minHeight: 240 }}>
+            <div className="zd-empty-icon" aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 6.5v4.2M10 14h.01M3.5 15.5h13L10 3.5l-6.5 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <strong>{t('tenantAdmin.common.errorLoad')}</strong>
+            <span style={{ fontSize: 12, color: 'var(--txt-3)' }}>{t('tenantAdmin.common.errorLoadHint')}</span>
+            <button type="button" className="tb-btn" onClick={() => void refetch()}>
+              {t('tenantAdmin.common.retry')}
+            </button>
           </div>
         ) : (
           <>
@@ -218,7 +233,8 @@ export function QueueConfig() {
                 type="button"
                 className="tb-btn tb-btn-primary"
                 onClick={handleSave}
-                disabled={mutation.isPending}
+                /* !isSuccess: nunca gravar a partir de um estado que não veio de um GET ok */
+                disabled={mutation.isPending || !isSuccess}
               >
                 {mutation.isPending
                   ? t('tenantAdmin.common.saving')
