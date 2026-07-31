@@ -14,6 +14,7 @@ import { decryptCredentials } from '../../utils/crypto.js';
 import { listTemplates as listAdminTemplates } from '../admin/templates/templates.service.js';
 import { calculateWaitingExpiresAt } from '../../lib/omnichannel/calculate-waiting-expires.js';
 import { hasFeature } from '../../middleware/entitlement.js';
+import { conversationsRef } from '../../lib/conversations/schema.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, requirePermission('conversations:reply')];
 
@@ -449,8 +450,9 @@ export async function activeOutboundRoutes(app: FastifyInstance): Promise<void> 
         outbound_origin_agent_id: userId,
       };
 
+      const conversationTableRef = await conversationsRef(tx, schemaName);
       const inserted = await tx.$queryRawUnsafe<ConversationInsertRow[]>(
-        `INSERT INTO conversations (
+        `INSERT INTO ${conversationTableRef} (
            contact_id,
            channel_id,
            channel_type,

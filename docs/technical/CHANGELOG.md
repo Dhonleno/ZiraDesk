@@ -1,5 +1,15 @@
 # Changelog — ZiraDesk
 
+## [0.10.9] — `conversations` blindada contra `0A000` por enum OID
+
+### Corrigido
+- Os 7 statements de `conversations` com `RETURNING *` passaram a qualificar a tabela por schema via `lib/conversations/schema.ts` (`conversationsRef`). O vetor era `conversation_status` criado por schema: mesmo enum textual (`open`, `waiting`, `closed`), mas `pg_type.oid`/`atttypid` diferente entre tenants, fazendo `equalTupleDescs` recusar o plano cacheado quando o mesmo texto SQL era reusado após troca de `search_path`.
+- `conversationsRef` resolve `current_schema()` antes de montar o SQL quando o call site não informa `schemaName`, então o statement final contém literal como `"tenant_demo".conversations`; isto cria texto distinto por tenant e fecha o cache de prepared statements sem trocar `RETURNING *` por colunas explícitas.
+
+### Testes
+- Adicionada sonda gated `src/lib/conversations/__probes__/0A000-conversations.probe.test.ts` para reproduzir deterministicamente o vetor `0A000` de `conversations`: `conversation_status` é `CREATE TYPE` por schema, então `status` retorna `atttypid` diferente mesmo com os mesmos labels (`open`, `waiting`, `closed`).
+- A prova mede os OIDs de `conversation_status` nos dois schemas efêmeros, confirma a colisão com statement não-qualificado + `RETURNING *`, confirma o gate com nome de tabela qualificado por schema, documenta que colunas explícitas incluindo `status` não fecham este vetor e adiciona um caso usando o helper real.
+
 ## [0.10.8] — `lgpd_requests` unificada e blindada contra `0A000` (Frente A)
 
 ### Corrigido

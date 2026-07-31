@@ -23,6 +23,7 @@ import { ensureCloseConfigInfrastructure } from '../../admin/close-config/close-
 import { ensureConversationCsatInfrastructure } from './csat.infrastructure.js';
 import { ensureConversationAssignmentsInfrastructure } from './assignments.infrastructure.js';
 import { calculateWaitingExpiresAt } from '../../../lib/omnichannel/calculate-waiting-expires.js';
+import { conversationsRef as resolveConversationsRef } from '../../../lib/conversations/schema.js';
 
 export class NotFoundError extends Error {
   constructor(message: string) {
@@ -757,6 +758,7 @@ export async function assignQueuedConversationToMe(
 ): Promise<{ conversation: ConversationRow }> {
   const schemaName = await getSchemaName(tenantId);
   const schemaPrefix = schemaName ? `${quoteIdent(schemaName)}.` : '';
+  const conversationTableRef = await resolveConversationsRef(prisma, schemaName);
   const previousRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id
      FROM ${schemaPrefix}conversations
@@ -769,7 +771,7 @@ export async function assignQueuedConversationToMe(
   if (!previousRows[0]) throw new ConflictError('Conversa não está disponível na fila');
 
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `UPDATE ${schemaPrefix}conversations
+    `UPDATE ${conversationTableRef}
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
          status = 'open',
@@ -1362,8 +1364,9 @@ export async function createConversation(
     }
 
     const protocolNumber = await callGenerateProtocol(tx, schemaName);
+    const conversationTableRef = await resolveConversationsRef(tx, schemaName);
     const convRows = await tx.$queryRawUnsafe<ConversationRow[]>(
-      `INSERT INTO conversations (
+      `INSERT INTO ${conversationTableRef} (
          contact_id,
          organization_id,
          channel_id,
@@ -1558,8 +1561,9 @@ export async function assignConversation(
   const previous = previousRows[0];
   if (!previous) throw new NotFoundError('Conversa não encontrada');
 
+  const conversationTableRef = await resolveConversationsRef(prisma);
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `UPDATE conversations
+    `UPDATE ${conversationTableRef}
      SET assigned_to = $1::uuid,
          assigned_at = NOW(),
          status = 'open',
@@ -1773,8 +1777,9 @@ export async function transferConversation(
     assignToUserId = eligibleAgents[0].id;
   }
 
+  const conversationTableRef = await resolveConversationsRef(prisma, schemaName);
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `UPDATE conversations
+    `UPDATE ${conversationTableRef}
      SET assigned_to = $1::uuid,
          assigned_at = NOW()
      WHERE id = $2::uuid
@@ -1849,8 +1854,9 @@ export async function updateConversation(
   const hasCsatScore = 'csat_score' in body;
   const hasCsatComment = 'csat_comment' in body;
 
+  const conversationTableRef = await resolveConversationsRef(prisma, schemaName);
   const rows = await prisma.$queryRawUnsafe<ConversationRow[]>(
-    `UPDATE conversations
+    `UPDATE ${conversationTableRef}
      SET
        status = COALESCE($1::conversation_status, status),
        assigned_to = CASE WHEN $2 THEN $3::uuid ELSE assigned_to END,
@@ -1982,8 +1988,9 @@ export async function closeConversation(
       agentId: actorUserId,
     };
 
+    const conversationTableRef = await resolveConversationsRef(tx, safeSchemaName);
     const rows = await tx.$queryRawUnsafe<ConversationRow[]>(
-      `UPDATE conversations
+      `UPDATE ${conversationTableRef}
        SET status = 'closed',
            closure_reason = $1::jsonb,
            close_type_id = $2,
