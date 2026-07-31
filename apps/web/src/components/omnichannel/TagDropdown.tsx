@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { type RefObject, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { conversationTags } from '../../services/api';
 import { useToast } from '../../stores/toast.store';
+import { AnchoredPopover } from '../ui/AnchoredPopover';
 
 interface TagDropdownProps {
+  /** Wrapper do gatilho — o painel alinha a borda direita a ele. */
+  anchorRef: RefObject<HTMLElement>;
   conversationId: string;
   onClose: () => void;
 }
 
-export function TagDropdown({ conversationId, onClose }: TagDropdownProps) {
+export function TagDropdown({ anchorRef, conversationId, onClose }: TagDropdownProps) {
   const { t } = useTranslation('admin');
   const toast = useToast();
   const qc = useQueryClient();
@@ -63,7 +66,7 @@ export function TagDropdown({ conversationId, onClose }: TagDropdownProps) {
   }
 
   return (
-    <div className="tag-dropdown" ref={dropdownRef}>
+    <AnchoredPopover anchorRef={anchorRef} popoverRef={dropdownRef} className="tag-dropdown">
       <div className="tag-dropdown-header">
         <span>{t('tenantAdmin.tags.title')}</span>
         <button type="button" onClick={onClose} aria-label={t('tenantAdmin.common.close')}>
@@ -93,6 +96,6 @@ export function TagDropdown({ conversationId, onClose }: TagDropdownProps) {
           );
         })}
       </div>
-    </div>
+    </AnchoredPopover>
   );
 }

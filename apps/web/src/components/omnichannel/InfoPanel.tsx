@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -209,6 +209,9 @@ export function InfoPanel({ conversationId }: Props) {
   const [showEditContact, setShowEditContact] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [contactTagPickerOpen, setContactTagPickerOpen] = useState(false);
+  // Wrappers das seções de tags — âncoras dos painéis portalizados.
+  const contactTagsAnchorRef = useRef<HTMLDivElement | null>(null);
+  const convTagsAnchorRef = useRef<HTMLDivElement | null>(null);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [createTicketData, setCreateTicketData] = useState<{
     contact_id?: string;
@@ -602,7 +605,7 @@ export function InfoPanel({ conversationId }: Props) {
             </div>
 
             {contactId && (
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+              <div ref={contactTagsAnchorRef} style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                 <SectionTitle
                   action={canEditContacts ? (
                     <button
@@ -668,6 +671,7 @@ export function InfoPanel({ conversationId }: Props) {
 
                 {contactTagPickerOpen && canEditContacts && (
                   <ContactTagPicker
+                    anchorRef={contactTagsAnchorRef}
                     tags={contactTagCatalog}
                     selectedTagIds={contactTags.map((tag) => tag.id)}
                     disabled={addContactTagMutation.isPending}
@@ -678,7 +682,7 @@ export function InfoPanel({ conversationId }: Props) {
               </div>
             )}
 
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+            <div ref={convTagsAnchorRef} style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
               <SectionTitle
                 action={(
                   <button
@@ -723,6 +727,7 @@ export function InfoPanel({ conversationId }: Props) {
 
               {showTagDropdown && (
                 <TagDropdown
+                  anchorRef={convTagsAnchorRef}
                   conversationId={conversationId}
                   onClose={() => setShowTagDropdown(false)}
                 />

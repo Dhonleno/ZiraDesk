@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ContactTag } from '../../services/api';
 import { ContactTagPicker } from './ContactTagPicker';
@@ -22,6 +22,7 @@ export function ContactTagSelector({
 }: ContactTagSelectorProps) {
   const { t } = useTranslation(['crm', 'common']);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
   const selectedTags = selectedTagIds
     .map((tagId) => tagsById.get(tagId))
@@ -41,7 +42,9 @@ export function ContactTagSelector({
         {t('contacts.fields.tags')}
       </label>
 
-      <div style={{ position: 'relative' }}>
+      {/* O painel é portalizado e alinha pela borda direita deste wrapper —
+          mesma geometria de quando era `absolute; top: 100%; right: 0`. */}
+      <div ref={anchorRef}>
         {selectedTags.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {selectedTags.map((tag) => (
@@ -111,6 +114,7 @@ export function ContactTagSelector({
 
         {pickerOpen && (
           <ContactTagPicker
+            anchorRef={anchorRef}
             tags={tags}
             selectedTagIds={selectedTagIds}
             disabled={disabled}

@@ -10,6 +10,7 @@ import { useToast } from '../../stores/toast.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { useNotificationStore } from '../../stores/notification.store';
 import { AgentStatsModal } from './AgentStatsModal';
+import { AnchoredPopover } from '../ui/AnchoredPopover';
 import { avatarClass } from '../../utils/avatar';
 import { isConversationBotControlled } from '../../utils/conversationNotifications';
 import { shouldShowDesktopNotification } from '../../utils/notify';
@@ -195,6 +196,9 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
   const newConversationTimeoutsRef = useRef<Map<string, number>>(new Map());
   const desktopPermissionDeniedRef = useRef(false);
   const tagFilterRef = useRef<HTMLDivElement | null>(null);
+  // O painel é portalizado no body, então não é mais descendente do wrapper:
+  // o clique-fora precisa checá-lo separadamente.
+  const tagFilterPopoverRef = useRef<HTMLDivElement | null>(null);
   const mainTabsRef = useRef<HTMLDivElement | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const debouncedSearch = useDebounce(search, 300);
@@ -334,9 +338,10 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
       if (!tagFilterRef.current) return;
-      if (!tagFilterRef.current.contains(event.target as Node)) {
-        setShowTagFilterDropdown(false);
-      }
+      const target = event.target as Node;
+      if (tagFilterRef.current.contains(target)) return;
+      if (tagFilterPopoverRef.current?.contains(target)) return;
+      setShowTagFilterDropdown(false);
     };
 
     document.addEventListener('mousedown', onPointerDown);
@@ -1133,7 +1138,13 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
           )}
 
           {showTagFilterDropdown && (
-            <div className="tag-dropdown" style={{ top: 'calc(100% + 6px)', left: 0, right: 0, minWidth: 0 }}>
+            <AnchoredPopover
+              anchorRef={tagFilterRef}
+              popoverRef={tagFilterPopoverRef}
+              align="stretch"
+              gap={6}
+              className="tag-dropdown"
+            >
               <div className="tag-dropdown-header">
                 <span>{t('tags.title')}</span>
                 <button type="button" onClick={() => setShowTagFilterDropdown(false)}>×</button>
@@ -1154,7 +1165,7 @@ export function ConversationList({ selectedId, onSelect, initialAgentId }: Props
                   </button>
                 ))}
               </div>
-            </div>
+            </AnchoredPopover>
           )}
         </div>
 

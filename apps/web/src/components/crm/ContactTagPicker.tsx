@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { type RefObject, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ContactTag } from '../../services/api';
+import { AnchoredPopover } from '../ui/AnchoredPopover';
 
 interface ContactTagPickerProps {
+  /** Wrapper do gatilho — o painel alinha a borda direita a ele. */
+  anchorRef: RefObject<HTMLElement>;
   tags: ContactTag[];
   selectedTagIds: string[];
   disabled?: boolean;
@@ -11,6 +14,7 @@ interface ContactTagPickerProps {
 }
 
 export function ContactTagPicker({
+  anchorRef,
   tags,
   selectedTagIds,
   disabled = false,
@@ -37,7 +41,7 @@ export function ContactTagPicker({
   }, [onClose]);
 
   return (
-    <div className="tag-dropdown" ref={pickerRef}>
+    <AnchoredPopover anchorRef={anchorRef} popoverRef={pickerRef} className="tag-dropdown">
       <div className="tag-dropdown-header">
         <span>{t('contacts.tagsSection.picker.title')}</span>
         <button
@@ -79,6 +83,6 @@ export function ContactTagPicker({
           ))
         )}
       </div>
-    </div>
+    </AnchoredPopover>
   );
 }

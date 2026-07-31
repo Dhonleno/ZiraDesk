@@ -440,6 +440,8 @@ export function ChatArea({ conversationId, onClosed }: Props) {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  // Wrapper do botão de tags — âncora do painel portalizado.
+  const tagAnchorRef = useRef<HTMLDivElement | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [, setTotalMessages] = useState(0);
@@ -2202,7 +2204,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
             </button>
           ) : (
             <>
-              <div style={{ position: 'relative' }}>
+              <div ref={tagAnchorRef}>
                 <button
                   type="button"
                   className="tb-icon-btn"
@@ -2223,6 +2225,7 @@ export function ChatArea({ conversationId, onClosed }: Props) {
 
                 {showTagDropdown && (
                   <TagDropdown
+                    anchorRef={tagAnchorRef}
                     conversationId={conversationId}
                     onClose={() => setShowTagDropdown(false)}
                   />

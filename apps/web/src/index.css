@@ -1591,16 +1591,20 @@
   }
 }
 
+/* Painel flutuante portalizado no body (AnchoredPopover): escapa do overflow
+   de modais e painéis laterais. z-index acima do Modal (1000/1001) e dos modais
+   próprios em 1100/1200 — mesma faixa do DatePicker/AgentCombobox. */
+.anchored-popover {
+  z-index: 1300;
+}
+
+/* position/top/left ficam com o AnchoredPopover (coordenadas de viewport). */
 .tag-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
   box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
   min-width: 220px;
-  z-index: 100;
   overflow: hidden;
 }
 
