@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../config/database.js';
+import { ensureLgpdRequestsTable } from '../../lib/lgpd/schema.js';
 
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
@@ -108,62 +109,9 @@ export async function ensureCrmInfrastructure(schemaName: string): Promise<void>
       ADD COLUMN IF NOT EXISTS lgpd_anonymization_reason TEXT
     `);
 
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS ${schema}.lgpd_requests (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        contact_id UUID REFERENCES ${schema}.contacts(id) ON DELETE SET NULL,
-        user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
-        subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
-        request_type VARCHAR(40) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'processed',
-        requested_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
-        processed_by UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
-        payload JSONB NOT NULL DEFAULT '{}',
-        result JSONB NOT NULL DEFAULT '{}',
-        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        processed_at TIMESTAMPTZ,
-        sla_deadline TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '15 days'),
-        notified_at TIMESTAMPTZ,
-        reminder_sent_at TIMESTAMPTZ
-      )
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE ${schema}.lgpd_requests
-      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES ${schema}.users(id) ON DELETE SET NULL,
-      ADD COLUMN IF NOT EXISTS subject_type VARCHAR(20) NOT NULL DEFAULT 'contact',
-      ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE ${schema}.lgpd_requests
-      ALTER COLUMN sla_deadline SET DEFAULT (NOW() + INTERVAL '15 days')
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      UPDATE ${schema}.lgpd_requests
-      SET sla_deadline = requested_at + INTERVAL '15 days'
-      WHERE status = 'pending'
-        AND sla_deadline IS NULL
-    `);
-
-    await prisma.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_contact ON ${schema}.lgpd_requests(contact_id)`,
-    );
-
-    await prisma.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_user ON ${schema}.lgpd_requests(user_id)`,
-    );
-
-    await prisma.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_subject_type ON ${schema}.lgpd_requests(subject_type)`,
-    );
-
-    await prisma.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS idx_lgpd_requests_sla ON ${schema}.lgpd_requests(sla_deadline) WHERE status = 'pending'`,
-    );
+    // Shape de lgpd_requests vem da fonte canônica (lib/lgpd/schema.ts) —
+    // esta definição já divergiu da de portal.service.ts e disparava 0A000.
+    await ensureLgpdRequestsTable(prisma, schemaName);
 
     if (await tableExists(schemaName, 'conversations')) {
       await prisma.$executeRawUnsafe(`

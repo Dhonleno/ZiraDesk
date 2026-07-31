@@ -1,5 +1,18 @@
 # Changelog — ZiraDesk
 
+## [0.10.8] — `lgpd_requests` unificada e blindada contra `0A000` (Frente A)
+
+### Corrigido
+- `lgpd_requests` tinha **duas definições lazy divergentes** — `crm.infrastructure.ts` (`request_type VARCHAR(40)`, `status VARCHAR(20) DEFAULT 'processed'`, FKs `ON DELETE SET NULL`) e `portal.service.ts` (`VARCHAR(30)`, `VARCHAR(30) DEFAULT 'pending'`, FKs sem `ON DELETE`) —, ambas com `CREATE TABLE IF NOT EXISTS`: quem chegasse primeiro no schema definia o shape. Mesmos nomes e mesma ordem de coluna, `atttypmod` diferente, o que basta para `equalTupleDescs` (plancache.c) recusar o plano cacheado e disparar `0A000 cached plan must not change result type`.
+- Shape unificado em fonte canônica única (`lib/lgpd/schema.ts`, `ensureLgpdRequestsTable`): `request_type VARCHAR(30)` (maior valor real `'external_anonymization'`, 22 chars), `status VARCHAR(20) DEFAULT 'pending'` (maior valor `'processed'`, 9 chars; a máquina de estados nasce em `pending`), FKs `requested_by`/`processed_by` com `ON DELETE SET NULL`. Os dois call sites passaram a chamar a canônica no ponto onde tinham DDL inline; os caches `Set<string>` por schema de cada módulo seguem com quem chama.
+- `createLgpdRequestRecord` (`lib/lgpd/requests.ts`) passou a **sempre qualificar** a tabela por schema. O ramo não-qualificado antigo produzia texto de statement idêntico entre tenants, então o mesmo prepared statement era reusado na mesma conexão do pool contra schemas de shape diferente — o par de colisão. Quando o chamador não informa `schemaName` (caminho do CRM, que entra por `withOptionalSchema` recorrendo com `undefined`), o schema ativo é resolvido por `current_schema()`, mesmo padrão de `ensureTicketInfrastructure`.
+- `RETURNING *` trocado por lista explícita das 15 colunas (`LGPD_REQUEST_COLUMNS`), fixando contagem e ordem do descritor de resultado contra colunas adicionadas por retrofit.
+
+### Testes
+- Sonda `src/lib/lgpd/__probes__/0A000-lgpd-requests.probe.test.ts` (fora da suíte, atrás de `ZIRADESK_PROBE_0A000=1`) passou a separar os três eixos do mecanismo, com cache de prepared statements isolado por caso (reconexão) e `DROP SCHEMA CASCADE` no teardown: **(a)** nome cru + `RETURNING *` sobre as defs legadas ainda dispara `0A000` — o vetor original continua detectável; **(b1)** shape canônico nos dois lados não colide; **(b2)** nome cru + colunas explícitas sobre typmod divergente **ainda dispara** `0A000`; **(b3)** o statement de produção (qualificado + explícito) não colide nem com typmod divergente.
+- Medição de (b2) corrige uma premissa: **colunas explícitas não blindam divergência de `atttypmod`** — `RETURNING request_type` continua carregando o typmod da coluna. Quem fecha o vetor independente do shape físico é a **qualificação** do nome da tabela; a lista explícita cobre o eixo de contagem/ordem.
+- Suíte: **355 passed | 5 skipped** (os 5 são a sonda desligada), sem regressão sobre a baseline de 355.
+
 ## [0.10.7] — Shape multitenant LGPD parcialmente unificado
 
 ### Corrigido
