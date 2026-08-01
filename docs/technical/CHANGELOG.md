@@ -1,5 +1,13 @@
 # Changelog — ZiraDesk
 
+## [0.10.10] — Decisão de não restaurar tenants de teste
+
+### Documentação
+- `ARQUITETURA_TECNICA.md` passou a registrar que `tenant_demo`, `tenant_multsoft_desenvolvimento_de_sistemas` e `tenant_sepol` eram ambientes de teste da VPS Contabo anterior e **não serão restaurados** a partir do backup no Cloudflare R2.
+- Documentado que tenants no novo destino de infraestrutura devem ser provisionados do zero via `createTenantTables`, com schema limpo, sem carregar shape legado dos ambientes de teste.
+- Removido o bloqueio operacional implícito de "backup verificado" para decidir sobre `agent_bot_skills`; a decisão sobre manter ou remover a tabela fica para tarefa própria, sem depender de restore dos tenants de teste.
+- Anotado que `migrate:lgpd-shape` deve ser reavaliado futuramente se não houver schemas reais legados a migrar. O backup R2 continua como histórico/precaução, sem plano ativo de restore para os três tenants de teste.
+
 ## [0.10.9] — `conversations` blindada contra `0A000` por enum OID
 
 ### Corrigido
