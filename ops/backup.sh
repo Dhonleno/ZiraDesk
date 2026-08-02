@@ -2,13 +2,18 @@
 set -Eeuo pipefail
 
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-ziradesk-postgres}"
-POSTGRES_USER="${POSTGRES_USER:-postgres}"
+POSTGRES_USER="${POSTGRES_USER:-ziradesk}"
 POSTGRES_DB="${POSTGRES_DB:-ziradesk}"
 R2_REMOTE="${R2_REMOTE:-r2:ziradesk-backups}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/home/deploy/.config/rclone/rclone.conf}"
 LOG_FILE="${LOG_FILE:-/home/deploy/ziradesk-backup.log}"
 
-: "${UPLOADS_DIR:?Defina UPLOADS_DIR com o caminho dos uploads persistentes}"
+UPLOADS_DIR="${UPLOADS_DIR:-/home/deploy/ziradesk/data/uploads}"
+
+if [ ! -d "${UPLOADS_DIR}" ]; then
+  echo "ERRO: UPLOADS_DIR (${UPLOADS_DIR}) nao existe ou nao e um diretorio." >&2
+  exit 1
+fi
 
 timestamp="$(date +%Y-%m-%d_%H-%M-%S)"
 tmp_dir="$(mktemp -d)"

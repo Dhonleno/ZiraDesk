@@ -235,6 +235,14 @@ Cloudflare R2) ainda nao foi reconfigurado no servidor novo. O
 **Ferramenta:** rclone v1.74+ (instalado em `/usr/bin/rclone`)
 **Config rclone:** `/home/deploy/.config/rclone/rclone.conf`
 
+`ops/backup.sh` e `ops/restore.sh` têm defaults alinhados à topologia de
+produção (`POSTGRES_USER=ziradesk`, `UPLOADS_DIR=/home/deploy/ziradesk/data/uploads`),
+então podem ser chamados sem variáveis extras nos três caminhos de invocação:
+cron, GitHub Action "Backup Manual" e execução manual via SSH. Todas as
+variáveis continuam overridáveis por ambiente caso a topologia mude
+(`POSTGRES_CONTAINER`, `POSTGRES_USER`, `POSTGRES_DB`, `UPLOADS_DIR`,
+`R2_REMOTE`, `RCLONE_CONFIG`, `LOG_FILE`).
+
 ### O que é salvo
 
 | Item | Formato | Retenção |
@@ -250,7 +258,7 @@ ziradesk-backups/
 │   ├── postgres/   ← retém 7 dias
 │   └── uploads/    ← retém 7 dias
 └── monthly/
-    └── YYYY-MM/    ← retém 28 dias (criado dia 1 de cada mês)
+    └── YYYY-MM/    ← retém 120 dias / ~4 meses (criado dia 1 de cada mês)
 ```
 
 ### Executar backup manual
