@@ -15,7 +15,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
-      CONTABO_HOST: ${{ secrets.CONTABO_HOST || '85.239.245.8' }}
+      CONTABO_HOST: ${{ secrets.CONTABO_HOST || '66.94.105.48' }}
       CONTABO_USER: ${{ secrets.CONTABO_USER || 'deploy' }}
       CONTABO_PORT: ${{ secrets.CONTABO_PORT || '22' }}
       CONTABO_DEPLOY_PATH: ${{ secrets.CONTABO_DEPLOY_PATH || '/home/deploy/ziradesk/app' }}

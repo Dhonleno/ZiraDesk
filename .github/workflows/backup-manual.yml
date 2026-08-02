@@ -18,7 +18,7 @@ jobs:
       - name: Executar backup via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 85.239.245.8
+          host: 66.94.105.48
           username: deploy
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |

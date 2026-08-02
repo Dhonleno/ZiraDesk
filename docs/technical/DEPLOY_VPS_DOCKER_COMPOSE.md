@@ -186,9 +186,11 @@ curl -I https://api.ziradesk.com/health
 O deploy automatico da VPS Contabo roda no workflow dedicado
 `.github/workflows/deploy-contabo.yml`.
 
-Pendencia da migracao de 2026-08-02: o workflow ainda tem o IP antigo
-`85.239.245.8` como default/valor hardcoded e nao funciona corretamente para o
-novo VPS (`66.94.105.48`) ate ser atualizado em tarefa propria.
+Atualizado em 2026-08-02: o default do host no workflow ja aponta para o novo
+VPS (`66.94.105.48`). Continua pendente a regeneracao do secret
+`CONTABO_SSH_PRIVATE_KEY`, que ainda contem a chave do servidor antigo — ate
+isso ser feito no painel do GitHub, o deploy automatico falha na autenticacao
+SSH mesmo com o IP correto.
 
 O workflow `.github/workflows/ci.yml` continua responsavel apenas pelos testes.
 
@@ -197,7 +199,7 @@ Secret obrigatorio no GitHub:
   `deploy` na VPS.
 
 Secrets opcionais, com defaults atuais:
-- `CONTABO_HOST` (default atual no workflow: `85.239.245.8`, pendente de troca)
+- `CONTABO_HOST` (default atual no workflow: `66.94.105.48`)
 - `CONTABO_USER` (default: `deploy`)
 - `CONTABO_PORT` (default: `22`)
 - `CONTABO_DEPLOY_PATH` (default: `/home/deploy/ziradesk/app`)
@@ -308,13 +310,16 @@ tail -100 /home/deploy/ziradesk-backup.log
 
 ## Pendências conhecidas pós-migração 2026-08-02
 
-- `.github/workflows/deploy-contabo.yml` ainda aponta para o IP antigo
-  `85.239.245.8`; deploy automatico via `git push` para `main` depende da troca
-  para `66.94.105.48`.
-- `.github/workflows/backup-manual.yml` ainda usa o IP antigo como unico valor
-  conhecido.
 - Secrets GitHub `CONTABO_SSH_PRIVATE_KEY` e `VPS_SSH_KEY` precisam ser
-  regenerados para o servidor novo.
+  regenerados para o servidor novo. O IP ja foi corrigido para `66.94.105.48`
+  em `deploy-contabo.yml` e `backup-manual.yml`, mas enquanto os secrets
+  apontarem para a chave do servidor antigo os dois workflows falham na
+  autenticacao SSH. E acao fora do repo: gerar o par de chaves no servidor e
+  cadastrar a privada em GitHub -> Settings -> Secrets.
+- `backup-manual.yml` mantem o host como valor literal, sem o padrao
+  `secrets.CONTABO_HOST || <default>` usado no deploy, e usa `VPS_SSH_KEY` em
+  vez de `CONTABO_SSH_PRIVATE_KEY`. Unificar host e secret de chave entre os
+  dois workflows fica para a tarefa de regeneracao dos secrets.
 - Cron de backup com `rclone` + `pg_dump` para Cloudflare R2 ainda nao foi
   reconfigurado no novo VPS.
 - Teste funcional completo de login via seed do super admin ainda nao foi
