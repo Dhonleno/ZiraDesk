@@ -1,5 +1,16 @@
 # Changelog — ZiraDesk
 
+## [0.10.11] — Migração de infraestrutura para novo Contabo VPS
+
+### Documentação
+- Registrada a migração concluída em 2026-08-02 para o novo Contabo Cloud VPS 6 Core em US-East (`66.94.105.48`, hostname `vmi3482143`), incluindo a decisão Core vs Performance e o achado de drop-ins do SSH na imagem Ubuntu 24.04 da Contabo.
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md` passou a cobrir o passo "VPS crua -> repo clonado": bootstrap, checagens de conflito, protocolo de sessão root salva-vidas, deploy key dedicada, clone e diretórios persistentes.
+- Corrigida a documentação de TLS: Cloudflare Origin Certificates não suportam wildcard de dois níveis (`*.*.ziradesk.com`), então `suporte.{tenant}.ziradesk.com` exige abordagem alternativa.
+- Documentados os requisitos de boot de produção para `META_APP_SECRET` e `RESEND_FROM_EMAIL`.
+
+### Segurança / Infraestrutura
+- Registradas como pendentes a troca do IP antigo nos workflows de deploy/backup, a regeneração dos secrets SSH do GitHub para o novo servidor, a reconfiguração do cron de backup R2 e o teste funcional completo de login via seed super admin.
+
 ## [0.10.10] — Decisão de não restaurar tenants de teste
 
 ### Documentação
