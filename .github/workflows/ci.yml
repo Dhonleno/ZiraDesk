@@ -57,7 +57,7 @@ jobs:
       TWILIO_API_SECRET: test_twilio_api_secret
       RESEND_API_KEY: test_resend_api_key
       RESEND_FROM_EMAIL: teste@ziradesk.com.br
-      RESEND_WEBHOOK_SECRET: test_resend_webhook_secret
+      RESEND_WEBHOOK_SECRET: whsec_emlyYWRlc2tfcmVzZW5kX3dlYmhvb2tfc2VjcmV0X2Zvcl90ZXN0c18yMDI2
       STORAGE_PROVIDER: local
 
     steps:
