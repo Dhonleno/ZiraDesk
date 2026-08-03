@@ -1,5 +1,7 @@
 import axios, { type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios';
+import i18n from '../lib/i18n';
 import { useAuthStore } from '../stores/auth.store';
+import { useToastStore } from '../stores/toast.store';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -771,6 +773,26 @@ function shouldLogoutAfterRefreshFailure(error: unknown): boolean {
   return status === 401 || status === 403;
 }
 
+function getApiErrorCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined;
+  return (error as AxiosError<{ error?: { code?: string } }>).response?.data?.error?.code;
+}
+
+// Mesmo padrão do `auth:force_logout` em services/socket.ts: derruba a sessão,
+// avisa por toast e redireciona fora do React (o interceptor não tem router).
+function handleTenantSuspended(): void {
+  useAuthStore.getState().logout();
+  useToastStore.getState().addToast({
+    type: 'warning',
+    message: i18n.t('session.tenantSuspended', { ns: 'auth' }),
+    durationMs: 6000,
+  });
+
+  window.setTimeout(() => {
+    window.location.href = '/login';
+  }, 2000);
+}
+
 async function refreshAccessToken(): Promise<string> {
   if (sharedRefreshPromise) return sharedRefreshPromise;
 
@@ -782,7 +804,9 @@ async function refreshAccessToken(): Promise<string> {
       return newToken;
     })
     .catch((error: unknown) => {
-      if (shouldLogoutAfterRefreshFailure(error)) {
+      if (getApiErrorCode(error) === 'TENANT_SUSPENDED') {
+        handleTenantSuspended();
+      } else if (shouldLogoutAfterRefreshFailure(error)) {
         useAuthStore.getState().logout();
       }
       throw error;
@@ -834,6 +858,13 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     if (!original) return Promise.reject(error);
+
+    // Tenant suspenso/cancelado: único caso em que o branch olha o corpo, não só
+    // o status. Rotas /auth/ são tratadas no catch de refreshAccessToken e no login.
+    if (getApiErrorCode(error) === 'TENANT_SUSPENDED' && !original.url?.includes('/auth/')) {
+      handleTenantSuspended();
+      return Promise.reject(error);
+    }
 
     // Só tenta refresh uma vez e apenas para rotas que não sejam de auth
     if (

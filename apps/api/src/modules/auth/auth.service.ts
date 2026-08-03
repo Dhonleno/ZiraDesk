@@ -40,18 +40,24 @@ const messages = {
     invalidCredentials: 'E-mail ou senha inválidos',
     userNotFound: 'Usuário não encontrado',
     tokenExpired: 'Sessão expirada, faça login novamente',
+    tenantSuspended: 'Esta conta está suspensa ou cancelada.',
   },
   'en-US': {
     invalidCredentials: 'Invalid email or password',
     userNotFound: 'User not found',
     tokenExpired: 'Session expired, please login again',
+    tenantSuspended: 'This account is suspended or cancelled.',
   },
   es: {
     invalidCredentials: 'Correo o contraseña inválidos',
     userNotFound: 'Usuario no encontrado',
     tokenExpired: 'Sesión expirada, inicia sesión nuevamente',
+    tenantSuspended: 'Esta cuenta está suspendida o cancelada.',
   },
-} satisfies Record<SupportedLanguage, { invalidCredentials: string; userNotFound: string; tokenExpired: string }>;
+} satisfies Record<
+  SupportedLanguage,
+  { invalidCredentials: string; userNotFound: string; tokenExpired: string; tenantSuspended: string }
+>;
 
 export function getAuthMessages(lang: SupportedLanguage) {
   return messages[lang];
@@ -225,7 +231,7 @@ export async function verifyRefreshToken(
     select: { schemaName: true, status: true },
   });
   if (!tenant || (tenant.status !== 'active' && tenant.status !== 'trial')) {
-    throw new TenantSuspendedError(msg.tokenExpired);
+    throw new TenantSuspendedError(msg.tenantSuspended);
   }
 
   const schemaName = tenant.schemaName.replaceAll('"', '""');

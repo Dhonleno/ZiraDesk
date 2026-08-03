@@ -1,5 +1,20 @@
 # Changelog — ZiraDesk
 
+## [0.10.15] — Frontend reage a conta suspensa
+
+### Adicionado
+- O interceptor global de resposta (`services/api.ts`) passou a reconhecer `code: 'TENANT_SUSPENDED'` no corpo do erro, acionando `handleTenantSuspended()`: derruba a sessão pelo store, exibe toast de aviso e redireciona para `/login` após 2s. Segue o padrão já estabelecido pelo handler de `auth:force_logout` em `services/socket.ts` — `getState()` no store, `i18n.t(..., { ns: 'auth' })` para a mensagem e `window.location.href` para navegar, já que o interceptor roda fora do React e o app usa `<BrowserRouter>`, sem router object acessível.
+- Este é o **único ponto do interceptor que ramifica pelo corpo da resposta**, e não apenas pelo status: o refresh devolve `401`, mesmo status de token expirado, então o código no payload é a única forma de distinguir os dois. Um helper `getApiErrorCode()` isola essa leitura, com `axios.isAxiosError` como guarda para não tocar `.response` em erro de rede.
+- O `catch` de `refreshAccessToken` distingue o caso antes do comportamento atual: `TENANT_SUSPENDED` chama `handleTenantSuspended()`; os outros 5 motivos de recusa do refresh continuam caindo em `shouldLogoutAfterRefreshFailure` + `logout()`, sem redirect, exatamente como antes.
+- `Login.tsx` passou a inspecionar o código do erro em vez de renderizar string fixa: conta suspensa e credenciais inválidas agora produzem mensagens distintas. Antes, qualquer falha de login — inclusive o `403` de conta suspensa — exibia "E-mail ou senha inválidos".
+- i18n: chaves `tenantSuspended` em `auth.json` nos 3 locales (`pt-BR`, `en-US`, `es`), em dois blocos — `login.errors` para a mensagem inline do formulário e `session` para o toast, irmã de `forcedLogout`.
+
+### Corrigido
+- Mensagem do refresh para tenant suspenso corrigida no backend: `TenantSuspendedError` passou a carregar `msg.tenantSuspended` (chave nova no catálogo de `auth.service.ts`, nos 3 idiomas) em vez de `msg.tokenExpired`. Fecha a pendência deixada na 0.10.14, onde o discriminador estava correto mas o texto dizia "Sessão expirada, faça login novamente". É mudança de texto em resposta de API existente; a auditoria de consumidores confirmou que nenhum código de `apps/web` lê esse campo nessas rotas.
+
+### Testes
+- `type-check` limpo em `@ziradesk/api` e `@ziradesk/web`. Suíte da API: **352 passed | 3 failed | 10 skipped** — as 3 falhas são as mesmas de `omnichannel.webhooks.integration.test.ts` já caracterizadas na 0.10.14 como ambiente (execução local contra o Postgres de desenvolvimento na porta `5432`, não o banco de teste em `5433`), e que passaram verdes no CI de `ab278d7`.
+
 ## [0.10.14] — Discriminador `TENANT_SUSPENDED` nos pontos de enforcement
 
 ### Adicionado

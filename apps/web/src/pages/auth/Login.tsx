@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
+import type { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'react-router-dom';
@@ -78,6 +79,12 @@ export function Login() {
   });
 
   const onSubmit = (data: LoginInput) => login(data);
+  const loginErrorCode = (loginError as AxiosError<{ error?: { code?: string } }> | null)
+    ?.response?.data?.error?.code;
+  const loginErrorMessage =
+    loginErrorCode === 'TENANT_SUSPENDED'
+      ? t('login.errors.tenantSuspended')
+      : t('login.errors.invalidCredentials');
   const hasDpoInfo = Boolean(
     legalInfo?.name
     || legalInfo?.email
@@ -228,7 +235,7 @@ export function Login() {
 
             {loginError && (
               <p className="rounded-lg bg-red-950/60 border border-red-800 px-3 py-2 text-sm text-red-400">
-                {t('login.errors.invalidCredentials')}
+                {loginErrorMessage}
               </p>
             )}
 
