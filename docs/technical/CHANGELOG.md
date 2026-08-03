@@ -1,5 +1,19 @@
 # Changelog — ZiraDesk
 
+## [0.10.13] — Bucket de backup alinhado e divergência de caminho documentada
+
+### Corrigido
+- Default de `R2_REMOTE` em `ops/restore.sh` corrigido de `r2:ziradesk-backups` para `r2:ziradesk-backups-prod`, alinhando com `ops/backup.sh` (corrigido em 0.10.12). A assimetria era mais grave que a do backup: um restore sem override gravava/lia do bucket errado justamente em cenário de disaster recovery, quando não há margem para descobrir o engano. Restore do histórico no bucket antigo, se vier a ser necessário, passa a exigir `R2_REMOTE` explícito.
+- `.github/workflows/backup-manual.yml` apontava a listagem de conferência pós-backup (`rclone ls`) para o bucket antigo, então a saída "Arquivos no R2" do workflow não refletia o destino real dos uploads.
+- As 4 referências ao bucket antigo em `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md` (destino, árvore de diretórios, comando de verificação e comando de restore) foram alinhadas ao mesmo nome.
+
+### Documentação
+- `DEPLOY_VPS_DOCKER_COMPOSE.md` passou a registrar que `/home/deploy/scripts/backup.sh` e `/home/deploy/scripts/restore.sh` são **cópias manuais** de `ops/*.sh` — arquivos regulares, não symlinks — e que o `git pull --ff-only` do `deploy-contabo.yml` atualiza somente `~/ziradesk/app/ops/`, sem propagar para o caminho que cron, `backup-manual.yml` e SSH manual de fato invocam. O trecho anterior afirmava que os scripts do repositório podiam ser chamados "nos três caminhos de invocação", o que nunca foi verdade. Inclui o `cp` + `chmod +x` de re-sincronização como passo pós-deploy explícito.
+- `ARQUITETURA_TECNICA.md` §16 registra a divergência de caminho como causa-raiz adicional do item [INFRA]: o Deploy Contabo #213 completou com `success` e ainda assim o backup de produção seguiu rodando a versão antiga, sem `verify_uploaded` e com o bucket errado, até a re-cópia manual em 2026-08-03. Deploy verde não implica script de backup atualizado. Follow-up estrutural pendente: step de sincronização no `deploy-contabo.yml` ou substituição das cópias por symlinks.
+
+### Segurança / Infraestrutura
+- §16 qualificado quanto aos secrets SSH: `CONTABO_SSH_PRIVATE_KEY` já está funcional — os passos de SSH do `deploy-contabo.yml` executaram e completaram contra o host correto em Deploy Contabo #213 (run 30822031385), incluindo `git pull`, rebuild dos containers, `api-migrate` e health check. A afirmação anterior de que os dois workflows falhavam na autenticação não se aplica mais a esse secret. `VPS_SSH_KEY` permanece não verificado, pois `backup-manual.yml` é `workflow_dispatch` apenas e não rodou.
+
 ## [0.10.12] — Verificação pós-upload dos backups no R2
 
 ### Corrigido

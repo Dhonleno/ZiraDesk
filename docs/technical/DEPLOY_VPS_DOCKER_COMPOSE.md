@@ -233,17 +233,41 @@ Pendencia da migracao de 2026-08-02: o cron de backup (`rclone` + `pg_dump` para
 Cloudflare R2) ainda nao foi reconfigurado no servidor novo. O
 `vps-bootstrap.sh` nao cobre essa etapa.
 
-**Destino:** Cloudflare R2 — bucket `ziradesk-backups`
+**Destino:** Cloudflare R2 — bucket `ziradesk-backups-prod`
 **Ferramenta:** rclone v1.74+ (instalado em `/usr/bin/rclone`)
 **Config rclone:** `/home/deploy/.config/rclone/rclone.conf`
 
 `ops/backup.sh` e `ops/restore.sh` têm defaults alinhados à topologia de
 produção (`POSTGRES_USER=ziradesk`, `UPLOADS_DIR=/home/deploy/ziradesk/data/uploads`),
-então podem ser chamados sem variáveis extras nos três caminhos de invocação:
-cron, GitHub Action "Backup Manual" e execução manual via SSH. Todas as
-variáveis continuam overridáveis por ambiente caso a topologia mude
-(`POSTGRES_CONTAINER`, `POSTGRES_USER`, `POSTGRES_DB`, `UPLOADS_DIR`,
-`R2_REMOTE`, `RCLONE_CONFIG`, `LOG_FILE`).
+então podem ser chamados sem variáveis extras. Todas as variáveis continuam
+overridáveis por ambiente caso a topologia mude (`POSTGRES_CONTAINER`,
+`POSTGRES_USER`, `POSTGRES_DB`, `UPLOADS_DIR`, `R2_REMOTE`, `RCLONE_CONFIG`,
+`LOG_FILE`).
+
+**Atenção: os scripts que executam em produção NÃO são os do repositório.** Os
+três caminhos de invocação — cron das 03h00, GitHub Action "Backup Manual"
+(`backup-manual.yml`) e execução manual via SSH — chamam
+`/home/deploy/scripts/backup.sh` e `/home/deploy/scripts/restore.sh`. Esses são
+**cópias manuais** de `ops/*.sh`: arquivos regulares, **não symlinks**
+(verificar com `ls -la /home/deploy/scripts/`). O `git pull --ff-only` do
+`deploy-contabo.yml` atualiza somente `~/ziradesk/app/ops/`, e **nenhum passo do
+deploy propaga para `/home/deploy/scripts/`**.
+
+Consequência prática: toda alteração em `ops/backup.sh` ou `ops/restore.sh`
+exige re-cópia manual no servidor antes de ter qualquer efeito real. Depois do
+deploy, rodar:
+
+```bash
+cp ~/ziradesk/app/ops/backup.sh ~/ziradesk/app/ops/restore.sh /home/deploy/scripts/
+chmod +x /home/deploy/scripts/backup.sh /home/deploy/scripts/restore.sh
+```
+
+Isto já causou dessincronização real: em 2026-08-03, após o deploy que levou ao
+repositório a verificação pós-upload (`verify_uploaded`) e a correção do bucket
+para `ziradesk-backups-prod`, o `/home/deploy/scripts/backup.sh` continuou sendo
+a versão antiga — sem verificação e apontando para o bucket errado — até a
+re-cópia manual ser executada. Enquanto a cópia não é feita, o repositório e o
+que roda às 03h00 divergem silenciosamente.
 
 ### O que é salvo
 
@@ -255,7 +279,7 @@ variáveis continuam overridáveis por ambiente caso a topologia mude
 ### Estrutura no R2
 
 ```text
-ziradesk-backups/
+ziradesk-backups-prod/
 ├── daily/
 │   ├── postgres/   ← retém 7 dias
 │   └── uploads/    ← retém 7 dias
@@ -280,7 +304,7 @@ tail -50 /home/deploy/ziradesk-backup.log
 
 ```bash
 ssh deploy@66.94.105.48
-rclone ls r2:ziradesk-backups \
+rclone ls r2:ziradesk-backups-prod \
   --config /home/deploy/.config/rclone/rclone.conf
 ```
 
@@ -288,7 +312,7 @@ rclone ls r2:ziradesk-backups \
 
 ```bash
 # 1. Baixar o dump do R2
-rclone copy r2:ziradesk-backups/daily/postgres/postgres_YYYY-MM-DD_HH-MM-SS.dump \
+rclone copy r2:ziradesk-backups-prod/daily/postgres/postgres_YYYY-MM-DD_HH-MM-SS.dump \
   /tmp/ --config /home/deploy/.config/rclone/rclone.conf
 
 # 2. Executar restore (interativo, pede confirmação)
