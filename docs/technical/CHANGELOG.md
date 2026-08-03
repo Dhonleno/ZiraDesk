@@ -1,5 +1,25 @@
 # Changelog — ZiraDesk
 
+## [0.10.17] — `schema.prisma` sincronizado com o banco (dois drifts fechados)
+
+### Corrigido
+- **`model TenantVoiceConfig` adicionado a `schema.prisma`**, fechando o drift [ALTO] registrado no §16 na 0.10.16. A tabela existia em produção desde a migration `20260613120000_add_tenant_voice_config` e era consumida por `voice-config.service.ts` e `tenants.service.ts`, mas sem model correspondente — então qualquer `prisma migrate dev` futuro, para qualquer mudança não relacionada, emitiria `DROP TABLE tenant_voice_config` no diff, silenciosamente.
+- O model foi escrito **a partir de introspecção real** (`\d+ tenant_voice_config`), não da descrição textual do §16 — e isso importou: a introspecção revelou três atributos que o registro não tinha, porque a inspeção original truncou o rodapé do `\d`. `tenant_id` e `twilio_phone_number` são **UNIQUE** (a relação com `Tenant` é **1:1**, não 1:N) e existe **FK `ON DELETE CASCADE`** para `tenants(id)`, que exigiu campo de relação no model e a back-relation `voiceConfig TenantVoiceConfig?` em `Tenant`. Escrever de memória teria deixado três `ALTER TABLE` residuais no diff.
+- Dois mapeamentos foram decisivos para o diff zerar, ambos casos em que o default do Prisma diverge do banco: `@default(dbgenerated("gen_random_uuid()"))` em vez de `@default(uuid())` — este último é gerado no cliente e **não** cria default de coluna, o que produziria um `DROP DEFAULT` —, e `onUpdate: NoAction` explícito na relação, já que o default do Prisma para relação obrigatória é `Cascade` e o banco tem `NO ACTION`. Somam-se `@db.Uuid`, `@db.VarChar(20)` e `@db.Timestamptz(6)`.
+- **Segundo drift fechado no mesmo diff**: `conversations.waiting_expires_at` e `queue_entered_at` são `timestamptz` no banco (migration `20260523120000_restructure_conversation_status:140`) mas estavam declarados como `DateTime?` sem `@db`, que o Prisma mapeia para `timestamp(3)` **sem** timezone. Um `migrate dev` futuro emitiria `ALTER COLUMN ... SET DATA TYPE TIMESTAMP(3)` — que no PostgreSQL descarta o offset e rotaciona os valores para o timezone da sessão. Perda silenciosa de dado num campo que controla expiração de conversa em fila. `@db.Timestamptz(6)` aplicado aos dois; precisão 6 confirmada por `information_schema.columns`.
+- As colunas irmãs `closed_at` e `csat_expires_at` foram **deliberadamente não marcadas**: em `public` são `timestamp(3)` sem timezone de fato, e marcá-las criaria o drift inverso. A assimetria está comentada no próprio `schema.prisma` para não parecer descuido.
+
+### Verificação
+- **`migrate diff --from-migrations` final totalmente vazio** — saída completa `-- This is an empty migration.`, 32 bytes, zero linhas não-comentário, verificada com `cat -A` para descartar conteúdo invisível. Nenhum `ALTER`/`CREATE`/`DROP` para nenhuma tabela. É a prova de que `schema.prisma` está 100% sincronizado com o histórico de migrations, e de que o próximo `migrate dev` vai gerar **só** a mudança pretendida.
+- **Nenhuma migration criada.** As duas mudanças são sincronização do model com tabelas já existentes; nenhum SQL é executado no banco por este commit, em nenhum ambiente.
+
+### Documentação
+- §16: item [ALTO] do `tenant_voice_config` marcado como resolvido, com registro dos três atributos que a introspecção revelou e dos dois mapeamentos não-óbvios, para quem enfrentar caso parecido.
+- §16: item novo **[BAIXO]** — `conversations.closed_at`/`csat_expires_at` divergem entre `public` (`timestamp(3)` sem tz, a sombra legada e vazia) e os schemas de tenant (`timestamptz(6)`, onde os dados reais vivem, confirmado em `tenant_demo` e `tenant_codexa`). O `model Conversation` descreve hoje a sombra, não os tenants, nesses dois campos. Impacto de runtime nulo — `prisma.conversation.*` não é usado em lugar nenhum, todo acesso é SQL raw. O conflito é irresolvível pelos dois lados: alinhar com os tenants reabriria o diff pedindo a conversão destrutiva no `public`. Vinculado à decisão pendente sobre o destino das tabelas-sombra, no item [MÉDIO] correspondente.
+
+### Testes
+- `type-check` limpo em `@ziradesk/api`. Suíte: **352 passed | 3 failed | 10 skipped**, contagem idêntica à da 0.10.16 — as 3 falhas seguem sendo as de `omnichannel.webhooks.integration.test.ts` já registradas como item [BAIXO] no §16 e verdes no CI.
+
 ## [0.10.16] — Endpoint público de leads (landing page, estágio 1)
 
 ### Adicionado

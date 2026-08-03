@@ -45,11 +45,32 @@ model Tenant {
   settings    Json         @default("{}")
   createdAt   DateTime     @default(now()) @map("created_at")
 
-  plan           Plan            @relation(fields: [planId], references: [id])
+  plan           Plan               @relation(fields: [planId], references: [id])
   subscriptions  Subscription[]
   usageSnapshots UsageSnapshot[]
+  voiceConfig    TenantVoiceConfig?
 
   @@map("tenants")
+}
+
+/// Espelha a tabela criada pela migration 20260613120000_add_tenant_voice_config,
+/// que existia sem model correspondente (drift registrado no §16). O model é
+/// sincronização de schema, não mudança de banco: escrito a partir da
+/// introspecção, para que `migrate diff` volte vazio nesta tabela.
+model TenantVoiceConfig {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @unique @map("tenant_id")
+  twilioPhoneNumber  String   @unique @map("twilio_phone_number") @db.VarChar(20)
+  defaultBotMenuId   String?  @map("default_bot_menu_id") @db.Uuid
+  ivrEnabled         Boolean  @default(true) @map("ivr_enabled")
+  ringTimeoutSeconds Int      @default(20) @map("ring_timeout_seconds")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([twilioPhoneNumber], map: "idx_tenant_voice_config_phone")
+  @@map("tenant_voice_config")
 }
 
 model UsageSnapshot {
@@ -141,8 +162,12 @@ model Conversation {
   closedAt         DateTime?                 @map("closed_at")
   csatExpiresAt    DateTime?                 @map("csat_expires_at")
   closureReason    Json?                     @map("closure_reason")
-  waitingExpiresAt DateTime?                 @map("waiting_expires_at")
-  queueEnteredAt   DateTime?                 @map("queue_entered_at")
+  /// TIMESTAMPTZ no banco desde 20260523120000_restructure_conversation_status.
+  /// Sem @db.Timestamptz o Prisma assume timestamp(3) sem timezone e o diff
+  /// pede uma conversão que rotacionaria os valores para o TZ da sessão.
+  /// As irmãs closed_at/csat_expires_at são timestamp(3) de fato — não marcar.
+  waitingExpiresAt DateTime?                 @map("waiting_expires_at") @db.Timestamptz(6)
+  queueEnteredAt   DateTime?                 @map("queue_entered_at") @db.Timestamptz(6)
   closeType        ConversationCloseType?    @relation("ConversationCloseTypeToConversation", fields: [closeTypeId], references: [id], onDelete: SetNull)
   closeOutcome     ConversationCloseOutcome? @relation("ConversationCloseOutcomeToConversation", fields: [closeOutcomeId], references: [id], onDelete: SetNull)
 
