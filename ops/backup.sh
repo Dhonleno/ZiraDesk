@@ -4,7 +4,7 @@ set -Eeuo pipefail
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-ziradesk-postgres}"
 POSTGRES_USER="${POSTGRES_USER:-ziradesk}"
 POSTGRES_DB="${POSTGRES_DB:-ziradesk}"
-R2_REMOTE="${R2_REMOTE:-r2:ziradesk-backups}"
+R2_REMOTE="${R2_REMOTE:-r2:ziradesk-backups-prod}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/home/deploy/.config/rclone/rclone.conf}"
 LOG_FILE="${LOG_FILE:-/home/deploy/ziradesk-backup.log}"
 
@@ -34,6 +34,25 @@ run_rclone() {
   rclone "$@" --config "${RCLONE_CONFIG}"
 }
 
+# verify_uploaded confirma que o objeto chegou ao destino resolvido por
+# R2_REMOTE/--config. NAO detecta endpoint mal configurado: lsf e copy usam
+# a mesma config, entao um path fantasma engana os dois. Endpoint e validado
+# manualmente na configuracao do rclone, nao aqui.
+verify_uploaded() {
+  local local_file="$1"
+  local remote_dir="$2"
+  local base listing
+  base="$(basename "${local_file}")"
+  if ! listing="$(run_rclone lsf "${remote_dir}")"; then
+    log "ERRO: falha ao listar destino para verificacao: ${remote_dir}"
+    exit 1
+  fi
+  if ! grep -qxF "${base}" <<<"${listing}"; then
+    log "ERRO: upload nao confirmado no destino: ${remote_dir}${base}"
+    exit 1
+  fi
+}
+
 log "Iniciando backup do ZiraDesk"
 
 log "Gerando dump PostgreSQL (${POSTGRES_CONTAINER}/${POSTGRES_DB})"
@@ -46,13 +65,17 @@ tar -czf "${tmp_dir}/${uploads_file}" -C "$(dirname "${UPLOADS_DIR}")" "$(basena
 
 log "Enviando backup diario para ${R2_REMOTE}"
 run_rclone copy "${tmp_dir}/${postgres_file}" "${R2_REMOTE}/daily/postgres/"
+verify_uploaded "${postgres_file}" "${R2_REMOTE}/daily/postgres/"
 run_rclone copy "${tmp_dir}/${uploads_file}" "${R2_REMOTE}/daily/uploads/"
+verify_uploaded "${uploads_file}" "${R2_REMOTE}/daily/uploads/"
 
 if [ "$(date +%d)" = "01" ]; then
   month="$(date +%Y-%m)"
   log "Enviando backup mensal para ${R2_REMOTE}/monthly/${month}"
   run_rclone copy "${tmp_dir}/${postgres_file}" "${R2_REMOTE}/monthly/${month}/postgres/"
+  verify_uploaded "${postgres_file}" "${R2_REMOTE}/monthly/${month}/postgres/"
   run_rclone copy "${tmp_dir}/${uploads_file}" "${R2_REMOTE}/monthly/${month}/uploads/"
+  verify_uploaded "${uploads_file}" "${R2_REMOTE}/monthly/${month}/uploads/"
 fi
 
 log "Aplicando retencao dos backups diarios"

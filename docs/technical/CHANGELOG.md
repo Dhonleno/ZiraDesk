@@ -1,5 +1,13 @@
 # Changelog — ZiraDesk
 
+## [0.10.12] — Verificação pós-upload dos backups no R2
+
+### Corrigido
+- `ops/backup.sh` passou a confirmar cada upload no destino via `rclone lsf` após cada `copy` (os dois diários e os dois mensais), abortando o script quando o objeto não é encontrado. Antes o script reportava "Backup concluido com sucesso" mesmo quando nada persistia: o `rclone copy` saía 0 e nenhuma checagem lia o destino de volta.
+- As duas condições de falha passaram a ter log distinto para diagnóstico: `falha ao listar destino para verificacao` (o `lsf` não rodou — rede, credencial ou path) e `upload nao confirmado no destino` (listou, mas o objeto não está lá).
+- Default de `R2_REMOTE` corrigido de `r2:ziradesk-backups` para `r2:ziradesk-backups-prod`. O bucket errado foi uma das causas dos backups que reportavam sucesso sem persistir; a outra foi um endpoint malformado gravando em path fantasma.
+- Limitação conhecida, registrada em comentário no próprio script: a verificação usa a mesma config do `copy`, então um endpoint mal configurado engana as duas pontas — o `lsf` lista o mesmo path fantasma e confirma o objeto. A validação do endpoint continua manual, na configuração do rclone.
+
 ## [0.10.11] — Migração de infraestrutura para novo Contabo VPS
 
 ### Documentação
