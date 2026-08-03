@@ -14,6 +14,7 @@ const ROOT_PRISMA_MODEL_PROPS = new Set<PropertyKey>([
   'usageSnapshot',
   'subscription',
   'superAdmin',
+  'lead',
 ]);
 
 export const rootPrisma =

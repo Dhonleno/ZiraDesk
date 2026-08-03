@@ -95,6 +95,20 @@ model SuperAdmin {
   @@map("super_admins")
 }
 
+/// Leads do formulário público da landing page (ziradesk.com).
+/// Vive em public: não pertence a nenhum tenant — é anterior ao cadastro.
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  company   String?
+  email     String
+  phone     String?
+  message   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("leads")
+}
+
 model ConversationCloseType {
   id            String         @id @default(cuid())
   label         String         @unique

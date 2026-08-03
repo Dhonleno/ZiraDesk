@@ -38,6 +38,7 @@ import { searchRoutes } from './modules/search/search.routes.js';
 import { callsRoutes } from './modules/calls/calls.routes.js';
 import { portalModuleRoutes } from './modules/portal/index.js';
 import { legalModuleRoutes } from './modules/legal/index.js';
+import { leadsModuleRoutes } from './modules/leads/index.js';
 import { redmineWebhookRoutes } from './modules/integrations/redmine/redmine.routes.js';
 import { languageMiddleware } from './middleware/language.js';
 import { registerTenantPrismaContextHooks } from './middleware/tenantSchemaFromJwt.js';
@@ -48,6 +49,15 @@ import { getStorage } from './lib/storage/index.js';
 
 const app = Fastify({
   ignoreTrailingSlash: true,
+  // 1 hop = o Nginx da borda, único caminho até a API (o container só faz
+  // `expose: 3333`, sem porta publicada). Precisa ser 1, não `true`: o Nginx
+  // usa $proxy_add_x_forwarded_for, que *anexa* ao X-Forwarded-For enviado
+  // pelo cliente em vez de substituí-lo. Com `true` o proxy-addr devolveria a
+  // entrada mais à esquerda — controlada pelo cliente — e o rate limit por IP
+  // viraria burlável trocando o header a cada request. Com 1 vale sempre a
+  // última entrada, que o Nginx anexou a partir de $remote_addr (derivado de
+  // CF-Connecting-IP via real_ip_header).
+  trustProxy: 1,
   logger: {
     level: env.NODE_ENV === 'development' ? 'info' : 'warn',
     ...(env.NODE_ENV === 'development'
@@ -65,6 +75,7 @@ function rateLimitMax(requestUrl: string) {
   if (requestUrl.startsWith('/api/auth/refresh')) return 60;
   if (requestUrl.startsWith('/api/auth/')) return 10;
   if (requestUrl.startsWith('/api/webhooks/')) return 1000;
+  if (requestUrl.startsWith('/api/leads')) return 5;
   return 200;
 }
 
@@ -141,7 +152,14 @@ async function bootstrap(): Promise<void> {
       max: (request) => rateLimitMax(request.url),
       timeWindow: '1 minute',
       keyGenerator: (request) => {
-        if (request.url.startsWith('/api/auth/') || request.url.startsWith('/api/webhooks/')) {
+        // Rotas públicas chaveiam por IP e nunca pelo Authorization: sem isso,
+        // um cliente anônimo escaparia do balde mandando um header arbitrário
+        // e diferente a cada request.
+        if (
+          request.url.startsWith('/api/auth/')
+          || request.url.startsWith('/api/webhooks/')
+          || request.url.startsWith('/api/leads')
+        ) {
           return request.ip;
         }
         return request.headers.authorization ?? request.ip;
@@ -174,6 +192,7 @@ async function bootstrap(): Promise<void> {
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });
   await app.register(legalModuleRoutes, { prefix: '/api/legal' });
+  await app.register(leadsModuleRoutes, { prefix: '/api/leads' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });

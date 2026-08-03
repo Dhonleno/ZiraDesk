@@ -27,6 +27,7 @@ import { searchRoutes } from '../modules/search/search.routes.js';
 import { callsRoutes } from '../modules/calls/calls.routes.js';
 import { portalModuleRoutes } from '../modules/portal/index.js';
 import { legalModuleRoutes } from '../modules/legal/index.js';
+import { leadsModuleRoutes } from '../modules/leads/index.js';
 import { redmineWebhookRoutes } from '../modules/integrations/redmine/redmine.routes.js';
 import { provisionTenantSchema } from '../modules/super-admin/tenants/tenants.service.js';
 import { languageMiddleware } from '../middleware/language.js';
@@ -250,6 +251,9 @@ async function ensureTestTenant(schemaName: string, slug: string): Promise<{
 export async function createIsolatedTestServer(): Promise<FastifyInstance> {
   const app = Fastify({
     ignoreTrailingSlash: true,
+    // Paridade com server.ts. Sob inject/light-my-request não há
+    // X-Forwarded-For, então request.ip continua sendo 127.0.0.1.
+    trustProxy: 1,
     logger: false,
   });
 
@@ -281,6 +285,7 @@ export async function createIsolatedTestServer(): Promise<FastifyInstance> {
   await app.register(webhookRoutes, { prefix: '/api/webhooks' });
   await app.register(redmineWebhookRoutes, { prefix: '/api' });
   await app.register(legalModuleRoutes, { prefix: '/api/legal' });
+  await app.register(leadsModuleRoutes, { prefix: '/api/leads' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(superAdminRoutes, { prefix: '/api/super-admin' });
   await app.register(omnichannelModuleRoutes, { prefix: '/api/omnichannel' });
