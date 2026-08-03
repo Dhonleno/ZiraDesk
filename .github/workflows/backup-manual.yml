@@ -26,5 +26,5 @@ jobs:
             echo "--- Últimas linhas do log ---"
             tail -20 /home/deploy/ziradesk-backup.log
             echo "--- Arquivos no R2 ---"
-            rclone ls r2:ziradesk-backups \
+            rclone ls r2:ziradesk-backups-prod \
               --config /home/deploy/.config/rclone/rclone.conf

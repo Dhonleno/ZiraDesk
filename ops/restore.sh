@@ -4,7 +4,7 @@ set -Eeuo pipefail
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-ziradesk-postgres}"
 POSTGRES_USER="${POSTGRES_USER:-ziradesk}"
 POSTGRES_DB="${POSTGRES_DB:-ziradesk}"
-R2_REMOTE="${R2_REMOTE:-r2:ziradesk-backups}"
+R2_REMOTE="${R2_REMOTE:-r2:ziradesk-backups-prod}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/home/deploy/.config/rclone/rclone.conf}"
 LOG_FILE="${LOG_FILE:-/home/deploy/ziradesk-backup.log}"
 
