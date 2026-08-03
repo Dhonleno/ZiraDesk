@@ -10,6 +10,7 @@ import {
   generateUserResetToken,
   verifyUserResetToken,
   hashPassword,
+  TenantSuspendedError,
 } from './auth.service.js';
 import { prisma } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
@@ -62,7 +63,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(404).send({ error: 'Tenant não encontrado' });
         }
         if (tenant.status !== 'active' && tenant.status !== 'trial') {
-          return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
+          return reply.code(403).send({
+            success: false,
+            error: { code: 'TENANT_SUSPENDED', message: 'Conta suspensa ou cancelada' },
+          });
         }
         tenantSchemaName = tenant.schemaName;
         tenantId = tenant.id;
@@ -277,6 +281,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ accessToken });
     } catch (err) {
       reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+      if (err instanceof TenantSuspendedError) {
+        return reply.code(401).send({
+          success: false,
+          error: { code: err.code, message: err.message },
+        });
+      }
       const msg = err instanceof Error ? err.message : getAuthMessages(lang).tokenExpired;
       return reply.code(401).send({ error: msg });
     }

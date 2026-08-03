@@ -57,6 +57,18 @@ export function getAuthMessages(lang: SupportedLanguage) {
   return messages[lang];
 }
 
+/// Lançado quando o tenant do refresh token está suspenso/cancelado. Distingue
+/// esse caso dos demais motivos de recusa do refresh, que seguem com Error cru.
+export class TenantSuspendedError extends Error {
+  code: 'TENANT_SUSPENDED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'TenantSuspendedError';
+    this.code = 'TENANT_SUSPENDED';
+  }
+}
+
 interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -213,7 +225,7 @@ export async function verifyRefreshToken(
     select: { schemaName: true, status: true },
   });
   if (!tenant || (tenant.status !== 'active' && tenant.status !== 'trial')) {
-    throw new Error(msg.tokenExpired);
+    throw new TenantSuspendedError(msg.tokenExpired);
   }
 
   const schemaName = tenant.schemaName.replaceAll('"', '""');

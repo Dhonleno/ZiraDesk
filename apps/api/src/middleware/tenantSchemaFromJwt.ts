@@ -193,7 +193,10 @@ export async function tenantSchemaFromJwt(
   }
 
   if (tenant.status !== 'active' && tenant.status !== 'trial') {
-    return reply.code(403).send({ error: 'Conta suspensa ou cancelada' });
+    return reply.code(403).send({
+      success: false,
+      error: { code: 'TENANT_SUSPENDED', message: 'Conta suspensa ou cancelada' },
+    });
   }
 
   if (!SAFE_SCHEMA_NAME.test(tenant.schemaName)) {

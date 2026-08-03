@@ -1,5 +1,20 @@
 # Changelog — ZiraDesk
 
+## [0.10.14] — Discriminador `TENANT_SUSPENDED` nos pontos de enforcement
+
+### Adicionado
+- `TenantSuspendedError` (`auth.service.ts`) passa a distinguir tenant suspenso/cancelado dos demais motivos de recusa do refresh token. Antes, `verifyRefreshToken` lançava `Error(msg.tokenExpired)` em 6 condições diferentes — JWT inválido, cutoff de `force_logout`, super admin ausente, payload sem `tenantId`, tenant suspenso e usuário inexistente —, todas indistinguíveis pelo `catch`. A classe segue o molde de `InviteEmailError`/`RoleUpdateError` (campo `code` como literal, atribuído no construtor). Os outros 5 pontos continuam com `Error` cru, sem mudança de comportamento.
+- O `catch` do `POST /auth/refresh` (`auth.routes.ts`) ganhou branch para a nova classe **antes** do fallback genérico, devolvendo `{ success: false, error: { code: 'TENANT_SUSPENDED', message } }`. O `clearCookie` do refresh token continua rodando para todos os casos, inclusive este — conta bloqueada também deve perder o token.
+
+### Alterado
+- Envelope de erro migrado do formato legado `{ error: string }` para o padrão coded `{ success: false, error: { code, message } }` nos três pontos restantes de tenant bloqueado: `middleware/tenant.ts`, `middleware/tenantSchemaFromJwt.ts` e o login em `auth.routes.ts`, todos com `code: 'TENANT_SUSPENDED'`. O padrão é o mesmo já usado por `rbac.ts`, `entitlement.ts` e `meta-signature.ts`.
+- **Status HTTP preservados** de propósito (402/403/403/401): a mudança é aditiva no payload, para não alterar o contrato de status enquanto o frontend não trata o caso. Em particular o `401` do refresh mantém o comportamento de `shouldLogoutAfterRefreshFailure` no cliente, que já desloga em 401/403.
+- Auditoria prévia dos consumidores confirmou zero quebras: nenhum código de `apps/web` lê `data.error` como string nessas rotas, o interceptor global (`services/api.ts`) ramifica só por `status`, e a tela de login descarta o corpo da resposta. As duas leituras string-puras que existem (`ForgotPassword.tsx`, `ResetPassword.tsx`) apontam para rotas fora desta migração.
+- `portal.service.ts` (404/403) e o `200` anti-enumeração do `forgot-password` ficaram intencionalmente de fora — categorias diferentes.
+
+### Testes
+- `type-check` da API limpo. Suíte local: **352 passed | 3 failed | 10 skipped**. As 3 falhas são de `omnichannel.webhooks.integration.test.ts` (e-mail inbound, timeout de 15s) e **não são regressão**: A/B com as alterações revertidas via `git stash` reproduziu exatamente as mesmas 3 falhas na baseline. Essas rotas de webhook não passam por nenhum dos middlewares alterados. Atribuídas a ambiente — a execução usou o Postgres de desenvolvimento (`5432`) em vez do banco de teste que o `.env.test` espera em `5433`, ocupado por container de outro projeto.
+
 ## [0.10.13] — Bucket de backup alinhado e divergência de caminho documentada
 
 ### Corrigido

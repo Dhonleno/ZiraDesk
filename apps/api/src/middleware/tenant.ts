@@ -65,7 +65,10 @@ export async function tenantMiddleware(
   }
 
   if (tenant.status !== 'active' && tenant.status !== 'trial') {
-    return reply.code(402).send({ error: 'Conta suspensa ou cancelada' });
+    return reply.code(402).send({
+      success: false,
+      error: { code: 'TENANT_SUSPENDED', message: 'Conta suspensa ou cancelada' },
+    });
   }
 
   request.tenant = {
