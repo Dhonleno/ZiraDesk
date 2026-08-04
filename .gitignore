@@ -4,6 +4,10 @@ build/
 .env
 .env.local
 .env.*.local
+.env.production*
+.env.development*
+!.env.production.example
+!.env.development.example
 
 # Prisma generated client
 prisma/generated/
