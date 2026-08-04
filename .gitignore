@@ -40,3 +40,6 @@ coverage/
 *.tmp
 *.temp
 tmp/
+
+# Review screenshots (audit docs in artifacts/ stay tracked)
+artifacts/*.png
