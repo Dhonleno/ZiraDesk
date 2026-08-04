@@ -1,5 +1,24 @@
 # Changelog — ZiraDesk
 
+## [0.10.25] — Dados reais do controlador na Política de Privacidade
+
+### Corrigido
+- **Os 5 placeholders da Política de Privacidade foram preenchidos com dado real**, fechando a pendência aberta na 0.10.23: razão social (AXLO TECNOLOGIA LTDA), CNPJ, endereço da sede, e-mail do Encarregado e data de publicação (04/08/2026). `grep "\[\["` no arquivo retorna **0**.
+- **Tratamento tipográfico revisto conforme o papel de cada dado.** CNPJ e data ficaram em IBM Plex Mono, consistente com a convenção do design system para identificadores e timestamps; razão social, endereço e e-mail voltaram a texto corrido. O destaque em âmbar existia apenas para sinalizar lacuna — preenchido, o dado é texto legal comum, e mantê-lo em cor de alerta sugeriria um problema onde não há mais.
+- **O peso da fonte Mono foi fixado em 500 explicitamente** na classe nova. A página declara **somente** a face IBM Plex Mono 500; sem o `font-weight` explícito o texto cairia em peso 400, sem `@font-face` correspondente, e o navegador sintetizaria a fonte.
+- **`--amber` e `--amber-dim` removidas do `:root`** da página, junto com a regra `.ph` e sua contraparte no bloco de 640px. Confirmado antes de remover que não restava nenhum uso — `grep -i amber` retorna **0**.
+- **E-mail do Encarregado agora é `mailto:`.** É o canal por onde o titular exerce os direitos do Art. 18 e o único endereço acionável do documento; deixá-lo como texto inerte transferia ao leitor o trabalho de copiar à mão o caminho que a própria política oferece. Sem classe própria — herda o `--teal` dos demais links da página.
+
+### Pendente
+- **A revisão jurídica por advogado segue em aberto e NÃO é resolvida por este commit.** Este preenchimento tratou apenas dos dados do controlador; o enquadramento das bases legais — em particular o legítimo interesse invocado para a captação de leads — continua sendo decisão jurídica, não de engenharia. O aviso permanece no comentário do topo de `privacidade.html`, agora reescrito para refletir que os placeholders foram resolvidos e que só esta trava resta.
+- **A natureza da trava de publicação mudou, e isso importa.** Antes ela era mecânica: campos vazios em âmbar, impossíveis de publicar por engano sem notar. Agora é de julgamento, e **nada no arquivo renderizado impede alguém de publicar sem ter lido o comentário HTML**. Quem for ao deploy precisa saber disso por este registro, não pela página.
+- Seguem válidos da 0.10.23: o `index.html` e a `privacidade.html` formam um pacote de deploy indivisível (o footer já linka a página), e *Termos de Uso* (`/termos`) continua como `href="#"`, tarefa futura separada.
+
+### Verificação
+- `grep "\[\["` → 0; `grep 'class="ph"'` → 0; `grep -i amber` → 0. Os cinco valores conferidos um a um nas posições certas: data no cabeçalho de metadados, os três dados do controlador na seção 1, e-mail na seção 10.
+- Renderização conferida em 760px e 320px: CNPJ e data em Mono, demais dados em prosa, sem resquício do destaque âmbar, sem transbordo horizontal na largura mínima. O `mailto:` renderiza em `--teal`, sem sublinhado em repouso, com o ponto final da frase fora do link — mesmo tratamento dos demais `<a>` do documento.
+- Achado lateral **não corrigido**, registrado para não se perder: `404.html` tem o mesmo defeito de peso que foi evitado aqui — `.code` usa `var(--mono)` sem `font-weight` e a página declara apenas Mono 500, então aquela fonte está sendo sintetizada. Correção de uma palavra, fora do escopo deste commit.
+
 ## [0.10.24] — Colisão do header da landing em viewport móvel
 
 ### Corrigido
@@ -24,7 +43,7 @@
 - Moldura visual seguindo o padrão do `404.html`: HTML único com CSS inline, IBM Plex self-hosted (5 `@font-face`, só os pesos usados), subset de 10 CSS vars. Sem `noindex` — ao contrário do 404, a política deve ser indexável. `--amber`/`--amber-dim` importados com os valores canônicos de `apps/web/src/styles/tokens.css:31-32` para destacar os placeholders. Referências cruzadas a "seção 10" viraram âncoras internas, sem alterar uma palavra do texto.
 
 ### Pendente
-- **A página NÃO pode ir a produção enquanto os 5 placeholders não forem preenchidos com dado real**: `[[RAZÃO SOCIAL]]`, `[[CNPJ]]`, `[[ENDEREÇO]]`, `[[E-MAIL DO ENCARREGADO]]` e `[[DATA DE PUBLICAÇÃO]]`. Estão renderizados em âmbar sobre fundo âmbar, em IBM Plex Mono, deliberadamente impossíveis de ignorar — um documento de identificação do controlador com lacuna visível é pior que documento nenhum.
+- ~~**A página NÃO pode ir a produção enquanto os 5 placeholders não forem preenchidos com dado real**: `[[RAZÃO SOCIAL]]`, `[[CNPJ]]`, `[[ENDEREÇO]]`, `[[E-MAIL DO ENCARREGADO]]` e `[[DATA DE PUBLICAÇÃO]]`. Estão renderizados em âmbar sobre fundo âmbar, em IBM Plex Mono, deliberadamente impossíveis de ignorar — um documento de identificação do controlador com lacuna visível é pior que documento nenhum.~~ — ✅ **Resolvido na 0.10.25.**
 - **Revisão jurídica pendente antes de produção.** Registrado também como comentário no topo do arquivo. O enquadramento do legítimo interesse para captação de leads, em particular, é decisão jurídica e não de engenharia.
 - **O link do footer já aponta para `/privacidade.html`, logo o `index.html` não pode ser publicado sem a página completa** — publicar só o index produz 404 no item Política de Privacidade; publicar com placeholders expõe documento legal incompleto. Os dois arquivos são um pacote de deploy indivisível.
 - **Termos de Uso (`/termos`) segue como `href="#"`** — página não existe, tarefa futura separada. O `TODO` no HTML do footer permanece válido para ela.
