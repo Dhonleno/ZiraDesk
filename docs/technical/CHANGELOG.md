@@ -1,5 +1,16 @@
 # Changelog — ZiraDesk
 
+## [0.10.26] — Revisão jurídica da Política de Privacidade concluída
+
+### Corrigido
+- **Revisão jurídica da Política de Privacidade concluída por advogado**, conforme confirmação do responsável pelo projeto. Era a última trava de publicação registrada: a pendência foi aberta na 0.10.23, mantida explicitamente na 0.10.25 e está riscada nas duas entradas apontando para cá. **Nenhuma alteração no texto da política acompanha este commit** — o documento segue exatamente como ficou na 0.10.25; o que muda é o status da revisão.
+- Comentário no topo de `privacidade.html` atualizado de `ATENÇÃO: ... ainda PENDENTE antes de publicação` para o registro de conclusão. O aviso deixa de ser um bloqueio e passa a ser rastro: quem abrir o arquivo continua sabendo quando os dados foram preenchidos e que a revisão existiu.
+- **Com isso a landing fica liberada para produção.** O pacote é indivisível e sai junto: `index.html` (faixa de confiança, footer LGPD, correção do header móvel) e `privacidade.html` completa, com o link do footer já apontando para ela.
+
+### Verificação
+- Este é o commit que precede o primeiro `push` desta série. `push` para `main` dispara o workflow **CI** e, na conclusão bem-sucedida dele, o **Deploy Contabo** por `workflow_run` — ou seja, a publicação em produção é encadeada automaticamente, não é um passo manual posterior. Registrado aqui porque cinco commits sobem de uma vez e a landing muda de conteúdo no apex no mesmo ato.
+- Commits publicados nesta leva: `ac1d340` (faixa de confiança + footer LGPD), `59e6b72` (Política de Privacidade), `2006260` (colisão do header em viewport móvel), `d09aa09` (dados reais do controlador) e este.
+
 ## [0.10.25] — Dados reais do controlador na Política de Privacidade
 
 ### Corrigido
@@ -10,7 +21,7 @@
 - **E-mail do Encarregado agora é `mailto:`.** É o canal por onde o titular exerce os direitos do Art. 18 e o único endereço acionável do documento; deixá-lo como texto inerte transferia ao leitor o trabalho de copiar à mão o caminho que a própria política oferece. Sem classe própria — herda o `--teal` dos demais links da página.
 
 ### Pendente
-- **A revisão jurídica por advogado segue em aberto e NÃO é resolvida por este commit.** Este preenchimento tratou apenas dos dados do controlador; o enquadramento das bases legais — em particular o legítimo interesse invocado para a captação de leads — continua sendo decisão jurídica, não de engenharia. O aviso permanece no comentário do topo de `privacidade.html`, agora reescrito para refletir que os placeholders foram resolvidos e que só esta trava resta.
+- ~~**A revisão jurídica por advogado segue em aberto e NÃO é resolvida por este commit.** Este preenchimento tratou apenas dos dados do controlador; o enquadramento das bases legais — em particular o legítimo interesse invocado para a captação de leads — continua sendo decisão jurídica, não de engenharia. O aviso permanece no comentário do topo de `privacidade.html`, agora reescrito para refletir que os placeholders foram resolvidos e que só esta trava resta.~~ — ✅ **Resolvido na 0.10.26.**
 - **A natureza da trava de publicação mudou, e isso importa.** Antes ela era mecânica: campos vazios em âmbar, impossíveis de publicar por engano sem notar. Agora é de julgamento, e **nada no arquivo renderizado impede alguém de publicar sem ter lido o comentário HTML**. Quem for ao deploy precisa saber disso por este registro, não pela página.
 - Seguem válidos da 0.10.23: o `index.html` e a `privacidade.html` formam um pacote de deploy indivisível (o footer já linka a página), e *Termos de Uso* (`/termos`) continua como `href="#"`, tarefa futura separada.
 
@@ -44,7 +55,7 @@
 
 ### Pendente
 - ~~**A página NÃO pode ir a produção enquanto os 5 placeholders não forem preenchidos com dado real**: `[[RAZÃO SOCIAL]]`, `[[CNPJ]]`, `[[ENDEREÇO]]`, `[[E-MAIL DO ENCARREGADO]]` e `[[DATA DE PUBLICAÇÃO]]`. Estão renderizados em âmbar sobre fundo âmbar, em IBM Plex Mono, deliberadamente impossíveis de ignorar — um documento de identificação do controlador com lacuna visível é pior que documento nenhum.~~ — ✅ **Resolvido na 0.10.25.**
-- **Revisão jurídica pendente antes de produção.** Registrado também como comentário no topo do arquivo. O enquadramento do legítimo interesse para captação de leads, em particular, é decisão jurídica e não de engenharia.
+- ~~**Revisão jurídica pendente antes de produção.** Registrado também como comentário no topo do arquivo. O enquadramento do legítimo interesse para captação de leads, em particular, é decisão jurídica e não de engenharia.~~ — ✅ **Resolvido na 0.10.26.**
 - **O link do footer já aponta para `/privacidade.html`, logo o `index.html` não pode ser publicado sem a página completa** — publicar só o index produz 404 no item Política de Privacidade; publicar com placeholders expõe documento legal incompleto. Os dois arquivos são um pacote de deploy indivisível.
 - **Termos de Uso (`/termos`) segue como `href="#"`** — página não existe, tarefa futura separada. O `TODO` no HTML do footer permanece válido para ela.
 - ~~Fora do escopo desta entrega, registrado por ter sido encontrado durante a validação: **o header da landing colide em viewport móvel** — a 375px o wordmark e o link *Entrar* se sobrepõem e o `btn-primary` invade a borda; `scrollWidth` 320 contra `clientWidth` 305 a 320px, com `DIV.nav-actions` e `A.btn-primary` como elementos transbordantes. Defeito pré-existente da 0.10.20, não introduzido aqui.~~ — ✅ **Resolvido na 0.10.24.**
