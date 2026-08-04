@@ -1,5 +1,14 @@
 # Changelog — ZiraDesk
 
+## [0.10.30] — Fechamento do incidente WhatsApp Meta #194
+
+### Segurança / Infraestrutura
+- **Incidente de configuração do WhatsApp em produção fechado.** A causa raiz era `WHATSAPP_VERIFY_TOKEN` vazio em `apps/api/.env.production`: o schema de env exigia a variável como string, mas aceitava string vazia, então a API subia e a falha só aparecia ao salvar canal WhatsApp, quando a Meta Graph API rejeitava a configuração do webhook com `#194` por receber `callback_url` com `verify_token` vazio.
+- **Token preenchido em produção sem exposição do valor** e callback público validado: a verificação `GET /api/webhooks/whatsapp` com `hub.mode=subscribe` e o token carregado do próprio `.env.production` passou de `403` para `200`.
+- **Gotcha operacional documentado:** `docker compose restart api` não recarrega valores vindos de `--env-file`; a correção só entrou no runtime depois de recriar o container com `docker compose --env-file .env.production -f docker-compose.production.yml up -d --force-recreate --no-deps api`.
+- **Lacuna de proteção de secrets fechada:** `.env.production` na raiz e em `apps/api/` estavam não rastreados, mas sem cobertura de `.gitignore`. A busca no histórico (`git log --all --full-history`) não encontrou commit desses arquivos, então não houve vazamento confirmado. O `.gitignore` agora cobre `.env.production*` e `.env.development*`, mantendo `.example` rastreável.
+- **Arquivo órfão removido do servidor:** `apps/api/.env.production.save`, resíduo da migração de 2026-08-02, sem referência em scripts/docs e diferente do `.env.production` atual. O backup válido criado durante o atendimento (`apps/api/.env.production.bak-20260804-203426`) foi mantido.
+
 ## [0.10.29] — Blocos CRM 360 e tickets no showcase da landing
 
 ### Adicionado
