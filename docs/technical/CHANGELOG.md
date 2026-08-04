@@ -1,5 +1,27 @@
 # Changelog — ZiraDesk
 
+## [0.10.18] — Landing page estática no apex (infraestrutura, estágio 2a)
+
+### Adicionado
+- **`apps/marketing/`** — landing page estática servida por container `nginx:alpine`, **deliberadamente fora do workspace pnpm**: a pasta não tem `package.json`, então `pnpm-workspace.yaml` (`apps/*`) não a captura e o `pnpm-lock.yaml` fica intocado. Isso evita a armadilha mapeada na auditoria: os Dockerfiles de api e web rodam `pnpm install --frozen-lockfile` na raiz, e um pacote novo no workspace sem lockfile regenerado **quebraria o build dos dois**, não só o do app novo. Conteúdo atual é holding page mínima (`public/index.html` + favicon); o conteúdo real vem no estágio 2b.
+- Serviço `marketing` no `docker-compose.production.yml`: `expose: 80` sem porta no host, na rede `ziradesk-internal`, healthcheck espelhando o do `web` (`wget /healthz`), `mem_limit: 128m`. Adicionado também ao `depends_on` do nginx com `condition: service_healthy`, junto de api e web.
+- **Bloco Nginx para `ziradesk.com` e `www.ziradesk.com`**, escrito **dentro do `ziradesk.conf` existente** em vez de um arquivo novo — `conf.d/*.conf` é incluído em ordem alfabética, e um `marketing.conf` ordenaria antes de `ziradesk.conf`, fazendo seu primeiro bloco `listen 443` virar o default server e capturar todo host desconhecido. Serve a landing em `location /` e faz proxy de `location /api/` para a API.
+
+### Alterado
+- **`location /api/` no apex torna o formulário de leads same-origin**, o que elimina a necessidade de CORS — a pendência deixada explícita na 0.10.16. A regex de origem em `server.ts` (`/\.ziradesk\.com$/`) exige ponto literal antes do domínio e por isso **não** cobre `https://ziradesk.com`; em vez de adicionar o apex ao array, a landing chama a própria origem. `server.ts` não foi tocado. Os headers `X-Forwarded-*` foram copiados do bloco do app, que é o que o `trustProxy: 1` (0.10.16) precisa para resolver o IP real do cliente.
+- **`default_server` explícito nas duas linhas `listen 443` do bloco `app.ziradesk.com`.** Até aqui, "host desconhecido cai no app" era efeito **posicional** — o app era o primeiro bloco 443 do arquivo, e a auditoria confirmou zero ocorrências de `default_server` no repositório. A diretiva **fixa o comportamento atual**, não o altera, e protege contra um bloco novo ou um `conf.d` que ordene antes roubar o default silenciosamente.
+- **`www.ziradesk.com` passa a servir a landing.** Hoje ele casa com a regex de tenant (`~^([a-z0-9-]+)\.ziradesk\.com$`) e é proxiado com `X-Tenant-Slug: www`, que a API rejeita — `www` está em `RESERVED_SUBDOMAINS` (`auth.routes.ts`) e leva `400` em `middleware/tenant.ts`. Como `server_name` exato vence regex no nginx, o bloco novo captura o host sem precisar alterar a regex de tenant. `ziradesk.com` e `www.ziradesk.com` também foram adicionados ao `server_name` do bloco de redirect `:80`, tornando explícito o que já funcionava por posição.
+- `deploy-contabo.yml`: `marketing` incluído nas **duas** listas explícitas do deploy. Na do `up -d` (linha 93), sem a qual o serviço seria buildado e **nunca subiria** — falha silenciosa, já que `--remove-orphans` não alcança serviço declarado mas não listado. E no regex de limpeza de containers órfãos (linha 87), pelo mesmo motivo que ele existe para api/web/nginx: um container renomeado vira órfão que segura o nome e faz o `up -d` seguinte falhar.
+
+### Verificação
+- `docker build ./apps/marketing` limpo; container executado com `/healthz` → `200 ok`, `/` → `200` com `<title>ZiraDesk</title>`, `/favicon.svg` → `200`, e `HEALTHCHECK` do Dockerfile reportando `healthy` no `docker inspect`.
+- **`nginx -t` executado na configuração real**, na mesma imagem de produção (`nginx:1.27-alpine`), com `nginx.conf` e `conf.d/` montados, certificados autoassinados e `--add-host` para `api`/`web`/`marketing` (o nginx resolve nomes de upstream no load e falharia sem isso): `syntax is ok` / `test is successful`. Sintaxe, pareamento de blocos e o `default_server` validados pelo próprio nginx, não por leitura.
+- `docker compose -f docker-compose.production.yml config --services` lista `marketing` entre os 7 serviços.
+
+### Pendente
+- **Registro DNS do apex não verificado.** `ARQUITETURA_TECNICA.md` §2 documenta o DNS como `app.ziradesk.com, api.ziradesk.com, *.ziradesk.com` — **sem o apex**. Se não houver registro para `ziradesk.com` no Cloudflare, o bloco novo simplesmente não recebe tráfego; nada quebra, mas a landing não aparece. Confirmar no painel antes de considerar o estágio concluído.
+- `try_files $uri $uri/ /index.html` foi herdado do padrão de `apps/web`, onde é correto por ser SPA. Num site estático isso faz URL inexistente devolver o index com **200 em vez de 404** — soft 404, indesejável justamente num site de marketing. Trocar por `=404` com página própria no estágio 2b.
+
 ## [0.10.17] — `schema.prisma` sincronizado com o banco (dois drifts fechados)
 
 ### Corrigido

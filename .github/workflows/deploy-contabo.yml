@@ -84,13 +84,13 @@ jobs:
 
           stale_recreate_containers="$(
             docker ps -a --format '{{.ID}} {{.Names}}' \
-              | awk '$2 ~ /^[[:xdigit:]]+_ziradesk-(api|web|nginx)$/ { print $1 }'
+              | awk '$2 ~ /^[[:xdigit:]]+_ziradesk-(api|web|marketing|nginx)$/ { print $1 }'
           )"
           if [ -n "${stale_recreate_containers}" ]; then
             docker rm -f ${stale_recreate_containers}
           fi
 
-          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web nginx
+          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web marketing nginx
 
           "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
           "${compose_cmd[@]}" exec -T nginx nginx -s reload </dev/null
