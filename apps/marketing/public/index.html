@@ -82,7 +82,7 @@
     }
     .nav {
       display: flex; align-items: center; justify-content: space-between;
-      height: 64px;
+      gap: 16px; height: 64px;
     }
     .brand { display: flex; align-items: center; gap: 12px; }
     .brand-icon {
@@ -107,7 +107,8 @@
     .btn-primary:hover { background: var(--teal-hover); }
     .btn-ghost { background: var(--bg-4); border-color: var(--line-2); color: var(--txt-2); }
     .btn-ghost:hover { background: var(--bg-5); color: var(--txt); border-color: rgba(255,255,255,.2); }
-    .btn-sm { padding: 7px 14px; font-size: 14px; }
+    .btn-sm { padding: 7px 14px; font-size: 14px; white-space: nowrap; }
+    .cta-short { display: none; }
 
     /* ---------- Hero ---------- */
     .hero { position: relative; padding: 96px 0 80px; text-align: center; }
@@ -316,6 +317,9 @@
     }
 
     @media (max-width: 640px) {
+      .link-login { display: none; }
+      .cta-full { display: none; }
+      .cta-short { display: inline; }
       .trust-inner { grid-template-columns: 1fr; gap: 20px; }
       .footer-cols { grid-template-columns: 1fr; gap: 30px; }
       .footer-bottom { flex-direction: column; align-items: flex-start; }
@@ -337,7 +341,10 @@
       </div>
       <div class="nav-actions">
         <a class="link-login" href="https://app.ziradesk.com">Entrar</a>
-        <a class="btn btn-primary btn-sm" href="#demo">Agendar demonstração</a>
+        <a class="btn btn-primary btn-sm" href="#demo">
+          <span class="cta-full">Agendar demonstração</span>
+          <span class="cta-short">Agendar</span>
+        </a>
       </div>
     </div>
   </header>

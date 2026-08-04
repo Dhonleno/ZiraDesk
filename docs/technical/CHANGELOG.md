@@ -1,5 +1,20 @@
 # Changelog — ZiraDesk
 
+## [0.10.24] — Colisão do header da landing em viewport móvel
+
+### Corrigido
+- **O header da landing colidia em praticamente todo telefone em uso.** Defeito pré-existente da 0.10.20, registrado como pendência na 0.10.23 e fechado aqui. Sintoma: o wordmark e o link *Entrar* se encostavam sem separação (`ZiraDeskEntrar`), o CTA quebrava em duas linhas — saltando de 38px para **61px de altura dentro de uma barra de 64px** — e transbordava a borda direita, recortado em silêncio pelo `overflow-x: hidden` do `body`.
+- **Mecanismo, medido antes de corrigir.** O `.nav` era `display: flex` com `justify-content: space-between` e **sem `gap`**: a separação entre marca e ações era feita exclusivamente de espaço livre, então zerava junto com ele. Sem `flex-wrap`, nada ia para uma segunda linha. Itens flex têm `min-width: auto`, e como `.brand` (117px) e `.link-login` (40px) não têm ponto de quebra, o único elemento elástico era o CTA, que comprimia de 181px até o min-content de 123px quebrando o rótulo em duas linhas. Somados `padding` de 48px + 117 + 237, o header exigia **~402px** para não colidir — acima de iPhone SE/8 (375), iPhone 12–15 (390) e da maioria dos Androids. **Nenhuma media query tocava o header**: os dois blocos responsivos existentes cobriam apenas grids de conteúdo e footer.
+- **Correção em quatro regras, todas dentro do breakpoint de 640px já existente** — nenhum breakpoint novo: `gap: 16px` no `.nav`, criando um piso de separação que não depende de sobra; `white-space: nowrap` no `.btn-sm`, impedindo a quebra em duas linhas; `.link-login { display: none }` abaixo de 640px, deixando só o CTA primário; e rótulo curto no CTA abaixo de 640px.
+- **`white-space: nowrap` foi aplicado ao `.btn-sm`, não ao `.btn` base.** `.btn-sm` é usado apenas no header e no banner de cookie (rótulos curtos); o `.btn` base cobre também o submit do formulário, que é `width: 100%` dentro de um card com 32px de padding e **depende da quebra de linha para caber no mobile** — `nowrap` ali teria criado um transbordo novo no lugar do corrigido.
+- **Rótulo curto por dois `<span>` no mesmo `<a>`**, alternados por CSS (`.cta-full` / `.cta-short`), sem JS e sem duplicar o botão. Mantém um único elemento âncora — um destino, um foco de teclado — e, como `display: none` remove o conteúdo da árvore de acessibilidade, o leitor de tela anuncia "Agendar" no mobile e "Agendar demonstração" no desktop, nunca dois CTAs.
+
+### Verificação
+- **Primeira tentativa reprovou e a medição pegou.** Com apenas `nowrap` + ocultar *Entrar*, o CTA ficou congelado em 181px e criou um piso rígido de **362px** (48 + 117 + 16 + 181): ocultar *Entrar* devolvia 56px, mas travar o botão custava 58. O resultado **regrediu** nas larguras extremas — `scrollWidth` a 305px subiu de 320 (antes) para 338 (depois) —, ainda transbordando em Galaxy S8–S10 (360px) e iPhone SE 1ª geração (320px). O rótulo curto derrubou o CTA para 85px e o piso para **266px**.
+- Geometria conferida em 700, 655, 641, 640, 430, 390, 375, 360, 320, 305 e 280px, com viewport real por `<iframe>`. Abaixo de 640: *Entrar* oculto, CTA renderizando 85px (`.cta-full: none` / `.cta-short: block` confirmados no `display` computado), **altura estável em 38px** e `scrollWidth == clientWidth` em todas — inclusive 280px, com 16px de folga sobrando. Em 641px e acima o header é idêntico ao anterior: *Entrar* visível, CTA de 181px com rótulo completo, mesma folga marca↔ações do `HEAD` em cada largura.
+- Um resíduo de **1px** (`scrollWidth` 686 contra `clientWidth` 685) aparece em 700px, mas é **idêntico no `HEAD`** e nenhum elemento excede a borda — arredondamento subpixel pré-existente, não introduzido aqui.
+- Escopo: **um arquivo, só CSS e o rótulo do CTA**. `privacidade.html`, `404.html`, nginx e o restante do repositório intocados.
+
 ## [0.10.23] — Política de Privacidade da landing (LGPD)
 
 ### Adicionado
@@ -13,7 +28,7 @@
 - **Revisão jurídica pendente antes de produção.** Registrado também como comentário no topo do arquivo. O enquadramento do legítimo interesse para captação de leads, em particular, é decisão jurídica e não de engenharia.
 - **O link do footer já aponta para `/privacidade.html`, logo o `index.html` não pode ser publicado sem a página completa** — publicar só o index produz 404 no item Política de Privacidade; publicar com placeholders expõe documento legal incompleto. Os dois arquivos são um pacote de deploy indivisível.
 - **Termos de Uso (`/termos`) segue como `href="#"`** — página não existe, tarefa futura separada. O `TODO` no HTML do footer permanece válido para ela.
-- Fora do escopo desta entrega, registrado por ter sido encontrado durante a validação: **o header da landing colide em viewport móvel** — a 375px o wordmark e o link *Entrar* se sobrepõem e o `btn-primary` invade a borda; `scrollWidth` 320 contra `clientWidth` 305 a 320px, com `DIV.nav-actions` e `A.btn-primary` como elementos transbordantes. Defeito pré-existente da 0.10.20, não introduzido aqui.
+- ~~Fora do escopo desta entrega, registrado por ter sido encontrado durante a validação: **o header da landing colide em viewport móvel** — a 375px o wordmark e o link *Entrar* se sobrepõem e o `btn-primary` invade a borda; `scrollWidth` 320 contra `clientWidth` 305 a 320px, com `DIV.nav-actions` e `A.btn-primary` como elementos transbordantes. Defeito pré-existente da 0.10.20, não introduzido aqui.~~ — ✅ **Resolvido na 0.10.24.**
 
 ### Verificação
 - `/privacidade.html` → 200, `/` → 200, `/termos.html` → **404** (correto — a página não existe e o link não aponta para ela). Os 5 placeholders presentes e únicos após as correções factuais; `grep ziradesk.com.br` → **0**. As 5 referências de `@font-face` conferidas uma a uma contra `public/fonts/`.
