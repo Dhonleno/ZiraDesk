@@ -1,5 +1,24 @@
 # Changelog — ZiraDesk
 
+## [0.10.22] — Faixa de confiança e footer LGPD reestruturado na landing
+
+### Adicionado
+- **Faixa de confiança** acima do footer (`.trust`, fundo `--bg-2`), com três selos — *Feito no Brasil*, *Conforme LGPD*, *Sem fidelidade* — em `grid-template-columns: repeat(3, 1fr)`, colapsando para coluna única aos 640px. Ícones SVG inline stroke-only (`stroke-width="1.4"`, `fill="none"`, `currentColor` herdando `--teal`), sem biblioteca de ícones e sem emoji: bandeira, escudo-com-check e porta-de-saída.
+- **Footer reestruturado** de faixa única (marca + 3 links + copyright em uma linha) para grid de três colunas — marca `2fr` / Produto / Legal —, com fundo `--bg-3`. Antes era transparente sobre `--bg` e se dissolvia no fim da página; o `--bg-3` cria separação real do conteúdo, mantido o `border-top` em `--line`. Coluna *Produto* com âncoras internas (Recursos, Como funciona, Demonstração) mais o *Entrar* que já existia no footer antigo; coluna *Legal* com Política de Privacidade, Termos de Uso e Contato. Aos 860px vira duas colunas com a marca ocupando a linha inteira — sem isso a coluna `2fr` esmagaria as outras duas na faixa de 640–860px; aos 640px, coluna única.
+- **`id="como-funciona"`** na `<section class="how">`, que não tinha âncora — as únicas da página eram `#pilares` e `#demo`, e a coluna *Produto* precisava de um terceiro destino. Nome em uma palavra, alinhado às existentes. A classe `.how` não é referenciada por JS (aparece só na própria regra CSS), então o atributo não teve efeito colateral.
+
+### Corrigido
+- **Reprovação de contraste AA no copyright do footer, pré-existente.** O texto usava `--txt-3` (`#5C6370`), que sobre o `--bg` (`#0E0F11`) da composição anterior dava **3.2:1** — abaixo do mínimo de **4.5:1** do WCAG AA para texto normal. Sobre o `--bg-3` (`#1A1C20`) do footer novo cairia para **2.8:1**, agravando a falha. Trocado para `--txt-2` (`#9DA3AE`): **6.7:1**. A dívida vinha da 0.10.20 e foi encontrada ao recalcular os contrastes da superfície nova, não reportada por ferramenta.
+
+### Verificação
+- Renderização conferida em **Chrome headless** nos quatro breakpoints — **1440, 800, 390 e 320px** —, com a faixa e o footer isolados num arquivo temporário que oculta o conteúdo acima (o layout dos dois é width-driven e não depende dos irmãos anteriores, então o que renderiza é o real). Sem overflow horizontal a 320px; o copyright cabe em uma linha na largura mínima.
+- Duas correções de alinhamento saíram dessa validação, não da leitura do código. A primeira versão da faixa usava `flex-wrap` e quebrava **2+1** aos 800px, com o terceiro selo órfão e centralizado — daí a troca para grid de 3 colunas fixas. O grid então expôs o problema seguinte: com descrições de 1 e 2 linhas convivendo na mesma linha, `align-items: center` desalinhava verticalmente o terceiro selo, e `align-items` centrado no item desalinhava os ícones entre si. Resolvido com `align-items: start` no grid e `flex-start` no item, que travam títulos e ícones na mesma base independentemente de quantas linhas a descrição ocupe.
+- Escopo confinado a `apps/marketing/public/index.html` — um único arquivo alterado. `apps/api/`, `apps/web/`, `deploy/` e a config do nginx intocados. Nenhuma dependência adicionada; a landing segue HTML/CSS/JS puro, sem terceiros.
+
+### Pendente
+- *Política de Privacidade* e *Termos de Uso* apontam para `href="#"` — as páginas `/privacidade` e `/termos` não existem, marcado com `TODO` no HTML. **O selo "Conforme LGPD" da faixa é uma afirmação que a landing ainda não sustenta**: a mesma página coleta dado pessoal por dois caminhos — o formulário de leads (`POST /api/leads`, campos `name`/`company`/`email`/`phone`/`message`) e o Google Analytics pós-consentimento. Redigir a política é a tarefa imediatamente seguinte e destrava os dois links.
+- CNPJ do bloco inferior reservado como comentário preenchível, com o `<p class="footer-cnpj">` já escrito e estilizado dentro dele. Optou-se por não renderizar elemento vazio nem número fictício em faixa de identificação legal.
+
 ## [0.10.21] — IBM Plex self-hosted, Google Fonts removido da landing (estágio 2c)
 
 ### Corrigido
