@@ -1,5 +1,15 @@
 # Changelog — ZiraDesk
 
+## [0.10.28] — Showcase interativo por canais na landing
+
+### Adicionado
+- **Seção showcase entre Pilares e Como funciona**, demonstrando a mesma cliente fictícia (`Ana Paula Lima`) entrando por WhatsApp, Instagram e e-mail. A seção usa abas manuais, sem autoplay e sem animação contínua.
+- **Mockup de conversa reaproveitando as classes do hero** (`.mock-chat`, `.mock-head`, `.mock-avatar`, `.mock-badge`, `.mock-messages`, `.mock-bubble`, `.mock-input`), sem repetir a moldura de navegador. O wrapper externo usa `.card`.
+- **Cores de canal finalmente consomem os tokens já declarados**: `--wa`, `--ig` e `--em` nos estados ativos das abas e nas variantes `.badge-wa`, `.badge-ig` e `.badge-em`.
+
+### Verificação
+- Cliques validados nos três canais: badge, cor ativa e mensagem mudam; nome e avatar permanecem estáveis. Screenshots gerados em 1440, 860 e 375px, com canais diferentes ativos. Overflow medido em iframe real para 1440, 860, 640, 390 e 320px: `scrollWidth == clientWidth` em todos.
+
 ## [0.10.27] — Hero da landing recriado em HTML/CSS
 
 ### Alterado
