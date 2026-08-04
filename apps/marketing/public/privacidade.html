@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!-- ATENÇÃO: revisão jurídica pendente antes de produção. Placeholders [[...]] devem ser preenchidos. Ver CHANGELOG. -->
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Política de Privacidade — ZiraDesk</title>
+  <meta name="description" content="Como a ZiraDesk trata os dados pessoais coletados neste site, em conformidade com a Lei Geral de Proteção de Dados (LGPD).">
+  <meta name="theme-color" content="#0E0F11">
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/fonts/IBMPlexSans-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/IBMPlexSans-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+
+  <style>
+    /* IBM Plex — self-hosted (OFL), subconjunto latino. Sem terceiros, sem rastreio. */
+    @font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 300; font-display: swap; src: url('/fonts/IBMPlexSans-Light.woff2') format('woff2'); }
+    @font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/IBMPlexSans-Regular.woff2') format('woff2'); }
+    @font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/IBMPlexSans-SemiBold.woff2') format('woff2'); }
+    @font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/IBMPlexSans-Bold.woff2') format('woff2'); }
+    @font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/IBMPlexMono-Medium.woff2') format('woff2'); }
+
+    :root {
+      --bg: #0E0F11;
+      --line: rgba(255,255,255,.07);
+      --txt: #F0F1F3;
+      --txt-2: #9DA3AE;
+      --teal: #00C9A7;
+      --teal-hover: #00E8C0;
+      --amber: #F59E0B;
+      --amber-dim: rgba(245,158,11,.15);
+      --font: 'IBM Plex Sans', system-ui, sans-serif;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--txt);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--teal); text-decoration: none; }
+    a:hover { color: var(--teal-hover); text-decoration: underline; }
+
+    /* ---------- Header ---------- */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(14,15,17,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav {
+      max-width: 760px; margin: 0 auto; padding: 0 24px; height: 64px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; color: var(--txt); }
+    .brand:hover { color: var(--txt); text-decoration: none; }
+    .brand-icon {
+      display: flex; height: 36px; width: 36px; align-items: center; justify-content: center;
+      border-radius: 10px; border: 1px solid #334155; background: #1E293B; color: #F1F5F9;
+    }
+    .brand-name { font-size: 18px; letter-spacing: -0.5px; }
+    .brand-name b { font-weight: 700; }
+    .brand-name span { font-weight: 300; }
+    .back { font-size: 14px; color: var(--txt-2); }
+    .back:hover { color: var(--txt); text-decoration: none; }
+
+    /* ---------- Documento ---------- */
+    main { max-width: 760px; margin: 0 auto; padding: 56px 24px 72px; }
+    h1 {
+      font-size: clamp(28px, 4.5vw, 38px); font-weight: 600;
+      letter-spacing: -1px; line-height: 1.15; margin-bottom: 14px;
+    }
+    .meta {
+      font-size: 14px; color: var(--txt-2);
+      padding-bottom: 28px; margin-bottom: 32px; border-bottom: 1px solid var(--line);
+    }
+    .lead { color: var(--txt-2); }
+    h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.3px; margin: 40px 0 12px; }
+    p { font-size: 16px; line-height: 1.8; margin-bottom: 16px; }
+    p:last-child { margin-bottom: 0; }
+
+    /* Placeholder pendente de preenchimento — deliberadamente impossível de ignorar. */
+    .ph {
+      font-family: var(--mono); font-weight: 500; font-size: .88em;
+      color: var(--amber); background: var(--amber-dim);
+      border: 1px solid rgba(245,158,11,.35); border-radius: 4px;
+      padding: 2px 7px; white-space: nowrap;
+    }
+
+    /* ---------- Footer ---------- */
+    footer { border-top: 1px solid var(--line); }
+    .foot {
+      max-width: 760px; margin: 0 auto; padding: 26px 24px 40px;
+      font-size: 13px; color: var(--txt-2);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 640px) {
+      .nav, main, .foot { padding-left: 20px; padding-right: 20px; }
+      main { padding-top: 40px; }
+      h2 { margin-top: 34px; }
+      .ph { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav">
+      <a class="brand" href="/">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+            <path d="M14 16 L42 16 L14 40 L42 40" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-name"><b>Zira</b><span>Desk</span></div>
+      </a>
+      <a class="back" href="/">Início</a>
+    </div>
+  </header>
+
+  <main>
+    <h1>Política de Privacidade</h1>
+    <p class="meta">Última atualização: <span class="ph">[[DATA DE PUBLICAÇÃO]]</span></p>
+
+    <p class="lead">Esta Política descreve como a ZiraDesk trata os dados pessoais coletados neste site (ziradesk.com), em conformidade com a Lei nº 13.709/2018 (Lei Geral de Proteção de Dados — LGPD). Ela se aplica aos dados coletados através deste site institucional. O tratamento de dados dentro da plataforma ZiraDesk (dados de clientes das empresas que contratam o serviço) é regido por instrumento contratual próprio.</p>
+
+    <h2 id="s1">1. Quem trata seus dados (Controlador)</h2>
+    <p>Os dados coletados neste site são tratados por <span class="ph">[[RAZÃO SOCIAL]]</span>, inscrita no CNPJ nº <span class="ph">[[CNPJ]]</span>, com sede em <span class="ph">[[ENDEREÇO]]</span>. Para questões relativas a esta Política e ao tratamento de seus dados, entre em contato pelo canal indicado na <a href="#s10">seção 10</a>.</p>
+
+    <h2 id="s2">2. Quais dados coletamos</h2>
+    <p>Coletamos dois tipos de dados:</p>
+    <p><strong>Dados que você nos fornece</strong> — ao preencher o formulário de contato/agendamento de demonstração, coletamos: nome, nome da empresa, e-mail, telefone/WhatsApp e a mensagem que você opcionalmente escreve. Apenas nome e e-mail são obrigatórios.</p>
+    <p><strong>Dados coletados automaticamente</strong> — quando você consente com o uso de cookies analíticos, coletamos dados de navegação (páginas visitadas, tempo de permanência, origem do acesso) através do Google Analytics. Sem o seu consentimento, esses cookies não são carregados. Independentemente de consentimento, nosso provedor de infraestrutura e segurança (Cloudflare) registra seu endereço IP como parte do funcionamento técnico e de segurança do site.</p>
+
+    <h2 id="s3">3. Para que usamos seus dados</h2>
+    <p>Os dados do formulário são usados exclusivamente para entrar em contato com você sobre a demonstração solicitada e apresentar a plataforma ZiraDesk. Os dados de navegação são usados para entender o uso do site e melhorá-lo. Não usamos seus dados para nenhuma outra finalidade sem informá-lo.</p>
+
+    <h2 id="s4">4. Base legal</h2>
+    <p>O tratamento dos dados do formulário fundamenta-se no legítimo interesse (Art. 7, IX, da LGPD) em estabelecer contato comercial com quem demonstrou interesse na plataforma. O tratamento de dados de navegação via cookies analíticos fundamenta-se no seu consentimento (Art. 7, I), que você pode conceder ou recusar no banner exibido ao acessar o site, e revogar a qualquer momento.</p>
+
+    <h2 id="s5">5. Com quem compartilhamos</h2>
+    <p>Não vendemos, alugamos ou cedemos seus dados pessoais a terceiros. Seus dados são processados apenas por operadores que nos prestam serviços técnicos, sob nossas instruções: Google (Google Analytics, mediante consentimento), Cloudflare (DNS, entrega e segurança do site), Contabo (hospedagem da infraestrutura) e Resend (envio de e-mails). Esses operadores tratam os dados exclusivamente para viabilizar nossos serviços.</p>
+
+    <h2 id="s6">6. Por quanto tempo guardamos</h2>
+    <p>Mantemos os dados do formulário enquanto houver finalidade de relacionamento comercial com você. Os dados são eliminados quando você solicita a exclusão ou quando a finalidade que motivou a coleta se encerra. Você pode pedir a exclusão a qualquer momento pelo canal da <a href="#s10">seção 10</a>.</p>
+
+    <h2 id="s7">7. Seus direitos</h2>
+    <p>A LGPD garante a você, como titular dos dados, o direito de: confirmar a existência de tratamento; acessar seus dados; corrigir dados incompletos ou desatualizados; solicitar a anonimização, bloqueio ou eliminação de dados desnecessários ou tratados em desconformidade com a lei; solicitar a portabilidade; obter informação sobre com quem compartilhamos seus dados; e revogar o consentimento. Para exercer qualquer desses direitos, use o canal da <a href="#s10">seção 10</a>.</p>
+
+    <h2 id="s8">8. Cookies</h2>
+    <p>Utilizamos cookies analíticos (Google Analytics) apenas após o seu consentimento, solicitado por um banner na sua primeira visita. Sua escolha fica registrada no seu navegador. Você pode revogar o consentimento limpando os dados do site no navegador ou ajustando suas preferências de cookies. Cookies estritamente necessários ao funcionamento do site não dependem de consentimento.</p>
+
+    <h2 id="s9">9. Segurança</h2>
+    <p>Adotamos medidas técnicas para proteger seus dados, incluindo conexão criptografada (HTTPS), criptografia de credenciais sensíveis, controle de acesso e registro de auditoria de alterações. Nenhum sistema é totalmente imune, mas trabalhamos para reduzir riscos de acesso não autorizado, perda ou vazamento.</p>
+
+    <h2 id="s10">10. Encarregado e contato</h2>
+    <p>Para exercer seus direitos ou esclarecer dúvidas sobre esta Política, entre em contato com nosso Encarregado pelo tratamento de dados pessoais: <span class="ph">[[E-MAIL DO ENCARREGADO]]</span>.</p>
+
+    <h2 id="s11">11. Alterações desta Política</h2>
+    <p>Podemos atualizar esta Política periodicamente. A data da última atualização é indicada no início do documento. Alterações relevantes serão comunicadas pelos meios disponíveis.</p>
+  </main>
+
+  <footer>
+    <div class="foot">
+      <span>© <span id="year">2026</span> ZiraDesk</span>
+      <a href="/">Voltar ao início</a>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

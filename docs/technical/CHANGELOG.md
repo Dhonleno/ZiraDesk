@@ -1,5 +1,24 @@
 # Changelog — ZiraDesk
 
+## [0.10.23] — Política de Privacidade da landing (LGPD)
+
+### Adicionado
+- **`apps/marketing/public/privacidade.html`** — página institucional em 11 seções cobrindo o tratamento de dados pessoais **do site**, com escopo explicitamente separado do tratamento **dentro da plataforma** (dados dos clientes dos tenants), que é regido por instrumento contratual próprio. Cobre a coleta real da landing, não uma genérica: o formulário de demonstração (`POST /api/leads` — `name`, `company`, `email`, `phone`, `message`, com apenas nome e e-mail obrigatórios) e o Google Analytics carregado somente após consentimento. **Bases legais declaradas**: legítimo interesse (Art. 7º, IX) para os dados do formulário; consentimento (Art. 7º, I) para os cookies analíticos. Direitos do titular do Art. 18 enumerados na seção 7, com canal do Encarregado na seção 10.
+- **Operadores divulgados**: Google (Google Analytics, mediante consentimento), Cloudflare (DNS, entrega e segurança do site), Contabo (hospedagem da infraestrutura) e Resend (envio de e-mails). A lista foi conferida contra o repositório antes de ser afirmada — Cloudflare como DNS/HTTPS de borda (`ARQUITETURA_TECNICA.md:56,1194`), Contabo como origem do VPS onde `public.leads` persiste, e Resend em `apps/api/src/services/email.service.ts`. O domínio citado no documento é **ziradesk.com**, conforme `server_name` em `deploy/nginx/conf.d/ziradesk.conf:147` e o `og:url` da landing — não `ziradesk.com.br`, que sobrevive apenas em `.env.example` e docs de design.
+- **Link do footer conectado**: o item *Política de Privacidade* saiu de `href="#"` para `/privacidade.html`. Extensão explícita porque o `try_files $uri $uri/ =404` do `nginx.default.conf` não faz mapeamento sem extensão — `/privacidade` devolveria 404 real. *Termos de Uso* e *Contato* seguem em `#`.
+- Moldura visual seguindo o padrão do `404.html`: HTML único com CSS inline, IBM Plex self-hosted (5 `@font-face`, só os pesos usados), subset de 10 CSS vars. Sem `noindex` — ao contrário do 404, a política deve ser indexável. `--amber`/`--amber-dim` importados com os valores canônicos de `apps/web/src/styles/tokens.css:31-32` para destacar os placeholders. Referências cruzadas a "seção 10" viraram âncoras internas, sem alterar uma palavra do texto.
+
+### Pendente
+- **A página NÃO pode ir a produção enquanto os 5 placeholders não forem preenchidos com dado real**: `[[RAZÃO SOCIAL]]`, `[[CNPJ]]`, `[[ENDEREÇO]]`, `[[E-MAIL DO ENCARREGADO]]` e `[[DATA DE PUBLICAÇÃO]]`. Estão renderizados em âmbar sobre fundo âmbar, em IBM Plex Mono, deliberadamente impossíveis de ignorar — um documento de identificação do controlador com lacuna visível é pior que documento nenhum.
+- **Revisão jurídica pendente antes de produção.** Registrado também como comentário no topo do arquivo. O enquadramento do legítimo interesse para captação de leads, em particular, é decisão jurídica e não de engenharia.
+- **O link do footer já aponta para `/privacidade.html`, logo o `index.html` não pode ser publicado sem a página completa** — publicar só o index produz 404 no item Política de Privacidade; publicar com placeholders expõe documento legal incompleto. Os dois arquivos são um pacote de deploy indivisível.
+- **Termos de Uso (`/termos`) segue como `href="#"`** — página não existe, tarefa futura separada. O `TODO` no HTML do footer permanece válido para ela.
+- Fora do escopo desta entrega, registrado por ter sido encontrado durante a validação: **o header da landing colide em viewport móvel** — a 375px o wordmark e o link *Entrar* se sobrepõem e o `btn-primary` invade a borda; `scrollWidth` 320 contra `clientWidth` 305 a 320px, com `DIV.nav-actions` e `A.btn-primary` como elementos transbordantes. Defeito pré-existente da 0.10.20, não introduzido aqui.
+
+### Verificação
+- `/privacidade.html` → 200, `/` → 200, `/termos.html` → **404** (correto — a página não existe e o link não aponta para ela). Os 5 placeholders presentes e únicos após as correções factuais; `grep ziradesk.com.br` → **0**. As 5 referências de `@font-face` conferidas uma a uma contra `public/fonts/`.
+- **Correção de método na validação responsiva.** As medidas de "320px" e "390px" reportadas na 0.10.22 não mediram o que diziam: o Chrome headless desta máquina **clampa o viewport em 489 CSS px**, e `--window-size` menor apenas recorta a imagem, sem reflow. Refeito medindo dentro de `<iframe>`, que dá viewport real ao documento interno. Nos valores corretos: `privacidade.html` tem `scrollWidth == clientWidth` a **375px e 305px**, sem nenhum elemento transbordante; `index.html` acusa 15px de overflow a 305px, rastreado até o header (ver Pendente). A conclusão da 0.10.22 sobre faixa e footer se manteve — ambos empilham corretamente —, mas o "sem overflow a 320px" afirmado lá valia para 489px e foi retificado aqui.
+
 ## [0.10.22] — Faixa de confiança e footer LGPD reestruturado na landing
 
 ### Adicionado
