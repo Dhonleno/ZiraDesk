@@ -1,5 +1,17 @@
 # Changelog — ZiraDesk
 
+## [0.10.19] — Guarda do `nginx -t` pré-deploy estendida ao serviço `marketing`
+
+### Corrigido
+- O Deploy Contabo do commit `774c00c` (0.10.18) **falhou**, e este é o conserto. O `nginx -t` **pré-deploy** (`deploy-contabo.yml:73-79`) roda `exec` no container nginx **já existente**, que enxerga a config **nova** porque `deploy/nginx/conf.d` é bind mount e o `git pull` do próprio deploy acabou de atualizá-la. Essa config referencia `upstream ziradesk_marketing { server marketing:80; }`, mas o container `marketing` só é buildado na linha 81 e sobe na 93. O nginx resolve hostname de upstream **no load da configuração**, não sob demanda, então o teste aborta com `[emerg] host not found in upstream "marketing:80"` e o `set -euo pipefail` derruba o deploy.
+- **Terceiro ponto de lista explícita de serviços** no mesmo arquivo, depois do `up -d` (linha 93) e da limpeza de containers órfãos (linha 87), ambos já tratados na 0.10.18. A guarda existe exatamente para pular o check enquanto um serviço ainda não subiu — o `else` dela já dizia isso — e só não tinha sido estendida ao serviço novo. Correção é uma linha: `&& is_compose_service_running marketing` na condição, mais a mensagem do `else` atualizada.
+- Comportamento resultante: **neste** deploy a guarda pula o check pré-deploy (marketing ainda não existe), o script segue para `build` → `up -d` com marketing → nginx sobe após o healthcheck de marketing → e o `nginx -t` **pós-deploy** (linha 95) valida a config de verdade, já com o upstream resolvível. Deploys seguintes voltam a exercer o check pré-deploy normalmente, sem perda de proteção.
+
+### Verificação
+- Causa reproduzida localmente antes do conserto: `nginx -t` na config real, na imagem `nginx:1.27-alpine`, com `--add-host` para `api` e `web` mas **sem** `marketing`, devolve exatamente `nginx: [emerg] host not found in upstream "marketing:80" in /etc/nginx/conf.d/ziradesk.conf:25`. A validação da 0.10.18 passara por ter incluído `--add-host marketing`, simulando um container que ainda não existia — o cenário que escapou.
+- **Falha foi fail-safe**: a linha 76 antecede `compose build`, `up -d postgres redis`, `api-migrate` e o `up -d` dos serviços. Nada chegou a ser aplicado. Confirmado durante o incidente: `app.ziradesk.com` 200, `api.ziradesk.com/health` 200, e `ziradesk.com` ainda servindo o SPA do app (`/assets/index-*.js`), sem vestígio da landing.
+- **DNS do apex confirmado existente** — a pendência aberta na 0.10.18. `ziradesk.com` responde 200 hoje, servindo o app pelo `default_server`, o que prova que há registro apontando para a origem. A landing passa a aparecer assim que o deploy concluir.
+
 ## [0.10.18] — Landing page estática no apex (infraestrutura, estágio 2a)
 
 ### Adicionado
