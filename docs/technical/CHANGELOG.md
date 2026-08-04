@@ -1,5 +1,17 @@
 # Changelog — ZiraDesk
 
+## [0.10.21] — IBM Plex self-hosted, Google Fonts removido da landing (estágio 2c)
+
+### Corrigido
+- **Google Fonts eliminado da landing**, fechando a pendência registrada na 0.10.20. As duas páginas carregavam IBM Plex de `fonts.googleapis.com`/`fonts.gstatic.com` via `<link>` no `<head>` — requisição a terceiro disparada no carregamento, **antes de qualquer interação com o banner de consentimento**, expondo o IP do visitante. O banner sempre cobriu apenas o Google Analytics; as fontes escapavam dele por serem `<link>` estático e não script condicional. Agora `grep "googleapis\|gstatic"` retorna **0** em `index.html` e `404.html`.
+- Fontes servidas pelo próprio container: 7 arquivos `.woff2` em `public/fonts/` (IBM Plex Sans Light/Regular/Medium/SemiBold/Bold + IBM Plex Mono Regular/Medium), subset latino, **111 KB somados**. IBM Plex é licenciado sob OFL, que permite redistribuição. `index.html` declara os 7 `@font-face`; `404.html` declara os 5 que de fato usa.
+- `font-display: swap` em todos os `@font-face` — o texto renderiza imediatamente com a fonte de sistema e troca quando o arquivo chega, em vez de ficar invisível. `<link rel="preload">` nos dois pesos above-the-fold (Sans Regular e SemiBold), que sem isso só seriam descobertos depois do CSS ser parseado.
+
+### Verificação
+- Integridade cruzada das referências: cada `src` de `@font-face` nos dois HTML aponta para arquivo existente em `public/fonts/`, e nenhum `.woff2` do diretório ficou órfão — as duas direções conferidas, para não deixar nem 404 de fonte nem peso morto no container.
+- Container buildado e exercitado: healthcheck **`healthy`**; `/fonts/IBMPlexSans-Regular.woff2` → **200 com `Content-Type: font/woff2`** (o `mime.types` do nginx já cobre `woff2`, sem configuração extra); as **7** fontes respondem 200; `/` → 200, `/product-screenshot.png` → 200, `/nao-existe` → **404** — o 404 real da 0.10.20 preservado.
+- Escopo confinado a `apps/marketing/`: `deploy/nginx/`, `apps/api/` e `docker-compose.production.yml` intocados. Nenhuma mudança de infraestrutura neste estágio — só conteúdo do container.
+
 ## [0.10.20] — Conteúdo real da landing + 404 real (estágio 2b)
 
 ### Adicionado
