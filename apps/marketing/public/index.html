@@ -46,6 +46,7 @@
       --wa: #25D366;
       --ig: #F472B6;
       --em: #60A5FA;
+      --amber: #F59E0B;
       --green: #3ECF8E;
       --red: #F87171;
       --r: 8px;
@@ -388,6 +389,180 @@
       background: color-mix(in srgb, var(--em) 14%, transparent);
       color: var(--em);
     }
+    .showcase-detail {
+      margin-top: 72px;
+    }
+    .showcase-detail h3 {
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+    .showcase-detail p {
+      color: var(--txt-2);
+      font-size: 16px;
+    }
+    .crm-showcase {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      gap: 36px;
+      align-items: center;
+    }
+    .crm-copy {
+      max-width: 380px;
+    }
+    .crm-profile-card {
+      padding: 32px;
+    }
+    .crm-profile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .crm-profile .mock-avatar {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 14px;
+      font-size: 24px;
+    }
+    .crm-profile strong {
+      display: block;
+      font-size: 19px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .crm-profile .label {
+      margin-top: 4px;
+      color: var(--txt-3);
+      font-size: 13px;
+    }
+    .crm-data {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      width: 100%;
+      margin: 28px 0 22px;
+    }
+    .crm-data-item {
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      background: var(--bg-3);
+      padding: 14px;
+      text-align: left;
+    }
+    .crm-data-item span {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--txt-3);
+      font-size: 12px;
+    }
+    .crm-data-item strong {
+      color: var(--txt-2);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .crm-chips {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .crm-chip {
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-pill);
+      background: var(--bg-3);
+      color: var(--txt-2);
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tickets-showcase .section-head {
+      margin-bottom: 32px;
+    }
+    .ticket-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .ticket-column {
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      background: var(--bg-2);
+      padding: 16px;
+    }
+    .ticket-column-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .ticket-column-head h4 {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .ticket-count {
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-pill);
+      background: var(--bg-3);
+      color: var(--txt-2);
+      min-width: 26px;
+      padding: 2px 8px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .ticket-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ticket-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      background: var(--bg-3);
+      padding: 14px;
+    }
+    .ticket-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .ticket-id {
+      color: var(--txt-3);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .ticket-priority {
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-pill);
+      color: var(--txt-2);
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .ticket-priority.priority-medium {
+      border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+      background: color-mix(in srgb, var(--amber) 14%, transparent);
+      color: var(--amber);
+    }
+    .ticket-card h5 {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+    .ticket-card p {
+      color: var(--txt-3);
+      font-size: 12px;
+    }
 
     /* ---------- Channels strip ---------- */
     .channels {
@@ -528,6 +703,9 @@
       .demo-grid { grid-template-columns: 1fr; gap: 40px; }
       .product-mock { grid-template-columns: 1fr; min-height: auto; }
       .mock-contact { border-left: 0; border-top: 1px solid var(--line); }
+      .crm-showcase { grid-template-columns: 1fr; gap: 24px; }
+      .crm-copy { max-width: none; text-align: center; }
+      .ticket-board { grid-template-columns: 1fr; }
       .hero { padding: 72px 0 60px; }
       section { padding: 60px 0; }
       .trust-inner { gap: 24px; }
@@ -552,6 +730,10 @@
       .channel-tabs { justify-content: stretch; }
       .channel-tab { flex: 1; justify-content: center; min-width: 0; padding: 9px 10px; }
       .channel-demo-card .mock-chat { min-height: 360px; }
+      .showcase-detail { margin-top: 56px; }
+      .crm-profile-card { padding: 24px 16px; }
+      .crm-data { grid-template-columns: 1fr; }
+      .ticket-column { padding: 14px; }
       .trust-inner { grid-template-columns: 1fr; gap: 20px; }
       .footer-cols { grid-template-columns: 1fr; gap: 30px; }
       .footer-bottom { flex-direction: column; align-items: flex-start; }
@@ -740,6 +922,112 @@
             <div class="mock-bubble agent">Já puxei seu histórico aqui e vou te ajudar.</div>
           </div>
           <div class="mock-input">Digite sua mensagem...</div>
+        </div>
+      </div>
+
+      <div class="showcase-detail crm-showcase">
+        <div class="crm-copy">
+          <h3>Cada contato, com histórico completo</h3>
+          <p>Dados, canais e anotações ficam no mesmo lugar. Quando Ana Paula volta, qualquer atendente entende o contexto antes de responder.</p>
+        </div>
+
+        <div class="card crm-profile-card" role="img" aria-label="Prévia do perfil de contato de Ana Paula Lima, com dados de contato e etiquetas">
+          <div class="crm-profile">
+            <div class="mock-avatar" aria-hidden="true">A</div>
+            <strong>Ana Paula Lima</strong>
+            <span class="label">Contato</span>
+            <div class="crm-data" aria-label="Dados do contato">
+              <div class="crm-data-item">
+                <span>E-mail</span>
+                <strong>a***@empresa.com.br</strong>
+              </div>
+              <div class="crm-data-item">
+                <span>Telefone</span>
+                <strong>+55 (19) 9****-8888</strong>
+              </div>
+            </div>
+            <div class="crm-chips" aria-label="Etiquetas do contato">
+              <span class="crm-chip">Cliente Pro</span>
+              <span class="crm-chip">Recorrente</span>
+              <span class="crm-chip">Financeiro</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="showcase-detail tickets-showcase">
+        <div class="section-head">
+          <h3>Tickets com dono, status e prioridade</h3>
+          <p>Transforme conversas em tarefas claras para a equipe acompanhar o que está aberto, em andamento e resolvido.</p>
+        </div>
+
+        <div class="ticket-board" aria-label="Quadro de tickets">
+          <div class="ticket-column">
+            <div class="ticket-column-head">
+              <h4>Aberto</h4>
+              <span class="ticket-count">2</span>
+            </div>
+            <div class="ticket-list">
+              <article class="ticket-card">
+                <div class="ticket-meta">
+                  <span class="ticket-id">#0001</span>
+                  <span class="ticket-priority priority-medium">Média</span>
+                </div>
+                <h5>Boleto não gerado</h5>
+                <p>Ana Paula Lima</p>
+              </article>
+              <article class="ticket-card">
+                <div class="ticket-meta">
+                  <span class="ticket-id">#0002</span>
+                  <span class="ticket-priority">Baixa</span>
+                </div>
+                <h5>Atualizar cadastro</h5>
+                <p>Rafael Nunes</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="ticket-column">
+            <div class="ticket-column-head">
+              <h4>Em andamento</h4>
+              <span class="ticket-count">2</span>
+            </div>
+            <div class="ticket-list">
+              <article class="ticket-card">
+                <div class="ticket-meta">
+                  <span class="ticket-id">#0003</span>
+                  <span class="ticket-priority priority-medium">Média</span>
+                </div>
+                <h5>Nota fiscal pendente</h5>
+                <p>Bianca Alves</p>
+              </article>
+              <article class="ticket-card">
+                <div class="ticket-meta">
+                  <span class="ticket-id">#0004</span>
+                  <span class="ticket-priority">Baixa</span>
+                </div>
+                <h5>Dúvida sobre plano</h5>
+                <p>Mateus Rocha</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="ticket-column">
+            <div class="ticket-column-head">
+              <h4>Resolvido</h4>
+              <span class="ticket-count">1</span>
+            </div>
+            <div class="ticket-list">
+              <article class="ticket-card">
+                <div class="ticket-meta">
+                  <span class="ticket-id">#0005</span>
+                  <span class="ticket-priority">Baixa</span>
+                </div>
+                <h5>Confirmação de pagamento</h5>
+                <p>Clara Mendes</p>
+              </article>
+            </div>
+          </div>
         </div>
       </div>
     </div>

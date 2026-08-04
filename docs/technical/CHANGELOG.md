@@ -1,5 +1,16 @@
 # Changelog — ZiraDesk
 
+## [0.10.29] — Blocos CRM 360 e tickets no showcase da landing
+
+### Adicionado
+- **Showcase da landing expandido com blocos subordinados de CRM 360 e tickets**, ainda dentro de `#showcase`, após a demonstração por abas. Os títulos novos usam `h3`, preservando o `h2` existente para a demonstração de canais.
+- **Bloco CRM 360** com texto e card de contato da persona fictícia `Ana Paula Lima`, incluindo e-mail e telefone mascarados e chips neutros de perfil.
+- **Bloco Tickets** com quadro kanban de três colunas (`Aberto`, `Em andamento`, `Resolvido`), contadores e cards com número, título, cliente fictício e prioridade.
+- **`--amber` reintroduzido no `:root` com `#F59E0B`** para o badge de prioridade `Média`; o fundo tonal usa `color-mix()`, sem adicionar `--amber-dim`.
+
+### Verificação
+- Overflow medido em iframe real para 1440, 860, 640, 390 e 320px: `scrollWidth == clientWidth` em todos, sem elementos transbordantes. Screenshots gerados em 1440 e 375px cobrindo CRM e Tickets completos. Busca por nomes de teste reais retornou zero ocorrência; não há `@keyframes`, `animation`, `setInterval` ou `setTimeout`.
+
 ## [0.10.28] — Showcase interativo por canais na landing
 
 ### Adicionado
