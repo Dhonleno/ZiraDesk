@@ -1,5 +1,27 @@
 # Changelog — ZiraDesk
 
+## [0.10.20] — Conteúdo real da landing + 404 real (estágio 2b)
+
+### Adicionado
+- **`apps/marketing/public/index.html`** substitui a holding page do estágio 2a. Estrutura: hero (`Todo o seu atendimento no WhatsApp, organizado num só lugar`) com screenshot do produto em moldura de browser, faixa de canais (WhatsApp/Instagram/e-mail), três seções — *Menos apps abertos, mais clientes atendidos*, *No ar em poucos dias* e o formulário *Veja o ZiraDesk funcionando com os dados da sua empresa*. Tipografia IBM Plex Sans/Mono, tema escuro alinhado à identidade do produto.
+- **`public/product-screenshot.png`** (~141 KB) e **`public/404.html`** com a mesma identidade visual da landing.
+- **Formulário de demonstração integrado ao endpoint público de leads.** Envia `POST` para **`/api/leads` em caminho relativo** — same-origin pelo `location /api/` do bloco do apex (estágio 2a) —, o que dispensa CORS por completo: `server.ts` não foi tocado e a regex de origem continua sem cobrir o apex, sem necessidade. Os cinco campos (`name`, `company`, `email`, `phone`, `message`) correspondem exatamente ao `createLeadSchema` da 0.10.16; opcionais vazios são removidos do payload antes do envio. Validação de `name` e `email` no cliente antes do POST, com o servidor como autoridade — erro do servidor cai numa mensagem genérica, sucesso limpa o formulário.
+- **Banner de consentimento LGPD para analytics.** O Google Analytics (`G-N0T4RVFHNT`) **não é carregado no `<head>`**: o script só é injetado dentro de `loadGA()`, chamada exclusivamente quando o visitante clica em *Aceitar* ou quando `localStorage.zd_ga_consent === 'granted'` de uma visita anterior. Recusa grava `'denied'` e nada é carregado; a escolha é persistida nos dois sentidos, então o banner não reaparece. `anonymize_ip: true` na configuração, e o evento `generate_lead` só dispara se `window.gtag` existir — ou seja, nunca para quem recusou.
+
+### Alterado
+- **Soft-404 eliminado.** O `nginx.default.conf` do container `marketing` trocou `try_files $uri $uri/ /index.html` (herdado do padrão SPA de `apps/web`) por `try_files $uri $uri/ =404`, com `error_page 404 /404.html` e a página marcada `internal`. URL inexistente agora devolve **404 real** em vez de 200 com o index — a pendência registrada na 0.10.18, que num site de marketing prejudica indexação.
+
+### Corrigido
+- **`listen [::]:80` restaurado** no `nginx.default.conf` do `marketing`, retomando a paridade com `apps/web/nginx.default.conf`. A linha se perdera na reescrita da config, deixando o nginx ouvindo só em `0.0.0.0:80`; como o `HEALTHCHECK` do Dockerfile usa `http://localhost/healthz` e o Alpine resolve `localhost` para `::1` antes de `127.0.0.1`, o container era reportado **`unhealthy`** — `wget: can't connect to remote host: Connection refused`, com `wget http://127.0.0.1/healthz` funcionando normalmente. Pego na validação local, antes do commit. **Produção não chegou a ser afetada e não teria sido**: o healthcheck declarado em `docker-compose.production.yml` substitui o da imagem e usa `127.0.0.1` explícito — confirmado empiricamente rodando o container com o comando exato do compose, que reportou `healthy` mesmo sem IPv6. Ainda assim o defeito importava: o `depends_on: marketing: service_healthy` do nginx da borda depende desse sinal, e o `HEALTHCHECK` do Dockerfile ficaria decorativo em qualquer uso fora do compose. Depois da correção o container escuta em `0.0.0.0:80` e `:::80`, e os dois caminhos (`localhost` e `127.0.0.1`) respondem.
+
+### Verificação
+- Container buildado e exercitado rota a rota: `/` → 200, `/healthz` → 200, `/product-screenshot.png` → 200, **`/nao-existe` → 404** (era 200 antes desta mudança), com o corpo servindo a `404.html` própria (`ERRO 404` presente). `/404.html` acessada diretamente também devolve 404, efeito pretendido do `internal`.
+- Antes de o changelog afirmar qualquer coisa, as duas garantias foram conferidas no fonte: `fetch('/api/leads')` é relativo (`index.html:561`) e o GA está atrás do consentimento (`index.html:504-520`).
+- `deploy/nginx/` e `apps/api/` **não foram tocados** — este estágio muda apenas o conteúdo do container `marketing` e a config interna dele. O `ziradesk.conf` da borda segue como ficou no estágio 2a.
+
+### Pendente
+- A landing carrega **Google Fonts** (`fonts.googleapis.com`/`fonts.gstatic.com`) no `<head>`, sem passar pelo banner. Não é analytics e não usa cookies, mas é conexão a terceiro que expõe o IP do visitante antes de qualquer escolha — o banner cobre apenas o Google Analytics. Se o critério de LGPD adotado for estrito, a saída é servir as fontes localmente (`@font-face` com os arquivos em `public/`), o que também remove duas conexões externas do carregamento.
+
 ## [0.10.19] — Guarda do `nginx -t` pré-deploy estendida ao serviço `marketing`
 
 ### Corrigido

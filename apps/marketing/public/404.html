@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Página não encontrada — ZiraDesk</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0E0F11; --txt: #F0F1F3; --txt-2: #9DA3AE; --txt-3: #5C6370;
+      --teal: #00C9A7; --teal-hover: #00E8C0; --line-2: rgba(255,255,255,.12);
+      --bg-4: #22252B; --font: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font); background: var(--bg); color: var(--txt);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 24px; -webkit-font-smoothing: antialiased;
+    }
+    .box { max-width: 440px; }
+    .brand-icon {
+      display: inline-flex; height: 44px; width: 44px; align-items: center; justify-content: center;
+      border-radius: 12px; border: 1px solid #334155; background: #1E293B; color: #F1F5F9; margin-bottom: 28px;
+    }
+    .code { font-family: var(--mono); font-size: 15px; color: var(--teal); letter-spacing: 2px; margin-bottom: 12px; }
+    h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.5px; margin-bottom: 14px; }
+    p { font-size: 16px; color: var(--txt-2); margin-bottom: 32px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600;
+      background: var(--teal); color: #0E0F11; border-radius: 8px; padding: 11px 22px; transition: background .15s;
+    }
+    .btn:hover { background: var(--teal-hover); }
+    a { text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="brand-icon">
+      <svg width="24" height="24" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+        <path d="M14 16 L42 16 L14 40 L42 40" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="code">ERRO 404</div>
+    <h1>Página não encontrada</h1>
+    <p>A página que você procura não existe ou foi movida.</p>
+    <a class="btn" href="/">Voltar ao início</a>
+  </div>
+</body>
+</html>
