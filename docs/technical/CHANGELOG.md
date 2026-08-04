@@ -1,5 +1,15 @@
 # Changelog — ZiraDesk
 
+## [0.10.27] — Hero da landing recriado em HTML/CSS
+
+### Alterado
+- **Hero da landing deixou de depender do screenshot estático como superfície visual principal.** A moldura de navegador existente foi preservada, mas a tag `<img src="/product-screenshot.png">` foi substituída por um mockup HTML/CSS de duas áreas: conversa aberta e painel de contato.
+- **Persona fictícia padronizada no mockup:** o exemplo usa `Ana Paula Lima`, sem nomes ou e-mails reais de massa de teste. O painel mostra estado `Aberto`, duas bolhas de conversa e métricas resumidas do contato.
+- **Responsividade mantida nos breakpoints existentes.** Abaixo de 860px o mockup empilha conversa e contato, evitando overflow dentro da moldura; abaixo de 640px os espaçamentos e métricas reduzem para preservar leitura em viewport estreito.
+
+### Verificação
+- Validação responsiva em iframe real para 1440, 860, 640, 390 e 320px: `scrollWidth == clientWidth` em todas as larguras, sem elementos transbordantes. Busca por nomes de teste reais retornou zero ocorrência.
+
 ## [0.10.26] — Revisão jurídica da Política de Privacidade concluída
 
 ### Corrigido
