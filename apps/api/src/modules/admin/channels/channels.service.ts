@@ -1,6 +1,7 @@
 import { prisma } from '../../../config/database.js';
 import type { Prisma } from '@prisma/client';
 import { env } from '../../../config/env.js';
+import { logger } from '../../../config/logger.js';
 import { redis } from '../../../config/redis.js';
 import { decryptCredentials, encryptCredentials } from '../../../utils/crypto.js';
 import { hasTenantEmailProvider } from '../../../services/email.service.js';
@@ -66,6 +67,15 @@ interface NgrokTunnel {
   };
 }
 
+type MetaRequestStep =
+  | 'debug_token'
+  | 'app_subscriptions'
+  | 'waba_fields'
+  | 'phone_numbers'
+  | 'subscribed_apps'
+  | 'phone_webhook_config'
+  | 'phone_webhook_verify';
+
 function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -82,6 +92,27 @@ function extractMetaErrorMessage(payload: unknown): string | null {
   if (!top.error || typeof top.error !== 'object') return null;
   const nested = top.error as { message?: unknown };
   return typeof nested.message === 'string' ? nested.message.trim() : null;
+}
+
+function extractMetaErrorDetails(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null;
+  const top = payload as { error?: unknown };
+  if (!top.error || typeof top.error !== 'object') return null;
+  const nested = top.error as {
+    message?: unknown;
+    type?: unknown;
+    code?: unknown;
+    error_subcode?: unknown;
+    fbtrace_id?: unknown;
+  };
+
+  return {
+    message: typeof nested.message === 'string' ? nested.message.trim() : undefined,
+    type: typeof nested.type === 'string' ? nested.type : undefined,
+    code: typeof nested.code === 'number' ? nested.code : undefined,
+    error_subcode: typeof nested.error_subcode === 'number' ? nested.error_subcode : undefined,
+    fbtrace_id: typeof nested.fbtrace_id === 'string' ? nested.fbtrace_id : undefined,
+  };
 }
 
 async function ensureChannelsInfrastructure(schemaName: string): Promise<void> {
@@ -121,7 +152,11 @@ async function fetchWithTimeout(
   }
 }
 
-async function readMetaResponse(response: Response, fallbackMessage: string): Promise<unknown> {
+async function readMetaResponse(
+  response: Response,
+  fallbackMessage: string,
+  step?: MetaRequestStep,
+): Promise<unknown> {
   let payload: unknown;
   try {
     payload = await response.json();
@@ -130,6 +165,11 @@ async function readMetaResponse(response: Response, fallbackMessage: string): Pr
   }
 
   if (!response.ok) {
+    const metaError = extractMetaErrorDetails(payload);
+    if (step && metaError) {
+      logger.error({ step, metaError }, '[WhatsApp Channel] Meta Graph API request failed');
+    }
+
     throw new ChannelConfigurationError(
       extractMetaErrorMessage(payload) ?? fallbackMessage,
       response.status >= 500 ? 502 : 400,
@@ -143,6 +183,7 @@ async function requestMeta(
   path: string,
   accessToken: string,
   init: RequestInit = {},
+  step?: MetaRequestStep,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -160,7 +201,7 @@ async function requestMeta(
     throw new ChannelConfigurationError('Não foi possível conectar à Meta para validar o canal', 502);
   }
 
-  return readMetaResponse(response, `Falha na configuração do WhatsApp (HTTP ${response.status})`);
+  return readMetaResponse(response, `Falha na configuração do WhatsApp (HTTP ${response.status})`, step);
 }
 
 async function resolveTokenAppId(
@@ -172,6 +213,8 @@ async function resolveTokenAppId(
   const payload = await requestMeta(
     `debug_token?input_token=${encodeURIComponent(accessToken)}`,
     appAccessToken,
+    {},
+    'debug_token',
   ) as { data?: { app_id?: unknown; is_valid?: unknown } };
   const resolvedAppId = asTrimmedString(payload.data?.app_id);
 
@@ -293,12 +336,15 @@ async function validateAndConfigureWhatsAppChannel(
         fields: subscribedFields.join(','),
       }),
     },
+    'app_subscriptions',
   );
 
-  await requestMeta(`${encodeURIComponent(wabaId)}?fields=id`, accessToken);
+  await requestMeta(`${encodeURIComponent(wabaId)}?fields=id`, accessToken, {}, 'waba_fields');
   const phoneNumbers = await requestMeta(
     `${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`,
     accessToken,
+    {},
+    'phone_numbers',
   ) as { data?: Array<{ id?: unknown }> };
   const phoneBelongsToWaba = phoneNumbers.data?.some(
     (phone) => asTrimmedString(phone.id) === phoneNumberId,
@@ -318,6 +364,7 @@ async function validateAndConfigureWhatsAppChannel(
         verify_token: env.WHATSAPP_VERIFY_TOKEN,
       }),
     },
+    'subscribed_apps',
   );
   await requestMeta(
     `${encodeURIComponent(phoneNumberId)}`,
@@ -332,11 +379,14 @@ async function validateAndConfigureWhatsAppChannel(
         },
       }),
     },
+    'phone_webhook_config',
   );
 
   const phone = await requestMeta(
     `${encodeURIComponent(phoneNumberId)}?fields=id,webhook_configuration`,
     accessToken,
+    {},
+    'phone_webhook_verify',
   ) as { webhook_configuration?: { application?: unknown } };
   if (asTrimmedString(phone.webhook_configuration?.application) !== callbackUrl) {
     throw new ChannelConfigurationError(
