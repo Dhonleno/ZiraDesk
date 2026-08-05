@@ -1,5 +1,14 @@
 # Changelog — ZiraDesk
 
+## [0.10.31] — Segunda causa raiz do incidente de canal WhatsApp: escopo do token
+
+### Corrigido
+- **Configuração de canal WhatsApp em produção concluída com sucesso.** Fechada a segunda causa raiz da mesma investigação aberta na 0.10.30: além do `WHATSAPP_VERIFY_TOKEN` vazio, o Access Token do tenant não tinha o escopo `whatsapp_business_management` no Meta Business Manager. A correção foi ajuste de escopo no console da Meta — **ação externa, sem commit associado**.
+- **Padrão de diagnóstico registrado:** `OAuthException` código `100` sem `error_subcode` e com mensagem genérica `Authorization Error` no passo `waba_fields` indica escopo ausente no token ou WABA não atribuído ao usuário de sistema, não credencial incorreta. O token passava em `debug_token` (valida existência, não escopos) e em `app_subscriptions` (autentica com credencial de app, não do tenant), o que mascarava a origem.
+
+### Adicionado
+- **Logging estruturado por passo nas chamadas à Meta Graph API** (commit `6ac4409`), cobrindo `debug_token`, `app_subscriptions`, `waba_fields`, `phone_numbers`, `subscribed_apps`, `phone_webhook_config` e `phone_webhook_verify`, com `type`, `code`, `error_subcode` e `fbtrace_id` da Meta. Foi o que permitiu isolar o passo exato e separar as duas causas. Permanece no código como ferramenta de diagnóstico para onboarding de tenants futuros; não expõe credenciais.
+
 ## [0.10.30] — Fechamento do incidente WhatsApp Meta #194
 
 ### Segurança / Infraestrutura
