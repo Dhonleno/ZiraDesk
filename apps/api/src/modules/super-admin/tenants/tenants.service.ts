@@ -8,6 +8,7 @@ import { quoteIdent } from '../../omnichannel/conversations/protocols.js';
 import { ensureWebhooksInfrastructure } from '../../admin/webhooks/webhooks.service.js';
 import { ensureQueueNotificationsInfrastructure } from '../../omnichannel/queue/queue-notifications.infrastructure.js';
 import { ensureCampaignsInfrastructure } from '../../omnichannel/campaigns/campaigns.infrastructure.js';
+import { ensureCanonicalRoutingInfrastructure } from '../../admin/routing/routing.infrastructure.js';
 import { generateTempPassword, hashPassword } from '../../auth/auth.service.js';
 import {
   listUsers,
@@ -1184,6 +1185,11 @@ export async function provisionTenantSchema(schemaName: string): Promise<void> {
   await ensureQueueNotificationsInfrastructure(schemaName);
   await ensureWebhooksInfrastructure(schemaName);
   await ensureCampaignsInfrastructure(schemaName);
+  // Roteamento canonico (Grupo -> Assunto). Chamado aqui, e nao espelhado em
+  // createTenantTables, porque createTenantTables so roda a partir desta funcao:
+  // tenant novo e tenant retrofitado executam exatamente o mesmo DDL, o que
+  // satisfaz AGENTS.md §5 sem duplicar definicao (ver comentario da funcao).
+  await ensureCanonicalRoutingInfrastructure(prisma, schemaName);
   await seedCloseConfig(prisma, schemaName);
   await seedQuickReplies(prisma, schemaName);
 }
