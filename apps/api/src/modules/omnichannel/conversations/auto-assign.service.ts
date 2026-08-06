@@ -285,6 +285,41 @@ async function resolveAgentForAssignment(
     );
   };
 
+  const agentHasAllRequiredSkills = async (
+    agentUserId: string,
+    optionId: string,
+  ): Promise<boolean> => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ missing_skills: number }>>(
+      `WITH RECURSIVE option_scope AS (
+         SELECT id, parent_option_id
+         FROM ${botOptionsRef}
+         WHERE id = $2::uuid
+         UNION ALL
+         SELECT parent.id, parent.parent_option_id
+         FROM ${botOptionsRef} parent
+         JOIN option_scope current ON current.parent_option_id = parent.id
+       ),
+       required_skills AS (
+         SELECT DISTINCT skill_id
+         FROM ${botOptionSkillsRef}
+         WHERE bot_option_id IN (SELECT id FROM option_scope)
+           AND required = true
+       )
+       SELECT COUNT(*)::integer AS missing_skills
+       FROM required_skills rs
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM ${agentSkillsRef} aks
+         WHERE aks.user_id = $1::uuid
+           AND aks.skill_id = rs.skill_id
+       )`,
+      agentUserId,
+      optionId,
+    );
+
+    return (rows[0]?.missing_skills ?? 0) === 0;
+  };
+
   const hasRoutingSkillTimeoutElapsed = async (): Promise<boolean> => {
     if (!conversationId) return true;
 
@@ -338,6 +373,12 @@ async function resolveAgentForAssignment(
     );
   };
 
+  const departmentId = requiredDepartmentId?.trim() || null;
+  const botOptionId = requiredBotOptionId?.trim() || null;
+  const botOptionSkills = botOptionId ? await getBotOptionSkills(botOptionId) : [];
+  const hasAnySkills = botOptionSkills.length > 0;
+  const hasRequiredSkills = botOptionSkills.some((skill) => skill.required === true);
+
   if (preferredAgentId) {
     const preferredRows = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
       `SELECT aa.user_id, u.name
@@ -356,14 +397,22 @@ async function resolveAgentForAssignment(
     );
 
     const preferredConnected = await pickConnectedCandidate(preferredRows);
-    if (preferredConnected) return preferredConnected;
+    if (preferredConnected) {
+      // Opcao com skill obrigatoria: o atalho de presenca nao pode ignorar o gate de skill.
+      if (!hasRequiredSkills || !botOptionId) return preferredConnected;
+
+      if (await agentHasAllRequiredSkills(preferredConnected.user_id, botOptionId)) {
+        return preferredConnected;
+      }
+
+      logger.info(
+        { agentId: preferredConnected.user_id, optionId: botOptionId },
+        '[AutoAssign] Preferred agent lacks required skills, falling back to skill routing',
+      );
+    }
   }
 
-  const departmentId = requiredDepartmentId?.trim() || null;
-  const botOptionId = requiredBotOptionId?.trim() || null;
-  const botOptionSkills = botOptionId ? await getBotOptionSkills(botOptionId) : [];
-
-  if (departmentId && botOptionId && botOptionSkills.length > 0) {
+  if (departmentId && botOptionId && hasAnySkills) {
     const rowsByDepartmentAndSkill = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
       `WITH RECURSIVE option_scope AS (
          SELECT id, parent_option_id
@@ -431,7 +480,7 @@ async function resolveAgentForAssignment(
   }
 
   if (botOptionId) {
-    if (botOptionSkills.length > 0) {
+    if (hasAnySkills) {
       const rowsByNewSkillModel = await prisma.$queryRawUnsafe<AgentCandidateRow[]>(
         `WITH RECURSIVE option_scope AS (
            SELECT id, parent_option_id
@@ -499,6 +548,10 @@ async function resolveAgentForAssignment(
 
       const connectedByNewSkillModel = await pickConnectedCandidate(rowsByNewSkillModel);
       if (connectedByNewSkillModel) return connectedByNewSkillModel;
+
+      // Skill obrigatoria sem agente qualificado: mantem na fila ate um aparecer,
+      // em vez de vazar para o round-robin geral.
+      if (hasRequiredSkills) return null;
     }
 
     return pickConnectedCandidate(await selectGeneral());
@@ -842,11 +895,20 @@ export async function autoAssignConversation(
   await ensureConversationRoutingInfrastructure(prisma, schemaName);
   await syncAllActiveConversationCounters(prisma, schemaName);
 
-  const conversationRows = await prisma.$queryRawUnsafe<Array<{ department_id: string | null }>>(
-    `SELECT department_id FROM ${tableRef(schemaName, 'conversations')} WHERE id = $1::uuid LIMIT 1`,
+  const conversationRows = await prisma.$queryRawUnsafe<
+    Array<{ department_id: string | null; bot_option_id: string | null }>
+  >(
+    `SELECT department_id, bot_option_id
+     FROM ${tableRef(schemaName, 'conversations')}
+     WHERE id = $1::uuid
+     LIMIT 1`,
     conversationId,
   );
   const departmentId = conversationRows[0]?.department_id ?? null;
+
+  // O parametro explicito tem precedencia; a leitura da conversa cobre os callers
+  // que omitem a opcao e evitariam o gate de skill.
+  const effectiveBotOptionId = requiredBotOptionId ?? conversationRows[0]?.bot_option_id ?? undefined;
 
   await prisma.$executeRawUnsafe(
     `UPDATE ${tableRef(schemaName, 'conversations')}
@@ -861,7 +923,7 @@ export async function autoAssignConversation(
     schemaName,
     io,
     preferredAgentId,
-    requiredBotOptionId,
+    effectiveBotOptionId,
     settings.max_conversations_per_agent,
     departmentId,
     conversationId,
@@ -870,8 +932,8 @@ export async function autoAssignConversation(
   if (!nextAgent) {
     if (departmentId) {
       logger.info({ departmentId }, '[AutoAssign] No agent for department, keeping in queue');
-    } else if (requiredBotOptionId) {
-      logger.info({ optionId: requiredBotOptionId }, '[AutoAssign] No agent with skill for option, keeping in queue');
+    } else if (effectiveBotOptionId) {
+      logger.info({ optionId: effectiveBotOptionId }, '[AutoAssign] No agent with skill for option, keeping in queue');
     }
     return null;
   }

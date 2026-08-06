@@ -203,7 +203,11 @@ async function createBotOption(schemaName: string): Promise<string> {
   return rows[0]!.id;
 }
 
-async function createSkill(schemaName: string, botOptionId?: string): Promise<string> {
+async function createSkill(
+  schemaName: string,
+  botOptionId?: string,
+  params: { required?: boolean } = {},
+): Promise<string> {
   const skillRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO "${schemaName}".skills (name)
      VALUES ($1)
@@ -215,9 +219,10 @@ async function createSkill(schemaName: string, botOptionId?: string): Promise<st
   if (botOptionId) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO "${schemaName}".bot_option_skills (bot_option_id, skill_id, required)
-       VALUES ($1::uuid, $2::uuid, true)`,
+       VALUES ($1::uuid, $2::uuid, $3::boolean)`,
       botOptionId,
       skillId,
+      params.required ?? true,
     );
   }
 
@@ -427,5 +432,121 @@ describe('autoAssignConversation AND logic integration', () => {
     );
 
     expect(result).toBe(agentId);
+  });
+
+  it('opção com skill obrigatória atribui ao agente que tem a skill (sem departamento)', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    const skillId = await createSkill(tenant.schemaName, botOptionId);
+    const agentId = await createAgent(tenant.schemaName, { skillIds: [skillId] });
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+      undefined,
+      botOptionId,
+    );
+
+    expect(result).toBe(agentId);
+    expect(await routingUsedSkillId(tenant.schemaName, conversationId)).toBe(skillId);
+  });
+
+  it('opção com skill obrigatória mantém na fila quando nenhum agente tem a skill', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    await createSkill(tenant.schemaName, botOptionId);
+    await createAgent(tenant.schemaName);
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+      undefined,
+      botOptionId,
+    );
+
+    expect(result).toBeNull();
+    expect(await assignedTo(tenant.schemaName, conversationId)).toBeNull();
+  });
+
+  it('opção com skill apenas opcional cai no round-robin geral quando ninguém tem a skill', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    await createSkill(tenant.schemaName, botOptionId, { required: false });
+    const agentId = await createAgent(tenant.schemaName);
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+      undefined,
+      botOptionId,
+    );
+
+    expect(result).toBe(agentId);
+  });
+
+  it('agente preferido sem a skill obrigatória não recebe a conversa', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    await createSkill(tenant.schemaName, botOptionId);
+    const preferredAgentId = await createAgent(tenant.schemaName);
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+      preferredAgentId,
+      botOptionId,
+    );
+
+    expect(result).toBeNull();
+    expect(await assignedTo(tenant.schemaName, conversationId)).toBeNull();
+  });
+
+  it('agente preferido com todas as skills obrigatórias continua recebendo a conversa', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    const skillId = await createSkill(tenant.schemaName, botOptionId);
+    const preferredAgentId = await createAgent(tenant.schemaName, { skillIds: [skillId] });
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+      preferredAgentId,
+      botOptionId,
+    );
+
+    expect(result).toBe(preferredAgentId);
+  });
+
+  it('sem requiredBotOptionId explícito, usa bot_option_id da conversa e respeita a skill obrigatória', async () => {
+    const botOptionId = await createBotOption(tenant.schemaName);
+    await createSkill(tenant.schemaName, botOptionId);
+    await createAgent(tenant.schemaName);
+    const conversationId = await createConversation(tenant.schemaName, { botOptionId });
+
+    const result = await autoAssignConversation(
+      conversationId,
+      tenant.id,
+      tenant.schemaName,
+      prisma,
+      mockIo(),
+    );
+
+    expect(result).toBeNull();
+    expect(await assignedTo(tenant.schemaName, conversationId)).toBeNull();
   });
 });
