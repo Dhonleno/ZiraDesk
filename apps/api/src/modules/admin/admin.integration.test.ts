@@ -717,7 +717,9 @@ describe('Admin integration', () => {
         type: 'whatsapp',
         name: 'WhatsApp Inválido',
         credentials: {
-          phoneNumberId: '1176005248926381',
+          // Número próprio: reusar o do teste anterior faria o gate cross-tenant
+          // do channel_registry devolver 409 antes de chegar na validação do WABA.
+          phoneNumberId: '1176005248926382',
           wabaId: 'not-a-waba-id',
           appId: '792394403295356',
           appSecret: 'tenant-meta-app-secret',

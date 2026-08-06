@@ -45,10 +45,11 @@ model Tenant {
   settings    Json         @default("{}")
   createdAt   DateTime     @default(now()) @map("created_at")
 
-  plan           Plan               @relation(fields: [planId], references: [id])
-  subscriptions  Subscription[]
-  usageSnapshots UsageSnapshot[]
-  voiceConfig    TenantVoiceConfig?
+  plan            Plan               @relation(fields: [planId], references: [id])
+  subscriptions   Subscription[]
+  usageSnapshots  UsageSnapshot[]
+  voiceConfig     TenantVoiceConfig?
+  channelRegistry ChannelRegistry[]
 
   @@map("tenants")
 }
@@ -128,6 +129,24 @@ model Lead {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("leads")
+}
+
+/// Unicidade global de phone_number_id entre tenants. O valor vive cifrado dentro
+/// de "<schema>".channels.credentials, onde nenhuma constraint SQL o alcança; esta
+/// tabela em public é o que torna a unicidade dura. Escrita por channels.service.ts
+/// na mesma transação do canal (via SQL raw, para não depender do search_path do
+/// tenant). updated_at é setado explicitamente no upsert, não por @updatedAt.
+model ChannelRegistry {
+  phoneNumberId String   @id @map("phone_number_id")
+  tenantSchema  String   @map("tenant_schema")
+  channelId     String   @map("channel_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantSchema], references: [schemaName], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([tenantSchema], map: "idx_channel_registry_tenant_schema")
+  @@map("channel_registry")
 }
 
 model ConversationCloseType {

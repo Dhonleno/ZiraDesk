@@ -15,6 +15,7 @@ import {
   testChannel,
   NotFoundError,
   ChannelConfigurationError,
+  ChannelNumberConflictError,
 } from './channels.service.js';
 
 const guard = [authMiddleware, tenantSchemaFromJwt, hasRole('owner', 'admin')];
@@ -101,6 +102,12 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
       const data = await createChannel(parsed.data, schemaName);
       return reply.code(201).send({ success: true, data });
     } catch (err) {
+      if (err instanceof ChannelNumberConflictError) {
+        return reply.code(err.statusCode).send({
+          success: false,
+          error: { code: 'CHANNEL_NUMBER_ALREADY_REGISTERED', message: err.message },
+        });
+      }
       if (err instanceof ChannelConfigurationError) {
         return reply.code(err.statusCode).send({
           success: false,
@@ -134,6 +141,12 @@ export async function channelsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof NotFoundError)
         return reply.code(404).send({ success: false, error: { message: err.message } });
+      if (err instanceof ChannelNumberConflictError) {
+        return reply.code(err.statusCode).send({
+          success: false,
+          error: { code: 'CHANNEL_NUMBER_ALREADY_REGISTERED', message: err.message },
+        });
+      }
       if (err instanceof ChannelConfigurationError) {
         return reply.code(err.statusCode).send({
           success: false,

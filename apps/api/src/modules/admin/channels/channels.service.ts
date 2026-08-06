@@ -24,6 +24,19 @@ export class ChannelConfigurationError extends Error {
   }
 }
 
+/**
+ * O numero ja pertence a outro tenant no public.channel_registry. Nao revela qual
+ * tenant — a mensagem e deliberadamente opaca para nao vazar existencia de conta.
+ */
+export class ChannelNumberConflictError extends Error {
+  readonly statusCode = 409;
+
+  constructor(message = 'Este número já está conectado a outro tenant.') {
+    super(message);
+    this.name = 'ChannelNumberConflictError';
+  }
+}
+
 function validateSchemaName(schemaName: string): string {
   if (!/^[a-z0-9_]+$/.test(schemaName)) {
     throw new Error('Schema do tenant inválido');
@@ -113,6 +126,84 @@ function extractMetaErrorDetails(payload: unknown) {
     error_subcode: typeof nested.error_subcode === 'number' ? nested.error_subcode : undefined,
     fbtrace_id: typeof nested.fbtrace_id === 'string' ? nested.fbtrace_id : undefined,
   };
+}
+
+function readPhoneNumberId(credentials: Record<string, unknown>): string | null {
+  const value = asTrimmedString(credentials['phoneNumberId'] ?? credentials['phone_number_id']);
+  return value || null;
+}
+
+/**
+ * Rejeita antes de qualquer efeito colateral. Nao substitui claimPhoneNumberId():
+ * e apenas um atalho para falhar barato, porque validateAndConfigureWhatsAppChannel
+ * faz 4 escritas na Graph API que um rollback de transacao nao desfaz. A garantia
+ * dura continua sendo a PK, aplicada no claim.
+ */
+async function assertNumberNotOwnedByAnotherTenant(
+  phoneNumberId: string,
+  schemaName: string,
+): Promise<void> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ tenant_schema: string }>>(
+    `SELECT tenant_schema
+       FROM public.channel_registry
+      WHERE phone_number_id = $1
+      LIMIT 1`,
+    phoneNumberId,
+  );
+
+  const owner = rows[0]?.tenant_schema;
+  if (owner && owner !== schemaName) throw new ChannelNumberConflictError();
+}
+
+/**
+ * Reivindica o numero para este tenant. Roda na transacao por request aberta em
+ * tenantSchemaFromJwt, entao entra junto com o INSERT/UPDATE do canal — ou nenhum
+ * dos dois entra.
+ *
+ * O WHERE do DO UPDATE e o que faz a protecao existir: se a linha pertence a outro
+ * tenant, ele nao casa, nenhuma linha e afetada, e o comando volta 0. Tratar esse 0
+ * como sucesso seria o furo — por isso ele vira excecao aqui.
+ */
+async function claimPhoneNumberId(
+  phoneNumberId: string,
+  schemaName: string,
+  channelId: string,
+): Promise<void> {
+  const affected = await prisma.$executeRawUnsafe(
+    `INSERT INTO public.channel_registry AS cr (phone_number_id, tenant_schema, channel_id)
+     VALUES ($1, $2, $3::uuid)
+     ON CONFLICT (phone_number_id) DO UPDATE
+        SET channel_id = EXCLUDED.channel_id,
+            updated_at = NOW()
+      WHERE cr.tenant_schema = EXCLUDED.tenant_schema`,
+    phoneNumberId,
+    schemaName,
+    channelId,
+  );
+
+  if (affected === 0) throw new ChannelNumberConflictError();
+}
+
+/**
+ * Libera o numero antigo quando um canal troca de numero. Sem isso a linha velha
+ * fica apontando para um canal que ja nao atende aquele numero — na Fase 2, quando
+ * a resolucao do webhook passar a ler o registry, isso rotearia para o canal errado.
+ * O escopo triplo garante que nunca se apague a reivindicacao de outro tenant.
+ */
+async function releasePhoneNumberId(
+  phoneNumberId: string,
+  schemaName: string,
+  channelId: string,
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM public.channel_registry
+      WHERE phone_number_id = $1
+        AND tenant_schema = $2
+        AND channel_id = $3::uuid`,
+    phoneNumberId,
+    schemaName,
+    channelId,
+  );
 }
 
 async function ensureChannelsInfrastructure(schemaName: string): Promise<void> {
@@ -477,6 +568,8 @@ export async function getChannel(id: string, schemaName: string) {
 export async function createChannel(data: CreateChannelInput, schemaName: string) {
   const tableRef = channelsTable(schemaName);
   await ensureChannelsInfrastructure(schemaName);
+  const phoneNumberId = data.type === 'whatsapp' ? readPhoneNumberId(data.credentials) : null;
+  if (phoneNumberId) await assertNumberNotOwnedByAnotherTenant(phoneNumberId, schemaName);
   if (data.type === 'whatsapp') {
     await validateAndConfigureWhatsAppChannel(data.credentials);
   }
@@ -493,7 +586,9 @@ export async function createChannel(data: CreateChannelInput, schemaName: string
     credentialsJson,
     settingsJson,
   );
-  return rows[0]!;
+  const created = rows[0]!;
+  if (phoneNumberId) await claimPhoneNumberId(phoneNumberId, schemaName, created.id);
+  return created;
 }
 
 export async function updateChannel(id: string, data: UpdateChannelInput, schemaName: string, tenantId?: string) {
@@ -531,16 +626,24 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
     mergedCredentials.appSecret = currentCredentials.appSecret;
   }
 
-  if (existingRows[0].type === 'whatsapp' && data.credentials) {
+  const isWhatsapp = existingRows[0].type === 'whatsapp';
+  const previousPhoneNumberId = isWhatsapp ? readPhoneNumberId(currentCredentials) : null;
+  const nextPhoneNumberId = isWhatsapp ? readPhoneNumberId(mergedCredentials) : null;
+
+  if (nextPhoneNumberId && nextPhoneNumberId !== previousPhoneNumberId) {
+    await assertNumberNotOwnedByAnotherTenant(nextPhoneNumberId, schemaName);
+  }
+
+  if (isWhatsapp && data.credentials) {
     await validateAndConfigureWhatsAppChannel(mergedCredentials);
   }
 
-  if (existingRows[0].type === 'whatsapp') {
-    const oldPhoneId = (currentCredentials.phoneNumberId ?? currentCredentials.phone_number_id ?? '').trim();
+  if (isWhatsapp && previousPhoneNumberId) {
     try {
-      if (oldPhoneId) {
-        await redis.del(`whatsapp:channel:${oldPhoneId}`, `whatsapp:app-secrets:${oldPhoneId}`);
-      }
+      await redis.del(
+        `whatsapp:channel:${previousPhoneNumberId}`,
+        `whatsapp:app-secrets:${previousPhoneNumberId}`,
+      );
     } catch {
       // silent — cache invalidation is best-effort
     }
@@ -567,6 +670,13 @@ export async function updateChannel(id: string, data: UpdateChannelInput, schema
     id,
   );
   const updatedChannel = rows[0]!;
+
+  if (nextPhoneNumberId) {
+    await claimPhoneNumberId(nextPhoneNumberId, schemaName, updatedChannel.id);
+  }
+  if (previousPhoneNumberId && previousPhoneNumberId !== nextPhoneNumberId) {
+    await releasePhoneNumberId(previousPhoneNumberId, schemaName, updatedChannel.id);
+  }
 
   if (
     tenantId
