@@ -1,5 +1,18 @@
 # Changelog — ZiraDesk
 
+## [0.10.33] — Resolução dinâmica de upstream no nginx (§16 dívida B — correção aplicada, verificação em produção pendente)
+
+### Segurança / Infraestrutura
+- **`resolver 127.0.0.11 valid=10s ipv6=off` nos 5 server blocks `:443` de `deploy/nginx/conf.d/ziradesk.conf`** (commits `c70c7b3` e `3a4c6dd`). Os 3 blocos `upstream` nomeados foram removidos e os 13 `proxy_pass` passaram a `http://$backend_*$request_uri`, com `set $backend_*` declarado por server. Endereça a dívida B da §16: upstream nomeado resolve o hostname **uma única vez, na carga da config**, então um container recriado fora de um deploy (OOM, crash, reboot do host) deixava o nginx apontando para IP morto até o próximo deploy — silenciosamente, porque `/` seguia sendo servido por `web`/`marketing`. Provado em ambiente isolado (`nginx:1.27-alpine`, A/B contra a config antiga): IP do `api` de `172.26.0.2` para `172.26.0.7` **sem reload** → config nova `200` nas 9 locations de API, config antiga `502` nas mesmas 9. **Ainda não verificado em produção** — as três pendências estão na §16.
+- **Incidente `502` de ~7 minutos causado por `c70c7b3`, e o mecanismo que o explica.** O `resolver` foi colocado em `nginx.conf` e **não foi relido pelo `nginx -s reload`**: `conf.d` é bind mount de **diretório** e reflete o `git pull`, mas `nginx.conf` é bind mount de **arquivo único**, preso ao inode original — e o `git pull` substitui o arquivo em vez de editá-lo. O nginx passou a usar o `ziradesk.conf` novo contra um `nginx.conf` velho sem `resolver`; `error.log` com `no resolver defined to resolve web/api/marketing` e `/etc/resolv.conf` correto em `127.0.0.11`, ou seja, o DNS estava certo. Diferente do incidente original da 0.10.32, os **três** upstreams caíram juntos, `/` inclusive, sem mascaramento pelo front. Rollback com `git checkout a767b80 -- deploy/nginx/` + reload; corrigido em `3a4c6dd`. **Lição que generaliza:** mount de arquivo único fica obsoleto quando o arquivo é substituído no host.
+- **`deploy-contabo.yml`: nginx recriado com `--force-recreate --no-deps` em todo deploy**, em comando separado do `up -d` dos demais serviços — juntos, o `--force-recreate` recriaria todos. É esse passo que refaz o mount de arquivo e garante releitura do `nginx.conf`.
+- **Smoke test do deploy passou a atravessar a borda.** O probe anterior rodava `wget` dentro do container `api` contra `127.0.0.1:3333` e portanto **não podia detectar falha de roteamento** — foi por isso que o deploy do incidente terminaria verde com a borda inteira em `502`. O novo step verifica `api.ziradesk.com/health`, `app.ziradesk.com/` e `ziradesk.com/`: um probe por upstream.
+
+### Documentação
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md`: nova seção "Resolução dinâmica de upstream no Nginx" com verificação pós-deploy, cobertura das 3 locations do portal (não testáveis de fora, por o certificado da Cloudflare não cobrir dois níveis de subdomínio), prova de fechamento com canário no `marketing` antes do `api`, comando de recuperação, e as armadilhas medidas (`/api/health` retorna `404` e isso é sinal de saúde; `sleep 12` não basta contra o `start_period: 20s`; `</dev/null` obrigatório em `exec -T`).
+- `docs/technical/DEPLOY_VPS_DOCKER_COMPOSE.md`: comando de deploy manual corrigido para incluir `marketing`, que faltava desde o fix aplicado apenas ao workflow na 0.10.32 — quem seguisse o doc buildava o serviço e nunca o subia, em silêncio.
+- `ARQUITETURA_TECNICA.md` §16: dívida B atualizada com o incidente, o mecanismo de mount de arquivo único, o achado do smoke test que não atravessava o nginx, e as três pendências que faltam para fechá-la.
+
 ## [0.10.32] — Registry global de `phone_number_id` e Fase 1 do roteamento canônico
 
 ### Adicionado
