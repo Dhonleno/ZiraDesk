@@ -222,6 +222,109 @@ Detalhes importantes do fluxo atual:
 - a migration nao depende de `pnpm dlx` nem de download em runtime
 - a imagem final da API ja carrega o Prisma Client gerado no build
 
+## Resolução dinâmica de upstream no Nginx (`resolver`)
+
+O Nginx **não usa mais blocos `upstream` nomeados**. Os três backends são
+declarados por server block em variáveis (`set $backend_api "api:3333";` etc.) e
+os 13 `proxy_pass` usam essas variáveis com `$request_uri` explícito. O
+`resolver 127.0.0.11 valid=10s ipv6=off` fica no bloco `http{}` de
+`deploy/nginx/nginx.conf`.
+
+Motivo: com upstream nomeado o hostname era resolvido uma única vez, na carga da
+config. Se o container `api` fosse recriado fora de um deploy (OOM, crash, reboot
+do host), o Nginx seguia apontando para o IP morto até o próximo reload — 502 nas
+9 locations de API, mascarado por `/` continuar em 200. Ver
+`ARQUITETURA_TECNICA.md` seção 16.
+
+### Verificação pós-deploy
+
+```bash
+docker compose -f docker-compose.production.yml exec -T nginx nginx -t </dev/null
+```
+
+Erro `unknown "backend_xxx" variable` significa que algum server block usa uma
+variável que não declarou — a conversão é por-server, cada bloco declara as suas.
+
+Smoke das 10 locations alcançáveis de fora (trocar `{tenant}` por um tenant real):
+
+```bash
+for u in \
+  https://app.ziradesk.com/ \
+  https://app.ziradesk.com/api/webhooks/whatsapp \
+  "https://app.ziradesk.com/socket.io/?EIO=4&transport=polling" \
+  https://ziradesk.com/ \
+  https://ziradesk.com/api/webhooks/whatsapp \
+  https://api.ziradesk.com/health \
+  "https://api.ziradesk.com/socket.io/?EIO=4&transport=polling" \
+  https://{tenant}.ziradesk.com/ \
+  https://{tenant}.ziradesk.com/api/webhooks/whatsapp \
+  "https://{tenant}.ziradesk.com/socket.io/?EIO=4&transport=polling" ; do
+  printf '%s %s\n' "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u")" "$u"
+done
+```
+
+Esperado: `200` nas rotas de front e em `/health`; `403` em
+`/api/webhooks/whatsapp` (sem token). Qualquer `502` é regressão.
+
+As 3 locations de `suporte.{tenant}.ziradesk.com` **não são testáveis de fora**:
+o certificado da Cloudflare não cobre dois níveis de subdomínio e o handshake TLS
+falha na borda (`curl` sai com código 35, com ou sem `-k`). Testar direto na
+origem, de dentro do container:
+
+```bash
+docker compose -f docker-compose.production.yml exec -T nginx \
+  wget -qS -O /dev/null --no-check-certificate \
+  --header="Host: suporte.{tenant}.ziradesk.com" \
+  https://127.0.0.1/api/webhooks/whatsapp </dev/null
+```
+
+### Prova de fechamento: absorver IP novo sem reload
+
+Valida a correção, não apenas a não-regressão. Derruba a API por alguns segundos
+por natureza (`--force-recreate`), então rodar em janela de baixo tráfego e com o
+comando de recuperação já pronto.
+
+```bash
+# 1. Canário: recriar `marketing` primeiro (raio de ação = só a landing do apex)
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ziradesk-marketing </dev/null
+docker compose -f docker-compose.production.yml up -d --force-recreate --no-deps marketing </dev/null
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ziradesk-marketing </dev/null
+sleep 12 && curl -s -o /dev/null -w '%{http_code} apex /\n' https://ziradesk.com/
+
+# 2. Só se o canário passar: o `api`
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ziradesk-api </dev/null
+docker compose -f docker-compose.production.yml up -d --force-recreate --no-deps api </dev/null
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ziradesk-api </dev/null
+
+# 3. Esperar `healthy` ANTES de medir
+until [ "$(docker inspect -f '{{.State.Health.Status}}' ziradesk-api)" = healthy ]; do sleep 3; done
+
+# 4. Passar o valid=10s e medir, SEM reload
+sleep 12
+curl -s -o /dev/null -w '%{http_code} app /api/webhooks (esperado 403)\n' https://app.ziradesk.com/api/webhooks/whatsapp
+curl -s -o /dev/null -w '%{http_code} api /health (esperado 200)\n' https://api.ziradesk.com/health
+
+# 5. Recuperação, se der 502
+docker compose -f docker-compose.production.yml exec -T nginx nginx -s reload </dev/null
+```
+
+### Armadilhas medidas
+
+- **`/api/health` retorna `404`, não `200`.** A rota da API é `/health`
+  (`apps/api/src/server.ts`); `/api/health` não existe. O `404` vem do Fastify
+  (`{"message":"Route GET:/api/health not found",...}`) e portanto prova que o
+  upstream está vivo — upstream morto dá `502`. Ainda assim, preferir
+  `/api/webhooks/whatsapp` (`403`) como sinal positivo inequívoco.
+- **`sleep 12` sozinho não basta após `--force-recreate`.** O healthcheck do
+  `api` tem `start_period: 20s` e `interval: 15s`; medir antes de `healthy`
+  produz `502` de container subindo, que parece falha da conversão. Daí o passo 3.
+- **Todo `docker compose exec -T` precisa de `</dev/null`.** Sem isso o comando
+  consome o stdin do script chamador e a linha seguinte não roda, em silêncio.
+- **Falha de backend migrou de startup-time para request-time.** Antes, um nome
+  errado impedia o Nginx de subir (`host not found in upstream`); agora aparece
+  como `502` + `could not be resolved` no error log. Variável não declarada
+  continua sendo pega por `nginx -t`.
+
 ## Backup e Recuperação
 
 ### Configuração
