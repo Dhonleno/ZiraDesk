@@ -55,9 +55,12 @@ jobs:
       TWILIO_TWIML_APP_SID: test_twiml_app_sid
       TWILIO_API_KEY: test_twilio_api_key
       TWILIO_API_SECRET: test_twilio_api_secret
-      RESEND_API_KEY: test_resend_api_key
+      # Espelha apps/api/.env.test — ver comentario la sobre a blindagem
+      # contra o dotenv do @prisma/client.
+      RESEND_API_KEY: ''
       RESEND_FROM_EMAIL: teste@ziradesk.com.br
       RESEND_WEBHOOK_SECRET: whsec_emlyYWRlc2tfcmVzZW5kX3dlYmhvb2tfc2VjcmV0X2Zvcl90ZXN0c18yMDI2
+      INBOUND_EMAIL_DOMAIN: ziradesk.com
       STORAGE_PROVIDER: local
 
     steps:
