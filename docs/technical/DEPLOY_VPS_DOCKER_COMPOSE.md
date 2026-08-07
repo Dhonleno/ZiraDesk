@@ -169,7 +169,7 @@ Observacao operacional:
 docker compose --env-file .env.production -f docker-compose.production.yml build
 docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
 docker compose --env-file .env.production -f docker-compose.production.yml run --rm api-migrate
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web nginx
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --remove-orphans postgres redis api web marketing nginx
 ```
 
 ## 5) Verificações rápidas
@@ -214,7 +214,7 @@ Fluxo executado no servidor:
 3. `docker compose --env-file .env.production -f docker-compose.production.yml build`
 4. `docker compose ... up -d postgres redis`
 5. `docker compose ... run --rm api-migrate`
-6. `docker compose ... up -d --remove-orphans postgres redis api web nginx`
+6. `docker compose ... up -d --remove-orphans postgres redis api web marketing nginx`
 7. `nginx -t`, reload do Nginx e smoke test interno da API
 
 Detalhes importantes do fluxo atual:

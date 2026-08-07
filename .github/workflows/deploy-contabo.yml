@@ -91,10 +91,42 @@ jobs:
             docker rm -f ${stale_recreate_containers}
           fi
 
-          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web marketing nginx
+          "${compose_cmd[@]}" up -d --remove-orphans postgres redis api web marketing
+
+          # nginx separado: --force-recreate garante que ele releia conf.d mesmo
+          # quando a imagem nao muda. Nao pode ir junto do comando acima porque
+          # --force-recreate recriaria todos os servicos listados, nao so o nginx.
+          "${compose_cmd[@]}" up -d --force-recreate --no-deps nginx
 
           "${compose_cmd[@]}" exec -T nginx nginx -t </dev/null
           "${compose_cmd[@]}" exec -T nginx nginx -s reload </dev/null
           "${compose_cmd[@]}" exec -T api wget -q -O - http://127.0.0.1:3333/health </dev/null
           "${compose_cmd[@]}" ps
           REMOTE
+
+      - name: Smoke test via borda
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # O smoke do passo anterior roda DENTRO do container api, contra
+          # 127.0.0.1:3333 — nao atravessa o nginx. Este sai pela borda publica
+          # e e o unico capaz de pegar falha de roteamento ou de resolucao de
+          # upstream, que foi a forma exata do incidente 502 de 2026-08-07:
+          # deploy verde com todas as rotas da borda em 502.
+          sleep 5
+
+          check() {
+            local url="$1" want="$2" got
+            got="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${url}")"
+            if [ "${got}" != "${want}" ]; then
+              echo "::error::Borda retornou ${got} em ${url}, esperado ${want}"
+              return 1
+            fi
+            echo "Borda OK: ${got} ${url}"
+          }
+
+          # Um probe por upstream: api, web e marketing.
+          check https://api.ziradesk.com/health 200
+          check https://app.ziradesk.com/ 200
+          check https://ziradesk.com/ 200
